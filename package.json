@@ -5,11 +5,18 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
+{
+  "name": "ciclo-market-server",
+  "version": "1.0.0",
+  "description": "Backend de Ciclo Market con Express y Mercado Pago",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node index.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^5.1.0",
