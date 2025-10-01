@@ -1,12 +1,5 @@
 {
-  "name": "ciclo-market-server",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-{
-  "name": "ciclo-market-server",
+  "name": "ciclomarketserver",
   "version": "1.0.0",
   "description": "Backend de Ciclo Market con Express y Mercado Pago",
   "main": "index.js",
@@ -19,6 +12,7 @@
   "license": "ISC",
   "dependencies": {
     "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
     "express": "^5.1.0",
     "mercadopago": "^2.9.0"
   }
