@@ -4,14 +4,16 @@ import { Field } from '../../components/FormFields'
 import Button from '../../components/Button'
 import useUpload from '../../hooks/useUpload'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import type { Category } from '../../types'
+import type { Category, Listing } from '../../types'
 import { useCurrency } from '../../context/CurrencyContext'
 import { BIKE_CATEGORIES, FRAME_SIZES, WHEEL_SIZE_OPTIONS } from '../../constants/catalog'
 import { PROVINCES, OTHER_CITY_OPTION } from '../../constants/locations'
 import { useAuth } from '../../context/AuthContext'
-import { supabase, supabaseEnabled } from '../../services/supabase'
+import { supabase, supabaseEnabled, getSupabaseClient } from '../../services/supabase'
 import { usePlans } from '../../context/PlanContext'
-import { normalisePlanText, resolvePlanCode } from '../../utils/planCodes'
+import { canonicalPlanCode, normalisePlanText, resolvePlanCode, type PlanCode } from '../../utils/planCodes'
+import { formatNameWithInitial } from '../../utils/user'
+import { fetchListing } from '../../services/listings'
 
 const MATERIAL_OPTIONS = ['Aluminio','Carbono','Aluminio + Carbono','Titanio','Acero','Otro']
 
@@ -40,9 +42,20 @@ export default function NewListingForm() {
   const { uploadFiles, uploading, progress } = useUpload()
   const { user, enabled } = useAuth()
   const { plans } = usePlans()
+  const listingId = searchParams.get('id')
+  const [editingListing, setEditingListing] = useState<Listing | null>(null)
+  const [loadingListing, setLoadingListing] = useState(false)
+  const [planOverride, setPlanOverride] = useState<PlanCode | null>(null)
 
   /** 1) Plan seleccionado por query (?plan=free|basic|premium) */
   const selectedPlan = useMemo(() => {
+    if (planOverride) {
+      const explicit = plans.find((plan) => {
+        const code = resolvePlanCode(plan)
+        return code === planOverride
+      })
+      if (explicit) return explicit
+    }
     if (!plans.length) return undefined
 
     const param = normalisePlanText(searchParams.get('plan'))
@@ -58,23 +71,36 @@ export default function NewListingForm() {
     })
 
     return explicitMatch ?? plans[0]
-  }, [plans, searchParams])
+  }, [plans, planOverride, searchParams])
 
   // Canonizamos el código de plan (lo usa la DB y el backend)
   const resolvedPlanCode = selectedPlan ? resolvePlanCode(selectedPlan) : null
-  const planCode = resolvedPlanCode
+  const planCode = (planOverride ?? resolvedPlanCode)
     ?? (selectedPlan?.code ? normalisePlanText(selectedPlan.code) : undefined)
     ?? (selectedPlan?.id ? normalisePlanText(selectedPlan.id) : undefined)
   const planPrice = selectedPlan?.price ?? 0
   const maxPhotos = selectedPlan?.maxPhotos ?? 4
   const planName = selectedPlan?.name ?? 'Plan'
   const listingDuration = selectedPlan?.listingDurationDays ?? selectedPlan?.periodDays ?? 30
+  const whatsappEnabled = Boolean(selectedPlan?.whatsappEnabled)
 
   const listingExpiresLabel = useMemo(() => {
+    if (editingListing?.expiresAt) {
+      return new Intl.DateTimeFormat('es-AR', { dateStyle: 'long' }).format(new Date(editingListing.expiresAt))
+    }
     const base = new Date()
     base.setDate(base.getDate() + listingDuration)
     return new Intl.DateTimeFormat('es-AR', { dateStyle: 'long' }).format(base)
-  }, [listingDuration])
+  }, [editingListing?.expiresAt, listingDuration])
+
+  const expiresAtIso = useMemo(() => {
+    if (editingListing?.expiresAt) {
+      return new Date(editingListing.expiresAt).toISOString()
+    }
+    const base = new Date()
+    base.setDate(base.getDate() + listingDuration)
+    return base.toISOString()
+  }, [editingListing?.expiresAt, listingDuration])
 
   const planPriceLabel = useMemo(() => {
     if (!selectedPlan) return null
@@ -102,11 +128,14 @@ export default function NewListingForm() {
   const [priceCurrency, setPriceCurrency] = useState<'USD'|'ARS'>('USD')
   const [priceInput, setPriceInput] = useState('')
   const [year, setYear] = useState('')
-  const [province, setProvince] = useState('')
-  const [city, setCity] = useState('')
-  const [cityOther, setCityOther] = useState('')
+  const [province, setProvince] = useState<string>('')
+  const [city, setCity] = useState<string>('')
+  const [cityOther, setCityOther] = useState<string>('')
   const [description, setDescription] = useState('')
   const [images, setImages] = useState<string[]>([])
+  const [sellerWhatsappInput, setSellerWhatsappInput] = useState('')
+
+  const isEditing = Boolean(editingListing)
 
   const materialValue = material === 'Otro' ? customMaterial.trim() : material
   const drivetrainValue = drivetrain === 'Otro' ? drivetrainOther.trim() : drivetrain
@@ -130,6 +159,92 @@ export default function NewListingForm() {
     return composed || 'Bicicleta en venta'
   }, [brand, model])
 
+  const normaliseWhatsapp = (value?: string | null): string | null => {
+    if (!value) return null
+    const digits = value.replace(/[^0-9+]/g, '')
+    return digits.trim() || null
+  }
+
+  useEffect(() => {
+    const loadListing = async () => {
+      if (!listingId || !supabaseEnabled) return
+      setLoadingListing(true)
+      try {
+        const existing = await fetchListing(listingId)
+        if (!existing) {
+          alert('No encontramos la publicación que querés editar.')
+          navigate('/dashboard')
+          return
+        }
+        if (user && existing.sellerId !== user.id) {
+          alert('No tenés permisos para editar esta publicación.')
+          navigate('/dashboard')
+          return
+        }
+        setEditingListing(existing)
+        const canonical = canonicalPlanCode(existing.plan ?? undefined)
+        if (canonical) setPlanOverride(canonical)
+        setCategory(existing.category as Category)
+        setBrand(existing.brand)
+        setModel(existing.model)
+        setDescription(existing.description ?? '')
+        setExtras(existing.extras ?? '')
+        setPriceCurrency((existing.priceCurrency as 'USD' | 'ARS') ?? 'USD')
+        setPriceInput(existing.price ? existing.price.toString() : '')
+        setYear(existing.year ? String(existing.year) : '')
+        setImages(existing.images ?? [])
+        const materialFromDb = existing.material ?? ''
+        if (materialFromDb && MATERIAL_OPTIONS.includes(materialFromDb)) {
+          setMaterial(materialFromDb)
+          setCustomMaterial('')
+        } else if (materialFromDb) {
+          setMaterial('Otro')
+          setCustomMaterial(materialFromDb)
+        }
+        const drivetrainFromDb = existing.drivetrain ?? ''
+        if (drivetrainFromDb && DRIVETRAIN_OPTIONS.includes(drivetrainFromDb)) {
+          setDrivetrain(drivetrainFromDb)
+          setDrivetrainOther('')
+        } else if (drivetrainFromDb) {
+          setDrivetrain('Otro')
+          setDrivetrainOther(existing.drivetrainDetail ?? drivetrainFromDb)
+        }
+        setWheelset(existing.wheelset ?? '')
+        setWheelSize(existing.wheelSize ?? '')
+        const locationParts = (existing.location ?? '').split(',').map((part) => part.trim()).filter(Boolean)
+        if (locationParts.length === 2) {
+          const [cityValue, provinceValue] = locationParts
+          const provinceMatch = PROVINCES.find((p) => p.name === provinceValue)
+          if (provinceMatch) {
+            setProvince(provinceValue)
+            const belongsToProvince = provinceMatch.cities?.some((cityOption) => cityOption === cityValue)
+            if (belongsToProvince) {
+              setCity(cityValue)
+            } else if (cityValue) {
+              setCity(OTHER_CITY_OPTION)
+              setCityOther(cityValue)
+            }
+          } else {
+            setCity(OTHER_CITY_OPTION)
+            setCityOther(cityValue)
+          }
+        }
+        setSellerWhatsappInput(existing.sellerWhatsapp ?? '')
+      } finally {
+        setLoadingListing(false)
+      }
+    }
+    void loadListing()
+  }, [listingId, supabaseEnabled, user?.id])
+
+  useEffect(() => {
+    if (listingId) return
+    const defaultWhatsapp = (user?.user_metadata?.whatsapp as string | undefined) ?? (user?.user_metadata?.phone as string | undefined) ?? ''
+    if (defaultWhatsapp && !sellerWhatsappInput) {
+      setSellerWhatsappInput(defaultWhatsapp)
+    }
+  }, [listingId, sellerWhatsappInput, user?.user_metadata?.phone, user?.user_metadata?.whatsapp])
+
   /** 2) Subida de fotos (usa hook existente) */
   const handleFiles = async (files: FileList | null) => {
     if (!photosEnabled) {
@@ -145,7 +260,7 @@ export default function NewListingForm() {
     setImages((prev) => [...prev, ...urls])
   }
 
-  /** 3) Submit: inserta listing + paga si corresponde */
+  /** 3) Submit: inserta listing o actualiza si corresponde */
   const submit = async () => {
     if (!enabled || !supabaseEnabled) return alert('Publicar deshabilitado: configurá Supabase en .env')
     if (!supabase) return alert('Supabase no configurado correctamente')
@@ -162,11 +277,15 @@ export default function NewListingForm() {
     if (!city) return alert('Seleccioná una ciudad')
     if (city === OTHER_CITY_OPTION && !cityOther.trim()) return alert('Especificá la ciudad')
     if (!images.length) return alert('Subí al menos una foto')
+    if (whatsappEnabled && !sellerWhatsappInput.trim()) {
+      alert('Ingresá un número de WhatsApp para el contacto directo.')
+      return
+    }
 
     // (Opcional) límite de publicaciones activas por usuario según plan visible en UI
-    const client = supabase
+    const client = getSupabaseClient()
 
-    if (supabaseEnabled && (selectedPlan as any)?.maxListings && (selectedPlan as any).maxListings > 1) {
+    if (!editingListing && supabaseEnabled && (selectedPlan as any)?.maxListings && (selectedPlan as any).maxListings > 1) {
       const { count } = await client
         .from('listings')
         .select('id', { count: 'exact', head: true })
@@ -187,48 +306,77 @@ export default function NewListingForm() {
     const expiresAtIso = expiresAtDate.toISOString()
 
     const metadata = user.user_metadata ?? {}
-    const rawSellerName = metadata.full_name ?? metadata.username ?? metadata.name ?? user.email ?? 'Vendedor'
-    const sellerName = typeof rawSellerName === 'string' ? rawSellerName : String(rawSellerName)
+    const rawSellerName = metadata.full_name ?? metadata.name ?? user.email ?? 'Vendedor'
+    const sellerName = formatNameWithInitial(typeof rawSellerName === 'string' ? rawSellerName : String(rawSellerName), user.email ?? undefined)
     const sellerLocation = metadata.city
       ? (metadata.province ? `${metadata.city}, ${metadata.province}` : metadata.city)
       : undefined
-    const sellerWhatsapp = metadata.whatsapp ?? metadata.phone ?? undefined
+    const sellerWhatsappFromProfile = metadata.whatsapp ?? metadata.phone ?? undefined
 
     // Defaults exigidos por el negocio
     const safeDescription = (description.trim() || 'No declara descripción específica')
     const safeExtras = (extras.trim() || 'No tiene agregados extras, se encuentra original')
 
+    const whatsappCandidate = sellerWhatsappInput.trim() || (whatsappEnabled ? (sellerWhatsappFromProfile ?? '') : '')
+    const formattedWhatsapp = whatsappEnabled
+      ? normaliseWhatsapp(whatsappCandidate)
+      : editingListing?.sellerWhatsapp ?? null
+
+    if (whatsappEnabled && !formattedWhatsapp) {
+      alert('Ingresá un número de WhatsApp válido (con código de país).')
+      return
+    }
+
+    const payload = {
+      title: autoTitle,
+      brand: brand.trim(),
+      model: model.trim(),
+      year: year ? Number(year) : undefined,
+      category,
+      price: priceForStorage,
+      price_currency: priceCurrency,
+      location,
+      description: safeDescription,
+      images,
+      seller_name: sellerName,
+      seller_location: sellerLocation,
+      seller_whatsapp: formattedWhatsapp,
+      seller_plan: planCode,
+      material: materialValue || undefined,
+      frame_size: frameSize || undefined,
+      drivetrain: drivetrain === 'Otro' ? undefined : drivetrain,
+      drivetrain_detail: drivetrain === 'Otro' ? (drivetrainOther.trim() || undefined) : undefined,
+      wheelset: wheelset.trim() || undefined,
+      wheel_size: wheelSize || undefined,
+      extras: safeExtras,
+      plan_code: planCode,
+      plan: planCode,
+      status: 'active',
+      expires_at: expiresAtIso,
+      renewal_notified_at: null
+    }
+
+    if (editingListing) {
+      const { data: updated, error: updateError } = await client
+        .from('listings')
+        .update(payload)
+        .eq('id', editingListing.id)
+        .select()
+        .single()
+
+      if (updateError || !updated) {
+        console.error('Error update listing:', updateError)
+        alert('No pudimos actualizar la publicación. Intentá nuevamente.')
+        return
+      }
+      navigate(`/listing/${updated.slug ?? updated.id}`)
+      return
+    }
+
     /** 3.a Inserta listing (dispara trigger de snapshot por plan_code) */
     const { data: inserted, error: insertErr } = await client
       .from('listings')
-      .insert([{
-        seller_id: user.id,
-        title: autoTitle,
-        brand: brand.trim(),
-        model: model.trim(),
-        year: year ? Number(year) : undefined,
-        category,
-        price: priceForStorage,
-        price_currency: priceCurrency,     // si tu columna se llama distinto, ajustá aquí
-        location,
-        description: safeDescription,
-        images: [],                        // primero creamos vacío, luego seteamos URLs
-        seller_name: sellerName,
-        seller_location: sellerLocation,
-        seller_whatsapp: sellerWhatsapp,
-        material: materialValue || undefined,
-        frame_size: frameSize || undefined,
-        drivetrain: drivetrain === 'Otro' ? undefined : drivetrain,
-        drivetrain_detail: drivetrain === 'Otro' ? (drivetrainOther.trim() || undefined) : undefined,
-        wheelset: wheelset.trim() || undefined,
-        wheel_size: wheelSize || undefined,
-        extras: safeExtras,
-        plan_code: planCode,               // 👈 clave para snapshot
-        plan: planCode,
-        status: 'active',
-        expires_at: expiresAtIso,
-        renewal_notified_at: null,
-      }])
+      .insert([{ seller_id: user.id, ...payload, images: [] }])
       .select()
       .single()
 
@@ -271,17 +419,31 @@ export default function NewListingForm() {
     if (city !== OTHER_CITY_OPTION) setCityOther('')
   }, [city])
 
+  if (loadingListing) {
+    return (
+      <Container>
+        <div className="mx-auto mt-12 max-w-xl rounded-2xl border border-black/10 bg-white p-6 text-center text-sm text-black/60 shadow">
+          Cargando datos de la publicación…
+        </div>
+      </Container>
+    )
+  }
+
   return (
     <Container>
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
         <div>
-          <h1 className="text-2xl font-bold">Nueva publicación</h1>
-          <p className="text-sm text-black/60 mt-1">Completá los datos de tu bici y obtené una vista previa en tiempo real.</p>
+          <h1 className="text-2xl font-bold">{isEditing ? 'Editar publicación' : 'Nueva publicación'}</h1>
+          <p className="text-sm text-black/60 mt-1">
+            {isEditing
+              ? 'Actualizá la información de tu aviso. Los cambios se publican al instante.'
+              : 'Completá los datos de tu bici y obtené una vista previa en tiempo real.'}
+          </p>
         </div>
         <div className="rounded-xl border border-mb-primary/30 bg-mb-primary/5 px-4 py-3 text-sm text-mb-ink max-w-sm">
-          <div className="font-semibold text-mb-primary">Plan seleccionado: {planName}</div>
+          <div className="font-semibold text-mb-primary">{isEditing ? `Plan en uso: ${planName}` : `Plan seleccionado: ${planName}`}</div>
           <div className="text-xs font-semibold text-mb-primary/80">
-            {planPriceLabel ?? 'Sin costo'}
+            {isEditing ? 'Podés cambiar de plan desde tu panel de vendedor.' : (planPriceLabel ?? 'Sin costo')}
           </div>
           {selectedPlan?.description && (
             <div className="mt-2 text-xs text-black/70">{selectedPlan.description}</div>
@@ -428,6 +590,17 @@ export default function NewListingForm() {
             {city === OTHER_CITY_OPTION && (
               <Field label="Ciudad (especificar)">
                 <input className="input" value={cityOther} onChange={(e) => setCityOther(e.target.value)} placeholder="Ingresá el nombre de la ciudad" />
+              </Field>
+            )}
+            {whatsappEnabled && (
+              <Field label="WhatsApp de contacto">
+                <input
+                  className="input"
+                  value={sellerWhatsappInput}
+                  onChange={(e) => setSellerWhatsappInput(e.target.value)}
+                  placeholder="Ej.: +5491122334455"
+                />
+                <p className="mt-1 text-xs text-black/50">Se mostrará un botón de WhatsApp en la publicación.</p>
               </Field>
             )}
 

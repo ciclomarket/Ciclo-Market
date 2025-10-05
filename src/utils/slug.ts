@@ -8,8 +8,25 @@ export function slugify(input: string): string {
     .replace(/^-+|-+$/g, '')
 }
 
-export function buildListingSlug({ id, title }: { id: string; title: string }): string {
-  const base = slugify(title || 'listing') || 'listing'
+export function buildListingSlug({
+  id,
+  title,
+  brand,
+  model,
+  category
+}: {
+  id: string
+  title: string
+  brand?: string | null
+  model?: string | null
+  category?: string | null
+}): string {
+  const parts = [brand, model, category]
+    .map((value) => (value ?? '').trim())
+    .filter((value) => value.length > 0)
+
+  const baseSource = parts.length > 0 ? parts.join(' ') : title || 'listing'
+  const base = slugify(baseSource) || 'listing'
   return `${base}--${id}`
 }
 

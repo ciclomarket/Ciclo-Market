@@ -8,6 +8,7 @@ import { mockListings } from '../mock/mockData'
 import { fetchListings } from '../services/listings'
 import { supabaseEnabled } from '../services/supabase'
 import type { Listing } from '../types'
+import { hasPaidPlan } from '../utils/plans'
 
 type Cat = 'Todos' | 'Ruta' | 'MTB' | 'Gravel' | 'Urbana' | 'Accesorios' | 'E-Bike' | 'Niños' | 'Pista' | 'Triatlón'
 type FiltersState = {
@@ -106,11 +107,13 @@ export default function Marketplace() {
     const sorted = [...filteredList]
 
     if (sortMode === 'relevance') {
-      const planScore: Record<string, number> = { pro: 2, featured: 1, basic: 0 }
       return sorted.sort((a, b) => {
-        const scoreB = planScore[b.sellerPlan ?? 'basic'] || 0
-        const scoreA = planScore[a.sellerPlan ?? 'basic'] || 0
-        if (scoreB !== scoreA) return scoreB - scoreA
+        const bFeatured = hasPaidPlan(b.sellerPlan ?? (b.plan as any), b.sellerPlanExpires) ? 1 : 0
+        const aFeatured = hasPaidPlan(a.sellerPlan ?? (a.plan as any), a.sellerPlanExpires) ? 1 : 0
+        if (bFeatured !== aFeatured) return bFeatured - aFeatured
+        const bExpires = b.sellerPlanExpires ?? 0
+        const aExpires = a.sellerPlanExpires ?? 0
+        if (bExpires !== aExpires) return bExpires - aExpires
         return (b.createdAt ?? 0) - (a.createdAt ?? 0)
       })
     }

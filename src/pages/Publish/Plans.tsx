@@ -112,6 +112,9 @@ export default function Plans() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           planId: plan.id ?? planCode,
+          planCode,
+          planName: plan.name,
+          planCurrency: plan.currency,
           userId: user.id,
           autoRenew: false,
           amount: typeof plan.price === 'number' ? plan.price : undefined,
@@ -148,13 +151,13 @@ export default function Plans() {
       <Container>
         <div className="text-center text-white">
           <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs uppercase tracking-[0.4em] text-white/70">
-            Planes por publicación
+            Destacados por publicación
           </span>
           <h1 className="mt-4 text-3xl font-bold sm:text-4xl">
             Elegí la visibilidad de tu aviso
           </h1>
           <p className="mt-3 mx-auto max-w-2xl text-sm text-white/70">
-            Pagás solo cuando necesitás destacar tu bicicleta. Todas las opciones incluyen una única publicación por aviso.
+            Pagás solo cuando querés destacar tu bicicleta. Todas las opciones incluyen una única publicación por aviso.
           </p>
         </div>
 

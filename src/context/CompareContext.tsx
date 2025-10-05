@@ -6,6 +6,8 @@ export type CompareContextValue = {
   remove: (id: string) => void
   toggle: (id: string) => void
   clear: () => void
+  setListings: (listings: Record<string, any>) => void
+  listings: Record<string, any>
 }
 
 const CompareContext = createContext<CompareContextValue | undefined>(undefined)
@@ -25,6 +27,7 @@ function loadInitial(): string[] {
 
 export function CompareProvider({ children }: { children: React.ReactNode }) {
   const [ids, setIds] = useState<string[]>(loadInitial)
+  const [listings, setListings] = useState<Record<string, any>>({})
 
   useEffect(() => {
     try {
@@ -39,7 +42,7 @@ export function CompareProvider({ children }: { children: React.ReactNode }) {
   const toggle = (id: string) => setIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]))
   const clear = () => setIds([])
 
-  const value = useMemo(() => ({ ids, add, remove, toggle, clear }), [ids])
+  const value = useMemo(() => ({ ids, add, remove, toggle, clear, listings, setListings }), [ids, listings])
 
   return <CompareContext.Provider value={value}>{children}</CompareContext.Provider>
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import Container from '../components/Container'
 import ImageCarousel from '../components/ImageCarousel'
 import Button from '../components/Button'
@@ -12,12 +12,29 @@ import useFaves from '../hooks/useFaves'
 import { fetchListing } from '../services/listings'
 import { supabaseEnabled } from '../services/supabase'
 import type { Listing } from '../types'
+import { formatNameWithInitial } from '../utils/user'
+import { useAuth } from '../context/AuthContext'
+import { useChat } from '../context/ChatContext'
+import { applySeo, resetSeo } from '../utils/seo'
+import { sendChatMessage } from '../services/chat'
+import { updateListingPlan } from '../services/listings'
+import { fetchUserProfile, setUserVerificationStatus } from '../services/users'
 
 export default function ListingDetail() {
   const params = useParams()
+  const navigate = useNavigate()
+  const { user, isModerator } = useAuth()
+  const { createThread } = useChat()
   const { format, fx } = useCurrency()
   const [listing, setListing] = useState<Listing | null>(null)
   const [loading, setLoading] = useState(true)
+  const [contacting, setContacting] = useState(false)
+  const [showOfferModal, setShowOfferModal] = useState(false)
+  const [offerAmount, setOfferAmount] = useState('')
+  const [offerSubmitting, setOfferSubmitting] = useState(false)
+  const [offerError, setOfferError] = useState<string | null>(null)
+  const [moderatorUpdating, setModeratorUpdating] = useState(false)
+  const [sellerVerified, setSellerVerified] = useState(false)
   const { ids: compareIds, toggle: toggleCompare } = useCompare()
   const { has: hasFav, toggle: toggleFav } = useFaves()
   const listingKey = params.slug ?? params.id ?? ''
@@ -51,6 +68,31 @@ export default function ListingDetail() {
     }
   }, [listingKey])
 
+  useEffect(() => {
+    if (!listing) return
+    const title = [listing.brand, listing.model, listing.year].filter(Boolean).join(' ')
+    const descriptionParts = [listing.material, listing.extras]
+      .filter((value) => value && value !== 'No tiene agregados extras, se encuentra original')
+      .join(' · ')
+    const description = descriptionParts || `${listing.title} disponible en Ciclo Market.`
+    const image = listing.images?.[0]
+    const url = typeof window !== 'undefined' ? window.location.href : undefined
+    applySeo({ title: `${title} | Ciclo Market`, description, image, url })
+    return () => {
+      resetSeo()
+    }
+  }, [listing])
+
+  useEffect(() => {
+    const loadSellerProfile = async () => {
+      if (!listing?.sellerId) return
+      setSellerVerified(false)
+      const profile = await fetchUserProfile(listing.sellerId)
+      setSellerVerified(Boolean(profile?.verified))
+    }
+    void loadSellerProfile()
+  }, [listing?.sellerId])
+
   if (loading) return <Container>Cargando publicación…</Container>
   if (!listing) return <Container>Publicación no encontrada.</Container>
 
@@ -61,11 +103,238 @@ export default function ListingDetail() {
   const originalPriceLabel = listing.originalPrice
     ? formatListingPrice(listing.originalPrice, listing.priceCurrency, format, fx)
     : null
-  const planLabel = getPlanLabel(listing.sellerPlan, listing.sellerPlanExpires)
-  const paidPlanActive = hasPaidPlan(listing.sellerPlan, listing.sellerPlanExpires)
-  const verifiedVendor = isPlanVerified(listing.sellerPlan, listing.sellerPlanExpires)
+  const effectivePlan = (listing.sellerPlan ?? (listing.plan as any))
+  const planLabel = getPlanLabel(effectivePlan, listing.sellerPlanExpires)
+  const paidPlanActive = hasPaidPlan(effectivePlan, listing.sellerPlanExpires)
+  const verifiedVendor = sellerVerified
   const inCompare = compareIds.includes(listing.id)
   const isFav = hasFav(listing.id)
+  const isOwner = user?.id === listing.sellerId
+  const isFeaturedListing = hasPaidPlan(effectivePlan, listing.sellerPlanExpires)
+
+  const shareUrl = typeof window !== 'undefined' ? window.location.href : ''
+  const shareTitle = `${listing.brand} ${listing.model}${listing.year ? ` ${listing.year}` : ''}`.trim()
+  const shareDescription = listing.description?.slice(0, 120) ?? 'Encontrá esta bicicleta en Ciclo Market.'
+  const shareImage = listing.images?.[0]
+  const shareText = `${shareTitle} - ${shareDescription}`
+
+  const openShareWindow = (url: string) => {
+    if (typeof window === 'undefined') return
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
+
+  const handleShare = (platform: 'whatsapp' | 'facebook' | 'x' | 'sms') => {
+    if (!shareUrl) return
+    const encodedUrl = encodeURIComponent(shareUrl)
+    const encodedText = encodeURIComponent(shareText)
+    switch (platform) {
+      case 'whatsapp':
+        openShareWindow(`https://wa.me/?text=${encodedText}%20${encodedUrl}`)
+        break
+      case 'facebook':
+        openShareWindow(`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`)
+        break
+      case 'x':
+        openShareWindow(`https://twitter.com/intent/tweet?url=${encodedUrl}&text=${encodedText}`)
+        break
+      case 'sms':
+        if (typeof window !== 'undefined') {
+          window.location.href = `sms:?body=${encodedText}%20${encodedUrl}`
+        }
+        break
+      default:
+        break
+    }
+  }
+
+  const handleInstagramShare = async () => {
+    if (!shareImage) {
+      alert('Necesitás al menos una foto para compartir en Instagram.')
+      return
+    }
+    try {
+      const response = await fetch(shareImage)
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${listing.slug ?? listing.id}-ciclomarket.jpg`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('[listing-detail] instagram share failed', error)
+      alert('No pudimos preparar la imagen. Intentá nuevamente.')
+    }
+  }
+
+  const handleOfferSubmit = async () => {
+    if (!listing?.sellerId) return
+    if (!user) {
+      navigate('/login', {
+        state: { from: { pathname: `/listing/${listing.slug ?? listing.id}` } }
+      })
+      return
+    }
+    if (!offerAmount.trim()) {
+      setOfferError('Ingresá un monto válido.')
+      return
+    }
+    const numericAmount = Number(offerAmount)
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      setOfferError('El monto debe ser mayor a cero.')
+      return
+    }
+    setOfferSubmitting(true)
+    setOfferError(null)
+    try {
+      const threadId = await createThread(listing.id, listing.sellerId)
+      if (!threadId) {
+        throw new Error('No se pudo iniciar el chat con el vendedor.')
+      }
+      const currency = listing.priceCurrency ?? 'USD'
+      const amountLabel = new Intl.NumberFormat(currency === 'USD' ? 'en-US' : 'es-AR', {
+        style: 'currency',
+        currency,
+        maximumFractionDigits: 0
+      }).format(numericAmount)
+      const message = `Hola ${formatNameWithInitial(listing.sellerName, undefined)}. Te ofrezco ${amountLabel} por tu bicicleta ${listing.title}. ¿Podemos conversar?`
+      await sendChatMessage(threadId, message)
+      setShowOfferModal(false)
+      setOfferAmount('')
+      navigate(`/dashboard?tab=Chat&thread=${threadId}`)
+    } catch (error: any) {
+      console.error('[listing-detail] offer failed', error)
+      setOfferError(error?.message ?? 'No pudimos enviar la oferta. Intentá nuevamente.')
+    } finally {
+      setOfferSubmitting(false)
+    }
+  }
+
+  const handleModeratorHighlight = async (plan: Listing['sellerPlan'] | null, durationDays: number | null) => {
+    if (!listing) return
+    setModeratorUpdating(true)
+    try {
+      const updated = await updateListingPlan({ id: listing.id, plan, durationDays })
+      if (updated) {
+        setListing(updated)
+      }
+    } catch (error) {
+      console.error('[listing-detail] moderator highlight failed', error)
+      alert('No pudimos actualizar el destaque. Intentá nuevamente.')
+    } finally {
+      setModeratorUpdating(false)
+    }
+  }
+
+  const handleModeratorVerify = async (verified: boolean) => {
+    if (!listing?.sellerId) return
+    setModeratorUpdating(true)
+    try {
+      const ok = await setUserVerificationStatus(listing.sellerId, verified)
+      if (ok) {
+        setSellerVerified(verified)
+      }
+    } catch (error) {
+      console.error('[listing-detail] moderator verify failed', error)
+      alert('No pudimos actualizar la verificación. Intentá nuevamente.')
+    } finally {
+      setModeratorUpdating(false)
+    }
+  }
+
+  const handleContact = async () => {
+    if (!listing?.sellerId) return
+    if (!user) {
+      navigate('/login', {
+        state: {
+          from: { pathname: `/listing/${listing.slug ?? listing.id}` }
+        }
+      })
+      return
+    }
+    try {
+      setContacting(true)
+      const threadId = await createThread(listing.id, listing.sellerId)
+      if (threadId) {
+        navigate(`/dashboard?tab=Chat&thread=${threadId}`)
+      }
+    } catch (err) {
+      console.error('[listing-detail] contact failed', err)
+      alert('No pudimos iniciar el chat. Intentá nuevamente en unos minutos.')
+    } finally {
+      setContacting(false)
+    }
+  }
+
+  const ContactIcons = () => {
+    const items: Array<{ id: string; label: string; onClick?: () => void; href?: string; icon: ReactNode; disabled?: boolean; className?: string }> = []
+    if (!isOwner) {
+      items.push({
+        id: 'chat',
+        label: 'Enviar mensaje interno',
+        onClick: handleContact,
+        disabled: contacting,
+        icon: <ChatBubbleIcon />,
+        className: 'bg-[#0b1724]'
+      })
+    }
+    if (paidPlanActive && waLink && !isOwner) {
+      items.push({
+        id: 'whatsapp',
+        label: 'Abrir WhatsApp',
+        href: waLink,
+        icon: <WhatsappIcon />,
+        className: 'bg-[#25D366]'
+      })
+    }
+    items.push({
+      id: 'email',
+      label: 'Enviar correo',
+      onClick: () => {
+        const subject = encodeURIComponent(`Consulta sobre ${listing.title}`)
+        const body = encodeURIComponent(`Hola! Vi tu ${listing.title} en Ciclo Market y me gustaría saber más.`)
+        window.location.href = `mailto:?subject=${subject}&body=${body}%0A%0A${shareUrl}`
+      },
+      icon: <MailIcon />,
+      className: 'bg-[#0b1724]'
+    })
+
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        {items.map((item) => (
+          item.href ? (
+            <a
+              key={item.id}
+              href={item.href}
+              target="_blank"
+              rel="noreferrer"
+              className={`inline-flex h-10 w-10 items-center justify-center rounded-full text-white shadow transition hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70 ${item.className}`}
+              aria-label={item.label}
+              title={item.label}
+            >
+              <span className="sr-only">{item.label}</span>
+              <span className="text-white">{item.icon}</span>
+            </a>
+          ) : (
+            <button
+              key={item.id}
+              type="button"
+              onClick={item.onClick}
+              disabled={item.disabled}
+              className={`inline-flex h-10 w-10 items-center justify-center rounded-full text-white shadow transition hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70 ${item.className} ${item.disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
+              aria-label={item.label}
+              title={item.label}
+            >
+              <span className="sr-only">{item.label}</span>
+              <span className="text-white">{item.icon}</span>
+            </button>
+          )
+        ))}
+      </div>
+    )
+  }
 
   return (
     <Container>
@@ -75,32 +344,185 @@ export default function ListingDetail() {
         </div>
 
         <div className="order-2 lg:col-start-2 lg:row-start-1">
-          <div className="card p-6">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h1 className="text-2xl font-bold text-[#14212e] leading-tight">{listing.title}</h1>
-                <p className="mt-2 text-sm text-[#14212e]/70">{listing.location}</p>
+          <div className="flex flex-col gap-6 lg:sticky lg:top-6 lg:self-start">
+            <div className="card p-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h1 className="text-2xl font-bold text-[#14212e] leading-tight">{listing.title}</h1>
+                  <p className="mt-2 text-sm text-[#14212e]/70">{listing.location}</p>
+                  {isFeaturedListing && (
+                    <span className="mt-3 inline-flex items-center gap-2 rounded-full bg-[#14212e] px-3 py-1 text-xs font-semibold text-white">
+                      Destacada 🔥
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <IconButton label={isFav ? 'Quitar de favoritos' : 'Agregar a favoritos'} onClick={() => toggleFav(listing.id)}>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
+                      <path d="M12 21.35s-6.63-4.35-9.33-8.35C-0.03 9.78.36 5.96 3.05 4.04 5.06 2.62 7.92 3 9.7 4.79L12 7.1l2.3-2.31c1.78-1.78 4.64-2.17 6.65-.75 2.69 1.92 3.08 5.74.38 8.96C18.63 17 12 21.35 12 21.35Z" />
+                    </svg>
+                  </IconButton>
+                  <IconButton label={inCompare ? 'Quitar de comparativa' : 'Agregar a comparativa'} onClick={() => toggleCompare(listing.id)}>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
+                      <path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4V4Zm2 0v16h6a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-6Z" />
+                    </svg>
+                  </IconButton>
+                </div>
+              </div>
+              <div className="mt-4 flex items-end gap-3">
+                <span className="text-3xl font-extrabold text-mb-primary">{formattedPrice}</span>
+                {originalPriceLabel && <span className="text-sm text-[#14212e]/60 line-through">{originalPriceLabel}</span>}
+              </div>
+              <p className="mt-4 text-xs text-[#14212e]/60">
+                Guardá o compará esta bici para decidir más tarde.
+              </p>
+            </div>
+
+            <div className="card p-6 space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm text-[#14212e]/70">Publicado por</p>
+                  <h3 className="text-lg font-semibold text-[#14212e]">
+                    <span className="inline-flex items-center gap-2">
+                      {formatNameWithInitial(listing.sellerName, undefined)}
+                      {sellerVerified && <VerifiedCheck />}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-[#14212e]/60">{listing.sellerLocation || 'Ubicación reservada'}</p>
+                </div>
+                {listing.sellerPlan && (
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs font-semibold uppercase ${
+                      paidPlanActive ? 'bg-mb-primary text-white' : 'bg-[#14212e]/10 text-[#14212e]'
+                    }`}
+                  >
+                    {planLabel}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="size-14 overflow-hidden rounded-full bg-[#14212e]/10">
+                  {listing.sellerAvatar ? (
+                    <img src={listing.sellerAvatar} alt={formatNameWithInitial(listing.sellerName, undefined)} className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="flex h-full w-full items-center justify-center text-sm text-[#14212e]/60">
+                      {formatNameWithInitial(listing.sellerName, undefined)[0] || 'C'}
+                    </span>
+                  )}
+                </div>
+                <div className="text-xs text-[#14212e]/60">
+                  {paidPlanActive && <p>{planLabel}</p>}
+                </div>
               </div>
               <div className="flex items-center gap-2">
-                <IconButton label={isFav ? 'Quitar de favoritos' : 'Agregar a favoritos'} onClick={() => toggleFav(listing.id)}>
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
-                    <path d="M12 21.35s-6.63-4.35-9.33-8.35C-0.03 9.78.36 5.96 3.05 4.04 5.06 2.62 7.92 3 9.7 4.79L12 7.1l2.3-2.31c1.78-1.78 4.64-2.17 6.65-.75 2.69 1.92 3.08 5.74.38 8.96C18.63 17 12 21.35 12 21.35Z" />
-                  </svg>
-                </IconButton>
-                <IconButton label={inCompare ? 'Quitar de comparativa' : 'Agregar a comparativa'} onClick={() => toggleCompare(listing.id)}>
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
-                    <path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4V4Zm2 0v16h6a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-6Z" />
-                  </svg>
-                </IconButton>
+                {!isOwner && (
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-2 rounded-full bg-[#f4f6fb] px-3 py-1 text-sm font-medium text-[#14212e]"
+                    onClick={() => setShowOfferModal(true)}
+                    disabled={isOwner}
+                  >
+                    <span aria-hidden="true">💸</span>
+                    Hacer oferta
+                  </button>
+                )}
               </div>
+              <ContactIcons />
+              <div className="pt-4">
+                <p className="text-xs text-[#14212e]/60 uppercase tracking-wide">Compartir</p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <IconCircleButton
+                    label="Compartir por WhatsApp"
+                    onClick={() => handleShare('whatsapp')}
+                    className="bg-[#25D366]"
+                    icon={<WhatsappIcon />}
+                  />
+                  <IconCircleButton
+                    label="Compartir en Facebook"
+                    onClick={() => handleShare('facebook')}
+                    className="bg-[#1877F2]"
+                    icon={<FacebookIcon />}
+                  />
+                  <IconCircleButton
+                    label="Compartir en X"
+                    onClick={() => handleShare('x')}
+                    className="bg-black"
+                    icon={<XIcon />}
+                  />
+                  <IconCircleButton
+                    label="Compartir por SMS"
+                    onClick={() => handleShare('sms')}
+                    className="bg-[#0f766e]"
+                    icon={<SmsIcon />}
+                  />
+                  <IconCircleButton
+                    label="Descargar para Instagram"
+                    onClick={handleInstagramShare}
+                    className="bg-gradient-to-tr from-pink-500 via-fuchsia-500 to-yellow-400"
+                    icon={<InstagramIcon />}
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-[#14212e]/60">
+              {verifiedVendor
+                ? 'Vendedor verificado: tus ofertas generan alertas prioritarias en su bandeja y correo.'
+                : 'Las ofertas llegan a la bandeja de Mensajes del vendedor y se notifican por correo.'}
+              </p>
+              {isFeaturedListing && (
+                <p className="text-xs font-semibold text-[#14212e]">
+                  Esta publicación está destacada con prioridad en la sección de destacados.
+                </p>
+              )}
+              {sellerVerified && (
+                <p className="text-xs text-[#14212e]/70">Vendedor verificado por el equipo de moderación.</p>
+              )}
+              {isModerator && (
+                <div className="mt-4 space-y-2 border-t border-[#14212e]/10 pt-3">
+                  <p className="text-xs uppercase tracking-wide text-[#14212e]/60">Acciones de moderador</p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="ghost"
+                      disabled={moderatorUpdating}
+                      onClick={() => handleModeratorHighlight('basic', 7)}
+                    >
+                      Destacar 7 días 🔥
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      disabled={moderatorUpdating}
+                      onClick={() => handleModeratorHighlight('premium', 14)}
+                    >
+                      Destacar 14 días ⚡
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      disabled={moderatorUpdating}
+                      onClick={() => handleModeratorHighlight(null as any, null)}
+                      className="text-red-600"
+                    >
+                      Quitar destaque
+                    </Button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="ghost"
+                      disabled={moderatorUpdating || sellerVerified}
+                      onClick={() => handleModeratorVerify(true)}
+                    >
+                      Verificar vendedor
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      disabled={moderatorUpdating || !sellerVerified}
+                      onClick={() => handleModeratorVerify(false)}
+                      className="text-red-600"
+                    >
+                      Quitar verificación
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="mt-4 flex items-end gap-3">
-              <span className="text-3xl font-extrabold text-mb-primary">{formattedPrice}</span>
-              {originalPriceLabel && <span className="text-sm text-[#14212e]/60 line-through">{originalPriceLabel}</span>}
-            </div>
-            <p className="mt-4 text-xs text-[#14212e]/60">
-              Guardá o compará esta bici para decidir más tarde.
-            </p>
           </div>
         </div>
 
@@ -128,69 +550,142 @@ export default function ListingDetail() {
             </div>
           </section>
         </div>
-
-        <div className="order-4 lg:col-start-2 lg:row-start-2">
-          <div className="card p-6 space-y-4">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm text-[#14212e]/70">Publicado por</p>
-                <h3 className="text-lg font-semibold text-[#14212e]">
-                  {listing.sellerName || 'Vendedor Ciclo Market'}
-                </h3>
-                <p className="text-xs text-[#14212e]/60">{listing.sellerLocation || 'Ubicación reservada'}</p>
-              </div>
-              {listing.sellerPlan && (
-                <span
-                  className={`rounded-full px-3 py-1 text-xs font-semibold uppercase ${
-                    paidPlanActive ? 'bg-mb-primary text-white' : 'bg-[#14212e]/10 text-[#14212e]'
-                  }`}
-                >
-                  {planLabel}
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="size-14 overflow-hidden rounded-full bg-[#14212e]/10">
-                {listing.sellerAvatar ? (
-                  <img src={listing.sellerAvatar} alt={listing.sellerName || 'Vendedor'} className="h-full w-full object-cover" />
-                ) : (
-                  <span className="flex h-full w-full items-center justify-center text-sm text-[#14212e]/60">
-                    {(listing.sellerName || 'CM')[0]}
-                  </span>
-                )}
-              </div>
-              <div className="text-xs text-[#14212e]/60">
-                <p>{planLabel}</p>
-                <p>ID vendedor: {listing.sellerId}</p>
-              </div>
-            </div>
-            <div className="grid gap-2">
-              <Button className="w-full" variant="ghost">
-                Hacé una oferta
-              </Button>
-              <Button className="w-full" variant="primary">
-                Contactar al vendedor
-              </Button>
-              {paidPlanActive && waLink && (
-                <a href={waLink} target="_blank" rel="noreferrer" className="btn btn-secondary w-full text-center">
-                  Contactar por WhatsApp
-                </a>
-              )}
-              <Button className="w-full" variant="ghost">
-                Contactar por email
-              </Button>
-            </div>
-            <p className="text-xs text-[#14212e]/60">
-              {verifiedVendor
-                ? 'Vendedor verificado: tus ofertas generan alertas prioritarias en su bandeja y correo.'
-                : 'Las ofertas llegan a la bandeja de Mensajes del vendedor y se notifican por correo.'}
-            </p>
-          </div>
-        </div>
       </div>
+      {showOfferModal && (
+        <OfferModal
+          amount={offerAmount}
+          onChange={setOfferAmount}
+          onSubmit={handleOfferSubmit}
+          onClose={() => {
+            setShowOfferModal(false)
+            setOfferError(null)
+          }}
+          loading={offerSubmitting}
+          error={offerError}
+        />
+      )}
     </Container>
   )
 }
+
+function OfferModal({
+  amount,
+  onChange,
+  onSubmit,
+  onClose,
+  loading,
+  error
+}: {
+  amount: string
+  onChange: (value: string) => void
+  onSubmit: () => Promise<void> | void
+  onClose: () => void
+  loading: boolean
+  error: string | null
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+      <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-xl">
+        <div className="flex items-start justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-[#14212e]">Enviar oferta</h2>
+            <p className="text-sm text-[#14212e]/70">Indicá el monto que querés ofrecer al vendedor.</p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Cerrar">
+            ✕
+          </button>
+        </div>
+        <div className="mt-4 space-y-3">
+          <div>
+            <label className="text-sm font-medium text-[#14212e]">Monto ofertado</label>
+            <input
+              className="input mt-1"
+              type="number"
+              min={0}
+              value={amount}
+              onChange={(event) => onChange(event.target.value)}
+              placeholder="Ej.: 1200000"
+            />
+          </div>
+          {error && <p className="text-sm text-red-600">{error}</p>}
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={onClose} disabled={loading}>Cancelar</Button>
+            <Button onClick={() => void onSubmit()} disabled={loading || !amount.trim()} className="bg-[#14212e] text-white hover:bg-[#1b2f3f]">
+              {loading ? 'Enviando…' : 'Enviar oferta'}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function IconCircleButton({ label, icon, onClick, className }: { label: string; icon: ReactNode; onClick: () => void; className?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className={`inline-flex h-10 w-10 items-center justify-center rounded-full text-white shadow transition hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70 ${className ?? ''}`}
+    >
+      <span className="sr-only">{label}</span>
+      <span className="text-white">{icon}</span>
+    </button>
+  )
+}
+
+const WhatsappIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M16.7 14.2c-.3-.2-1.8-.9-2.1-1-.3-.1-.5-.2-.7.2-.2.3-.8 1-.9 1.1-.2.1-.3.2-.6.1-.3-.1-1.2-.4-2.3-1.4-.9-.8-1.4-1.7-1.6-2-.2-.3 0-.4.1-.6l.5-.6c.1-.2.2-.3.3-.5.1-.2 0-.3-.1-.5-.2-.2-.7-1.6-.9-2.2-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.7.3-.3.3-1 1-1 2.5s1 2.9 1.1 3.1c.1.2 2 3 4.8 4.2 1.8.8 2.5.9 2.9.8.5 0 1.5-.6 1.7-1.1.2-.5.2-1 .1-1.1-.1-.1-.3-.2-.6-.4Z" />
+    <path d="M12 21a9 9 0 1 0-3.9-.9L6 21l1.9-5.4" />
+  </svg>
+)
+
+const FacebookIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden="true">
+    <path d="M13.5 8.5V6.8c0-.8.5-1 1-.9h1.8V3h-2.6C10.5 3 10 5.3 10 6.6v1.9H8v3h2v9h3.5v-9h2.3l.5-3h-2.8Z" />
+  </svg>
+)
+
+const XIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden="true">
+    <path d="M4 3h3.3l4.2 6.2L16.1 3H20l-6.1 8.2L20 21h-3.3l-4.5-6.6L7.9 21H4l6.2-9L4 3Z" />
+  </svg>
+)
+
+const SmsIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden="true">
+    <path d="M4 3h16c1.1 0 2 .9 2 2v10c0 1.1-.9 2-2 2H8l-4 4v-4H4c-1.1 0-2-.9-2-2V5c0-1.1.9-2 2-2Zm2 6v1h12V9H6Zm0-3v1h12V6H6Zm0 5v1h8v-1H6Z" />
+  </svg>
+)
+
+const InstagramIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden="true">
+    <path d="M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5Zm0 2a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3H7Zm5 3.5a4.5 4.5 0 1 1-4.5 4.5A4.5 4.5 0 0 1 12 7.5Zm0 2a2.5 2.5 0 1 0 2.5 2.5A2.5 2.5 0 0 0 12 9.5Zm5-3a1 1 0 1 1-1-1 1 1 0 0 1 1 1Z" />
+  </svg>
+)
+
+const VerifiedCheck = () => (
+  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#1d9bf0] text-white" aria-hidden="true">
+    <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2 7.5 4.1 3 6v6c0 5 3.4 9.4 9 10 5.6-.6 9-5 9-10V6l-4.5-1.9L12 2Z" />
+      <path d="m9 12 2 2 4-4" />
+    </svg>
+  </span>
+)
+
+const ChatBubbleIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden="true">
+    <path d="M4 4h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-9l-4.5 3.6A1 1 0 0 1 5 18V15H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Zm3 4v1h10V8H7Zm0 3v1h6v-1H7Z" />
+  </svg>
+)
+
+const MailIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden="true">
+    <path d="M4 5h16a2 2 0 0 1 2 2v10c0 1.1-.9 2-2 2H4a2 2 0 0 1-2-2V7c0-1.1.9-2 2-2Zm0 2v.5l8 5 8-5V7H4Zm16 10v-7.3l-7.4 4.6a1 1 0 0 1-1.2 0L4 9.7V17h16Z" />
+  </svg>
+)
 
 function Spec({ label, value, fullWidth = false }: { label: string; value: string; fullWidth?: boolean }) {
   return (

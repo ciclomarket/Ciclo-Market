@@ -1,18 +1,19 @@
 
 import Container from '../../components/Container'
 import Button from '../../components/Button'
-import { useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { PROVINCES, OTHER_CITY_OPTION } from '../../constants/locations'
 import { BIKE_CATEGORIES } from '../../constants/catalog'
 import { getSupabaseClient, supabaseEnabled } from '../../services/supabase'
 import { createUserProfile } from '../../services/users'
+import { deriveProfileSlug, pickDiscipline } from '../../utils/user'
 
 export default function Register(){
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [username, setUsername] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [fullName, setFullName] = useState('')
   const [province, setProvince] = useState('')
   const [city, setCity] = useState('')
@@ -22,15 +23,28 @@ export default function Register(){
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [googleLoading, setGoogleLoading] = useState(false)
   const nav = useNavigate()
   const { enabled } = useAuth()
+
+  const passwordChecks = useMemo(() => {
+    const value = password
+    return {
+      length: value.length >= 8,
+      upper: /[A-Z]/.test(value),
+      lower: /[a-z]/.test(value),
+      number: /\d/.test(value)
+    }
+  }, [password])
+
+  const passwordValid = Object.values(passwordChecks).every(Boolean)
 
   const register = async () => {
     setError(null)
     if (!enabled || !supabaseEnabled) { setError('Registro deshabilitado: configurá Supabase en .env'); return }
     if (!email.trim()) { setError('Ingresá un email válido'); return }
-    if (password.length < 6) { setError('La contraseña debe tener al menos 6 caracteres'); return }
-    if (!username.trim()) { setError('Ingresá un nombre de usuario'); return }
+    if (!passwordValid) { setError('La contraseña debe cumplir con los requisitos de seguridad'); return }
+    if (password !== confirmPassword) { setError('Las contraseñas no coinciden'); return }
     if (!fullName.trim()) { setError('Ingresá tu nombre completo'); return }
     if (!province) { setError('Seleccioná una provincia'); return }
     if (!city) { setError('Seleccioná una ciudad'); return }
@@ -41,16 +55,23 @@ export default function Register(){
       setLoading(true)
       const location = city === OTHER_CITY_OPTION ? cityOther.trim() : city
       const supabase = getSupabaseClient()
+      const discipline = pickDiscipline(bikePrefs)
+      const profileSlug = deriveProfileSlug({
+        fullName: fullName.trim(),
+        discipline,
+        fallback: email.trim().split('@')[0] ?? 'usuario'
+      })
       const { data, error: signUpError } = await supabase.auth.signUp({
         email: email.trim(),
         password,
         options: {
           data: {
-            username: username.trim(),
             full_name: fullName.trim(),
             province,
             city: location,
             bike_preferences: bikePrefs,
+            profile_slug: profileSlug,
+            discipline,
           }
         }
       })
@@ -60,11 +81,11 @@ export default function Register(){
         await createUserProfile({
           id: data.user.id,
           email: email.trim(),
-          username: username.trim(),
           fullName: fullName.trim(),
           province,
           city: location,
           bikePreferences: bikePrefs,
+          profileSlug,
         })
       }
 
@@ -95,6 +116,33 @@ export default function Register(){
     setBikePrefs((prev) => prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat])
   }
 
+  const loginGoogle = async () => {
+    setError(null)
+    if (!enabled || !supabaseEnabled) { setError('Login con Google deshabilitado: configurá Supabase en .env'); return }
+    try {
+      setGoogleLoading(true)
+      const supabase = getSupabaseClient()
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/dashboard`
+        }
+      })
+      if (error) throw error
+      if (data?.url) {
+        window.location.href = data.url
+        return
+      }
+      nav('/dashboard')
+    } catch (err: any) {
+      console.error('Error login Google:', err)
+      const message = err instanceof Error ? err.message : 'No pudimos conectar con Google. Intentá nuevamente.'
+      setError(message)
+    } finally {
+      setGoogleLoading(false)
+    }
+}
+
   const cityOptions = province ? PROVINCES.find((p) => p.name === province)?.cities ?? [] : []
   const finalCity = city === OTHER_CITY_OPTION ? cityOther.trim() : city
 
@@ -113,21 +161,27 @@ export default function Register(){
           </div>
         )}
 
-        <div className="grid md:grid-cols-2 gap-4">
-          <label className="label">Nombre completo
-            <input className="input mt-1" value={fullName} onChange={(e) => setFullName(e.target.value)} />
-          </label>
-          <label className="label">Nombre de usuario
-            <input className="input mt-1" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Ej: ciclista123" />
-          </label>
-        </div>
+        <label className="label">Nombre completo
+          <input className="input mt-1" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Ej: Ana Pérez" />
+        </label>
 
         <label className="label">Email
           <input className="input mt-1" type="email" value={email} onChange={(e)=>setEmail(e.target.value)} />
         </label>
 
-        <label className="label">Contraseña
-          <input className="input mt-1" type="password" value={password} onChange={(e)=>setPassword(e.target.value)} />
+        <div>
+          <label className="label">Contraseña</label>
+          <input className="input mt-1" type="password" value={password} onChange={(e)=>setPassword(e.target.value)} placeholder="Ingresa una contraseña segura" />
+          <div className="mt-2 space-y-1 text-xs">
+            <PasswordHint ok={passwordChecks.length}>Al menos 8 caracteres</PasswordHint>
+            <PasswordHint ok={passwordChecks.upper}>Una letra mayúscula</PasswordHint>
+            <PasswordHint ok={passwordChecks.lower}>Una letra minúscula</PasswordHint>
+            <PasswordHint ok={passwordChecks.number}>Al menos un número</PasswordHint>
+          </div>
+        </div>
+
+        <label className="label">Repetí la contraseña
+          <input className="input mt-1" type="password" value={confirmPassword} onChange={(e)=>setConfirmPassword(e.target.value)} placeholder="Confirmá la contraseña" />
         </label>
 
         <div className="grid md:grid-cols-2 gap-4">
@@ -193,8 +247,22 @@ export default function Register(){
         <Button onClick={register} className="w-full" disabled={loading}>
           {loading ? 'Creando cuenta…' : 'Crear cuenta'}
         </Button>
+        <Button onClick={loginGoogle} variant="ghost" className="w-full" disabled={googleLoading}>
+          {googleLoading ? 'Conectando con Google…' : 'Registrarme con Google'}
+        </Button>
         <p className="text-sm text-black/60">¿Ya tenés cuenta? <Link className="underline" to="/login">Ingresá</Link></p>
       </div>
     </Container>
+  )
+}
+
+function PasswordHint({ ok, children }: { ok: boolean; children: ReactNode }) {
+  return (
+    <div className={`flex items-center gap-2 ${ok ? 'text-green-600' : 'text-black/50'}`}>
+      <span className={`inline-flex h-4 w-4 items-center justify-center rounded-full border text-[10px] font-semibold ${ok ? 'border-green-600 bg-green-600 text-white' : 'border-black/20'}`}>
+        {ok ? '✓' : ''}
+      </span>
+      <span>{children}</span>
+    </div>
   )
 }

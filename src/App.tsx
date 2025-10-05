@@ -23,6 +23,11 @@ import Compare from './pages/Compare'
 import { CompareProvider } from './context/CompareContext'
 import CompareTray from './components/CompareTray'
 import { PlanProvider } from './context/PlanContext'
+import { NotificationsProvider } from './context/NotificationContext'
+import { ChatProvider } from './context/ChatContext'
+import CheckoutSuccess from './pages/Checkout/Success'
+import CheckoutFailure from './pages/Checkout/Failure'
+import CheckoutPending from './pages/Checkout/Pending'
 
 // Helper opcional por si quisieras redirigir preservando query-string
 function RedirectWithSearch({ to }: { to: string }) {
@@ -34,13 +39,15 @@ export default function App() {
   return (
     <AuthProvider>
       <PlanProvider>
-        <CurrencyProvider>
-          <CompareProvider>
-        <div className="min-h-screen flex flex-col">
-          <Header />
+        <NotificationsProvider>
+          <ChatProvider>
+            <CurrencyProvider>
+              <CompareProvider>
+                <div className="min-h-screen flex flex-col">
+              <Header />
 
-          <main className="flex-1">
-            <Routes>
+              <main className="flex-1">
+                <Routes>
               {/* Home */}
               <Route path="/" element={<Home />} />
 
@@ -90,6 +97,11 @@ export default function App() {
               <Route path="/ayuda" element={<Help />} />
               <Route path="/tienda-oficial" element={<OfficialStore />} />
 
+              {/* Checkout status */}
+              <Route path="/checkout/success" element={<CheckoutSuccess />} />
+              <Route path="/checkout/failure" element={<CheckoutFailure />} />
+              <Route path="/checkout/pending" element={<CheckoutPending />} />
+
               {/* Info */}
               <Route path="/faq" element={<FAQ />} />
               <Route path="/terminos" element={<Terms />} />
@@ -98,14 +110,16 @@ export default function App() {
 
               {/* Fallback */}
               <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </main>
+                </Routes>
+              </main>
 
-          <CompareTray />
-          <Footer />
-        </div>
-          </CompareProvider>
-        </CurrencyProvider>
+                  <CompareTray />
+                  <Footer />
+                </div>
+              </CompareProvider>
+            </CurrencyProvider>
+          </ChatProvider>
+        </NotificationsProvider>
       </PlanProvider>
     </AuthProvider>
   )

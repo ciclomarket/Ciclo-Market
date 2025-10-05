@@ -3,6 +3,7 @@ import { getSupabaseClient, supabaseEnabled } from './supabase'
 import type { Listing } from '../types'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { extractListingId, slugify } from '../utils/slug'
+import { canonicalPlanCode } from '../utils/planCodes'
 
 type ListingRow = {
   id: string
@@ -40,40 +41,45 @@ type ListingRow = {
   slug?: string | null
 }
 
-const normalizeListing = (row: ListingRow): Listing => ({
-  id: row.id,
-  slug: row.slug ?? undefined,
-  title: row.title,
-  brand: row.brand,
-  model: row.model,
-  year: row.year ?? undefined,
-  category: row.category as Listing['category'],
-  price: row.price,
-  priceCurrency: (row.price_currency ?? undefined) as Listing['priceCurrency'],
-  originalPrice: row.original_price ?? undefined,
-  location: row.location ?? '',
-  description: row.description ?? '',
-  images: row.images ?? [],
-  sellerId: row.seller_id,
-  sellerName: row.seller_name ?? undefined,
-  sellerPlan: (row.seller_plan ?? undefined) as Listing['sellerPlan'],
-  sellerPlanExpires: row.seller_plan_expires ? Date.parse(row.seller_plan_expires) : undefined,
-  sellerLocation: row.seller_location ?? undefined,
-  sellerWhatsapp: row.seller_whatsapp ?? undefined,
-  sellerAvatar: row.seller_avatar ?? undefined,
-  material: row.material ?? undefined,
-  frameSize: row.frame_size ?? undefined,
-  drivetrain: row.drivetrain ?? undefined,
-  drivetrainDetail: row.drivetrain_detail ?? undefined,
-  wheelset: row.wheelset ?? undefined,
-  wheelSize: row.wheel_size ?? undefined,
-  extras: row.extras ?? undefined,
-  plan: (row.plan ?? row.plan_code ?? undefined) as Listing['plan'],
-  status: (row.status ?? undefined) as Listing['status'],
-  expiresAt: row.expires_at ? Date.parse(row.expires_at) : null,
-  renewalNotifiedAt: row.renewal_notified_at ? Date.parse(row.renewal_notified_at) : null,
-  createdAt: row.created_at ? Date.parse(row.created_at) : Date.now()
-})
+const normalizeListing = (row: ListingRow): Listing => {
+  const normalizedSellerPlan = canonicalPlanCode((row.seller_plan ?? row.plan ?? row.plan_code ?? null) as string | null) ?? undefined
+  const normalizedPlan = canonicalPlanCode((row.plan ?? row.plan_code ?? row.seller_plan ?? null) as string | null)
+
+  return {
+    id: row.id,
+    slug: row.slug ?? undefined,
+    title: row.title,
+    brand: row.brand,
+    model: row.model,
+    year: row.year ?? undefined,
+    category: row.category as Listing['category'],
+    price: row.price,
+    priceCurrency: (row.price_currency ?? undefined) as Listing['priceCurrency'],
+    originalPrice: row.original_price ?? undefined,
+    location: row.location ?? '',
+    description: row.description ?? '',
+    images: row.images ?? [],
+    sellerId: row.seller_id,
+    sellerName: row.seller_name ?? undefined,
+    sellerPlan: normalizedSellerPlan as Listing['sellerPlan'],
+    plan: (normalizedPlan ?? row.plan ?? row.plan_code ?? undefined) as Listing['plan'],
+    sellerPlanExpires: row.seller_plan_expires ? Date.parse(row.seller_plan_expires) : undefined,
+    sellerLocation: row.seller_location ?? undefined,
+    sellerWhatsapp: row.seller_whatsapp ?? undefined,
+    sellerAvatar: row.seller_avatar ?? undefined,
+    material: row.material ?? undefined,
+    frameSize: row.frame_size ?? undefined,
+    drivetrain: row.drivetrain ?? undefined,
+    drivetrainDetail: row.drivetrain_detail ?? undefined,
+    wheelset: row.wheelset ?? undefined,
+    wheelSize: row.wheel_size ?? undefined,
+    extras: row.extras ?? undefined,
+    status: (row.status ?? undefined) as Listing['status'],
+    expiresAt: row.expires_at ? Date.parse(row.expires_at) : null,
+    renewalNotifiedAt: row.renewal_notified_at ? Date.parse(row.renewal_notified_at) : null,
+    createdAt: row.created_at ? Date.parse(row.created_at) : Date.now()
+  }
+}
 
 export async function fetchListings(): Promise<Listing[]> {
   if (!supabaseEnabled) return []
@@ -147,6 +153,79 @@ export async function fetchListingsBySeller(sellerId: string): Promise<Listing[]
   }
 }
 
+export async function updateListingPlan(options: { id: string; plan: Listing['sellerPlan'] | null; durationDays: number | null }): Promise<Listing | null> {
+  if (!supabaseEnabled) return null
+  const supabase = getSupabaseClient()
+  const expiresIso = options.durationDays && options.durationDays > 0
+    ? new Date(Date.now() + options.durationDays * 24 * 60 * 60 * 1000).toISOString()
+    : null
+  const { data, error } = await supabase
+    .from('listings')
+    .update({
+      seller_plan: options.plan,
+      seller_plan_expires: expiresIso
+    })
+    .eq('id', options.id)
+    .select('*')
+    .maybeSingle()
+  if (error) {
+    console.warn('[listings] updateListingPlan error', error)
+    return null
+  }
+  return data ? normalizeListing(data as ListingRow) : null
+}
+
+export async function archiveListing(id: string): Promise<boolean> {
+  if (!supabaseEnabled) return false
+  try {
+    const supabase = getSupabaseClient()
+    const { error } = await supabase
+      .from('listings')
+      .update({ status: 'archived', archived_at: new Date().toISOString() })
+      .eq('id', id)
+    return !error
+  } catch (err) {
+    console.warn('[listings] archive error', err)
+    return false
+  }
+}
+
+export async function reduceListingPrice({
+  id,
+  newPrice,
+  currentPrice,
+  originalPrice
+}: {
+  id: string
+  newPrice: number
+  currentPrice: number
+  originalPrice?: number
+}): Promise<Listing | null> {
+  if (!supabaseEnabled) return null
+  try {
+    const supabase = getSupabaseClient()
+    const nextOriginal = typeof originalPrice === 'number' && originalPrice > 0 ? originalPrice : currentPrice
+    const { data, error } = await supabase
+      .from('listings')
+      .update({
+        price: newPrice,
+        original_price: nextOriginal
+      })
+      .eq('id', id)
+      .select('*')
+      .maybeSingle()
+
+    if (error) {
+      console.warn('[listings] reduce price error', error)
+      return null
+    }
+    return data ? normalizeListing(data as ListingRow) : null
+  } catch (err) {
+    console.warn('[listings] reduce price exception', err)
+    return null
+  }
+}
+
 async function ensureUniqueSlug(title: string, supabase: SupabaseClient): Promise<string> {
   const base = slugify(title) || 'listing'
   let candidate = base
@@ -167,7 +246,8 @@ export async function createListing(payload: Omit<Listing, 'id' | 'createdAt'>):
   if (!supabaseEnabled) return null
   try {
     const supabase = getSupabaseClient()
-    const slug = await ensureUniqueSlug(payload.title, supabase)
+    const baseForSlug = [payload.brand, payload.model, payload.category].filter(Boolean).join(' ') || payload.title
+    const slug = await ensureUniqueSlug(baseForSlug, supabase)
     const expiresAt = payload.expiresAt ? new Date(payload.expiresAt).toISOString() : null
     const toInsert = {
       title: payload.title,
@@ -183,7 +263,7 @@ export async function createListing(payload: Omit<Listing, 'id' | 'createdAt'>):
       images: payload.images,
       seller_id: payload.sellerId,
       seller_name: payload.sellerName ?? null,
-      seller_plan: payload.sellerPlan ?? null,
+      seller_plan: payload.sellerPlan ?? payload.plan ?? null,
       seller_plan_expires: payload.sellerPlanExpires ? new Date(payload.sellerPlanExpires).toISOString() : null,
       seller_location: payload.sellerLocation ?? null,
       seller_whatsapp: payload.sellerWhatsapp ?? null,

@@ -233,6 +233,8 @@ function SearchBar() {
           aria-label="Buscar"
           aria-autocomplete="list"
           aria-expanded={open}
+          id="header-search"
+          name="search"
           className="w-full h-10 rounded-full border border-black/10 pl-5 pr-11 bg-white/95 outline-none focus:ring-2 focus:ring-mb-primary/30"
         />
         <button
@@ -507,27 +509,33 @@ export default function Header() {
                 <div className="absolute right-0 mt-2 w-80 rounded-xl border border-black/10 bg-white shadow-xl p-5 z-50">
                   <form className="space-y-3" onSubmit={handleLogin}>
                     <div>
-                      <label className="text-xs font-semibold text-black/60">Email</label>
+                      <label htmlFor="header-login-email" className="text-xs font-semibold text-black/60">Email</label>
                       <input
                         className="input mt-1"
                         type="email"
+                        id="header-login-email"
+                        name="email"
                         value={loginEmail}
                         onChange={(e) => setLoginEmail(e.target.value)}
                       />
                     </div>
                     <div>
-                      <label className="text-xs font-semibold text-black/60">Contraseña</label>
+                      <label htmlFor="header-login-password" className="text-xs font-semibold text-black/60">Contraseña</label>
                       <input
                         className="input mt-1"
                         type="password"
+                        id="header-login-password"
+                        name="password"
                         value={loginPassword}
                         onChange={(e) => setLoginPassword(e.target.value)}
                       />
                     </div>
-                    <label className="flex items-center gap-2 text-xs text-black/70">
+                    <label htmlFor="header-login-remember" className="flex items-center gap-2 text-xs text-black/70">
                       <input
                         type="checkbox"
                         className="accent-mb-primary"
+                        id="header-login-remember"
+                        name="remember"
                         checked={rememberMe}
                         onChange={(e) => setRememberMe(e.target.checked)}
                       />
@@ -742,27 +750,33 @@ export default function Header() {
               </div>
               <form className="mt-4 space-y-4" onSubmit={handleLogin}>
                 <div>
-                  <label className="text-xs font-semibold text-black/60">Email</label>
+                  <label htmlFor="header-login-email-mobile" className="text-xs font-semibold text-black/60">Email</label>
                   <input
                     className="input mt-1"
                     type="email"
+                    id="header-login-email-mobile"
+                    name="email"
                     value={loginEmail}
                     onChange={(e) => setLoginEmail(e.target.value)}
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-black/60">Contraseña</label>
+                  <label htmlFor="header-login-password-mobile" className="text-xs font-semibold text-black/60">Contraseña</label>
                   <input
                     className="input mt-1"
                     type="password"
+                    id="header-login-password-mobile"
+                    name="password"
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
                   />
                 </div>
-                <label className="flex items-center gap-2 text-xs text-black/70">
+                <label htmlFor="header-login-remember-mobile" className="flex items-center gap-2 text-xs text-black/70">
                   <input
                     type="checkbox"
                     className="accent-mb-primary"
+                    id="header-login-remember-mobile"
+                    name="remember"
                     checked={rememberMe}
                     onChange={(e) => setRememberMe(e.target.checked)}
                   />

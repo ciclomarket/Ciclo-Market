@@ -1,6 +1,6 @@
 export type Category = 'Ruta'|'MTB'|'Gravel'|'Urbana'|'Accesorios'|'E-Bike'|'Niños'|'Pista'|'Triatlón'
 
-export type SellerPlan = 'basic' | 'featured' | 'pro'
+export type SellerPlan = 'basic' | 'premium' | 'featured' | 'pro'
 
 export interface Listing {
   id: string

@@ -13,6 +13,8 @@ import { fetchListings } from '../services/listings'
 import { supabaseEnabled } from '../services/supabase'
 import type { Listing } from '../types'
 import { buildListingSlug } from '../utils/slug'
+import { hasPaidPlan } from '../utils/plans'
+import { applySeo } from '../utils/seo'
 
 import specializedLogo from '/brands/specialized.svg'
 import canyonLogo from '/brands/canyon.svg'
@@ -50,7 +52,7 @@ function OfferCard({ l }: { l: any }) {
   const { format } = useCurrency()
   const hasOriginal = typeof l.originalPrice === 'number' && l.originalPrice > l.price
   const offPct = hasOriginal ? Math.round((1 - l.price / l.originalPrice) * 100) : 0
-  const slug = l.slug ?? buildListingSlug({ id: l.id, title: l.title })
+  const slug = l.slug ?? buildListingSlug({ id: l.id, title: l.title, brand: l.brand, model: l.model, category: l.category })
   return (
     <Link to={`/listing/${slug}`} className="card-flat overflow-hidden block group">
       <div className="relative">
@@ -170,6 +172,10 @@ export default function Home() {
       setDataStatus('ready')
     }
     load()
+    applySeo({
+      title: 'Ciclo Market | Comprá y vendé bicicletas en Argentina',
+      description: 'Explorá el marketplace de bicicletas Ciclo Market: publicaciones destacadas, planes flexibles y contacto directo con vendedores verificados.'
+    })
     return () => {
       active = false
     }
@@ -182,6 +188,13 @@ export default function Home() {
     () => listings.filter((l: any) => typeof l.originalPrice === 'number' && l.price < l.originalPrice),
     [listings]
   )
+
+  const featuredListingsRaw = useMemo(
+    () => listings.filter((l) => hasPaidPlan(l.sellerPlan ?? (l.plan as any), l.sellerPlanExpires)),
+    [listings]
+  )
+
+  const featuredListings = featuredListingsRaw.length ? featuredListingsRaw : listings.slice(0, 8)
 
   // Filtrado general
   const filtered = useMemo(
@@ -258,13 +271,29 @@ export default function Home() {
         </Container>
       </section>
 
-      {/* OFERTAS ÚNICAS */}
+      {/* BICICLETAS DESTACADAS */}
+      {featuredListings.length > 0 && (
+        <section className="section-soft pt-12 pb-6">
+          <Container>
+            <HorizontalSlider
+              title="Bicicletas destacadas"
+              subtitle="Avisos con planes Premium o Básico activos"
+              items={featuredListings}
+              maxItems={24}
+              initialLoad={8}
+              renderCard={(l: any) => <ListingCard l={l} />}
+            />
+          </Container>
+        </section>
+      )}
+
+      {/* OFERTAS DESTACADAS */}
       <section className="section-soft pt-12 pb-12">
         <Container>
           {offers.length ? (
             <HorizontalSlider
-              title="Ofertas únicas"
-              subtitle="Productos con precio rebajado"
+              title="Ofertas destacadas"
+              subtitle="Bicicletas con precio reducido recientemente"
               items={offers}
               maxItems={20}
               initialLoad={8}
@@ -273,8 +302,8 @@ export default function Home() {
           ) : (
             <>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold">Ofertas únicas</h2>
-                <span className="text-sm text-black/60">Productos con precio rebajado</span>
+                <h2 className="text-xl font-semibold">Ofertas destacadas</h2>
+                <span className="text-sm text-black/60">Bicicletas con precio rebajado</span>
               </div>
               <EmptyState title="Sin ofertas por ahora" subtitle="Cuando una publicación tenga rebaja, aparecerá acá." />
             </>

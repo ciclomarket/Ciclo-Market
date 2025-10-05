@@ -1,7 +1,7 @@
 import Container from '../../components/Container'
 import Button from '../../components/Button'
 import { useState } from 'react'
-import { useLocation, useNavigate, Link } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { getSupabaseClient, supabaseEnabled } from '../../services/supabase'
 
@@ -9,7 +9,6 @@ export default function Login(){
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const nav = useNavigate()
-  const loc = useLocation() as any
   const { enabled } = useAuth()
 
   const loginEmail = async () => {
@@ -21,7 +20,7 @@ export default function Login(){
         password
       })
       if (error) throw error
-      nav(loc.state?.from?.pathname || '/dashboard')
+      nav('/dashboard')
     } catch (err: any) {
       const message = err instanceof Error ? err.message : 'No pudimos iniciar sesión. Intentá nuevamente.'
       alert(message)

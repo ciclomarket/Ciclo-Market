@@ -7,19 +7,86 @@ import { mockListings } from '../mock/mockData'
 import { getPlanLabel, isPlanActive } from '../utils/plans'
 import { useAuth } from '../context/AuthContext'
 import { supabase, supabaseEnabled } from '../services/supabase'
-import { fetchListingsBySeller } from '../services/listings'
+import { archiveListing, fetchListingsBySeller, reduceListingPrice } from '../services/listings'
 import { fetchUserProfile, type UserProfileRecord, upsertUserProfile } from '../services/users'
 import type { Listing } from '../types'
 import { usePlans } from '../context/PlanContext'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { uploadAvatar } from '../services/storage'
 import { PROVINCES, OTHER_CITY_OPTION } from '../constants/locations'
 import { BIKE_CATEGORIES } from '../constants/catalog'
+import { deriveProfileSlug, pickDiscipline } from '../utils/user'
+import { useNotifications } from '../context/NotificationContext'
+import { useChat } from '../context/ChatContext'
 
 const TABS = ['Perfil', 'Publicaciones', 'Notificaciones', 'Chat', 'Editar perfil', 'Suscripción', 'Cerrar sesión'] as const
 
+const RELATIVE_FORMATTER = new Intl.RelativeTimeFormat('es-AR', { numeric: 'auto' })
+
+function relativeTimeFromNow(value: string): string {
+  const target = new Date(value)
+  if (Number.isNaN(target.getTime())) return ''
+  const diffMs = target.getTime() - Date.now()
+  const abs = Math.abs(diffMs)
+  const minute = 60 * 1000
+  const hour = 60 * minute
+  const day = 24 * hour
+  const week = 7 * day
+
+  let unit: Intl.RelativeTimeFormatUnit = 'minute'
+  let amount = diffMs / minute
+
+  if (abs >= week) {
+    unit = 'week'
+    amount = diffMs / week
+  } else if (abs >= day) {
+    unit = 'day'
+    amount = diffMs / day
+  } else if (abs >= hour) {
+    unit = 'hour'
+    amount = diffMs / hour
+  }
+
+  const rounded = Math.round(amount)
+  return RELATIVE_FORMATTER.format(rounded, unit)
+}
+
+function normaliseHandle(value: string): string {
+  const trimmed = value.trim()
+  if (!trimmed) return ''
+  if (/^https?:\/\//i.test(trimmed)) return trimmed
+  const clean = trimmed.replace(/^@+/, '')
+  return `@${clean}`
+}
+
+function normaliseUrl(value: string): string {
+  const trimmed = value.trim()
+  if (!trimmed) return ''
+  if (/^https?:\/\//i.test(trimmed)) return trimmed
+  return `https://${trimmed.replace(/^https?:\/\//i, '')}`
+}
+
+function instagramUrl(value?: string | null): string | null {
+  if (!value) return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  if (/^https?:\/\//i.test(trimmed)) return trimmed
+  const handle = trimmed.replace(/^@+/, '')
+  if (!handle) return null
+  return `https://instagram.com/${handle}`
+}
+
+function facebookUrl(value?: string | null): string | null {
+  if (!value) return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  if (/^https?:\/\//i.test(trimmed)) return trimmed
+  return `https://facebook.com/${trimmed.replace(/^@+/, '')}`
+}
+
 export default function Dashboard() {
-  const { user, logout } = useAuth()
+  const { user, logout, isModerator } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>('Perfil')
   const [sellerListings, setSellerListings] = useState<Listing[]>([])
   const [profile, setProfile] = useState<UserProfileRecord | null>(null)
@@ -55,10 +122,21 @@ export default function Dashboard() {
     loadData()
   }, [loadData])
 
+  useEffect(() => {
+    const tabParam = searchParams.get('tab')
+    if (tabParam && TABS.includes(tabParam as (typeof TABS)[number])) {
+      setActiveTab(tabParam as (typeof TABS)[number])
+    }
+    const threadParam = searchParams.get('thread')
+    if (threadParam) {
+      setActiveTab('Chat')
+    }
+  }, [searchParams])
+
   const profileNeedsInfo = useMemo(() => {
     if (!user) return false
-    const prefs = profile?.bike_preferences ?? []
-    return !profile || !profile.province || !profile.city || prefs.length === 0
+    const preferredBike = profile?.preferred_bike ?? ''
+    return !profile || !profile.province || !profile.city || !preferredBike.trim()
   }, [user, profile])
 
   const [showProfileModal, setShowProfileModal] = useState(false)
@@ -70,60 +148,6 @@ export default function Dashboard() {
   }, [loading, profileNeedsInfo])
 
   const sellerProfile = sellerListings[0]
-
-  const notifications = useMemo(
-    () => [
-      {
-        id: 'notif-1',
-        title: 'Nueva oferta recibida',
-        body: 'Mariana hizo una oferta por tu Specialized Tarmac SL7 por USD 5.400.',
-        time: 'Hace 2 horas',
-      },
-      {
-        id: 'notif-2',
-        title: 'Publicación destacada',
-        body: 'Tu plan Destacado está activo. Aprovechá para compartir en redes.',
-        time: 'Ayer',
-      },
-      {
-        id: 'notif-3',
-        title: 'Recordatorio de entrega',
-        body: 'Coordiná la logística con Javier para la Domane SL 6.',
-        time: 'Hace 3 días',
-      },
-    ],
-    []
-  )
-
-  const chats = useMemo(
-    () => [
-      {
-        id: 'chat-1',
-        name: 'Mariana López',
-        listing: sellerListings[0]?.title ?? 'Tu publicación',
-        lastMessage: '¿Podemos coordinar una visita esta semana? 😄',
-        time: '15:42',
-        unread: 2,
-      },
-      {
-        id: 'chat-2',
-        name: 'Javier Torres',
-        listing: sellerListings[1]?.title ?? 'Consulta',
-        lastMessage: 'Perfecto, confirmame la horario.',
-        time: 'Ayer',
-        unread: 0,
-      },
-      {
-        id: 'chat-3',
-        name: 'Ana Pereyra',
-        listing: sellerListings[2]?.title ?? 'Publicación',
-        lastMessage: '¿Aceptás permuta por cuadro?',
-        time: 'Hace 3 días',
-        unread: 0,
-      },
-    ],
-    [sellerListings]
-  )
 
   if (loading) {
     return (
@@ -183,11 +207,21 @@ export default function Dashboard() {
                   fallbackEmail={user?.email ?? undefined}
                   onEditProfile={() => setShowProfileModal(true)}
                   profileNeedsInfo={profileNeedsInfo}
+                  isModerator={isModerator}
                 />
               )}
-              {activeTab === 'Publicaciones' && <ListingsView listings={sellerListings} />}
-              {activeTab === 'Notificaciones' && <NotificationsView items={notifications} />}
-              {activeTab === 'Chat' && <ChatView items={chats} />}
+              {activeTab === 'Publicaciones' && <ListingsView listings={sellerListings} onRefresh={loadData} />}
+              {activeTab === 'Notificaciones' && <NotificationsView />}
+              {activeTab === 'Chat' && (
+                <ChatView
+                  initialThreadId={searchParams.get('thread')}
+                  clearThreadParam={() => {
+                    const next = new URLSearchParams(searchParams)
+                    next.delete('thread')
+                    setSearchParams(next, { replace: true })
+                  }}
+                />
+              )}
               {activeTab === 'Editar perfil' && (
                 <EditProfileView
                   profile={profile}
@@ -207,7 +241,6 @@ export default function Dashboard() {
           profile={profile}
           userId={user?.id}
           userEmail={user?.email}
-          username={user?.user_metadata?.username || user?.user_metadata?.user_name || user?.email?.split('@')[0] || undefined}
           onSaved={loadData}
         />
       </Container>
@@ -222,6 +255,7 @@ function ProfileView({
   fallbackEmail,
   onEditProfile,
   profileNeedsInfo,
+  isModerator,
 }: {
   listing: Listing | undefined
   profile: UserProfileRecord | null
@@ -229,6 +263,7 @@ function ProfileView({
   fallbackEmail?: string
   onEditProfile: () => void
   profileNeedsInfo: boolean
+  isModerator: boolean
 }) {
   const planLabel = getPlanLabel(listing?.sellerPlan, listing?.sellerPlanExpires)
   const planActive = isPlanActive(listing?.sellerPlan, listing?.sellerPlanExpires)
@@ -240,6 +275,10 @@ function ProfileView({
     : null
   const displayLocation = locationFromProfile ?? listing?.sellerLocation ?? 'Ubicación reservada'
   const avatarUrl = profile?.avatar_url ?? listing?.sellerAvatar ?? null
+  const preferredBike = profile?.preferred_bike ?? null
+  const instagramLink = instagramUrl(profile?.instagram_handle)
+  const facebookLink = facebookUrl(profile?.facebook_handle)
+  const websiteLink = profile?.website_url ? normaliseUrl(profile.website_url) : null
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
@@ -253,7 +292,14 @@ function ProfileView({
           )}
         </div>
         <div>
-          <h2 className="text-2xl font-semibold text-[#14212e]">{displayName}</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-2xl font-semibold text-[#14212e]">{displayName}</h2>
+            {isModerator && (
+              <span className="rounded-full border border-[#14212e]/20 bg-[#14212e]/10 px-3 py-1 text-xs font-semibold text-[#14212e]">
+                Moderador
+              </span>
+            )}
+          </div>
           <p className="text-sm text-[#14212e]/70">{displayLocation}</p>
           <div
             className={`mt-3 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs ${
@@ -270,6 +316,51 @@ function ProfileView({
         <ProfileStat label="Publicaciones activas" value={totalListings} />
         <ProfileStat label="Consultas sin responder" value={3} trend="+1 hoy" />
         <ProfileStat label="Plan" value={planLabel} trend={planActive ? 'Activo' : 'Vencido'} />
+      </div>
+
+      <div className="rounded-2xl border border-[#14212e]/10 bg-white p-5 shadow">
+        <h3 className="text-sm font-semibold text-[#14212e] uppercase tracking-wide">Tu perfil público</h3>
+        <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+          {preferredBike && (
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-[#14212e]/50">Preferencia</dt>
+              <dd className="text-sm font-medium text-[#14212e]">{preferredBike}</dd>
+            </div>
+          )}
+          {instagramLink && (
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-[#14212e]/50">Instagram</dt>
+              <dd>
+                <a href={instagramLink} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-[#14212e] underline">
+                  {profile?.instagram_handle ?? instagramLink}
+                </a>
+              </dd>
+            </div>
+          )}
+          {facebookLink && (
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-[#14212e]/50">Facebook</dt>
+              <dd>
+                <a href={facebookLink} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-[#14212e] underline">
+                  {profile?.facebook_handle ?? facebookLink}
+                </a>
+              </dd>
+            </div>
+          )}
+          {websiteLink && (
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-[#14212e]/50">Sitio web</dt>
+              <dd>
+                <a href={websiteLink} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-[#14212e] underline">{websiteLink}</a>
+              </dd>
+            </div>
+          )}
+          {!preferredBike && !instagramLink && !facebookLink && !websiteLink && (
+            <div className="sm:col-span-2 text-sm text-[#14212e]/70">
+              Añadí tus redes y preferencias desde la pestaña “Editar perfil”.
+            </div>
+          )}
+        </dl>
       </div>
 
       {profileNeedsInfo && (
@@ -308,7 +399,8 @@ function ProfileView({
   )
 }
 
-function ListingsView({ listings }: { listings: Listing[] }) {
+function ListingsView({ listings, onRefresh }: { listings: Listing[]; onRefresh?: () => Promise<void> | void }) {
+  const navigate = useNavigate()
   if (!listings.length) {
     return (
       <div className="flex flex-col items-center justify-center gap-4 py-10 text-center">
@@ -321,6 +413,48 @@ function ListingsView({ listings }: { listings: Listing[] }) {
         </Button>
       </div>
     )
+  }
+
+  const handleDelete = async (id: string) => {
+    const confirmed = window.confirm('¿Seguro que querés archivar esta publicación? Podrás reactivarla luego.')
+    if (!confirmed) return
+    const ok = await archiveListing(id)
+    if (!ok) {
+      alert('No pudimos archivar la publicación. Intentá nuevamente.')
+      return
+    }
+    if (onRefresh) await onRefresh()
+  }
+
+  const handleReducePrice = async (listing: Listing) => {
+    const input = window.prompt('Reducí el precio (ingresá el nuevo valor, usa el mismo formato que la moneda actual):', String(listing.price))
+    if (input === null) return
+    const normalized = Number(input.replace(/,/g, '.'))
+    if (!Number.isFinite(normalized) || normalized <= 0) {
+      alert('Ingresá un monto válido mayor a cero.')
+      return
+    }
+    if (normalized >= listing.price) {
+      alert('El nuevo precio debe ser menor al actual para marcar la rebaja.')
+      return
+    }
+
+    if (!supabaseEnabled) {
+      alert('La reducción de precio requiere la conexión con Supabase activada.')
+      return
+    }
+
+    const updated = await reduceListingPrice({
+      id: listing.id,
+      newPrice: normalized,
+      currentPrice: listing.price,
+      originalPrice: listing.originalPrice
+    })
+    if (!updated) {
+      alert('No pudimos actualizar el precio. Intentá nuevamente.')
+      return
+    }
+    if (onRefresh) await onRefresh()
   }
 
   return (
@@ -337,67 +471,248 @@ function ListingsView({ listings }: { listings: Listing[] }) {
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {listings.map((listing) => (
-          <ListingCard key={listing.id} l={listing} />
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function NotificationsView({ items }: { items: { id: string; title: string; body: string; time: string }[] }) {
-  return (
-    <div className="space-y-4">
-      <h2 className="text-xl font-semibold text-[#14212e]">Notificaciones</h2>
-      <div className="space-y-3">
-        {items.map((item) => (
-          <div key={item.id} className="rounded-2xl border border-[#14212e]/10 bg-[#14212e]/5 p-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-[#14212e]">{item.title}</h3>
-              <span className="text-xs text-[#14212e]/60">{item.time}</span>
+          <div key={listing.id} className="space-y-3">
+            <ListingCard l={listing} />
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="secondary"
+                className="flex-1 min-w-[150px] text-xs py-2"
+                onClick={() => navigate(`/publicar/nueva?id=${listing.id}`)}
+              >
+                Editar
+              </Button>
+              <Button
+                variant="secondary"
+                className="flex-1 min-w-[150px] text-xs py-2"
+                onClick={() => void handleReducePrice(listing)}
+              >
+                Reducir precio
+              </Button>
+              <Button
+                variant="ghost"
+                className="flex-1 min-w-[150px] text-xs py-2 text-red-600"
+                onClick={() => void handleDelete(listing.id)}
+              >
+                Archivar
+              </Button>
             </div>
-            <p className="mt-2 text-sm text-[#14212e]/80">{item.body}</p>
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+function NotificationsView() {
+  const { notifications, loading, unreadCount, markAsRead } = useNotifications()
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-semibold text-[#14212e]">Notificaciones</h2>
+        {unreadCount > 0 && (
+          <span className="rounded-full bg-[#14212e]/10 px-3 py-1 text-xs font-semibold text-[#14212e]">
+            {unreadCount} sin leer
+          </span>
+        )}
+      </div>
+      <div className="space-y-3">
+        {loading && (
+          <div className="rounded-2xl border border-[#14212e]/10 bg-[#14212e]/5 p-4 text-sm text-[#14212e]/70">
+            Cargando notificaciones…
+          </div>
+        )}
+        {!loading && notifications.length === 0 && (
+          <div className="rounded-2xl border border-[#14212e]/10 bg-[#14212e]/5 p-6 text-center text-sm text-[#14212e]/70">
+            No hay notificaciones por ahora.
+          </div>
+        )}
+        {notifications.map((item) => {
+          const timeAgo = relativeTimeFromNow(item.created_at)
+          const unread = !item.read_at
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => unread && markAsRead(item.id)}
+              className={`w-full rounded-2xl border p-4 text-left transition ${
+                unread
+                  ? 'border-[#14212e]/30 bg-white shadow'
+                  : 'border-[#14212e]/10 bg-[#14212e]/5'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-[#14212e]">{item.title}</h3>
+                  <p className="mt-2 text-sm text-[#14212e]/80">{item.body}</p>
+                </div>
+                <span className="text-xs text-[#14212e]/60">{timeAgo || 'Hace instantes'}</span>
+              </div>
+              {item.cta_url && (
+                <a
+                  href={item.cta_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-3 inline-block text-xs font-semibold text-[#14212e] underline"
+                >
+                  Ver más detalles
+                </a>
+              )}
+            </button>
+          )
+        })}
+      </div>
       <p className="text-xs text-[#14212e]/60">
-        Recibirás un correo por cada nueva oferta o mensaje importante.
+        Recibirás alertas por email para que ninguna oferta o mensaje importante se pierda.
       </p>
     </div>
   )
 }
 
-function ChatView({ items }: { items: { id: string; name: string; listing: string; lastMessage: string; time: string; unread: number }[] }) {
+function ChatView({ initialThreadId, clearThreadParam }: { initialThreadId?: string | null; clearThreadParam?: () => void }) {
+  const { user } = useAuth()
+  const { threads, loadingThreads, activeThreadId, selectThread, messages, loadingMessages, sendMessage } = useChat()
+  const [draft, setDraft] = useState('')
+
+  const activeThread = useMemo(() => threads.find((thread) => thread.id === activeThreadId) ?? null, [threads, activeThreadId])
+
+  useEffect(() => {
+    if (!initialThreadId) return
+    const exists = threads.some((thread) => thread.id === initialThreadId)
+    if (exists) {
+      selectThread(initialThreadId)
+      if (clearThreadParam) clearThreadParam()
+    }
+  }, [initialThreadId, threads, selectThread, clearThreadParam])
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!draft.trim()) return
+    await sendMessage(draft)
+    setDraft('')
+  }
+
   return (
     <div className="space-y-4">
       <h2 className="text-xl font-semibold text-[#14212e]">Chats y ofertas</h2>
-      <div className="space-y-3">
-        {items.map((chat) => (
-          <button
-            key={chat.id}
-            type="button"
-            className="w-full rounded-2xl border border-[#14212e]/10 bg-white p-4 text-left shadow hover:border-[#14212e]/30"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold text-[#14212e]">{chat.name}</p>
-                <p className="text-xs text-[#14212e]/50">{chat.listing}</p>
-              </div>
-              <div className="text-xs text-[#14212e]/50 text-right">
-                <p>{chat.time}</p>
-                {chat.unread > 0 && (
-                  <span className="mt-1 inline-flex items-center justify-center rounded-full bg-[#14212e] px-2 py-0.5 text-[10px] font-semibold text-white">
-                    {chat.unread}
-                  </span>
-                )}
-              </div>
+      <div className="grid gap-4 lg:grid-cols-[280px,1fr]">
+        <div className="space-y-2">
+          {loadingThreads && (
+            <div className="rounded-2xl border border-[#14212e]/10 bg-[#14212e]/5 p-4 text-sm text-[#14212e]/70">
+              Cargando conversaciones…
             </div>
-            <p className="mt-2 text-sm text-[#14212e]/80 line-clamp-2">{chat.lastMessage}</p>
-          </button>
-        ))}
+          )}
+          {!loadingThreads && threads.length === 0 && (
+            <div className="rounded-2xl border border-[#14212e]/10 bg-[#14212e]/5 p-6 text-sm text-[#14212e]/70">
+              Todavía no tenés chats. Respondé consultas desde tus publicaciones.
+            </div>
+          )}
+          {threads.map((thread) => {
+            const timeAgo = relativeTimeFromNow(thread.lastMessageCreatedAt ?? thread.last_message_at)
+            const isActive = thread.id === activeThreadId
+            return (
+              <button
+                key={thread.id}
+                type="button"
+                onClick={() => selectThread(thread.id)}
+                className={`flex w-full flex-col gap-1 rounded-2xl border px-4 py-3 text-left transition ${
+                  isActive ? 'border-[#14212e] bg-white shadow' : 'border-[#14212e]/10 bg-white/80 hover:border-[#14212e]/30'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-3">
+                    <span className="flex size-8 items-center justify-center rounded-full bg-[#14212e]/10 text-sm font-semibold text-[#14212e]">
+                      {thread.otherParticipantName.charAt(0).toUpperCase()}
+                    </span>
+                    <div>
+                      <p className="text-sm font-semibold text-[#14212e]">{thread.otherParticipantName}</p>
+                      <p className="text-xs text-[#14212e]/50">{thread.listing_title ?? 'Consulta privada'}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[11px] text-[#14212e]/50">{timeAgo || 'hace instantes'}</p>
+                    {thread.unreadCount > 0 && (
+                      <span className="mt-1 inline-flex items-center justify-center rounded-full bg-[#14212e] px-2 py-0.5 text-[10px] font-semibold text-white">
+                        {thread.unreadCount}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {thread.lastMessageSnippet && (
+                  <p className="text-xs text-[#14212e]/60 line-clamp-2">
+                    {thread.lastMessageAuthorId === user?.id ? 'Vos: ' : ''}{thread.lastMessageSnippet}
+                  </p>
+                )}
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="rounded-2xl border border-[#14212e]/10 bg-white p-0">
+          {!activeThread && (
+            <div className="flex h-full items-center justify-center p-6 text-sm text-[#14212e]/60">
+              Seleccioná una conversación para verla.
+            </div>
+          )}
+
+          {activeThread && (
+            <div className="flex h-full flex-col">
+              <header className="flex items-center gap-3 border-b border-[#14212e]/10 bg-[#14212e]/5 px-4 py-3">
+                <div className="flex size-10 items-center justify-center rounded-full bg-[#14212e]/20 text-lg font-semibold text-[#14212e]">
+                  {activeThread.otherParticipantName.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-[#14212e]">{activeThread.otherParticipantName}</h3>
+                  <p className="text-xs text-[#14212e]/60">{activeThread.listing_title ?? 'Consulta directa'}</p>
+                </div>
+              </header>
+
+              <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
+                {loadingMessages && (
+                  <div className="text-sm text-[#14212e]/60">Cargando mensajes…</div>
+                )}
+                {!loadingMessages && messages.length === 0 && (
+                  <div className="text-sm text-[#14212e]/60">Todavía no hay mensajes en este hilo.</div>
+                )}
+                {messages.map((message) => {
+                  const isMine = message.author_id === user?.id
+                  const timeAgo = relativeTimeFromNow(message.created_at)
+                  const displayName = isMine ? 'Vos' : activeThread.otherParticipantName
+                  return (
+                    <div key={message.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
+                      <div
+                        className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm shadow ${
+                          isMine ? 'bg-[#14212e] text-white' : 'bg-[#f2f6fb] text-[#14212e]'
+                        }`}
+                      >
+                        <p className={`text-[11px] font-semibold ${isMine ? 'text-white/70' : 'text-[#14212e]/70'}`}>{displayName}</p>
+                        <p className="mt-1 whitespace-pre-line text-sm">{message.body}</p>
+                        <span className={`mt-2 block text-[10px] ${isMine ? 'text-white/70' : 'text-[#14212e]/60'}`}>
+                          {timeAgo || 'Hace instantes'}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              <form onSubmit={handleSubmit} className="border-t border-[#14212e]/10 px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    className="input flex-1"
+                    placeholder="Escribí tu mensaje"
+                    value={draft}
+                    onChange={(event) => setDraft(event.target.value)}
+                  />
+                  <Button type="submit" disabled={!draft.trim()} className="bg-[#14212e] text-white hover:bg-[#1b2f3f]">
+                    Enviar
+                  </Button>
+                </div>
+              </form>
+            </div>
+          )}
+        </div>
       </div>
-      <p className="text-xs text-[#14212e]/60">
-        Los chats activos también envían alertas por mail para que no pierdas ofertas.
-      </p>
     </div>
   )
 }
@@ -413,6 +728,17 @@ function EditProfileView({
   userId?: string
   onProfileUpdated?: () => Promise<void> | void
 }) {
+  const [fullName, setFullName] = useState(profile?.full_name ?? '')
+  const [province, setProvince] = useState(profile?.province ?? '')
+  const [city, setCity] = useState(profile?.city ?? '')
+  const [cityOther, setCityOther] = useState('')
+  const [preferredBike, setPreferredBike] = useState(profile?.preferred_bike ?? '')
+  const [instagram, setInstagram] = useState(profile?.instagram_handle ?? '')
+  const [facebook, setFacebook] = useState(profile?.facebook_handle ?? '')
+  const [website, setWebsite] = useState(profile?.website_url ?? '')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
   const initialAvatar = profile?.avatar_url ?? listing?.sellerAvatar ?? ''
   const [avatarUrl, setAvatarUrl] = useState(initialAvatar)
   const [avatarUploading, setAvatarUploading] = useState(false)
@@ -420,119 +746,178 @@ function EditProfileView({
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
-    if (initialAvatar && initialAvatar !== avatarUrl) {
-      setAvatarUrl(initialAvatar)
-    }
-  }, [initialAvatar, avatarUrl])
+    setFullName(profile?.full_name ?? '')
+    setProvince(profile?.province ?? '')
+    setCity(profile?.city ?? '')
+    setPreferredBike(profile?.preferred_bike ?? '')
+    setInstagram(profile?.instagram_handle ?? '')
+    setFacebook(profile?.facebook_handle ?? '')
+    setWebsite(profile?.website_url ?? '')
+    setAvatarUrl(initialAvatar)
+  }, [profile, initialAvatar])
+
+  const cityOptions = province ? PROVINCES.find((item) => item.name === province)?.cities ?? [] : []
+  const showCityOther = city === OTHER_CITY_OPTION
 
   const handleAvatarUpload = async (fileList: FileList | null) => {
-    if (!fileList || fileList.length === 0) return
-    if (!userId) {
-      setAvatarError('Necesitás iniciar sesión para actualizar tu foto de perfil.')
-      return
-    }
-    const file = fileList[0]
+    if (!fileList || fileList.length === 0 || !userId) return
     setAvatarUploading(true)
     setAvatarError(null)
     try {
-      const url = await uploadAvatar(file, userId)
-      if (!url) throw new Error('No pudimos obtener la URL de la imagen')
+      const url = await uploadAvatar(fileList[0], userId)
+      if (!url) throw new Error('No pudimos subir la imagen')
       await upsertUserProfile({ id: userId, avatarUrl: url })
       if (supabaseEnabled && supabase) {
-        await supabase
-          .from('listings')
-          .update({ seller_avatar: url })
-          .eq('seller_id', userId)
+        await supabase.from('listings').update({ seller_avatar: url }).eq('seller_id', userId)
       }
       setAvatarUrl(url)
       if (onProfileUpdated) await onProfileUpdated()
-    } catch (error: any) {
-      setAvatarError(error?.message ?? 'No pudimos subir la imagen. Intentá nuevamente.')
+    } catch (err: any) {
+      setAvatarError(err?.message ?? 'No pudimos subir la imagen. Intentá nuevamente.')
     } finally {
       setAvatarUploading(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
 
-  const displayName = profile?.full_name ?? listing?.sellerName ?? ''
-  const displayLocation = profile?.city
-    ? profile.province
-      ? `${profile.city}, ${profile.province}`
-      : profile.city
-    : listing?.sellerLocation ?? ''
-  const whatsapp = listing?.sellerWhatsapp ?? ''
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!userId || !profile?.email) {
+      setError('Necesitás una sesión activa para guardar cambios.')
+      return
+    }
+    const finalCity = city === OTHER_CITY_OPTION ? cityOther.trim() : city
+    if (!fullName.trim() || !province || !finalCity) {
+      setError('Completá nombre, provincia y ciudad.')
+      return
+    }
+    setSaving(true)
+    setError(null)
+    try {
+      await upsertUserProfile({
+        id: userId,
+        email: profile.email,
+        fullName: fullName.trim(),
+        province,
+        city: finalCity,
+        profileSlug: deriveProfileSlug({
+          fullName: fullName.trim(),
+          discipline: pickDiscipline(preferredBike ? [preferredBike] : []),
+          fallback: profile.email.split('@')[0] ?? 'usuario'
+        }),
+        preferredBike: preferredBike || null,
+        instagramHandle: instagram ? normaliseHandle(instagram) : null,
+        facebookHandle: facebook ? normaliseUrl(facebook) : null,
+        websiteUrl: website ? normaliseUrl(website) : null
+      })
+      if (onProfileUpdated) await onProfileUpdated()
+    } catch (err: any) {
+      setError(err?.message ?? 'No pudimos guardar tu perfil. Intentá nuevamente.')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <div className="space-y-6">
       <h2 className="text-xl font-semibold text-[#14212e]">Editar perfil</h2>
-      <form className="grid gap-4 sm:grid-cols-2">
-        <label className="text-sm font-medium text-[#14212e] sm:col-span-2">
-          Foto de perfil
-          <div className="mt-2 flex items-center gap-3">
+      <form className="grid gap-4" onSubmit={handleSubmit}>
+        <div>
+          <p className="text-sm font-medium text-[#14212e]">Foto de perfil</p>
+          <div className="mt-2 flex items-center gap-4">
             <div className="size-16 overflow-hidden rounded-2xl bg-[#14212e]/10">
               {avatarUrl ? (
-                <img src={avatarUrl} alt={displayName || 'Vendedor'} className="h-full w-full object-cover" />
+                <img src={avatarUrl} alt={fullName || 'Vendedor'} className="h-full w-full object-cover" />
               ) : (
                 <span className="flex h-full w-full items-center justify-center text-sm text-[#14212e]/60">
-                  {(displayName || 'CM')[0]}
+                  {(fullName || 'CM')[0]}
                 </span>
               )}
             </div>
             <div className="flex flex-col gap-1">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={avatarUploading}
-              >
-                {avatarUploading ? 'Subiendo…' : 'Subir nueva foto'}
+              <Button type="button" variant="secondary" onClick={() => fileInputRef.current?.click()} disabled={avatarUploading}>
+                {avatarUploading ? 'Subiendo…' : 'Cambiar foto'}
               </Button>
               <input
+                ref={fileInputRef}
                 type="file"
                 accept="image/*"
-                ref={fileInputRef}
                 className="hidden"
                 onChange={(event) => handleAvatarUpload(event.target.files)}
               />
+              <span className="text-xs text-[#14212e]/60">Formatos JPG o PNG (máximo 5MB).</span>
               {avatarError && <span className="text-xs text-red-600">{avatarError}</span>}
-              <span className="text-xs text-[#14212e]/60">Usá imágenes JPG o PNG de hasta 5MB.</span>
             </div>
           </div>
-        </label>
+        </div>
 
         <label className="text-sm font-medium text-[#14212e]">
           Nombre completo
-          <input className="input mt-1" defaultValue={displayName} placeholder="Nombre y apellido" />
+          <input className="input mt-1" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Nombre y apellido" />
         </label>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="text-sm font-medium text-[#14212e]">
+            Provincia
+            <select className="select mt-1" value={province} onChange={(e) => { setProvince(e.target.value); setCity(''); setCityOther('') }}>
+              <option value="">Seleccioná provincia</option>
+              {PROVINCES.map((prov) => (
+                <option key={prov.name} value={prov.name}>{prov.name}</option>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm font-medium text-[#14212e]">
+            Ciudad
+            <select className="select mt-1" value={city} onChange={(e) => setCity(e.target.value)} disabled={!province}>
+              <option value="">{province ? 'Seleccioná ciudad' : 'Elegí provincia primero'}</option>
+              {cityOptions.map((item) => (
+                <option key={item} value={item}>{item}</option>
+              ))}
+              <option value={OTHER_CITY_OPTION}>{OTHER_CITY_OPTION}</option>
+            </select>
+          </label>
+        </div>
+
+        {showCityOther && (
+          <label className="text-sm font-medium text-[#14212e]">
+            Ciudad (especificar)
+            <input className="input mt-1" value={cityOther} onChange={(e) => setCityOther(e.target.value)} placeholder="Ingresá la ciudad" />
+          </label>
+        )}
+
         <label className="text-sm font-medium text-[#14212e]">
-          Email de contacto
-          <input className="input mt-1" defaultValue={profile?.email ?? ''} placeholder="hola@tudominio.com" />
+          Bicicleta preferida
+          <select className="select mt-1" value={preferredBike} onChange={(e) => setPreferredBike(e.target.value)}>
+            <option value="">Seleccioná una opción</option>
+            {BIKE_CATEGORIES.map((cat) => (
+              <option key={cat} value={cat}>{cat}</option>
+            ))}
+          </select>
         </label>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="text-sm font-medium text-[#14212e]">
+            Instagram (opcional)
+            <input className="input mt-1" value={instagram} onChange={(e) => setInstagram(e.target.value)} placeholder="@ciclomarket" />
+          </label>
+          <label className="text-sm font-medium text-[#14212e]">
+            Facebook (opcional)
+            <input className="input mt-1" value={facebook} onChange={(e) => setFacebook(e.target.value)} placeholder="facebook.com/ciclomarket" />
+          </label>
+        </div>
+
         <label className="text-sm font-medium text-[#14212e]">
-          Ubicación
-          <input className="input mt-1" defaultValue={displayLocation} placeholder="Ciudad, Provincia" />
+          Sitio web (opcional)
+          <input className="input mt-1" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://tusitio.com" />
         </label>
-        <label className="text-sm font-medium text-[#14212e]">
-          WhatsApp comercial
-          <input className="input mt-1" defaultValue={whatsapp} placeholder="+54911..." />
-        </label>
-        <label className="text-sm font-medium text-[#14212e]">
-          Contraseña actual
-          <input className="input mt-1" type="password" placeholder="••••••" />
-        </label>
-        <label className="text-sm font-medium text-[#14212e]">
-          Nueva contraseña
-          <input className="input mt-1" type="password" placeholder="••••••" />
-        </label>
-        <label className="text-sm font-medium text-[#14212e] sm:col-span-2">
-          Descripción para compradores
-          <textarea className="textarea mt-1" placeholder="Contá brevemente cómo trabajás, entregas, políticas, etc." defaultValue="Vendedor confiable, entrega inmediata en CABA y envíos a todo el país." />
-        </label>
-        <div className="sm:col-span-2 flex flex-wrap items-center gap-3">
-          <Button type="button" className="bg-[#14212e] text-white hover:bg-[#1b2f3f]">
-            Guardar cambios
+
+        {error && <p className="text-sm text-red-600">{error}</p>}
+
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="submit" className="bg-[#14212e] text-white hover:bg-[#1b2f3f]" disabled={saving}>
+            {saving ? 'Guardando…' : 'Guardar cambios'}
           </Button>
-          <span className="text-xs text-[#14212e]/60">Los cambios se reflejarán en tu perfil público y publicaciones.</span>
+          <span className="text-xs text-[#14212e]/60">Los cambios se reflejan en tu perfil público y publicaciones.</span>
         </div>
       </form>
     </div>
@@ -652,7 +1037,6 @@ function ProfileDetailsModal({
   profile,
   userId,
   userEmail,
-  username,
   onSaved,
 }: {
   open: boolean
@@ -660,14 +1044,16 @@ function ProfileDetailsModal({
   profile: UserProfileRecord | null
   userId?: string
   userEmail?: string | null
-  username?: string | null
   onSaved?: () => Promise<void> | void
 }) {
   const [fullName, setFullName] = useState(profile?.full_name ?? '')
   const [province, setProvince] = useState(profile?.province ?? '')
   const [city, setCity] = useState(profile?.city ?? '')
   const [cityOther, setCityOther] = useState('')
-  const [bikePrefs, setBikePrefs] = useState<string[]>(profile?.bike_preferences ?? [])
+  const [preferredBike, setPreferredBike] = useState(profile?.preferred_bike ?? '')
+  const [instagram, setInstagram] = useState(profile?.instagram_handle ?? '')
+  const [facebook, setFacebook] = useState(profile?.facebook_handle ?? '')
+  const [website, setWebsite] = useState(profile?.website_url ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -675,12 +1061,11 @@ function ProfileDetailsModal({
     setFullName(profile?.full_name ?? '')
     setProvince(profile?.province ?? '')
     setCity(profile?.city ?? '')
-    setBikePrefs(profile?.bike_preferences ?? [])
+    setPreferredBike(profile?.preferred_bike ?? '')
+    setInstagram(profile?.instagram_handle ?? '')
+    setFacebook(profile?.facebook_handle ?? '')
+    setWebsite(profile?.website_url ?? '')
   }, [profile])
-
-  const togglePref = (value: string) => {
-    setBikePrefs((prev) => (prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]))
-  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -699,11 +1084,18 @@ function ProfileDetailsModal({
       await upsertUserProfile({
         id: userId,
         email: userEmail,
-        username: username ?? userEmail.split('@')[0],
         fullName: fullName.trim(),
         province,
         city: finalCity,
-        bikePreferences: bikePrefs,
+        profileSlug: deriveProfileSlug({
+          fullName: fullName.trim(),
+          discipline: pickDiscipline(preferredBike ? [preferredBike] : []),
+          fallback: userEmail.split('@')[0] ?? 'usuario'
+        }),
+        preferredBike: preferredBike || null,
+        instagramHandle: instagram ? normaliseHandle(instagram) : null,
+        facebookHandle: facebook ? normaliseUrl(facebook) : null,
+        websiteUrl: website ? normaliseUrl(website) : null
       })
       if (onSaved) await onSaved()
       onClose()
@@ -768,25 +1160,29 @@ function ProfileDetailsModal({
               <input className="input mt-1" value={cityOther} onChange={(e) => setCityOther(e.target.value)} placeholder="Ingresá la ciudad" />
             </label>
           )}
-          <div>
-            <span className="text-sm font-medium text-[#14212e]">¿Qué bici te interesa?</span>
-            <div className="mt-2 grid gap-2 sm:grid-cols-2">
-              {BIKE_CATEGORIES.map((category) => {
-                const checked = bikePrefs.includes(category)
-                return (
-                  <label key={category} className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${checked ? 'border-mb-primary bg-mb-primary/10' : 'border-black/10'}`}>
-                    <input
-                      type="checkbox"
-                      className="accent-mb-primary"
-                      checked={checked}
-                      onChange={() => togglePref(category)}
-                    />
-                    <span>{category}</span>
-                  </label>
-                )
-              })}
-            </div>
+          <label className="text-sm font-medium text-[#14212e]">
+            Bicicleta preferida
+            <select className="select mt-1" value={preferredBike} onChange={(e) => setPreferredBike(e.target.value)}>
+              <option value="">Seleccioná una opción</option>
+              {BIKE_CATEGORIES.map((cat) => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+          </label>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="text-sm font-medium text-[#14212e]">
+              Instagram (opcional)
+              <input className="input mt-1" value={instagram} onChange={(e) => setInstagram(e.target.value)} placeholder="@ciclomarket" />
+            </label>
+            <label className="text-sm font-medium text-[#14212e]">
+              Facebook (opcional)
+              <input className="input mt-1" value={facebook} onChange={(e) => setFacebook(e.target.value)} placeholder="facebook.com/ciclomarket" />
+            </label>
           </div>
+          <label className="text-sm font-medium text-[#14212e]">
+            Sitio web (opcional)
+            <input className="input mt-1" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://tusitio.com" />
+          </label>
           {error && <p className="text-sm text-red-600">{error}</p>}
           <div className="flex justify-end gap-3">
             <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>Cancelar</Button>
