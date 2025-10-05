@@ -125,7 +125,7 @@ app.post('/api/checkout', async (req, res) => {
     }
 
     const mpRes = await preferenceClient.create({ body: preference })
-    const url = mpRes.sandbox_init_point || mpRes.init_point
+    const url = mpRes.init_point || null
     if (!url) {
       console.error('checkout error: missing init point', mpRes)
       res.status(502).json({ error: 'missing_init_point' })

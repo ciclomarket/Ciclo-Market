@@ -61,8 +61,7 @@ app.post("/api/checkout", async (req, res) => {
     };
 
     const preferenceResponse = await preferenceClient.create({ body: preferencePayload });
-    const checkoutUrl =
-      preferenceResponse.init_point || preferenceResponse.sandbox_init_point;
+    const checkoutUrl = preferenceResponse.init_point;
 
     res.json({ url: checkoutUrl });
   } catch (error) {
