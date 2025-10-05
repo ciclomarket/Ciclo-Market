@@ -1,0 +1,2 @@
+import Container from '../components/Container'
+export default function Terms(){return (<Container><h1 className="text-2xl font-bold mb-4">Términos y condiciones</h1><p className="text-white/70">Contenido legal…</p></Container>)}

@@ -1,0 +1,1 @@
+export default function EmptyState({ title='Sin resultados', subtitle='Intenta cambiar los filtros.' }: {title?:string, subtitle?:string}) { return (<div className="text-center py-20 opacity-70"><h3 className="text-lg font-semibold">{title}</h3><p className="text-sm text-white/60">{subtitle}</p></div>) }

@@ -1,0 +1,28 @@
+export const OTHER_CITY_OPTION = 'Otra ciudad'
+
+export const PROVINCES = [
+  { name: 'Buenos Aires', cities: ['La Plata', 'Mar del Plata', 'Bahía Blanca', 'Tandil', OTHER_CITY_OPTION] },
+  { name: 'Ciudad Autónoma de Buenos Aires', cities: ['Ciudad Autónoma de Buenos Aires', OTHER_CITY_OPTION] },
+  { name: 'Catamarca', cities: ['San Fernando del Valle de Catamarca', 'Belén', 'Andalgalá', 'Tinogasta', OTHER_CITY_OPTION] },
+  { name: 'Chaco', cities: ['Resistencia', 'Presidencia Roque Sáenz Peña', 'Villa Ángela', 'Charata', OTHER_CITY_OPTION] },
+  { name: 'Chubut', cities: ['Comodoro Rivadavia', 'Trelew', 'Puerto Madryn', 'Rawson', OTHER_CITY_OPTION] },
+  { name: 'Córdoba', cities: ['Córdoba Capital', 'Villa Carlos Paz', 'Río Cuarto', 'San Francisco', OTHER_CITY_OPTION] },
+  { name: 'Corrientes', cities: ['Corrientes Capital', 'Goya', 'Paso de los Libres', 'Ituzaingó', OTHER_CITY_OPTION] },
+  { name: 'Entre Ríos', cities: ['Paraná', 'Concordia', 'Gualeguaychú', 'Victoria', OTHER_CITY_OPTION] },
+  { name: 'Formosa', cities: ['Formosa Capital', 'Clorinda', 'Pirané', 'Las Lomitas', OTHER_CITY_OPTION] },
+  { name: 'Jujuy', cities: ['San Salvador de Jujuy', 'Palpalá', 'San Pedro de Jujuy', 'Perico', OTHER_CITY_OPTION] },
+  { name: 'La Pampa', cities: ['Santa Rosa', 'General Pico', 'Toay', '25 de Mayo', OTHER_CITY_OPTION] },
+  { name: 'La Rioja', cities: ['La Rioja Capital', 'Chilecito', 'Aimogasta', 'Chepes', OTHER_CITY_OPTION] },
+  { name: 'Mendoza', cities: ['Mendoza Capital', 'San Rafael', 'Godoy Cruz', 'San Martín', OTHER_CITY_OPTION] },
+  { name: 'Misiones', cities: ['Posadas', 'Oberá', 'Eldorado', 'Puerto Iguazú', OTHER_CITY_OPTION] },
+  { name: 'Neuquén', cities: ['Neuquén Capital', 'San Martín de los Andes', 'Cutral Co', 'Zapala', OTHER_CITY_OPTION] },
+  { name: 'Río Negro', cities: ['General Roca', 'San Carlos de Bariloche', 'Viedma', 'Cipolletti', OTHER_CITY_OPTION] },
+  { name: 'Salta', cities: ['Salta Capital', 'San Ramón de la Nueva Orán', 'Tartagal', 'Metán', OTHER_CITY_OPTION] },
+  { name: 'San Juan', cities: ['San Juan Capital', 'Rawson', 'Pocito', 'Caucete', OTHER_CITY_OPTION] },
+  { name: 'San Luis', cities: ['San Luis Capital', 'Villa Mercedes', 'Merlo', 'La Punta', OTHER_CITY_OPTION] },
+  { name: 'Santa Cruz', cities: ['Río Gallegos', 'Caleta Olivia', 'El Calafate', 'Puerto Deseado', OTHER_CITY_OPTION] },
+  { name: 'Santa Fe', cities: ['Santa Fe Capital', 'Rosario', 'Rafaela', 'Reconquista', OTHER_CITY_OPTION] },
+  { name: 'Santiago del Estero', cities: ['Santiago del Estero', 'La Banda', 'Termas de Río Hondo', 'Frías', OTHER_CITY_OPTION] },
+  { name: 'Tierra del Fuego', cities: ['Ushuaia', 'Río Grande', 'Tolhuin', OTHER_CITY_OPTION] },
+  { name: 'Tucumán', cities: ['San Miguel de Tucumán', 'Tafí Viejo', 'Yerba Buena', 'Concepción', OTHER_CITY_OPTION] },
+] as const

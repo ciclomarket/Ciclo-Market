@@ -1,0 +1,1 @@
+export function Field({ label, children }: { label: string, children: React.ReactNode }) { return (<label className="block"><div className="label">{label}</div>{children}</label>) }

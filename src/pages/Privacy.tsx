@@ -1,0 +1,2 @@
+import Container from '../components/Container'
+export default function Privacy(){return (<Container><h1 className="text-2xl font-bold mb-4">Política de privacidad</h1><p className="text-white/70">Contenido legal…</p></Container>)}
