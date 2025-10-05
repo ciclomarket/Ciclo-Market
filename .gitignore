@@ -1,3 +1,25 @@
-node_modules
-.env
-dist
+# Build / cache
+node_modules/
+server/node_modules/
+dist/
+.firebase/
+tsconfig.tsbuildinfo
+
+# Env / secrets
+*.env
+sendgrid.env
+
+# Supabase exports / backups
+supabase/
+ciclo-market-server.backup/
+server.tar.gz
+
+# Google Cloud SDK (ruta rara que se coló)
+exec -l /
+
+# Misc
+storage.rules
+users.csv
+*.DS_Store
+gcloud auth login/
+.env.local
