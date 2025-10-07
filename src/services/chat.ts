@@ -154,7 +154,43 @@ export async function sendChatMessage(threadId: string, body: string) {
     p_body: body
   })
   if (error) throw error
-  return data as ChatMessage
+  const message = data as ChatMessage
+
+  void (async () => {
+    try {
+      const { data: userData } = await supabase.auth.getUser()
+      const me = userData?.user?.id
+      if (!me) return
+
+      const { data: thread, error: threadError } = await supabase
+        .from('chat_threads')
+        .select('seller_id,buyer_id')
+        .eq('id', threadId)
+        .maybeSingle()
+
+      if (threadError || !thread) return
+
+      const toUserId = thread.seller_id === me ? thread.buyer_id : thread.seller_id
+      if (!toUserId || toUserId === me) return
+
+      const { error: notificationError } = await supabase.from('notifications').insert({
+        user_id: toUserId,
+        type: 'chat_message',
+        title: 'Nuevo mensaje',
+        body: body.slice(0, 120),
+        metadata: { conversation_id: threadId, message_id: message?.id },
+        cta_url: `/chat/${threadId}`
+      })
+
+      if (notificationError) {
+        console.warn('[chat] notification insert failed', notificationError)
+      }
+    } catch (notifyError) {
+      console.warn('[chat] send notification failed', notifyError)
+    }
+  })()
+
+  return message
 }
 
 export async function markThreadRead(threadId: string) {

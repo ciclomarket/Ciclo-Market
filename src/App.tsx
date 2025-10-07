@@ -11,6 +11,7 @@ import Login from './pages/Auth/Login'
 import Register from './pages/Auth/Register'
 import VerifyEmail from './pages/Auth/VerifyEmail'
 import Help from './pages/Help'
+import HowToPublish from './pages/HowToPublish'
 import OfficialStore from './pages/OfficialStore'
 import FAQ from './pages/FAQ'
 import Terms from './pages/Terms'
@@ -88,13 +89,15 @@ export default function App() {
                   </ProtectedRoute>
                 }
               />
-              <Route path="/profile/:uid" element={<Profile />} />
+              <Route path="/vendedor/:sellerId" element={<Profile />} />
+              <Route path="/profile/:sellerId" element={<Profile />} />
 
               {/* Auth */}
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               <Route path="/verificar-email" element={<VerifyEmail />} />
               <Route path="/ayuda" element={<Help />} />
+              <Route path="/como-publicar" element={<HowToPublish />} />
               <Route path="/tienda-oficial" element={<OfficialStore />} />
 
               {/* Checkout status */}

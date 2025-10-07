@@ -14,6 +14,7 @@ import { usePlans } from '../../context/PlanContext'
 import { canonicalPlanCode, normalisePlanText, resolvePlanCode, type PlanCode } from '../../utils/planCodes'
 import { formatNameWithInitial } from '../../utils/user'
 import { fetchListing } from '../../services/listings'
+import { fetchUserProfile, type UserProfileRecord } from '../../services/users'
 
 const MATERIAL_OPTIONS = ['Aluminio','Carbono','Aluminio + Carbono','Titanio','Acero','Otro']
 
@@ -134,6 +135,7 @@ export default function NewListingForm() {
   const [description, setDescription] = useState('')
   const [images, setImages] = useState<string[]>([])
   const [sellerWhatsappInput, setSellerWhatsappInput] = useState('')
+  const [profile, setProfile] = useState<UserProfileRecord | null>(null)
 
   const isEditing = Boolean(editingListing)
 
@@ -153,6 +155,26 @@ export default function NewListingForm() {
         ? `Otra ciudad, ${province}`
         : `${province}`
     : 'Ubicación por definir'
+
+  useEffect(() => {
+    if (!user?.id || !supabaseEnabled) {
+      setProfile(null)
+      return
+    }
+    let active = true
+    const loadProfile = async () => {
+      const data = await fetchUserProfile(user.id)
+      if (!active) return
+      setProfile(data)
+      if (whatsappEnabled && !sellerWhatsappInput && data?.whatsapp_number) {
+        setSellerWhatsappInput(data.whatsapp_number)
+      }
+    }
+    void loadProfile()
+    return () => {
+      active = false
+    }
+  }, [user?.id, whatsappEnabled, sellerWhatsappInput])
 
   const autoTitle = useMemo(() => {
     const composed = `${brand.trim()} ${model.trim()}`.trim()
@@ -229,7 +251,7 @@ export default function NewListingForm() {
             setCityOther(cityValue)
           }
         }
-        setSellerWhatsappInput(existing.sellerWhatsapp ?? '')
+        setSellerWhatsappInput(existing.sellerWhatsapp ?? profile?.whatsapp_number ?? '')
       } finally {
         setLoadingListing(false)
       }
@@ -238,12 +260,22 @@ export default function NewListingForm() {
   }, [listingId, supabaseEnabled, user?.id])
 
   useEffect(() => {
-    if (listingId) return
-    const defaultWhatsapp = (user?.user_metadata?.whatsapp as string | undefined) ?? (user?.user_metadata?.phone as string | undefined) ?? ''
-    if (defaultWhatsapp && !sellerWhatsappInput) {
+    if (listingId || !whatsappEnabled) return
+    if (sellerWhatsappInput) return
+    const metaWhatsapp = (user?.user_metadata?.whatsapp as string | undefined) ?? (user?.user_metadata?.phone as string | undefined) ?? ''
+    const profileWhatsapp = profile?.whatsapp_number ?? ''
+    const defaultWhatsapp = profileWhatsapp || metaWhatsapp
+    if (defaultWhatsapp) {
       setSellerWhatsappInput(defaultWhatsapp)
     }
-  }, [listingId, sellerWhatsappInput, user?.user_metadata?.phone, user?.user_metadata?.whatsapp])
+  }, [listingId, whatsappEnabled, profile?.whatsapp_number, sellerWhatsappInput, user?.user_metadata?.phone, user?.user_metadata?.whatsapp])
+
+  useEffect(() => {
+    if (!listingId || !whatsappEnabled) return
+    if (!profile?.whatsapp_number) return
+    if (sellerWhatsappInput) return
+    setSellerWhatsappInput(profile.whatsapp_number)
+  }, [listingId, whatsappEnabled, profile?.whatsapp_number, sellerWhatsappInput])
 
   /** 2) Subida de fotos (usa hook existente) */
   const handleFiles = async (files: FileList | null) => {
@@ -277,11 +309,6 @@ export default function NewListingForm() {
     if (!city) return alert('Seleccioná una ciudad')
     if (city === OTHER_CITY_OPTION && !cityOther.trim()) return alert('Especificá la ciudad')
     if (!images.length) return alert('Subí al menos una foto')
-    if (whatsappEnabled && !sellerWhatsappInput.trim()) {
-      alert('Ingresá un número de WhatsApp para el contacto directo.')
-      return
-    }
-
     // (Opcional) límite de publicaciones activas por usuario según plan visible en UI
     const client = getSupabaseClient()
 
@@ -311,21 +338,17 @@ export default function NewListingForm() {
     const sellerLocation = metadata.city
       ? (metadata.province ? `${metadata.city}, ${metadata.province}` : metadata.city)
       : undefined
-    const sellerWhatsappFromProfile = metadata.whatsapp ?? metadata.phone ?? undefined
+    const profileWhatsapp = profile?.whatsapp_number ?? undefined
+    const sellerWhatsappFromProfile = metadata.whatsapp ?? metadata.phone ?? profileWhatsapp ?? undefined
 
     // Defaults exigidos por el negocio
     const safeDescription = (description.trim() || 'No declara descripción específica')
     const safeExtras = (extras.trim() || 'No tiene agregados extras, se encuentra original')
 
-    const whatsappCandidate = sellerWhatsappInput.trim() || (whatsappEnabled ? (sellerWhatsappFromProfile ?? '') : '')
+    const whatsappCandidate = sellerWhatsappInput.trim() || sellerWhatsappFromProfile || editingListing?.sellerWhatsapp || ''
     const formattedWhatsapp = whatsappEnabled
       ? normaliseWhatsapp(whatsappCandidate)
       : editingListing?.sellerWhatsapp ?? null
-
-    if (whatsappEnabled && !formattedWhatsapp) {
-      alert('Ingresá un número de WhatsApp válido (con código de país).')
-      return
-    }
 
     const payload = {
       title: autoTitle,
@@ -341,6 +364,7 @@ export default function NewListingForm() {
       seller_name: sellerName,
       seller_location: sellerLocation,
       seller_whatsapp: formattedWhatsapp,
+      seller_email: user.email,
       seller_plan: planCode,
       material: materialValue || undefined,
       frame_size: frameSize || undefined,
@@ -431,8 +455,8 @@ export default function NewListingForm() {
 
   return (
     <Container>
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
-        <div>
+      <div className="flex w-full flex-col gap-3 md:flex-row md:items-center md:justify-between mb-6">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold">{isEditing ? 'Editar publicación' : 'Nueva publicación'}</h1>
           <p className="text-sm text-black/60 mt-1">
             {isEditing
@@ -440,7 +464,7 @@ export default function NewListingForm() {
               : 'Completá los datos de tu bici y obtené una vista previa en tiempo real.'}
           </p>
         </div>
-        <div className="rounded-xl border border-mb-primary/30 bg-mb-primary/5 px-4 py-3 text-sm text-mb-ink max-w-sm">
+        <div className="min-w-0 rounded-xl border border-mb-primary/30 bg-mb-primary/5 px-4 py-3 text-sm text-mb-ink max-w-full md:max-w-sm">
           <div className="font-semibold text-mb-primary">{isEditing ? `Plan en uso: ${planName}` : `Plan seleccionado: ${planName}`}</div>
           <div className="text-xs font-semibold text-mb-primary/80">
             {isEditing ? 'Podés cambiar de plan desde tu panel de vendedor.' : (planPriceLabel ?? 'Sin costo')}
@@ -448,10 +472,10 @@ export default function NewListingForm() {
           {selectedPlan?.description && (
             <div className="mt-2 text-xs text-black/70">{selectedPlan.description}</div>
           )}
-            <div className="mt-2 text-xs text-black/60 space-y-1">
-              <div>Duración de la publicación: {listingDuration} días</div>
-              <div>Expira aprox.: {listingExpiresLabel}</div>
-              <div>Fotos permitidas: {maxPhotos}</div>
+          <div className="mt-2 space-y-1 text-xs text-black/60">
+            <div>Duración de la publicación: {listingDuration} días</div>
+            <div>Expira aprox.: {listingExpiresLabel}</div>
+            <div>Fotos permitidas: {maxPhotos}</div>
             <div>
               {selectedPlan?.featuredDays
                 ? `Destacada ${selectedPlan.featuredDays} ${selectedPlan.featuredDays === 1 ? 'día' : 'días'} en portada`
@@ -463,8 +487,8 @@ export default function NewListingForm() {
         </div>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-6">
-        <div className="card p-6 space-y-6">
+      <div className="grid w-full gap-6 md:grid-cols-2">
+        <div className="card w-full max-w-full min-w-0 overflow-hidden p-6 space-y-6">
           <section>
             <h2 className="text-lg font-semibold text-mb-ink">1. Categoría</h2>
             <p className="text-sm text-black/60">Elegí la categoría que mejor describe tu bicicleta.</p>
@@ -648,7 +672,7 @@ export default function NewListingForm() {
           <Button onClick={submit} className="w-full">Publicar</Button>
         </div>
 
-        <aside className="card p-6 space-y-5 md:sticky md:top-6 h-fit">
+        <aside className="card w-full max-w-full min-w-0 overflow-hidden p-6 space-y-5 md:sticky md:top-6 md:max-w-sm h-fit">
           <h2 className="text-lg font-semibold text-mb-ink">Ficha técnica</h2>
           <div className="rounded-lg border border-black/10 overflow-hidden">
             {images[0] ? (

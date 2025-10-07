@@ -14,6 +14,7 @@ export interface UserProfileInput {
   facebookHandle?: string | null
   websiteUrl?: string | null
   verified?: boolean
+  whatsapp?: string | null
 }
 
 export interface UserProfileRecord {
@@ -31,6 +32,7 @@ export interface UserProfileRecord {
   facebook_handle?: string | null
   website_url?: string | null
   verified?: boolean | null
+  whatsapp_number?: string | null
 }
 
 export async function createUserProfile(payload: UserProfileInput): Promise<boolean> {
@@ -51,6 +53,7 @@ export async function createUserProfile(payload: UserProfileInput): Promise<bool
       facebook_handle: payload.facebookHandle ?? null,
       website_url: payload.websiteUrl ?? null,
       verified: payload.verified ?? false,
+      whatsapp_number: payload.whatsapp ?? null,
       created_at: new Date().toISOString()
     })
     return !error
@@ -78,6 +81,7 @@ export async function upsertUserProfile(payload: Partial<UserProfileInput> & { i
     if (payload.facebookHandle !== undefined) updates.facebook_handle = payload.facebookHandle
     if (payload.websiteUrl !== undefined) updates.website_url = payload.websiteUrl
     if (payload.verified !== undefined) updates.verified = payload.verified
+    if (payload.whatsapp !== undefined) updates.whatsapp_number = payload.whatsapp
 
     const { data, error } = await supabase
       .from('users')
@@ -107,6 +111,7 @@ export async function upsertUserProfile(payload: Partial<UserProfileInput> & { i
       facebook_handle: payload.facebookHandle ?? null,
       website_url: payload.websiteUrl ?? null,
       verified: payload.verified ?? false,
+      whatsapp_number: payload.whatsapp ?? null,
       created_at: new Date().toISOString()
     }
     const { error: insertError } = await supabase.from('users').insert(insertPayload)

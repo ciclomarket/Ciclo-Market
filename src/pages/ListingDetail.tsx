@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import Container from '../components/Container'
 import ImageCarousel from '../components/ImageCarousel'
 import Button from '../components/Button'
@@ -18,7 +18,7 @@ import { useChat } from '../context/ChatContext'
 import { applySeo, resetSeo } from '../utils/seo'
 import { sendChatMessage } from '../services/chat'
 import { updateListingPlan } from '../services/listings'
-import { fetchUserProfile, setUserVerificationStatus } from '../services/users'
+import { fetchUserProfile, setUserVerificationStatus, type UserProfileRecord } from '../services/users'
 
 export default function ListingDetail() {
   const params = useParams()
@@ -35,6 +35,7 @@ export default function ListingDetail() {
   const [offerError, setOfferError] = useState<string | null>(null)
   const [moderatorUpdating, setModeratorUpdating] = useState(false)
   const [sellerVerified, setSellerVerified] = useState(false)
+  const [sellerProfile, setSellerProfile] = useState<UserProfileRecord | null>(null)
   const { ids: compareIds, toggle: toggleCompare } = useCompare()
   const { has: hasFav, toggle: toggleFav } = useFaves()
   const listingKey = params.slug ?? params.id ?? ''
@@ -85,9 +86,14 @@ export default function ListingDetail() {
 
   useEffect(() => {
     const loadSellerProfile = async () => {
-      if (!listing?.sellerId) return
+      if (!listing?.sellerId || !supabaseEnabled) {
+        setSellerProfile(null)
+        setSellerVerified(false)
+        return
+      }
       setSellerVerified(false)
       const profile = await fetchUserProfile(listing.sellerId)
+      setSellerProfile(profile)
       setSellerVerified(Boolean(profile?.verified))
     }
     void loadSellerProfile()
@@ -97,7 +103,8 @@ export default function ListingDetail() {
   if (!listing) return <Container>Publicación no encontrada.</Container>
 
   const waText = encodeURIComponent(`Hola! Vi tu ${listing.title} en Ciclo Market y me interesa. ¿Sigue disponible?`)
-  const waLink = listing.sellerWhatsapp ? `https://wa.me/${listing.sellerWhatsapp.replace(/[^0-9]/g, '')}?text=${waText}` : null
+  const sellerWhatsappNumber = listing.sellerWhatsapp || sellerProfile?.whatsapp_number || null
+  const waLink = sellerWhatsappNumber ? `https://wa.me/${sellerWhatsappNumber.replace(/[^0-9]/g, '')}?text=${waText}` : null
 
   const formattedPrice = formatListingPrice(listing.price, listing.priceCurrency, format, fx)
   const originalPriceLabel = listing.originalPrice
@@ -270,6 +277,8 @@ export default function ListingDetail() {
 
   const ContactIcons = () => {
     const items: Array<{ id: string; label: string; onClick?: () => void; href?: string; icon: ReactNode; disabled?: boolean; className?: string }> = []
+    const emailRecipient = sellerProfile?.email || listing.sellerEmail || null
+
     if (!isOwner) {
       items.push({
         id: 'chat',
@@ -280,7 +289,7 @@ export default function ListingDetail() {
         className: 'bg-[#0b1724]'
       })
     }
-    if (paidPlanActive && waLink && !isOwner) {
+    if (waLink && !isOwner) {
       items.push({
         id: 'whatsapp',
         label: 'Abrir WhatsApp',
@@ -289,17 +298,17 @@ export default function ListingDetail() {
         className: 'bg-[#25D366]'
       })
     }
-    items.push({
-      id: 'email',
-      label: 'Enviar correo',
-      onClick: () => {
-        const subject = encodeURIComponent(`Consulta sobre ${listing.title}`)
-        const body = encodeURIComponent(`Hola! Vi tu ${listing.title} en Ciclo Market y me gustaría saber más.`)
-        window.location.href = `mailto:?subject=${subject}&body=${body}%0A%0A${shareUrl}`
-      },
-      icon: <MailIcon />,
-      className: 'bg-[#0b1724]'
-    })
+    if (emailRecipient) {
+      items.push({
+        id: 'email',
+        label: 'Enviar correo',
+        href: `mailto:${emailRecipient}?subject=${encodeURIComponent(`Consulta sobre ${listing.title}`)}`,
+        icon: <MailIcon />,
+        className: 'bg-[#0b1724]'
+      })
+    }
+
+    if (items.length === 0) return null
 
     return (
       <div className="flex flex-wrap items-center gap-2">
@@ -338,12 +347,12 @@ export default function ListingDetail() {
 
   return (
     <Container>
-      <div className="grid gap-6 lg:grid-cols-[2fr_1fr] lg:grid-rows-[auto_auto]">
-        <div className="order-1 space-y-6 lg:col-start-1 lg:row-start-1">
+      <div className="grid w-full gap-6 lg:grid-cols-[2fr_1fr] lg:grid-rows-[auto_auto]">
+        <div className="order-1 w-full min-w-0 space-y-6 lg:col-start-1 lg:row-start-1">
           <ImageCarousel images={listing.images} />
         </div>
 
-        <div className="order-2 lg:col-start-2 lg:row-start-1">
+        <div className="order-2 w-full min-w-0 lg:col-start-2 lg:row-start-1">
           <div className="flex flex-col gap-6 lg:sticky lg:top-6 lg:self-start">
             <div className="card p-6">
               <div className="flex items-start justify-between gap-4">
@@ -383,51 +392,35 @@ export default function ListingDetail() {
                 <div>
                   <p className="text-sm text-[#14212e]/70">Publicado por</p>
                   <h3 className="text-lg font-semibold text-[#14212e]">
-                    <span className="inline-flex items-center gap-2">
+                    <Link
+                      to={`/vendedor/${listing.sellerId}`}
+                      className="inline-flex items-center gap-2 transition hover:text-mb-primary"
+                    >
                       {formatNameWithInitial(listing.sellerName, undefined)}
                       {sellerVerified && <VerifiedCheck />}
-                    </span>
+                    </Link>
                   </h3>
                   <p className="text-xs text-[#14212e]/60">{listing.sellerLocation || 'Ubicación reservada'}</p>
                 </div>
-                {listing.sellerPlan && (
-                  <span
-                    className={`rounded-full px-3 py-1 text-xs font-semibold uppercase ${
-                      paidPlanActive ? 'bg-mb-primary text-white' : 'bg-[#14212e]/10 text-[#14212e]'
-                    }`}
-                  >
-                    {planLabel}
-                  </span>
-                )}
               </div>
-              <div className="flex items-center gap-3">
-                <div className="size-14 overflow-hidden rounded-full bg-[#14212e]/10">
-                  {listing.sellerAvatar ? (
-                    <img src={listing.sellerAvatar} alt={formatNameWithInitial(listing.sellerName, undefined)} className="h-full w-full object-cover" />
-                  ) : (
-                    <span className="flex h-full w-full items-center justify-center text-sm text-[#14212e]/60">
-                      {formatNameWithInitial(listing.sellerName, undefined)[0] || 'C'}
-                    </span>
-                  )}
-                </div>
-                <div className="text-xs text-[#14212e]/60">
-                  {paidPlanActive && <p>{planLabel}</p>}
-                </div>
+              <div className="text-xs text-[#14212e]/60">
+                <Link to={`/vendedor/${listing.sellerId}`} className="inline-flex items-center gap-1 text-[#14212e] underline">
+                  Ver perfil del vendedor
+                </Link>
+                {isFeaturedListing && <p className="mt-1 text-[11px] text-[#14212e]/60">Publicación destacada en el marketplace.</p>}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="space-y-3">
                 {!isOwner && (
                   <button
                     type="button"
-                    className="inline-flex items-center gap-2 rounded-full bg-[#f4f6fb] px-3 py-1 text-sm font-medium text-[#14212e]"
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#14212e] px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-[#1b2f3f]"
                     onClick={() => setShowOfferModal(true)}
-                    disabled={isOwner}
                   >
-                    <span aria-hidden="true">💸</span>
                     Hacer oferta
                   </button>
                 )}
+                <ContactIcons />
               </div>
-              <ContactIcons />
               <div className="pt-4">
                 <p className="text-xs text-[#14212e]/60 uppercase tracking-wide">Compartir</p>
                 <div className="mt-2 flex flex-wrap items-center gap-2">

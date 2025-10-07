@@ -11,6 +11,9 @@ interface ChatContextValue {
   selectThread: (id: string | null) => void
   messages: ChatMessage[]
   loadingMessages: boolean
+  loadingOlderMessages: boolean
+  hasMoreMessages: boolean
+  loadOlderMessages: () => Promise<void>
   sendMessage: (body: string) => Promise<void>
   createThread: (listingId: string, sellerId: string) => Promise<string | null>
   refreshThreads: () => Promise<void>
@@ -25,7 +28,13 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [loadingMessages, setLoadingMessages] = useState(false)
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false)
+  const [hasMoreMessages, setHasMoreMessages] = useState(false)
   const subscriptionRef = useRef<RealtimeChannel | null>(null)
+  const oldestMessageRef = useRef<string | null>(null)
+  const latestMessageRef = useRef<string | null>(null)
+
+  const MESSAGE_PAGE_SIZE = 50
 
   const refreshThreads = useCallback(async () => {
     if (!supabaseEnabled || !user?.id) {
@@ -45,12 +54,17 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const loadMessages = useCallback(async (threadId: string | null) => {
     if (!threadId || !supabaseEnabled) {
       setMessages([])
+      setHasMoreMessages(false)
+      oldestMessageRef.current = null
       return
     }
     setLoadingMessages(true)
-    const list = await fetchChatMessages(threadId)
+    const list = await fetchChatMessages(threadId, { limit: MESSAGE_PAGE_SIZE })
     setMessages(list)
     setLoadingMessages(false)
+    oldestMessageRef.current = list[0]?.created_at ?? null
+    latestMessageRef.current = list[list.length - 1]?.created_at ?? null
+    setHasMoreMessages(list.length === MESSAGE_PAGE_SIZE)
     await markThreadRead(threadId)
   }, [])
 
@@ -83,7 +97,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       void supabase.removeChannel(subscriptionRef.current)
     }
 
-    const channel = supabase
+      const channel = supabase
       .channel(`chat-thread-${activeThreadId}`)
       .on(
         'postgres_changes',
@@ -93,7 +107,12 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           switch (payload.eventType) {
             case 'INSERT':
               if (newMessage) {
-                setMessages((prev) => [...prev, newMessage])
+                setMessages((prev) => {
+                  if (prev.some((msg) => msg.id === newMessage.id)) return prev
+                  const next = [...prev, newMessage]
+                  latestMessageRef.current = newMessage.created_at ?? latestMessageRef.current
+                  return next
+                })
                 void markThreadRead(activeThreadId)
               }
               break
@@ -125,6 +144,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   const selectThread = useCallback((id: string | null) => {
     setActiveThreadId(id)
+    oldestMessageRef.current = null
+    setHasMoreMessages(false)
   }, [])
 
   const sendMessage = useCallback(async (body: string) => {
@@ -132,10 +153,48 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     const trimmed = body.trim()
     const newMessage = await sendChatMessage(activeThreadId, trimmed)
     if (newMessage) {
-      setMessages((prev) => [...prev, newMessage])
+      setMessages((prev) => {
+        if (prev.some((msg) => msg.id === newMessage.id)) return prev
+        return [...prev, newMessage]
+      })
       void refreshThreads()
     }
   }, [activeThreadId, refreshThreads])
+
+  const loadOlderMessages = useCallback(async () => {
+    if (!supabaseEnabled || !activeThreadId) return
+    if (loadingOlderMessages || !hasMoreMessages || !oldestMessageRef.current) return
+    setLoadingOlderMessages(true)
+    const older = await fetchChatMessages(activeThreadId, {
+      before: oldestMessageRef.current,
+      limit: MESSAGE_PAGE_SIZE
+    })
+
+    if (older.length > 0) {
+      const prevFirst = oldestMessageRef.current
+      oldestMessageRef.current = older[0]?.created_at ?? oldestMessageRef.current
+      setMessages((prev) => {
+        const existingIds = new Set(prev.map((msg) => msg.id))
+        const filtered = older.filter((msg) => !existingIds.has(msg.id))
+        const merged = [...filtered, ...prev]
+
+        if (merged.length > MESSAGE_PAGE_SIZE * 3 && prevFirst) {
+          const pruned = merged.filter((msg) => {
+            if (!latestMessageRef.current) return true
+            const diff = new Date(latestMessageRef.current).getTime() - new Date(msg.created_at).getTime()
+            const fourDays = 4 * 24 * 60 * 60 * 1000
+            return diff <= fourDays
+          })
+          return pruned.length ? pruned : merged
+        }
+
+        return merged
+      })
+    }
+
+    setHasMoreMessages(older.length === MESSAGE_PAGE_SIZE)
+    setLoadingOlderMessages(false)
+  }, [activeThreadId, hasMoreMessages, loadingOlderMessages])
 
   const createThread = useCallback(async (listingId: string, sellerId: string) => {
     try {
@@ -156,10 +215,26 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     selectThread,
     messages,
     loadingMessages,
+    loadingOlderMessages,
+    hasMoreMessages,
+    loadOlderMessages,
     sendMessage,
     createThread,
     refreshThreads
-  }), [threads, loadingThreads, activeThreadId, messages, loadingMessages, selectThread, sendMessage, createThread, refreshThreads])
+  }), [
+    threads,
+    loadingThreads,
+    activeThreadId,
+    messages,
+    loadingMessages,
+    loadingOlderMessages,
+    hasMoreMessages,
+    selectThread,
+    sendMessage,
+    createThread,
+    refreshThreads,
+    loadOlderMessages
+  ])
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>
 }

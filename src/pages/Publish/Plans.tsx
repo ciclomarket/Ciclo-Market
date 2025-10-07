@@ -309,7 +309,7 @@ export default function Plans() {
                     ))}
                   </ul>
 
-                 <Button
+                  <Button
                     onClick={() => handleSelect(plan)}
                     disabled={loading || processingPlan === planCode}
                     className="mt-4 bg-white text-[#14212e] hover:bg-white/90"
