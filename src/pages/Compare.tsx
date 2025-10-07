@@ -49,6 +49,26 @@ export default function Compare() {
     }
   }, [ids])
 
+  const rows = useMemo(() => {
+    return [
+      {
+        label: 'Precio',
+        values: items.map((item) =>
+          formatListingPrice(item.price, item.priceCurrency, format, fx)
+        ),
+      },
+      { label: 'Categoría', values: items.map((item) => item.category) },
+      { label: 'Marca', values: items.map((item) => item.brand) },
+      { label: 'Modelo', values: items.map((item) => item.model) },
+      { label: 'Año', values: items.map((item) => item.year ?? '—') },
+      { label: 'Material', values: items.map((item) => item.material ?? '—') },
+      { label: 'Grupo', values: items.map((item) => item.drivetrain || item.drivetrainDetail || '—') },
+      { label: 'Rodado', values: items.map((item) => item.wheelSize ?? '—') },
+      { label: 'Ruedas', values: items.map((item) => item.wheelset ?? '—') },
+      { label: 'Extras', values: items.map((item) => item.extras ?? '—') },
+    ]
+  }, [items, format, fx])
+
   if (loading) {
     return (
       <Container>
@@ -76,26 +96,6 @@ export default function Compare() {
       </Container>
     )
   }
-
-  const rows = useMemo(() => {
-    return [
-      {
-        label: 'Precio',
-        values: items.map((item) =>
-          formatListingPrice(item.price, item.priceCurrency, format, fx)
-        ),
-      },
-      { label: 'Categoría', values: items.map((item) => item.category) },
-      { label: 'Marca', values: items.map((item) => item.brand) },
-      { label: 'Modelo', values: items.map((item) => item.model) },
-      { label: 'Año', values: items.map((item) => item.year ?? '—') },
-      { label: 'Material', values: items.map((item) => item.material ?? '—') },
-      { label: 'Grupo', values: items.map((item) => item.drivetrain || item.drivetrainDetail || '—') },
-      { label: 'Rodado', values: items.map((item) => item.wheelSize ?? '—') },
-      { label: 'Ruedas', values: items.map((item) => item.wheelset ?? '—') },
-      { label: 'Extras', values: items.map((item) => item.extras ?? '—') },
-    ]
-  }, [items, format, fx])
 
   return (
     <div className="bg-[#0f1729] py-12 text-white">

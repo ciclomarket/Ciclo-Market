@@ -1,10 +1,9 @@
-
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import Container from '../components/Container'
 import Button from '../components/Button'
 import ListingCard from '../components/ListingCard'
 import { mockListings } from '../mock/mockData'
-import { getPlanLabel, isPlanActive } from '../utils/plans'
 import { useAuth } from '../context/AuthContext'
 import { supabase, supabaseEnabled } from '../services/supabase'
 import { archiveListing, fetchListingsBySeller, reduceListingPrice } from '../services/listings'
@@ -18,6 +17,7 @@ import { BIKE_CATEGORIES } from '../constants/catalog'
 import { deriveProfileSlug, pickDiscipline } from '../utils/user'
 import { useNotifications } from '../context/NotificationContext'
 import { useChat } from '../context/ChatContext'
+import useFaves from '../hooks/useFaves'
 
 const TABS = ['Perfil', 'Publicaciones', 'Notificaciones', 'Chat', 'Editar perfil', 'Suscripción', 'Cerrar sesión'] as const
 
@@ -91,6 +91,7 @@ export default function Dashboard() {
   const [sellerListings, setSellerListings] = useState<Listing[]>([])
   const [profile, setProfile] = useState<UserProfileRecord | null>(null)
   const [loading, setLoading] = useState(true)
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   const loadData = useCallback(async () => {
     if (!user?.id) {
@@ -123,6 +124,28 @@ export default function Dashboard() {
   }, [loadData])
 
   useEffect(() => {
+    setMobileNavOpen(false)
+  }, [activeTab])
+
+  useEffect(() => {
+    if (!mobileNavOpen) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMobileNavOpen(false)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [mobileNavOpen])
+
+  useEffect(() => {
+    if (!mobileNavOpen) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [mobileNavOpen])
+
+  useEffect(() => {
     const tabParam = searchParams.get('tab')
     if (tabParam && TABS.includes(tabParam as (typeof TABS)[number])) {
       setActiveTab(tabParam as (typeof TABS)[number])
@@ -148,6 +171,15 @@ export default function Dashboard() {
   }, [loading, profileNeedsInfo])
 
   const sellerProfile = sellerListings[0]
+  const latestListingAt = useMemo(() => {
+    if (!sellerListings.length) return null
+    const newest = sellerListings.reduce((latest, current) => {
+      if (!current?.createdAt) return latest
+      return Math.max(latest, current.createdAt)
+    }, 0)
+    return newest > 0 ? newest : null
+  }, [sellerListings])
+  const lastConnectionAt = user?.last_sign_in_at ?? user?.created_at ?? null
 
   if (loading) {
     return (
@@ -167,9 +199,28 @@ export default function Dashboard() {
         <div className="overflow-hidden rounded-[28px] border border-white/10 bg-white/5 backdrop-blur-xl shadow-[0_35px_80px_rgba(12,20,28,0.45)]">
           <header className="border-b border-white/10 bg-[#14212e]/90 px-6 py-6 text-white">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-xs uppercase tracking-[0.4em] text-white/70">Panel de vendedor</p>
-                <h1 className="text-2xl font-semibold">Bienvenido, {sellerProfile?.sellerName || 'Ciclista'}</h1>
+              <div className="flex items-start justify-between gap-3 sm:block">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.4em] text-white/70">Panel de vendedor</p>
+                  <h1 className="text-2xl font-semibold">Bienvenido, {sellerProfile?.sellerName || 'Ciclista'}</h1>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMobileNavOpen(true)}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/20 text-white transition hover:border-white/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70 sm:hidden"
+                  aria-label="Abrir menú del panel"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    className="h-6 w-6"
+                    stroke="currentColor"
+                    fill="none"
+                    strokeWidth={1.5}
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M4 12h16M4 17h16" />
+                  </svg>
+                </button>
               </div>
               <Button to="/publicar/nueva" className="bg-white text-[#14212e] hover:bg-white/90">
                 Nueva publicación
@@ -178,7 +229,7 @@ export default function Dashboard() {
           </header>
 
           <div className="grid gap-6 p-6 lg:grid-cols-[260px_1fr]">
-            <nav className="rounded-3xl border border-white/10 bg-white/[0.08] p-3 text-sm text-white/80">
+            <nav className="hidden rounded-3xl border border-white/10 bg-white/[0.08] p-3 text-sm text-white/80 md:block">
               <ul className="grid gap-1">
                 {TABS.map((tab) => (
                   <li key={tab}>
@@ -188,7 +239,7 @@ export default function Dashboard() {
                       className={`w-full rounded-2xl px-4 py-3 text-left transition ${
                         activeTab === tab
                           ? 'bg-white text-[#14212e] shadow-lg'
-                          : 'hover:bg-white/10'
+                          : 'hover:bg白/10'.replace('白', 'white') /* evita encoding raro */
                       }`}
                     >
                       {tab}
@@ -208,6 +259,8 @@ export default function Dashboard() {
                   onEditProfile={() => setShowProfileModal(true)}
                   profileNeedsInfo={profileNeedsInfo}
                   isModerator={isModerator}
+                  lastConnectionAt={lastConnectionAt}
+                  latestListingAt={latestListingAt}
                 />
               )}
               {activeTab === 'Publicaciones' && <ListingsView listings={sellerListings} onRefresh={loadData} />}
@@ -235,6 +288,60 @@ export default function Dashboard() {
             </section>
           </div>
         </div>
+        {mobileNavOpen && (
+          <div
+            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm sm:hidden"
+            role="dialog"
+            aria-modal="true"
+            onClick={() => setMobileNavOpen(false)}
+          >
+            <div
+              className="absolute inset-x-4 top-24 rounded-3xl border border-[#14212e]/10 bg-white p-5 text-[#14212e] shadow-xl"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold">Secciones del panel</h2>
+                <button
+                  type="button"
+                  aria-label="Cerrar menú"
+                  onClick={() => setMobileNavOpen(false)}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#14212e]/10 text-[#14212e] hover:border-[#14212e]/40"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    className="h-5 w-5"
+                    stroke="currentColor"
+                    fill="none"
+                    strokeWidth={1.5}
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 6l12 12M6 18 18 6" />
+                  </svg>
+                </button>
+              </div>
+              <ul className="mt-4 grid gap-2">
+                {TABS.map((tab) => (
+                  <li key={`mobile-${tab}`}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveTab(tab)
+                        setMobileNavOpen(false)
+                      }}
+                      className={`w-full rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition ${
+                        activeTab === tab
+                          ? 'border-[#14212e] bg-[#14212e] text-white shadow'
+                          : 'border-[#14212e]/15 bg-white hover:border-[#14212e]/40'
+                      }`}
+                    >
+                      {tab}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
         <ProfileDetailsModal
           open={showProfileModal}
           onClose={() => setShowProfileModal(false)}
@@ -256,6 +363,8 @@ function ProfileView({
   onEditProfile,
   profileNeedsInfo,
   isModerator,
+  lastConnectionAt,
+  latestListingAt,
 }: {
   listing: Listing | undefined
   profile: UserProfileRecord | null
@@ -264,9 +373,9 @@ function ProfileView({
   onEditProfile: () => void
   profileNeedsInfo: boolean
   isModerator: boolean
+  lastConnectionAt?: string | null
+  latestListingAt?: number | null
 }) {
-  const planLabel = getPlanLabel(listing?.sellerPlan, listing?.sellerPlanExpires)
-  const planActive = isPlanActive(listing?.sellerPlan, listing?.sellerPlanExpires)
   const displayName = profile?.full_name ?? listing?.sellerName ?? fallbackEmail ?? 'Vendedor Ciclo Market'
   const locationFromProfile = profile?.city
     ? profile.province
@@ -278,7 +387,42 @@ function ProfileView({
   const preferredBike = profile?.preferred_bike ?? null
   const instagramLink = instagramUrl(profile?.instagram_handle)
   const facebookLink = facebookUrl(profile?.facebook_handle)
-  const websiteLink = profile?.website_url ? normaliseUrl(profile.website_url) : null
+  const websiteLink = profile?.website_url ? normaliseUrl(profile?.website_url) : null
+  const { ids: favouriteIds } = useFaves()
+  const favouritesCount = favouriteIds.length
+  const stravaProfileUrl = profile?.website_url && profile.website_url.toLowerCase().includes('strava.com')
+    ? normaliseUrl(profile.website_url)
+    : null
+  const stravaConnected = Boolean(stravaProfileUrl)
+  const handleConnectStrava = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      window.open('https://www.strava.com/', '_blank', 'noopener')
+    }
+  }, [])
+
+  const lastActivityDate = latestListingAt ? new Date(latestListingAt) : null
+  const activityLabel = lastActivityDate && !Number.isNaN(lastActivityDate.getTime())
+    ? new Intl.DateTimeFormat('es-AR', { dateStyle: 'long' }).format(lastActivityDate)
+    : 'Sin actividad reciente'
+  const activityRelative = lastActivityDate && !Number.isNaN(lastActivityDate.getTime())
+    ? relativeTimeFromNow(lastActivityDate.toISOString())
+    : null
+
+  const connectionDate = lastConnectionAt ? new Date(lastConnectionAt) : null
+  const connectionValid = connectionDate && !Number.isNaN(connectionDate.getTime())
+  const connectionLabel = connectionValid
+    ? new Intl.DateTimeFormat('es-AR', { dateStyle: 'long', timeStyle: 'short' }).format(connectionDate as Date)
+    : 'Sesión en curso'
+  const connectionRelative = connectionValid
+    ? relativeTimeFromNow((connectionDate as Date).toISOString())
+    : null
+
+  const reputationScore = profile?.verified ? 5 : totalListings >= 5 ? 5 : totalListings >= 3 ? 4 : 3
+  const reputationDescription = reputationScore >= 5
+    ? 'Excelente reputación. Mantené la respuesta rápida para sostenerla.'
+    : reputationScore >= 4
+      ? 'Muy buena reputación. Seguí respondiendo a tiempo para llegar al máximo.'
+      : 'Construí tu reputación completando tu perfil y respondiendo rápido.'
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
@@ -301,21 +445,45 @@ function ProfileView({
             )}
           </div>
           <p className="text-sm text-[#14212e]/70">{displayLocation}</p>
-          <div
-            className={`mt-3 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs ${
-              planActive ? 'bg-[#14212e]/10 text-[#14212e]' : 'bg-[#14212e]/5 text-[#14212e]/60'
-            }`}
-          >
-            <span className={`size-2 rounded-full ${planActive ? 'bg-[#14212e]' : 'bg-[#14212e]/40'}`} />
-            {planLabel}
-          </div>
         </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <ProfileStat label="Publicaciones activas" value={totalListings} />
-        <ProfileStat label="Consultas sin responder" value={3} trend="+1 hoy" />
-        <ProfileStat label="Plan" value={planLabel} trend={planActive ? 'Activo' : 'Vencido'} />
+        <ProfileStat
+          label="Publicaciones activas"
+          value={totalListings}
+          trend={totalListings > 0 ? `${totalListings === 1 ? '1 publicación en curso' : `${totalListings} publicaciones en curso`}` : 'Publicá tu primera bicicleta'}
+        />
+        <ProfileStat
+          label="Bicicletas guardadas"
+          value={favouritesCount}
+          trend={favouritesCount > 0 ? 'En tu lista de seguimiento' : 'Guardá bicicletas para compararlas más tarde'}
+        />
+        <ProfileStat
+          label="Perfil de Strava"
+          value={stravaConnected ? 'Conectado' : 'No conectado'}
+          trend={
+            stravaConnected ? (
+              <a
+                href={stravaProfileUrl ?? '#'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex text-xs font-semibold text-[#14212e] underline"
+              >
+                Ver mi Strava
+              </a>
+            ) : (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={handleConnectStrava}
+                className="w-full border border-dashed border-[#14212e]/30 text-[#14212e]"
+              >
+                Conectar Strava
+              </Button>
+            )
+          }
+        />
       </div>
 
       <div className="rounded-2xl border border-[#14212e]/10 bg-white p-5 shadow">
@@ -380,18 +548,54 @@ function ProfileView({
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="rounded-2xl border border-[#14212e]/10 bg-[#14212e]/5 p-5">
           <h3 className="text-sm font-semibold text-[#14212e] uppercase tracking-wide">Resumen de actividad</h3>
-          <ul className="mt-3 space-y-2 text-sm text-[#14212e]/80">
-            <li>• Última venta concretada: 12 de febrero</li>
-            <li>• Valor promedio de publicación: USD 4.200</li>
-            <li>• 5 compradores con reputación positiva este mes</li>
-          </ul>
+          <dl className="mt-3 space-y-3 text-sm text-[#14212e]">
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-[#14212e]/50">Fecha de actividad</dt>
+              <dd className="mt-1 font-medium">
+                {activityLabel}
+                {activityRelative && (
+                  <span className="ml-2 text-xs text-[#14212e]/60">({activityRelative})</span>
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-[#14212e]/50">Última conexión</dt>
+              <dd className="mt-1 font-medium">
+                {connectionLabel}
+                {connectionRelative && (
+                  <span className="ml-2 text-xs text-[#14212e]/60">({connectionRelative})</span>
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-[#14212e]/50">Reputación</dt>
+              <dd className="mt-1">
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: 5 }, (_, index) => (
+                      <StarIcon key={index} filled={index < reputationScore} />
+                    ))}
+                  </div>
+                  <span className="text-sm font-medium text-[#14212e]">{reputationScore} / 5</span>
+                </div>
+                <p className="mt-1 text-xs text-[#14212e]/60">{reputationDescription}</p>
+              </dd>
+            </div>
+          </dl>
         </div>
         <div className="rounded-2xl border border-[#14212e]/10 bg-white p-5">
-          <h3 className="text-sm font-semibold text-[#14212e] uppercase tracking-wide">Próximos pasos sugeridos</h3>
-          <ul className="mt-3 space-y-2 text-sm text-[#14212e]/80">
-            <li>• Actualizá tus fotos con luz natural para destacar en portada.</li>
-            <li>• Activá envío asegurado en la Domane SL 6.</li>
-            <li>• Configurá respuestas rápidas para agilizar tus chats.</li>
+          <h3 className="text-sm font-semibold text-[#14212e] uppercase tracking-wide">Potenciá tus ventas</h3>
+          <ul className="mt-3 space-y-3 text-sm text-[#14212e]/80">
+            {[
+              'Elegí publicaciones premium para aparecer destacada en la portada.',
+              'Completá tu perfil con foto, ubicación y redes sociales.',
+              'Respondé rápido a las consultas para ganar confianza.'
+            ].map((tip) => (
+              <li key={tip} className="flex items-start gap-2">
+                <span className="mt-1 inline-block h-1.5 w-1.5 rounded-full bg-[#f59e0b]" />
+                <span>{tip}</span>
+              </li>
+            ))}
           </ul>
         </div>
       </div>
@@ -401,6 +605,13 @@ function ProfileView({
 
 function ListingsView({ listings, onRefresh }: { listings: Listing[]; onRefresh?: () => Promise<void> | void }) {
   const navigate = useNavigate()
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!successMessage || typeof window === 'undefined') return
+    const timeout = window.setTimeout(() => setSuccessMessage(null), 5000)
+    return () => window.clearTimeout(timeout)
+  }, [successMessage])
   if (!listings.length) {
     return (
       <div className="flex flex-col items-center justify-center gap-4 py-10 text-center">
@@ -455,6 +666,7 @@ function ListingsView({ listings, onRefresh }: { listings: Listing[]; onRefresh?
       return
     }
     if (onRefresh) await onRefresh()
+    setSuccessMessage('Se actualizó el precio correctamente.')
   }
 
   return (
@@ -468,6 +680,11 @@ function ListingsView({ listings, onRefresh }: { listings: Listing[]; onRefresh?
           Publicar nueva bicicleta
         </Button>
       </header>
+      {successMessage && (
+        <div className="rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700" role="status" aria-live="polite">
+          {successMessage}
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {listings.map((listing) => (
@@ -571,8 +788,25 @@ function NotificationsView() {
 
 function ChatView({ initialThreadId, clearThreadParam }: { initialThreadId?: string | null; clearThreadParam?: () => void }) {
   const { user } = useAuth()
-  const { threads, loadingThreads, activeThreadId, selectThread, messages, loadingMessages, sendMessage } = useChat()
+  const {
+    threads,
+    loadingThreads,
+    activeThreadId,
+    selectThread,
+    messages,
+    loadingMessages,
+    loadingOlderMessages,
+    hasMoreMessages,
+    loadOlderMessages,
+    sendMessage
+  } = useChat()
   const [draft, setDraft] = useState('')
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const bottomRef = useRef<HTMLDivElement | null>(null)
+  const preserveScrollHeightRef = useRef(0)
+  const preserveScrollTopRef = useRef(0)
+  const loadingOlderRequestRef = useRef(false)
+  const autoScrollRef = useRef(true)
 
   const activeThread = useMemo(() => threads.find((thread) => thread.id === activeThreadId) ?? null, [threads, activeThreadId])
 
@@ -585,12 +819,62 @@ function ChatView({ initialThreadId, clearThreadParam }: { initialThreadId?: str
     }
   }, [initialThreadId, threads, selectThread, clearThreadParam])
 
+  useEffect(() => {
+    autoScrollRef.current = true
+  }, [activeThreadId])
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
     if (!draft.trim()) return
     await sendMessage(draft)
     setDraft('')
   }
+
+  const maintainScrollPosition = useCallback(() => {
+    const container = containerRef.current
+    if (!container) return
+    const diff = container.scrollHeight - preserveScrollHeightRef.current
+    container.scrollTop = preserveScrollTopRef.current + diff
+  }, [])
+
+  const triggerLoadOlder = useCallback(() => {
+    if (loadingOlderRequestRef.current || loadingOlderMessages || !hasMoreMessages) return
+    const container = containerRef.current
+    if (!container) return
+    loadingOlderRequestRef.current = true
+    autoScrollRef.current = false
+    preserveScrollHeightRef.current = container.scrollHeight
+    preserveScrollTopRef.current = container.scrollTop
+    void (async () => {
+      await loadOlderMessages()
+      requestAnimationFrame(() => {
+        maintainScrollPosition()
+        loadingOlderRequestRef.current = false
+      })
+    })()
+  }, [hasMoreMessages, loadOlderMessages, loadingOlderMessages, maintainScrollPosition])
+
+  const handleScroll = useCallback(
+    (event: React.UIEvent<HTMLDivElement>) => {
+      const el = event.currentTarget
+      const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+      autoScrollRef.current = nearBottom
+      if (el.scrollTop <= 40) {
+        triggerLoadOlder()
+      }
+    },
+    [triggerLoadOlder]
+  )
+
+  useEffect(() => {
+    if (loadingMessages || loadingOlderMessages) return
+    if (!autoScrollRef.current) return
+    requestAnimationFrame(() => {
+      const container = containerRef.current
+      if (!container) return
+      container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' })
+    })
+  }, [messages, loadingMessages, loadingOlderMessages])
 
   return (
     <div className="space-y-4">
@@ -667,33 +951,53 @@ function ChatView({ initialThreadId, clearThreadParam }: { initialThreadId?: str
                 </div>
               </header>
 
-              <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
-                {loadingMessages && (
-                  <div className="text-sm text-[#14212e]/60">Cargando mensajes…</div>
-                )}
-                {!loadingMessages && messages.length === 0 && (
-                  <div className="text-sm text-[#14212e]/60">Todavía no hay mensajes en este hilo.</div>
-                )}
-                {messages.map((message) => {
-                  const isMine = message.author_id === user?.id
-                  const timeAgo = relativeTimeFromNow(message.created_at)
-                  const displayName = isMine ? 'Vos' : activeThread.otherParticipantName
-                  return (
-                    <div key={message.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
-                      <div
-                        className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm shadow ${
-                          isMine ? 'bg-[#14212e] text-white' : 'bg-[#f2f6fb] text-[#14212e]'
-                        }`}
+              <div
+                ref={containerRef}
+                onScroll={handleScroll}
+                className="flex-1 overflow-y-auto px-4 py-4"
+              >
+                <div className="flex flex-col gap-3">
+                  {hasMoreMessages && (
+                    <div className="flex justify-center">
+                      <button
+                        type="button"
+                        onClick={triggerLoadOlder}
+                        disabled={loadingOlderMessages}
+                        className="rounded-full border border-[#14212e]/20 px-4 py-1 text-[11px] font-semibold text-[#14212e] transition hover:border-[#14212e]/40 disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        <p className={`text-[11px] font-semibold ${isMine ? 'text-white/70' : 'text-[#14212e]/70'}`}>{displayName}</p>
-                        <p className="mt-1 whitespace-pre-line text-sm">{message.body}</p>
-                        <span className={`mt-2 block text-[10px] ${isMine ? 'text-white/70' : 'text-[#14212e]/60'}`}>
-                          {timeAgo || 'Hace instantes'}
-                        </span>
-                      </div>
+                        {loadingOlderMessages ? 'Cargando mensajes…' : 'Ver mensajes anteriores'}
+                      </button>
                     </div>
-                  )
-                })}
+                  )}
+
+                  {loadingMessages && (
+                    <div className="text-sm text-[#14212e]/60">Cargando mensajes…</div>
+                  )}
+                  {!loadingMessages && messages.length === 0 && (
+                    <div className="text-sm text-[#14212e]/60">Todavía no hay mensajes en este hilo.</div>
+                  )}
+                  {messages.map((message) => {
+                    const isMine = message.author_id === user?.id
+                    const timeAgo = relativeTimeFromNow(message.created_at)
+                    const displayName = isMine ? 'Vos' : activeThread.otherParticipantName
+                    return (
+                      <div key={message.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
+                        <div
+                          className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm shadow ${
+                            isMine ? 'bg-[#14212e] text-white' : 'bg-[#f2f6fb] text-[#14212e]'
+                          }`}
+                        >
+                          <p className={`text-[11px] font-semibold ${isMine ? 'text-white/70' : 'text-[#14212e]/70'}`}>{displayName}</p>
+                          <p className="mt-1 whitespace-pre-line text-sm">{message.body}</p>
+                          <span className={`mt-2 block text-[10px] ${isMine ? 'text-white/70' : 'text-[#14212e]/60'}`}>
+                            {timeAgo || 'Hace instantes'}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                  <div ref={bottomRef} />
+                </div>
               </div>
 
               <form onSubmit={handleSubmit} className="border-t border-[#14212e]/10 px-4 py-3">
@@ -736,8 +1040,10 @@ function EditProfileView({
   const [instagram, setInstagram] = useState(profile?.instagram_handle ?? '')
   const [facebook, setFacebook] = useState(profile?.facebook_handle ?? '')
   const [website, setWebsite] = useState(profile?.website_url ?? '')
+  const [whatsapp, setWhatsapp] = useState(profile?.whatsapp_number ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
 
   const initialAvatar = profile?.avatar_url ?? listing?.sellerAvatar ?? ''
   const [avatarUrl, setAvatarUrl] = useState(initialAvatar)
@@ -753,11 +1059,24 @@ function EditProfileView({
     setInstagram(profile?.instagram_handle ?? '')
     setFacebook(profile?.facebook_handle ?? '')
     setWebsite(profile?.website_url ?? '')
+    setWhatsapp(profile?.whatsapp_number ?? '')
     setAvatarUrl(initialAvatar)
   }, [profile, initialAvatar])
 
+  useEffect(() => {
+    if (!success || typeof window === 'undefined') return
+    const timeout = window.setTimeout(() => setSuccess(null), 5000)
+    return () => window.clearTimeout(timeout)
+  }, [success])
+
   const cityOptions = province ? PROVINCES.find((item) => item.name === province)?.cities ?? [] : []
   const showCityOther = city === OTHER_CITY_OPTION
+
+  const normaliseWhatsapp = useCallback((value?: string | null): string | null => {
+    if (!value) return null
+    const digits = value.replace(/[^0-9+]/g, '')
+    return digits.trim() || null
+  }, [])
 
   const handleAvatarUpload = async (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0 || !userId) return
@@ -772,6 +1091,7 @@ function EditProfileView({
       }
       setAvatarUrl(url)
       if (onProfileUpdated) await onProfileUpdated()
+      setSuccess('Se actualizó el perfil correctamente.')
     } catch (err: any) {
       setAvatarError(err?.message ?? 'No pudimos subir la imagen. Intentá nuevamente.')
     } finally {
@@ -808,9 +1128,11 @@ function EditProfileView({
         preferredBike: preferredBike || null,
         instagramHandle: instagram ? normaliseHandle(instagram) : null,
         facebookHandle: facebook ? normaliseUrl(facebook) : null,
-        websiteUrl: website ? normaliseUrl(website) : null
+        websiteUrl: website ? normaliseUrl(website) : null,
+        whatsapp: normaliseWhatsapp(whatsapp)
       })
       if (onProfileUpdated) await onProfileUpdated()
+      setSuccess('Se actualizó el perfil correctamente.')
     } catch (err: any) {
       setError(err?.message ?? 'No pudimos guardar tu perfil. Intentá nuevamente.')
     } finally {
@@ -821,6 +1143,11 @@ function EditProfileView({
   return (
     <div className="space-y-6">
       <h2 className="text-xl font-semibold text-[#14212e]">Editar perfil</h2>
+      {success && (
+        <div className="rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700" role="status" aria-live="polite">
+          {success}
+        </div>
+      )}
       <form className="grid gap-4" onSubmit={handleSubmit}>
         <div>
           <p className="text-sm font-medium text-[#14212e]">Foto de perfil</p>
@@ -909,6 +1236,18 @@ function EditProfileView({
         <label className="text-sm font-medium text-[#14212e]">
           Sitio web (opcional)
           <input className="input mt-1" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://tusitio.com" />
+        </label>
+
+        {/* WhatsApp — único input */}
+        <label className="text-sm font-medium text-[#14212e]">
+          WhatsApp (privado)
+          <input
+            className="input mt-1"
+            value={whatsapp}
+            onChange={(e) => setWhatsapp(e.target.value)}
+            placeholder="Ej.: +5491122334455"
+          />
+          <span className="text-xs text-[#14212e]/60">No se muestra públicamente; se usa para autocompletar publicaciones con botón de WhatsApp.</span>
         </label>
 
         {error && <p className="text-sm text-red-600">{error}</p>}
@@ -1054,6 +1393,7 @@ function ProfileDetailsModal({
   const [instagram, setInstagram] = useState(profile?.instagram_handle ?? '')
   const [facebook, setFacebook] = useState(profile?.facebook_handle ?? '')
   const [website, setWebsite] = useState(profile?.website_url ?? '')
+  const [whatsapp, setWhatsapp] = useState(profile?.whatsapp_number ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -1065,7 +1405,14 @@ function ProfileDetailsModal({
     setInstagram(profile?.instagram_handle ?? '')
     setFacebook(profile?.facebook_handle ?? '')
     setWebsite(profile?.website_url ?? '')
+    setWhatsapp(profile?.whatsapp_number ?? '')
   }, [profile])
+
+  const normaliseWhatsapp = (value?: string | null): string | null => {
+    if (!value) return null
+    const digits = value.replace(/[^0-9+]/g, '')
+    return digits.trim() || null
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -1095,7 +1442,8 @@ function ProfileDetailsModal({
         preferredBike: preferredBike || null,
         instagramHandle: instagram ? normaliseHandle(instagram) : null,
         facebookHandle: facebook ? normaliseUrl(facebook) : null,
-        websiteUrl: website ? normaliseUrl(website) : null
+        websiteUrl: website ? normaliseUrl(website) : null,
+        whatsapp: normaliseWhatsapp(whatsapp)
       })
       if (onSaved) await onSaved()
       onClose()
@@ -1183,6 +1531,18 @@ function ProfileDetailsModal({
             Sitio web (opcional)
             <input className="input mt-1" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://tusitio.com" />
           </label>
+
+          <label className="text-sm font-medium text-[#14212e]">
+            WhatsApp (privado)
+            <input
+              className="input mt-1"
+              value={whatsapp}
+              onChange={(e) => setWhatsapp(e.target.value)}
+              placeholder="Ej.: +5491122334455"
+            />
+            <span className="text-xs text-[#14212e]/60">No se muestra públicamente; se usa para autocompletar tus publicaciones con botón de WhatsApp.</span>
+          </label>
+
           {error && <p className="text-sm text-red-600">{error}</p>}
           <div className="flex justify-end gap-3">
             <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>Cancelar</Button>
@@ -1213,12 +1573,42 @@ function SignOutView({ onSignOut }: { onSignOut: () => Promise<void> | void }) {
   )
 }
 
-function ProfileStat({ label, value, trend }: { label: string; value: number | string; trend?: string }) {
+function ProfileStat({ label, value, trend }: { label: string; value: ReactNode; trend?: ReactNode }) {
+  const isPrimitiveValue = typeof value === 'string' || typeof value === 'number'
+  const isPrimitiveTrend = typeof trend === 'string' || typeof trend === 'number'
+
   return (
     <div className="rounded-2xl border border-[#14212e]/10 bg-white p-4 shadow">
       <p className="text-xs uppercase tracking-wide text-[#14212e]/50">{label}</p>
-      <div className="mt-2 text-2xl font-bold text-[#14212e]">{value}</div>
-      {trend && <p className="text-xs text-[#14212e]/60">{trend}</p>}
+      {isPrimitiveValue ? (
+        <div className="mt-2 text-2xl font-bold text-[#14212e]">{value}</div>
+      ) : (
+        <div className="mt-2 text-sm font-medium text-[#14212e]">{value}</div>
+      )}
+      {trend && (
+        isPrimitiveTrend ? (
+          <p className="text-xs text-[#14212e]/60">{trend}</p>
+        ) : (
+          <div className="mt-2">{trend}</div>
+        )
+      )}
     </div>
+  )
+}
+
+function StarIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg
+      className={`h-4 w-4 ${filled ? 'text-[#f59e0b]' : 'text-[#14212e]/30'}`}
+      viewBox="0 0 24 24"
+      fill={filled ? 'currentColor' : 'none'}
+      stroke="currentColor"
+      strokeWidth={filled ? 0 : 1.5}
+      aria-hidden="true"
+    >
+      <path
+        d="M11.48 3.5c.3-.92 1.74-.92 2.04 0l1.45 4.42c.14.43.54.72.99.72h4.63c.96 0 1.36 1.24.58 1.8l-3.74 2.72c-.37.27-.53.75-.38 1.17l1.43 4.42c.3.92-.75 1.69-1.53 1.13l-3.76-2.72a1.05 1.05 0 00-1.23 0l-3.76 2.72c-.78.56-1.83-.21-1.53-1.13l1.43-4.42a1.05 1.05 0 00-.38-1.17L3.83 10.44c-.78-.56-.38-1.8.58-1.8h4.63c.45 0 .85-.29.99-.72l1.45-4.42z"
+      />
+    </svg>
   )
 }

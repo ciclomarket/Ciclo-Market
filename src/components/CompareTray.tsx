@@ -11,9 +11,13 @@ export default function CompareTray() {
   const location = useLocation()
   const [items, setItems] = useState<Listing[]>([])
 
-  if (!ids.length || location.pathname === '/comparar') return null
+  const shouldHide = !ids.length || location.pathname === '/comparar'
 
   useEffect(() => {
+    if (!ids.length) {
+      setItems([])
+      return
+    }
     let active = true
     const load = async () => {
       if (supabaseEnabled) {
@@ -35,7 +39,7 @@ export default function CompareTray() {
     }
   }, [ids])
 
-  if (!items.length) return null
+  if (shouldHide || !items.length) return null
 
   return (
     <div className="pointer-events-none fixed inset-x-4 bottom-4 z-40 flex justify-center">

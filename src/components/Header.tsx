@@ -291,7 +291,7 @@ function SearchBar() {
 }
 
 export default function Header() {
-  const { user, enabled, logout } = useAuth()
+  const { user, enabled } = useAuth()
   const [openIdx, setOpenIdx] = useState<number | null>(null)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [mobileCategoryOpen, setMobileCategoryOpen] = useState<number | null>(null)
@@ -484,18 +484,23 @@ export default function Header() {
 
         <div className="ml-auto flex items-center gap-2">
           {user ? (
-            <>
-              <Link to="/dashboard" className="h-9 px-3 rounded-full border border-black/10 hover:border-black/20 text-sm grid place-content-center">
-                Mi cuenta
-              </Link>
-              <button
-                type="button"
-                className="h-9 px-3 rounded-full border border-black/10 hover:border-black/20 text-sm"
-                onClick={() => logout()}
+            <Link
+              to="/dashboard"
+              aria-label="Ir a mi cuenta"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-black/10 hover:border-black/20 text-sm"
+            >
+              <span className="sr-only">Mi cuenta</span>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                className="h-5 w-5"
+                stroke="currentColor"
+                fill="none"
+                strokeWidth={1.5}
               >
-                Salir
-              </button>
-            </>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm0 2c-3.1 0-6 1.57-6 4v.25a.75.75 0 0 0 .75.75h10.5a.75.75 0 0 0 .75-.75V18c0-2.43-2.9-4-6-4Z" />
+              </svg>
+            </Link>
           ) : (
             <div className="relative">
               <button
@@ -590,11 +595,8 @@ export default function Header() {
           <Link to="/marketplace" className="ml-auto py-3 text-black/70 hover:text-black">
             Marketplace
           </Link>
-          <Link to="/marketplace?deal=1" className="py-3 text-mb-primary font-semibold">
-            Ofertas
-          </Link>
-          <Link to="/ayuda" className="py-3 text-black/70 hover:text-black">
-            Ayuda
+          <Link to="/como-publicar" className="py-3 text-black/70 hover:text-black">
+            Cómo publicar
           </Link>
           <Link to="/tienda-oficial" className="py-3 text-black/70 hover:text-black">
             Tienda oficial
@@ -647,9 +649,13 @@ export default function Header() {
                     <Link to="/dashboard" className="underline" onClick={closeMobileMenu}>
                       Ir a mi cuenta
                     </Link>
-                    <button type="button" className="text-left underline" onClick={() => { closeMobileMenu(); logout() }}>
-                      Salir
-                    </button>
+                    <Link
+                      to={`/dashboard?tab=${encodeURIComponent('Cerrar sesión')}`}
+                      className="text-left underline"
+                      onClick={closeMobileMenu}
+                    >
+                      Cerrar sesión desde el panel
+                    </Link>
                   </div>
                 </div>
               ) : (
@@ -715,11 +721,8 @@ export default function Header() {
                 <Link to="/marketplace" className="underline" onClick={closeMobileMenu}>
                   Marketplace
                 </Link>
-                <Link to="/marketplace?deal=1" className="text-mb-primary font-semibold" onClick={closeMobileMenu}>
-                  Ofertas
-                </Link>
-                <Link to="/ayuda" className="underline" onClick={closeMobileMenu}>
-                  Ayuda
+                <Link to="/como-publicar" className="underline" onClick={closeMobileMenu}>
+                  Cómo publicar
                 </Link>
                 <Link to="/tienda-oficial" className="underline" onClick={closeMobileMenu}>
                   Tienda oficial

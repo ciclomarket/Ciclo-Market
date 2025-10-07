@@ -61,6 +61,11 @@ export default function Footer() {
                   </Link>
                 </li>
                 <li>
+                  <Link to="/como-publicar" className="transition hover:text-white">
+                    Cómo publicar tu bici
+                  </Link>
+                </li>
+                <li>
                   <Link to="/ayuda" className="transition hover:text-white">
                     Ayuda
                   </Link>
@@ -75,11 +80,6 @@ export default function Footer() {
                     Política de privacidad
                   </Link>
                 </li>
-                <li>
-                  <Link to="/tienda-oficial" className="transition hover:text-white">
-                    Tienda oficial
-                  </Link>
-                </li>
               </ul>
             </div>
 
@@ -87,8 +87,8 @@ export default function Footer() {
               <h5 className="text-base font-semibold text-white">Contacto</h5>
               <ul className="mt-3 space-y-3">
                 <li>
-                  <a href="mailto:hola@ciclomarket.com" className="transition hover:text-white">
-                    hola@ciclomarket.com
+                  <a href="mailto:admin@ciclomarket.ar" className="transition hover:text-white">
+                    admin@ciclomarket.ar
                   </a>
                 </li>
                 <li className="flex flex-col">
@@ -98,14 +98,21 @@ export default function Footer() {
                 <li className="flex flex-col">
                   <span className="text-xs uppercase tracking-wide text-white/50">Seguinos</span>
                   <div className="flex gap-3">
-                    <a href="https://instagram.com" target="_blank" rel="noreferrer" className="transition hover:text-white">
-                      Instagram
-                    </a>
-                    <a href="https://www.youtube.com" target="_blank" rel="noreferrer" className="transition hover:text-white">
-                      YouTube
-                    </a>
-                    <a href="https://www.linkedin.com" target="_blank" rel="noreferrer" className="transition hover:text-white">
-                      LinkedIn
+                    <a
+                      href="https://instagram.com/ciclomarket.ar"
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label="Instagram Ciclo Market"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/30 text-white transition hover:border-white/60"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        className="h-4 w-4"
+                        fill="currentColor"
+                      >
+                        <path d="M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5Zm0 2a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3H7Zm5 3.5A4.5 4.5 0 1 1 7.5 12 4.5 4.5 0 0 1 12 7.5Zm0 2a2.5 2.5 0 1 0 2.5 2.5A2.5 2.5 0 0 0 12 9.5Zm5.75-3.5a1 1 0 1 1-1 1 1 1 0 0 1 1-1Z" />
+                      </svg>
                     </a>
                   </div>
                 </li>

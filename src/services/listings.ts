@@ -24,6 +24,7 @@ type ListingRow = {
   seller_plan_expires?: string | null
   seller_location?: string | null
   seller_whatsapp?: string | null
+  seller_email?: string | null
   seller_avatar?: string | null
   material?: string | null
   frame_size?: string | null
@@ -66,6 +67,7 @@ const normalizeListing = (row: ListingRow): Listing => {
     sellerPlanExpires: row.seller_plan_expires ? Date.parse(row.seller_plan_expires) : undefined,
     sellerLocation: row.seller_location ?? undefined,
     sellerWhatsapp: row.seller_whatsapp ?? undefined,
+    sellerEmail: row.seller_email ?? undefined,
     sellerAvatar: row.seller_avatar ?? undefined,
     material: row.material ?? undefined,
     frameSize: row.frame_size ?? undefined,
@@ -230,16 +232,21 @@ async function ensureUniqueSlug(title: string, supabase: SupabaseClient): Promis
   const base = slugify(title) || 'listing'
   let candidate = base
   let counter = 2
-  while (true) {
+  let available = false
+  while (!available) {
     const { data, error } = await supabase
       .from('listings')
       .select('id')
       .eq('slug', candidate)
       .limit(1)
     if (error) throw error
-    if (!data || data.length === 0) return candidate
-    candidate = `${base}-${counter++}`
+    if (!data || data.length === 0) {
+      available = true
+    } else {
+      candidate = `${base}-${counter++}`
+    }
   }
+  return candidate
 }
 
 export async function createListing(payload: Omit<Listing, 'id' | 'createdAt'>): Promise<{ id: string; slug: string } | null> {

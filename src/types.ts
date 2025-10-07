@@ -23,6 +23,7 @@ export interface Listing {
   sellerPlanExpires?: number
   sellerLocation?: string
   sellerWhatsapp?: string
+  sellerEmail?: string
   sellerAvatar?: string
   material?: string
   frameSize?: string
