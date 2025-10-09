@@ -13,9 +13,22 @@ const { MercadoPagoConfig, Preference } = require('mercadopago')
 const { startRenewalNotificationJob } = require('./jobs/renewalNotifier')
 const { sendMail, isMailConfigured } = require('./lib/mail')
 const { getServerSupabaseClient } = require('./lib/supabaseClient')
+const path = require('path')
 
 const app = express()
 app.use(express.json())
+
+/* ----------------------------- Static assets ------------------------------ */
+const publicDir = path.join(__dirname, '../public')
+app.use(
+  express.static(publicDir, {
+    setHeaders(res, filePath) {
+      if (filePath.endsWith('.xml')) {
+        res.setHeader('Content-Type', 'application/xml; charset=utf-8')
+      }
+    },
+  })
+)
 
 /* ----------------------------- CORS --------------------------------------- */
 const allowed = (process.env.FRONTEND_URL || '')
@@ -51,6 +64,16 @@ function escapeHtml(s) {
 /* ----------------------------- Health ------------------------------------- */
 app.get('/', (_req, res) => {
   res.send('Ciclo Market API ready')
+})
+
+app.get('/sitemap.xml', (_req, res) => {
+  res.type('application/xml')
+  res.sendFile(path.join(publicDir, 'sitemap.xml'))
+})
+
+app.get('/robots.txt', (_req, res) => {
+  res.type('text/plain')
+  res.sendFile(path.join(publicDir, 'robots.txt'))
 })
 
 /* ----------------------- Open Graph for Listings --------------------------- */
