@@ -137,22 +137,22 @@ const MEGA: MegaItem[] = [
       {
         title: 'Para rodar',
         links: [
-          { label: 'Maillots', to: '/marketplace?cat=Accesorios&sub=Jersey' },
-          { label: 'Baberos / Shorts', to: '/marketplace?cat=Accesorios&sub=Babero' },
-          { label: 'Guantes', to: '/marketplace?cat=Accesorios&sub=Guantes' },
+          { label: 'Maillots', to: '/marketplace?cat=Indumentaria&sub=Jersey' },
+          { label: 'Baberos / Shorts', to: '/marketplace?cat=Indumentaria&sub=Babero' },
+          { label: 'Guantes', to: '/marketplace?cat=Indumentaria&sub=Guantes' },
         ],
       },
       {
         title: 'Zapatillas',
         links: [
-          { label: 'Ruta (3 pernos)', to: '/marketplace?cat=Accesorios&sub=Zapatillas%20Ruta' },
-          { label: 'MTB (2 pernos)', to: '/marketplace?cat=Accesorios&sub=Zapatillas%20MTB' },
+          { label: 'Ruta (3 pernos)', to: '/marketplace?cat=Indumentaria&sub=Zapatillas%20Ruta' },
+          { label: 'MTB (2 pernos)', to: '/marketplace?cat=Indumentaria&sub=Zapatillas%20MTB' },
         ],
       },
       {
         title: 'Ofertas',
         links: [
-          { label: 'Outlet Indumentaria', to: '/marketplace?deal=1&cat=Accesorios&sub=Ropa' },
+          { label: 'Outlet Indumentaria', to: '/marketplace?deal=1&cat=Indumentaria&sub=Ropa' },
         ],
       },
     ],
@@ -305,7 +305,7 @@ export default function Header() {
   const hoverTimer = useRef<number | null>(null)
   const promoMessages = useMemo(
     () => [
-      '🔥 Seguinos en Instagram y obtené una publicación premium gratis! 🔥',
+      '🔥Seguinos en Instagram y obtené una publicación premium gratis🔥',
       'Escribinos para ayudarte a cotizar tu bicicleta',
     ],
     []

@@ -22,8 +22,40 @@ export default function ListingCard({ l }: { l: Listing }) {
   const slug = l.slug ?? buildListingSlug({ id: l.id, title: l.title, brand: l.brand, model: l.model, category: l.category })
   const highlighted = hasPaidPlan(l.sellerPlan ?? (l.plan as any), l.sellerPlanExpires)
   const discountPct = hasOffer ? Math.round((1 - l.price / (l.originalPrice as number)) * 100) : null
+  const city = l.location?.split(',')[0]?.trim() || null
+  const extrasTokens = (l.extras ?? '')
+    .split('•')
+    .map((part) => part.trim())
+    .filter(Boolean)
+  const getExtraValue = (label: string) => {
+    const token = extrasTokens.find((part) => part.toLowerCase().startsWith(`${label.toLowerCase()}:`))
+    if (!token) return null
+    return token.split(':').slice(1).join(':').trim() || null
+  }
+
+  let metaParts: Array<string | null>
+  if (l.category === 'Accesorios') {
+    const typeValue = getExtraValue('Tipo')
+    const useValue = getExtraValue('Uso')
+    metaParts = [typeValue, useValue ? `Uso: ${useValue}` : null, city]
+  } else if (l.category === 'Indumentaria') {
+    const typeValue = getExtraValue('Tipo')
+    const sizeValue = getExtraValue('Talle')
+    const conditionValue = getExtraValue('Condición')
+    metaParts = [
+      typeValue,
+      sizeValue ? `Talle: ${sizeValue}` : null,
+      conditionValue ? `Condición: ${conditionValue}` : null,
+      city
+    ]
+  } else {
+    const sizeLabel = `Talle: ${l.frameSize?.trim() || 'N/D'}`
+    const drivetrainLabel = l.drivetrain?.trim() || null
+    metaParts = [sizeLabel, drivetrainLabel, city]
+  }
+  const metaDisplay = metaParts.filter(Boolean) as string[]
   return (
-    <div className="relative">
+    <div className="relative h-full">
       <div className="absolute top-2 left-2 right-2 z-10 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <button
@@ -48,29 +80,27 @@ export default function ListingCard({ l }: { l: Listing }) {
             </span>
           )}
           {highlighted && (
-          <span className="rounded-full bg-[#14212e] px-3 py-1 text-xs font-semibold text-white shadow-lg">
-            Destacada 🔥
-          </span>
+            <span className="rounded-full bg-[#14212e] px-3 py-1 text-xs font-semibold text-white shadow-lg">
+              Destacada 🔥
+            </span>
           )}
         </div>
       </div>
-      <Link to={`/listing/${slug}`} className="card-flat overflow-hidden block group">
-        <div className="aspect-video bg-black/40 overflow-hidden">
-          <img src={l.images[0]} alt={l.title} className="w-full h-full object-cover group-hover:scale-105 transition"/>
+      <Link to={`/listing/${slug}`} className="card-flat group flex h-full flex-col overflow-hidden">
+        <div className="aspect-video overflow-hidden bg-black/40">
+          <img src={l.images[0]} alt={l.title} className="h-full w-full object-cover transition group-hover:scale-105"/>
         </div>
-        <div className="p-4">
-          <div className="flex items-center justify-between gap-3">
-            <h3 className="font-semibold line-clamp-1 text-[#14212e]">{l.title}</h3>
-            <div className="text-right">
-              <span className="text-mb-primary font-semibold leading-none block">{priceLabel}</span>
+        <div className="flex flex-1 flex-col p-4">
+          <div className="flex items-start justify-between gap-3">
+            <h3 className="line-clamp-1 font-semibold text-[#14212e]">{l.title}</h3>
+            <div className="text-right leading-none">
+              <span className="block font-semibold text-mb-primary">{priceLabel}</span>
               {originalPriceLabel && (
-                <span className="text-xs text-[#14212e]/50 line-through block">{originalPriceLabel}</span>
+                <span className="block text-xs text-[#14212e]/50 line-through">{originalPriceLabel}</span>
               )}
             </div>
           </div>
-          <p className="text-sm text-[#14212e]/70 mt-1">
-            {l.location} • {l.brand} {l.model}
-          </p>
+          <p className="mt-1 text-sm text-[#14212e]/70">{metaDisplay.join(' • ')}</p>
         </div>
       </Link>
     </div>

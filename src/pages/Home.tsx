@@ -16,25 +16,25 @@ import { buildListingSlug } from '../utils/slug'
 import { hasPaidPlan } from '../utils/plans'
 import { applySeo } from '../utils/seo'
 
-import specializedLogo from '/brands/specialized.svg'
-import canyonLogo from '/brands/canyon.svg'
-import trekLogo from '/brands/trek.svg'
-import scottLogo from '/brands/scott.svg'
-import cannondaleLogo from '/brands/cannondale.svg'
-import cerveloLogo from '/brands/cervelo.svg'
-import colnerLogo from '/brands/colner.svg'
-import topmegaLogo from '/brands/topmega.svg'
+import specializedLogo from '/brands/specialized.png'
+import canyonLogo from '/brands/canyon.png'
+import trekLogo from '/brands/trek.png'
+import scottLogo from '/brands/scott.png'
+import cannondaleLogo from '/brands/cannondale.png'
+import cerveloLogo from '/brands/cervelo.png'
+import colnerLogo from '/brands/colner.png'
+import giantLogo from '/brands/giant.png'
 
-// ── Config marcas: logos en /public/brands/*.svg
+// ── Config marcas: logos en /public/brands/*.png
 const BRANDS = [
   { slug: 'specialized', name: 'Specialized' },
   { slug: 'canyon', name: 'Canyon' },
   { slug: 'trek', name: 'Trek' },
   { slug: 'scott', name: 'Scott' },
   { slug: 'cannondale', name: 'Cannondale' },
+  { slug: 'giant', name: 'Giant' },
   { slug: 'cervelo', name: 'Cervelo' },
   { slug: 'colner', name: 'Colner' },
-  { slug: 'topmega', name: 'Top Mega' }
 ] as const
 
 const BRAND_LOGOS: Record<(typeof BRANDS)[number]['slug'], string> = {
@@ -43,9 +43,9 @@ const BRAND_LOGOS: Record<(typeof BRANDS)[number]['slug'], string> = {
   trek: trekLogo,
   scott: scottLogo,
   cannondale: cannondaleLogo,
+  giant: giantLogo,
   cervelo: cerveloLogo,
   colner: colnerLogo,
-  topmega: topmegaLogo,
 }
 
 function OfferCard({ l }: { l: any }) {
@@ -53,8 +53,39 @@ function OfferCard({ l }: { l: any }) {
   const hasOriginal = typeof l.originalPrice === 'number' && l.originalPrice > l.price
   const offPct = hasOriginal ? Math.round((1 - l.price / l.originalPrice) * 100) : 0
   const slug = l.slug ?? buildListingSlug({ id: l.id, title: l.title, brand: l.brand, model: l.model, category: l.category })
+  const city = l.location?.split(',')[0]?.trim() || null
+  const extrasTokens = (l.extras ?? '')
+    .split('•')
+    .map((part: string) => part.trim())
+    .filter(Boolean)
+  const getExtraValue = (label: string) => {
+    const token = extrasTokens.find((part: string) => part.toLowerCase().startsWith(`${label.toLowerCase()}:`))
+    if (!token) return null
+    return token.split(':').slice(1).join(':').trim() || null
+  }
+  let metaParts: Array<string | null>
+  if (l.category === 'Accesorios') {
+    const typeValue = getExtraValue('Tipo')
+    const useValue = getExtraValue('Uso')
+    metaParts = [typeValue, useValue ? `Uso: ${useValue}` : null, city]
+  } else if (l.category === 'Indumentaria') {
+    const typeValue = getExtraValue('Tipo')
+    const sizeValue = getExtraValue('Talle')
+    const conditionValue = getExtraValue('Condición')
+    metaParts = [
+      typeValue,
+      sizeValue ? `Talle: ${sizeValue}` : null,
+      conditionValue ? `Condición: ${conditionValue}` : null,
+      city
+    ]
+  } else {
+    const sizeLabel = `Talle: ${l.frameSize?.trim() || 'N/D'}`
+    const drivetrainLabel = l.drivetrain?.trim() || null
+    metaParts = [sizeLabel, drivetrainLabel, city]
+  }
+  const metaDisplay = metaParts.filter(Boolean) as string[]
   return (
-    <Link to={`/listing/${slug}`} className="card-flat overflow-hidden block group">
+    <Link to={`/listing/${slug}`} className="card-flat group flex h-full flex-col overflow-hidden">
       <div className="relative">
         <div className="aspect-video overflow-hidden bg-[#0b131c]/20">
           <img
@@ -70,15 +101,13 @@ function OfferCard({ l }: { l: any }) {
           </span>
         )}
       </div>
-      <div className="p-4">
-        <h3 className="font-semibold text-[#14212e] line-clamp-1">{l.title}</h3>
-        <p className="text-sm text-[#14212e]/70 mt-1">
-          {l.location} • {l.brand} {l.model}
-        </p>
+      <div className="flex flex-1 flex-col p-4">
+        <h3 className="line-clamp-1 font-semibold text-[#14212e]">{l.title}</h3>
+        <p className="mt-1 text-sm text-[#14212e]/70">{metaDisplay.join(' • ')}</p>
         <div className="mt-2 flex items-baseline gap-2">
-          <span className="text-mb-primary font-bold">{format(l.price)}</span>
+          <span className="font-bold text-mb-primary">{format(l.price)}</span>
           {hasOriginal && (
-            <span className="text-sm line-through text-black/50">
+            <span className="text-sm text-black/50 line-through">
               {format(l.originalPrice)}
             </span>
           )}
@@ -135,7 +164,7 @@ function Stat({ n, t }: { n: string; t: string }) {
 function Step({ n, t, d }: { n: number; t: string; d: string }) {
   return (
     <div
-      className="rounded-2xl border border-white/15 bg-white/10 p-5 transition hover:bg-white/16 backdrop-blur"
+      className="flex h-full flex-col rounded-2xl border border-white/15 bg-white/10 p-5 transition hover:bg-white/16 backdrop-blur"
       style={{
         backgroundImage:
           'radial-gradient(120px 40px at 20% 0%, rgba(20,33,46,.12), transparent), radial-gradient(120px 40px at 80% 0%, rgba(20,33,46,.18), transparent)'
@@ -143,7 +172,7 @@ function Step({ n, t, d }: { n: number; t: string; d: string }) {
     >
       <div className="grid size-10 place-content-center rounded-xl2 bg-white/90 font-bold text-[#14212e]">{n}</div>
       <h4 className="mt-3 font-semibold text-white">{t}</h4>
-      <p className="text-sm text-white/70">{d}</p>
+      <p className="mt-2 text-sm text-white/70">{d}</p>
     </div>
   )
 }
@@ -214,7 +243,10 @@ export default function Home() {
   }
 
   return (
-    <>
+    <div
+      className="relative isolate overflow-hidden text-white"
+      style={{ background: '#14212e' }}
+    >
       {/* HERO */}
       <section className="relative overflow-hidden border-b border-white/10 text-white">
         <img
@@ -273,8 +305,8 @@ export default function Home() {
 
       {/* BICICLETAS DESTACADAS */}
       {featuredListings.length > 0 && (
-        <section className="section-soft pt-12 pb-6">
-          <Container>
+        <section className="bg-[#14212e] pt-10 pb-6">
+          <Container className="text-white">
             <HorizontalSlider
               title="Bicicletas destacadas"
               subtitle="Avisos con planes Premium o Básico activos"
@@ -282,14 +314,15 @@ export default function Home() {
               maxItems={24}
               initialLoad={8}
               renderCard={(l: any) => <ListingCard l={l} />}
+              tone="dark"
             />
           </Container>
         </section>
       )}
 
       {/* OFERTAS DESTACADAS */}
-      <section className="section-soft pt-12 pb-12">
-        <Container>
+      <section className="bg-[#1d2f41] pt-8 pb-8">
+        <Container className="text-white">
           {offers.length ? (
             <HorizontalSlider
               title="Ofertas destacadas"
@@ -298,12 +331,13 @@ export default function Home() {
               maxItems={20}
               initialLoad={8}
               renderCard={(l:any) => <OfferCard l={l} />}
+              tone="dark"
             />
           ) : (
             <>
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center justify-between mb-4 text-white">
                 <h2 className="text-xl font-semibold">Ofertas destacadas</h2>
-                <span className="text-sm text-black/60">Bicicletas con precio rebajado</span>
+                <span className="text-sm text-white/70">Bicicletas con precio rebajado</span>
               </div>
               <EmptyState title="Sin ofertas por ahora" subtitle="Cuando una publicación tenga rebaja, aparecerá acá." />
             </>
@@ -312,9 +346,9 @@ export default function Home() {
       </section>
 
       {/* ÚLTIMAS PUBLICADAS */}
-      <section id="explorar" className="pt-12">
-        <Container>
-          <div className="flex items-center justify-between mb-4">
+      <section id="explorar" className="bg-[#14212e] pt-8 pb-10">
+        <Container className="text-white">
+          <div className="flex items-center justify-between mb-4 text-white">
             <h2 className="text-xl font-semibold">Últimas publicadas</h2>
           </div>
 
@@ -329,6 +363,7 @@ export default function Home() {
               maxItems={20}
               initialLoad={8}
               renderCard={(l:any) => <ListingCard l={l} />}
+              tone="dark"
             />
           ) : (
             <EmptyState />
@@ -337,11 +372,18 @@ export default function Home() {
       </section>
 
       {/* MARCAS con logos clickeables */}
-      <section className="section-soft py-12">
-        <Container>
-          <div className="flex items-center justify-between mb-4">
+      <section className="bg-[#1d2f41] py-12">
+        <Container className="text-white">
+          <div className="flex items-center justify-between mb-4 text-white">
             <h3 className="text-lg font-semibold">Marcas destacadas</h3>
-            {brand && <button className="btn btn-ghost text-sm" onClick={clearBrand}>Limpiar marca</button>}
+            {brand && (
+              <button
+                className="inline-flex items-center gap-2 rounded-xl2 border border-white/40 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-white/10"
+                onClick={clearBrand}
+              >
+                Limpiar marca
+              </button>
+            )}
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-4">
             {BRANDS.map(b => (
@@ -358,7 +400,7 @@ export default function Home() {
 
       {/* ¿CÓMO FUNCIONA? */}
       <section className="section-ribbon py-14 text-white">
-        <Container>
+        <Container className="text-white">
           <div
             className="rounded-3xl border border-white/10 bg-white/5 p-6 md:p-10 backdrop-blur"
             style={{
@@ -375,6 +417,6 @@ export default function Home() {
           </div>
         </Container>
       </section>
-    </>
+    </div>
   )
 }

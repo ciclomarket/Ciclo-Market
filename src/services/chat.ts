@@ -56,6 +56,7 @@ export async function fetchChatThreads(currentUserId: string): Promise<ChatThrea
   const { data, error } = await supabase
     .from('v_chat_threads')
     .select('*')
+    .or(`seller_id.eq.${currentUserId},buyer_id.eq.${currentUserId}`)
     .order('last_message_at', { ascending: false })
   if (error) {
     console.warn('[chat] fetch threads error', error)
@@ -63,9 +64,12 @@ export async function fetchChatThreads(currentUserId: string): Promise<ChatThrea
   }
 
   const rawThreads = (data ?? []) as RawThread[]
+  const ownThreads = rawThreads.filter(
+    (thread) => thread.seller_id === currentUserId || thread.buyer_id === currentUserId
+  )
 
   const enriched = await Promise.all(
-    rawThreads.map(async (thread) => {
+    ownThreads.map(async (thread) => {
       const otherParticipantId = currentUserId === thread.seller_id ? thread.buyer_id : thread.seller_id
       const otherParticipantName = currentUserId === thread.seller_id
         ? thread.buyer_full_name ?? 'Comprador'

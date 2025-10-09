@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import Button from '../../components/Button'
@@ -33,6 +34,104 @@ function formatPrice(price: number, currency: string): string {
 }
 
 const BASE = import.meta.env.VITE_API_BASE_URL || ''
+const CHECKOUT_REQUEST_TIMEOUT_MS = 15000
+
+type ListingType = 'bike' | 'accessory' | 'apparel'
+
+const LISTING_TYPE_COPY: Record<ListingType, { tag: string; title: string; blurb: string; cta: string }> = {
+  bike: {
+    tag: 'Publicá tu bici',
+    title: 'Elegí la visibilidad de tu bicicleta',
+    blurb: 'Pagás solo cuando querés destacar tu bici. Todas las opciones incluyen una única publicación por aviso.',
+    cta: 'Publicar bicicleta'
+  },
+  accessory: {
+    tag: 'Componentes y repuestos',
+    title: 'Mostrá tus accesorios al mundo',
+    blurb: 'Vendé ruedas, componentes, electrónica y repuestos con visibilidad destacada.',
+    cta: 'Publicar accesorio'
+  },
+  apparel: {
+    tag: 'Indumentaria ciclista',
+    title: 'Mostrá tu equipamiento',
+    blurb: 'Publicá jerseys, cascos, zapatillas y ropa técnica con información clara de talle y uso.',
+    cta: 'Publicar indumentaria'
+  }
+}
+
+const BikeIcon = (
+  <svg
+    viewBox="0 0 24 24"
+    aria-hidden="true"
+    className="h-6 w-6"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={1.6}
+  >
+    <circle cx="6.5" cy="16.5" r="3.5" />
+    <circle cx="17.5" cy="16.5" r="3.5" />
+    <path d="M9.5 6.5h3.8l3.2 5.5" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M10.5 10.5 9 6.5" strokeLinecap="round" />
+    <path d="M10.5 10.5h4.5l-3.2 6" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+)
+
+const AccessoryIcon = (
+  <svg
+    viewBox="0 0 24 24"
+    aria-hidden="true"
+    className="h-6 w-6"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={1.6}
+  >
+    <circle cx="12" cy="12" r="7" />
+    <circle cx="12" cy="12" r="2.6" />
+    <path d="M12 5v4" strokeLinecap="round" />
+    <path d="M12 15v4" strokeLinecap="round" />
+    <path d="m7.5 7.5 2.8 2.8" strokeLinecap="round" />
+    <path d="m13.7 13.7 2.8 2.8" strokeLinecap="round" />
+    <path d="m5 12h4" strokeLinecap="round" />
+    <path d="m15 12h4" strokeLinecap="round" />
+    <path d="m7.5 16.5 2.8-2.8" strokeLinecap="round" />
+    <path d="m13.7 10.3 2.8-2.8" strokeLinecap="round" />
+  </svg>
+)
+
+const ApparelIcon = (
+  <svg
+    viewBox="0 0 24 24"
+    aria-hidden="true"
+    className="h-6 w-6"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={1.6}
+  >
+    <path d="M9 4.5 12 6l3-1.5 2.5 2.5L16 9h-1v9a1 1 0 0 1-1 1H10a1 1 0 0 1-1-1V9H8L5.5 7z" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M9 12h6" strokeLinecap="round" />
+  </svg>
+)
+
+const TYPE_OPTIONS: Array<{ value: ListingType; title: string; description: string; icon: ReactNode }> = [
+  {
+    value: 'bike',
+    title: 'Bicicleta completa',
+    description: 'Ideal para vender tu bici lista para salir a rodar. Sumá fotos, especificaciones y upgrades.',
+    icon: BikeIcon
+  },
+  {
+    value: 'accessory',
+    title: 'Accesorios / Componentes',
+    description: 'Ruedas, componentes, herramientas, electrónicos y piezas para equipar cualquier bici.',
+    icon: AccessoryIcon
+  },
+  {
+    value: 'apparel',
+    title: 'Indumentaria',
+    description: 'Jerseys, cascos, zapatillas y todo lo que tu equipo necesita para rodar cómodo.',
+    icon: ApparelIcon
+  }
+]
 
 export default function Plans() {
   const { plans, loading } = usePlans()
@@ -40,6 +139,12 @@ export default function Plans() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const [processingPlan, setProcessingPlan] = useState<PlanCode | null>(null)
+
+  const typeParam = searchParams.get('type')
+  const listingType: ListingType | null = ((): ListingType | null => {
+    if (typeParam === 'bike' || typeParam === 'accessory' || typeParam === 'apparel') return typeParam
+    return null
+  })()
 
   const paymentStatus = searchParams.get('payment') ?? undefined
   const paymentPlanParam = canonicalPlanCode(searchParams.get('plan'))
@@ -83,12 +188,27 @@ export default function Plans() {
     setSearchParams(next, { replace: true })
   }, [searchParams, setSearchParams])
 
+  const setListingType = useCallback((type: ListingType) => {
+    const next = new URLSearchParams(searchParams)
+    next.set('type', type)
+    next.delete('payment')
+    next.delete('plan')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams])
+
   const handleSelect = useCallback(async (plan: Plan & { _code: PlanCode }) => {
+    if (!listingType) {
+      alert('Seleccioná qué deseas vender antes de elegir un plan.')
+      return
+    }
     const planCode = plan._code
     if (!user) {
       navigate('/login', {
         state: {
-          from: { pathname: '/publicar', search: `?plan=${encodeURIComponent(planCode)}` }
+          from: {
+            pathname: '/publicar',
+            search: `?type=${listingType}&plan=${encodeURIComponent(planCode)}`
+          }
         }
       })
       return
@@ -96,7 +216,7 @@ export default function Plans() {
 
     if (plan.price === 0) {
       clearPaymentParams()
-      navigate(`/publicar/nueva?plan=${encodeURIComponent(planCode)}`)
+      navigate(`/publicar/nueva?type=${listingType}&plan=${encodeURIComponent(planCode)}`)
       return
     }
 
@@ -105,11 +225,19 @@ export default function Plans() {
       return
     }
 
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null
+    const timeoutId = controller
+      ? window.setTimeout(() => {
+          controller?.abort()
+        }, CHECKOUT_REQUEST_TIMEOUT_MS)
+      : null
+
     try {
       setProcessingPlan(planCode)
       const response = await fetch(`${BASE}/api/checkout`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller?.signal,
         body: JSON.stringify({
           planId: plan.id ?? planCode,
           planCode,
@@ -119,9 +247,9 @@ export default function Plans() {
           autoRenew: false,
           amount: typeof plan.price === 'number' ? plan.price : undefined,
           redirectUrls: {
-            success: `${window.location.origin}/publicar?payment=success&plan=${planCode}`,
-            failure: `${window.location.origin}/publicar?payment=failure&plan=${planCode}`,
-            pending: `${window.location.origin}/publicar?payment=pending&plan=${planCode}`
+            success: `${window.location.origin}/publicar?type=${listingType}&payment=success&plan=${planCode}`,
+            failure: `${window.location.origin}/publicar?type=${listingType}&payment=failure&plan=${planCode}`,
+            pending: `${window.location.origin}/publicar?type=${listingType}&payment=pending&plan=${planCode}`
           }
         })
       })
@@ -134,30 +262,83 @@ export default function Plans() {
       }
       window.location.href = redirectUrl
     } catch (error) {
+      const aborted = controller?.signal.aborted ?? false
       console.error('[plans] init checkout failed', error)
-      alert('No pudimos iniciar el pago. Revisá tu conexión e intentá de nuevo.')
+      if (aborted) {
+        alert('No pudimos iniciar el pago a tiempo. Revisá tu conexión o intentá nuevamente.')
+      } else {
+        alert('No pudimos iniciar el pago. Revisá tu conexión e intentá de nuevo.')
+      }
     } finally {
+      if (timeoutId) window.clearTimeout(timeoutId)
       setProcessingPlan(null)
     }
-  }, [user, navigate, clearPaymentParams])
+  }, [user, navigate, clearPaymentParams, listingType])
 
   const planFromQuery = useMemo(() => {
     if (!paymentPlanParam) return null
     return visiblePlans.find((plan) => plan._code === paymentPlanParam) ?? null
   }, [paymentPlanParam, visiblePlans])
 
+  if (!listingType) {
+    return (
+      <div className="min-h-[calc(100vh-120px)] bg-[#0c1723] py-12 text-white">
+        <Container>
+          <div className="mx-auto max-w-6xl text-center space-y-6">
+            <span className="inline-flex items-center justify-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70">
+              ¿Qué querés publicar?
+            </span>
+            <h1 className="text-3xl font-bold sm:text-4xl">Elegí el tipo de aviso</h1>
+            <p className="text-sm text-white/75">
+              Organizamos la información según lo que vendas para que compradores encuentren rápido tu publicación.
+            </p>
+            <div className="mx-auto grid w-full max-w-[80vw] gap-6 md:grid-cols-3">
+              {TYPE_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setListingType(option.value)}
+                  className="group flex h-full flex-col gap-4 rounded-3xl border border-white/10 bg-white/5 p-6 text-left transition hover:border-white/30 hover:bg-white/10"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="grid size-12 place-content-center rounded-2xl border border-white/15 bg-white/10 text-white/80 transition group-hover:border-white/40 group-hover:text-white">
+                      {option.icon}
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between gap-4">
+                        <h2 className="text-xl font-semibold text-white">{option.title}</h2>
+                      </div>
+                      <p className="mt-2 text-sm text-white/70">{option.description}</p>
+                    </div>
+                  </div>
+                  <div className="mt-auto flex w-full justify-center">
+                    <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition group-hover:border-white/40 group-hover:bg-white/20">
+                      Seleccionar
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </Container>
+      </div>
+    )
+  }
+
+  const copy = LISTING_TYPE_COPY[listingType]
+
   return (
     <div className="min-h-[calc(100vh-120px)] bg-[#0c1723] py-12">
       <Container>
         <div className="text-center text-white">
           <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs uppercase tracking-[0.4em] text-white/70">
-            Destacados por publicación
+            {copy.tag}
           </span>
           <h1 className="mt-4 text-3xl font-bold sm:text-4xl">
-            Elegí la visibilidad de tu aviso
+            {copy.title}
           </h1>
           <p className="mt-3 mx-auto max-w-2xl text-sm text-white/70">
-            Pagás solo cuando querés destacar tu bicicleta. Todas las opciones incluyen una única publicación por aviso.
+            {copy.blurb}
           </p>
         </div>
 
@@ -165,17 +346,17 @@ export default function Plans() {
           <div className="mt-8 rounded-3xl border border-white/20 bg-white/90 p-6 text-[#14212e] shadow">
             <h2 className="text-lg font-semibold">Pago confirmado</h2>
             <p className="mt-2 text-sm text-[#14212e]/80">
-              Tu plan {PLAN_LABEL[planFromQuery._code]} está activo. Completá el formulario para publicar tu bicicleta.
+              Tu plan {PLAN_LABEL[planFromQuery._code]} está activo. Completá el formulario para publicar tu aviso.
             </p>
             <div className="mt-4 flex flex-wrap gap-3">
               <Button
                 className="bg-[#14212e] text-white hover:bg-[#1b2f3f]"
                 onClick={() => {
                   clearPaymentParams()
-                  navigate(`/publicar/nueva?plan=${planFromQuery._code}`)
+                  navigate(`/publicar/nueva?type=${listingType}&plan=${planFromQuery._code}`)
                 }}
               >
-                Publicar ahora
+                {copy.cta}
               </Button>
               <Button
                 variant="ghost"
@@ -225,7 +406,7 @@ export default function Plans() {
           <div className="mt-8 rounded-3xl border border-white/20 bg-white/90 p-6 text-[#14212e] shadow">
             <h2 className="text-lg font-semibold">Plan {PLAN_LABEL[planFromQuery._code]} seleccionado</h2>
             <p className="mt-2 text-sm text-[#14212e]/80">
-              Iniciá el pago para habilitar la publicación de tu bicicleta.
+              Iniciá el pago para habilitar tu publicación.
             </p>
             <div className="mt-4">
               <Button className="bg-[#14212e] text-white hover:bg-[#1b2f3f]" onClick={() => handleSelect(planFromQuery)}>
@@ -257,11 +438,7 @@ export default function Plans() {
                 ? `Destacada ${plan.featuredDays} ${plan.featuredDays === 1 ? 'día' : 'días'} en portada`
                 : 'Sin destaque en portada'
             )
-            features.push(
-              plan.whatsappEnabled
-                ? 'Botón de WhatsApp habilitado'
-                : 'Contacto por email y chat'
-            )
+            features.push('Botón de WhatsApp habilitado')
             features.push(`Duración ${listingDuration} días`)
             if (plan.socialBoost) features.push('Publicación en Instagram y Facebook')
             if (plan.description) features.push(plan.description)

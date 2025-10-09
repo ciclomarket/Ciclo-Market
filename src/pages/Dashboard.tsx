@@ -6,7 +6,7 @@ import ListingCard from '../components/ListingCard'
 import { mockListings } from '../mock/mockData'
 import { useAuth } from '../context/AuthContext'
 import { supabase, supabaseEnabled } from '../services/supabase'
-import { archiveListing, fetchListingsBySeller, reduceListingPrice } from '../services/listings'
+import { archiveListing, fetchListingsBySeller, reduceListingPrice, fetchListingsByIds } from '../services/listings'
 import { fetchUserProfile, type UserProfileRecord, upsertUserProfile } from '../services/users'
 import type { Listing } from '../types'
 import { usePlans } from '../context/PlanContext'
@@ -16,12 +16,60 @@ import { PROVINCES, OTHER_CITY_OPTION } from '../constants/locations'
 import { BIKE_CATEGORIES } from '../constants/catalog'
 import { deriveProfileSlug, pickDiscipline } from '../utils/user'
 import { useNotifications } from '../context/NotificationContext'
-import { useChat } from '../context/ChatContext'
 import useFaves from '../hooks/useFaves'
 
-const TABS = ['Perfil', 'Publicaciones', 'Notificaciones', 'Chat', 'Editar perfil', 'Suscripción', 'Cerrar sesión'] as const
+const TABS = ['Perfil', 'Publicaciones', 'Favoritos', 'Notificaciones', 'Editar perfil', 'Suscripción', 'Cerrar sesión'] as const
+type SellerTab = (typeof TABS)[number]
+
+const TAB_METADATA: Record<SellerTab, { title: string; description: string }> = {
+  Perfil: {
+    title: 'Tu perfil',
+    description: 'Revisá reputación y datos públicos',
+  },
+  Publicaciones: {
+    title: 'Publicaciones',
+    description: 'Administrá avisos activos y archivados',
+  },
+  Favoritos: {
+    title: 'Favoritos',
+    description: 'Tus bicicletas guardadas para seguirlas de cerca',
+  },
+  Notificaciones: {
+    title: 'Notificaciones',
+    description: 'Leé alertas y pendientes importantes',
+  },
+  'Editar perfil': {
+    title: 'Editar perfil',
+    description: 'Actualizá tus datos, redes y WhatsApp',
+  },
+  Suscripción: {
+    title: 'Plan y beneficios',
+    description: 'Controlá tu plan y próximas renovaciones',
+  },
+  'Cerrar sesión': {
+    title: 'Cerrar sesión',
+    description: 'Desconectate de forma segura',
+  },
+}
 
 const RELATIVE_FORMATTER = new Intl.RelativeTimeFormat('es-AR', { numeric: 'auto' })
+
+function useIsMobile(maxWidth = 768) {
+  const [isMobile, setIsMobile] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.innerWidth < maxWidth : false
+  )
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const mq = window.matchMedia(`(max-width: ${maxWidth - 1}px)`)
+    const update = () => setIsMobile(mq.matches)
+    update()
+    mq.addEventListener('change', update)
+    return () => mq.removeEventListener('change', update)
+  }, [maxWidth])
+
+  return isMobile
+}
 
 function relativeTimeFromNow(value: string): string {
   const target = new Date(value)
@@ -87,11 +135,16 @@ function facebookUrl(value?: string | null): string | null {
 export default function Dashboard() {
   const { user, logout, isModerator } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>('Perfil')
+  const [activeTab, setActiveTab] = useState<SellerTab>('Perfil')
   const [sellerListings, setSellerListings] = useState<Listing[]>([])
   const [profile, setProfile] = useState<UserProfileRecord | null>(null)
   const [loading, setLoading] = useState(true)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const isMobile = useIsMobile()
+  const [mobileActiveTab, setMobileActiveTab] = useState<SellerTab | null>(null)
+  const { unreadCount: unreadNotifications } = useNotifications()
+  const { ids: favouriteIds } = useFaves()
+  const favouritesCount = favouriteIds.length
 
   const loadData = useCallback(async () => {
     if (!user?.id) {
@@ -124,6 +177,12 @@ export default function Dashboard() {
   }, [loadData])
 
   useEffect(() => {
+    if (!isMobile) {
+      setMobileActiveTab(null)
+    }
+  }, [isMobile])
+
+  useEffect(() => {
     setMobileNavOpen(false)
   }, [activeTab])
 
@@ -147,14 +206,12 @@ export default function Dashboard() {
 
   useEffect(() => {
     const tabParam = searchParams.get('tab')
-    if (tabParam && TABS.includes(tabParam as (typeof TABS)[number])) {
-      setActiveTab(tabParam as (typeof TABS)[number])
+    if (tabParam && TABS.includes(tabParam as SellerTab)) {
+      const tab = tabParam as SellerTab
+      setActiveTab(tab)
+      if (isMobile) setMobileActiveTab(tab)
     }
-    const threadParam = searchParams.get('thread')
-    if (threadParam) {
-      setActiveTab('Chat')
-    }
-  }, [searchParams])
+  }, [searchParams, isMobile])
 
   const profileNeedsInfo = useMemo(() => {
     if (!user) return false
@@ -162,13 +219,66 @@ export default function Dashboard() {
     return !profile || !profile.province || !profile.city || !preferredBike.trim()
   }, [user, profile])
 
-  const [showProfileModal, setShowProfileModal] = useState(false)
-
-  useEffect(() => {
-    if (!loading && profileNeedsInfo) {
-      setShowProfileModal(true)
+  const handleSelectTab = useCallback((tab: SellerTab) => {
+    setActiveTab(tab)
+    setMobileNavOpen(false)
+    if (isMobile) {
+      setMobileActiveTab(tab)
+      if (typeof window !== 'undefined') {
+        window.requestAnimationFrame(() => {
+          window.scrollTo({ top: 0, behavior: 'smooth' })
+        })
+      }
     }
-  }, [loading, profileNeedsInfo])
+  }, [isMobile])
+
+  const openEditProfile = useCallback(() => {
+    handleSelectTab('Editar perfil')
+  }, [handleSelectTab])
+
+  const renderSection = (tab: SellerTab) => {
+    switch (tab) {
+      case 'Perfil':
+        return (
+          <ProfileView
+            listing={sellerProfile}
+            profile={profile}
+            totalListings={sellerListings.length}
+            fallbackEmail={user?.email ?? undefined}
+            onEditProfile={openEditProfile}
+            profileNeedsInfo={profileNeedsInfo}
+            isModerator={isModerator}
+            lastConnectionAt={lastConnectionAt}
+            latestListingAt={latestListingAt}
+          />
+        )
+      case 'Publicaciones':
+        return <ListingsView listings={sellerListings} onRefresh={loadData} />
+      case 'Notificaciones':
+        return <NotificationsView />
+      case 'Favoritos':
+        return <FavoritesView favouriteIds={favouriteIds} />
+      case 'Editar perfil':
+        return (
+          <EditProfileView
+            profile={profile}
+            listing={sellerProfile}
+            userId={user?.id}
+            userEmail={
+              user?.email
+              ?? (typeof user?.user_metadata?.email === 'string' ? user.user_metadata.email : undefined)
+            }
+            onProfileUpdated={loadData}
+          />
+        )
+      case 'Suscripción':
+        return <SubscriptionView listings={sellerListings} />
+      case 'Cerrar sesión':
+        return <SignOutView onSignOut={logout} />
+      default:
+        return null
+    }
+  }
 
   const sellerProfile = sellerListings[0]
   const latestListingAt = useMemo(() => {
@@ -187,6 +297,120 @@ export default function Dashboard() {
         <Container>
           <div className="rounded-[28px] border border-white/10 bg-white/5 p-10 text-center text-white/80">
             Cargando tu panel de vendedor…
+          </div>
+        </Container>
+      </div>
+    )
+  }
+
+  if (isMobile) {
+    const mobileTab = mobileActiveTab
+    const activeMetadata = mobileTab ? TAB_METADATA[mobileTab] : null
+    const displayName = profile?.full_name ?? sellerProfile?.sellerName ?? user?.email ?? 'Ciclista'
+
+    return (
+      <div className="min-h-[calc(100vh-96px)] bg-[#0f1729] py-6 text-white">
+        <Container>
+          <div className="space-y-6">
+            <header className="rounded-3xl border border-white/15 bg-white/10 p-5 shadow-[0_18px_40px_rgba(6,12,24,0.35)]">
+              <p className="text-[11px] uppercase tracking-[0.35em] text-white/60">Panel de vendedor</p>
+              <h1 className="mt-2 text-2xl font-semibold">Hola, {displayName}</h1>
+              <p className="mt-1 text-sm text-white/70">Gestioná tu tienda y mantené al día tus publicaciones.</p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Button to="/publicar" className="bg-white text-[#14212e] hover:bg-white/90">
+                  Nueva publicación
+                </Button>
+                <Button to="/marketplace" variant="ghost" className="text-white/80">
+                  Ver marketplace
+                </Button>
+              </div>
+            </header>
+
+            {mobileTab ? (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setMobileActiveTab(null)}
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/20 text-white transition hover:border-white/40"
+                    aria-label="Volver al menú"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      className="h-5 w-5"
+                      stroke="currentColor"
+                      fill="none"
+                      strokeWidth={1.6}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+                    </svg>
+                  </button>
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.3em] text-white/50">Sección</p>
+                    <h2 className="text-lg font-semibold">{activeMetadata?.title ?? mobileTab}</h2>
+                  </div>
+                </div>
+                <div className="rounded-3xl border border-white/15 bg-white text-[#14212e] shadow-[0_18px_40px_rgba(6,12,24,0.25)]">
+                  {renderSection(mobileTab)}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {profileNeedsInfo && (
+                  <div className="rounded-3xl border border-amber-100 bg-amber-50/95 p-4 text-[#7c3f00] shadow-lg">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold">Completá tu perfil</p>
+                        <p className="text-sm text-[#7c3f00]/80">Agregá ubicación y preferencias para mejorar tu visibilidad.</p>
+                      </div>
+                      <Button type="button" className="bg-[#14212e] text-white hover:bg-[#1b2f3f]" onClick={() => handleSelectTab('Editar perfil')}>
+                        Ir a editar perfil
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                <div className="grid gap-3">
+                  {TABS.map((tab) => {
+                    const meta = TAB_METADATA[tab]
+                    const badge = tab === 'Notificaciones' ? unreadNotifications : tab === 'Favoritos' ? favouritesCount : 0
+                    return (
+                      <button
+                        key={tab}
+                        type="button"
+                        onClick={() => handleSelectTab(tab)}
+                        className="flex items-center justify-between gap-3 rounded-3xl border border-white/15 bg-white/10 p-4 text-left shadow-[0_18px_40px_rgba(6,12,24,0.25)] transition hover:bg-white/15"
+                      >
+                      <div className="flex w-full items-center gap-3">
+                        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/20 text-white">
+                          <TabIcon tab={tab} />
+                        </span>
+                        <div className="flex flex-1 flex-col">
+                          <p className="text-base font-semibold text-white">{meta.title}</p>
+                          <p className="text-xs text-white/70">{meta.description}</p>
+                        </div>
+                        {badge > 0 && (
+                          <span className="inline-flex min-w-[26px] shrink-0 items-center justify-center rounded-full bg-[#ff6b6b] px-2 py-0.5 text-[11px] font-semibold text-white">
+                            {badge > 99 ? '99+' : badge}
+                          </span>
+                        )}
+                      </div>
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 24 24"
+                          className="h-5 w-5 text-white/50"
+                          stroke="currentColor"
+                          fill="none"
+                          strokeWidth={1.5}
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" d="m9 5 7 7-7 7" />
+                        </svg>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </Container>
       </div>
@@ -222,7 +446,7 @@ export default function Dashboard() {
                   </svg>
                 </button>
               </div>
-              <Button to="/publicar/nueva" className="bg-white text-[#14212e] hover:bg-white/90">
+              <Button to="/publicar" className="bg-white text-[#14212e] hover:bg-white/90">
                 Nueva publicación
               </Button>
             </div>
@@ -235,7 +459,7 @@ export default function Dashboard() {
                   <li key={tab}>
                     <button
                       type="button"
-                      onClick={() => setActiveTab(tab)}
+                      onClick={() => handleSelectTab(tab)}
                       className={`w-full rounded-2xl px-4 py-3 text-left transition ${
                         activeTab === tab
                           ? 'bg-white text-[#14212e] shadow-lg'
@@ -250,41 +474,7 @@ export default function Dashboard() {
             </nav>
 
             <section className="rounded-3xl border border-white/10 bg-white p-6 shadow-[0_25px_60px_rgba(12,20,28,0.25)]">
-              {activeTab === 'Perfil' && (
-                <ProfileView
-                  listing={sellerProfile}
-                  profile={profile}
-                  totalListings={sellerListings.length}
-                  fallbackEmail={user?.email ?? undefined}
-                  onEditProfile={() => setShowProfileModal(true)}
-                  profileNeedsInfo={profileNeedsInfo}
-                  isModerator={isModerator}
-                  lastConnectionAt={lastConnectionAt}
-                  latestListingAt={latestListingAt}
-                />
-              )}
-              {activeTab === 'Publicaciones' && <ListingsView listings={sellerListings} onRefresh={loadData} />}
-              {activeTab === 'Notificaciones' && <NotificationsView />}
-              {activeTab === 'Chat' && (
-                <ChatView
-                  initialThreadId={searchParams.get('thread')}
-                  clearThreadParam={() => {
-                    const next = new URLSearchParams(searchParams)
-                    next.delete('thread')
-                    setSearchParams(next, { replace: true })
-                  }}
-                />
-              )}
-              {activeTab === 'Editar perfil' && (
-                <EditProfileView
-                  profile={profile}
-                  listing={sellerProfile}
-                  userId={user?.id}
-                  onProfileUpdated={loadData}
-                />
-              )}
-              {activeTab === 'Suscripción' && <SubscriptionView listings={sellerListings} />}
-              {activeTab === 'Cerrar sesión' && <SignOutView onSignOut={logout} />}
+              {renderSection(activeTab)}
             </section>
           </div>
         </div>
@@ -325,8 +515,7 @@ export default function Dashboard() {
                     <button
                       type="button"
                       onClick={() => {
-                        setActiveTab(tab)
-                        setMobileNavOpen(false)
+                        handleSelectTab(tab)
                       }}
                       className={`w-full rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition ${
                         activeTab === tab
@@ -342,14 +531,6 @@ export default function Dashboard() {
             </div>
           </div>
         )}
-        <ProfileDetailsModal
-          open={showProfileModal}
-          onClose={() => setShowProfileModal(false)}
-          profile={profile}
-          userId={user?.id}
-          userEmail={user?.email}
-          onSaved={loadData}
-        />
       </Container>
     </div>
   )
@@ -619,7 +800,7 @@ function ListingsView({ listings, onRefresh }: { listings: Listing[]; onRefresh?
         <p className="max-w-md text-sm text-[#14212e]/70">
           Subí tu primera bicicleta o accesorio y aparecé en las búsquedas del Marketplace. Recordá que podés destacarte con el plan Destacada o Pro.
         </p>
-        <Button to="/publicar/nueva" className="bg-[#14212e] text-white hover:bg-[#1b2f3f]">
+        <Button to="/publicar" className="bg-[#14212e] text-white hover:bg-[#1b2f3f]">
           Publicar ahora
         </Button>
       </div>
@@ -676,8 +857,8 @@ function ListingsView({ listings, onRefresh }: { listings: Listing[]; onRefresh?
           <h2 className="text-xl font-semibold text-[#14212e]">Tus publicaciones</h2>
           <p className="text-sm text-[#14212e]/60">Gestioná precios, stock y visibilidad desde acá.</p>
         </div>
-        <Button to="/publicar/nueva" className="bg-[#14212e] text-white hover:bg-[#1b2f3f]">
-          Publicar nueva bicicleta
+        <Button to="/publicar" className="bg-[#14212e] text-white hover:bg-[#1b2f3f]">
+          Publicar nuevo aviso
         </Button>
       </header>
       {successMessage && (
@@ -694,7 +875,17 @@ function ListingsView({ listings, onRefresh }: { listings: Listing[]; onRefresh?
               <Button
                 variant="secondary"
                 className="flex-1 min-w-[150px] text-xs py-2"
-                onClick={() => navigate(`/publicar/nueva?id=${listing.id}`)}
+                onClick={() =>
+                  navigate(
+                    `/publicar/nueva?id=${listing.id}&type=${
+                      listing.category === 'Accesorios'
+                        ? 'accessory'
+                        : listing.category === 'Indumentaria'
+                          ? 'apparel'
+                          : 'bike'
+                    }`
+                  )
+                }
               >
                 Editar
               </Button>
@@ -716,6 +907,116 @@ function ListingsView({ listings, onRefresh }: { listings: Listing[]; onRefresh?
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+function FavoritesView({ favouriteIds }: { favouriteIds: string[] }) {
+  const [loading, setLoading] = useState(false)
+  const [listings, setListings] = useState<Listing[]>([])
+
+  useEffect(() => {
+    let active = true
+    if (!favouriteIds.length) {
+      setListings([])
+      setLoading(false)
+      return () => { active = false }
+    }
+    setLoading(true)
+    const load = async () => {
+      try {
+        let data: Listing[] = []
+        if (supabaseEnabled) {
+          data = await fetchListingsByIds(favouriteIds)
+        } else {
+          data = mockListings.filter((listing) => favouriteIds.includes(listing.id))
+        }
+        if (!active) return
+        const order = new Map(favouriteIds.map((id, index) => [id, index]))
+        const filtered = data.filter((listing) => order.has(listing.id))
+        const sorted = filtered.slice().sort((a, b) => {
+          const aIndex = order.get(a.id) ?? 0
+          const bIndex = order.get(b.id) ?? 0
+          return aIndex - bIndex
+        })
+        setListings(sorted)
+      } catch (error) {
+        console.warn('[dashboard] load favourites failed', error)
+        if (active) setListings([])
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+    void load()
+    return () => {
+      active = false
+    }
+  }, [favouriteIds])
+
+  if (!favouriteIds.length) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 py-10 text-center">
+        <h3 className="text-lg font-semibold text-[#14212e]">Todavía no guardaste bicicletas</h3>
+        <p className="max-w-md text-sm text-[#14212e]/70">
+          Buscá modelos en el marketplace y marcá con ★ tus preferidas para compararlas más tarde.
+        </p>
+        <Button to="/marketplace" className="bg-[#14212e] text-white hover:bg-[#1b2f3f]">
+          Explorar marketplace
+        </Button>
+      </div>
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-10 text-center text-sm text-[#14212e]/70">
+        <span className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-[#14212e]/15">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            className="h-5 w-5 animate-spin text-[#14212e]"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v3m0 12v3m9-9h-3M6 12H3m15.364 6.364-2.121-2.121M8.757 8.757 6.636 6.636m0 10.728 2.121-2.121m8.486-8.486 2.121-2.121" />
+          </svg>
+        </span>
+        <p>Cargando tus favoritos…</p>
+      </div>
+    )
+  }
+
+  if (!listings.length) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 py-10 text-center">
+        <h3 className="text-lg font-semibold text-[#14212e]">No encontramos tus bicicletas guardadas</h3>
+        <p className="max-w-md text-sm text-[#14212e]/70">
+          Es posible que se hayan dado de baja o que los vendedores hayan pausado las publicaciones.
+        </p>
+        <Button to="/marketplace" variant="ghost" className="text-[#14212e] hover:bg-[#14212e]/10">
+          Ver marketplace
+        </Button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-xl font-semibold text-[#14212e]">Tus favoritos</h2>
+        <span className="rounded-full border border-[#14212e]/15 bg-[#14212e]/5 px-3 py-1 text-xs font-semibold text-[#14212e]/70">
+          {listings.length} {listings.length === 1 ? 'artículo guardado' : 'artículos guardados'}
+        </span>
+      </div>
+      <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+        {listings.map((listing) => (
+          <ListingCard key={listing.id} l={listing} />
+        ))}
+      </div>
+      <p className="text-xs text-[#14212e]/60">
+        Quitá favoritos desde esta vista o desde el marketplace para mantener tu lista al día.
+      </p>
     </div>
   )
 }
@@ -786,6 +1087,68 @@ function NotificationsView() {
   )
 }
 
+function TabIcon({ tab }: { tab: SellerTab }) {
+  const common = {
+    className: 'h-6 w-6',
+    stroke: 'currentColor',
+    fill: 'none',
+    strokeWidth: 1.6,
+    xmlns: 'http://www.w3.org/2000/svg',
+    viewBox: '0 0 24 24'
+  } as const
+
+  switch (tab) {
+    case 'Perfil':
+      return (
+        <svg {...common}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 7.5a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 19.5a7.5 7.5 0 0115 0" />
+        </svg>
+      )
+    case 'Publicaciones':
+      return (
+        <svg {...common}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 6h12M6 12h12M6 18h7" />
+        </svg>
+      )
+    case 'Favoritos':
+      return (
+        <svg {...common}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.04-4.5-4.55-4.5-1.74 0-3.42 1.008-4.45 2.708C10.97 4.758 9.29 3.75 7.55 3.75 5.04 3.75 3 5.765 3 8.25c0 5.25 7.5 9 9 9s9-3.75 9-9z" />
+        </svg>
+      )
+    case 'Notificaciones':
+      return (
+        <svg {...common}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M14.235 19.458a1.5 1.5 0 01-2.47 0M12 6a4.5 4.5 0 00-4.5 4.5v2.086a2 2 0 01-.586 1.414L6 15.914h12l-.914-.914a2 2 0 01-.586-1.414V10.5A4.5 4.5 0 0012 6z" />
+        </svg>
+      )
+    case 'Editar perfil':
+      return (
+        <svg {...common}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.651-1.651a1.5 1.5 0 112.121 2.121L8.25 17.341 4.5 18.75l1.409-3.75L16.862 4.487z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5v6a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 16.5V8.25A2.25 2.25 0 016.75 6h6" />
+        </svg>
+      )
+    case 'Suscripción':
+      return (
+        <svg {...common}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6l1.902 3.855 4.258.62-3.08 3.002.727 4.237L12 15.75l-3.807 2.002.727-4.237-3.08-3.001 4.258-.62L12 6z" />
+        </svg>
+      )
+    case 'Cerrar sesión':
+      return (
+        <svg {...common}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V4.5a1.5 1.5 0 00-1.5-1.5h-6A1.5 1.5 0 006.75 4.5v15a1.5 1.5 0 001.5 1.5h6a1.5 1.5 0 001.5-1.5V15" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M18 12H9m9 0l-2.25-2.25M18 12l-2.25 2.25" />
+        </svg>
+      )
+    default:
+      return null
+  }
+}
+
+/* ChatView temporalmente deshabilitado
 function ChatView({ initialThreadId, clearThreadParam }: { initialThreadId?: string | null; clearThreadParam?: () => void }) {
   const { user } = useAuth()
   const {
@@ -879,60 +1242,66 @@ function ChatView({ initialThreadId, clearThreadParam }: { initialThreadId?: str
   return (
     <div className="space-y-4">
       <h2 className="text-xl font-semibold text-[#14212e]">Chats y ofertas</h2>
-      <div className="grid gap-4 lg:grid-cols-[280px,1fr]">
-        <div className="space-y-2">
-          {loadingThreads && (
-            <div className="rounded-2xl border border-[#14212e]/10 bg-[#14212e]/5 p-4 text-sm text-[#14212e]/70">
-              Cargando conversaciones…
-            </div>
-          )}
-          {!loadingThreads && threads.length === 0 && (
-            <div className="rounded-2xl border border-[#14212e]/10 bg-[#14212e]/5 p-6 text-sm text-[#14212e]/70">
-              Todavía no tenés chats. Respondé consultas desde tus publicaciones.
-            </div>
-          )}
-          {threads.map((thread) => {
-            const timeAgo = relativeTimeFromNow(thread.lastMessageCreatedAt ?? thread.last_message_at)
-            const isActive = thread.id === activeThreadId
-            return (
-              <button
-                key={thread.id}
-                type="button"
-                onClick={() => selectThread(thread.id)}
-                className={`flex w-full flex-col gap-1 rounded-2xl border px-4 py-3 text-left transition ${
-                  isActive ? 'border-[#14212e] bg-white shadow' : 'border-[#14212e]/10 bg-white/80 hover:border-[#14212e]/30'
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-3">
-                    <span className="flex size-8 items-center justify-center rounded-full bg-[#14212e]/10 text-sm font-semibold text-[#14212e]">
-                      {thread.otherParticipantName.charAt(0).toUpperCase()}
-                    </span>
-                    <div>
-                      <p className="text-sm font-semibold text-[#14212e]">{thread.otherParticipantName}</p>
-                      <p className="text-xs text-[#14212e]/50">{thread.listing_title ?? 'Consulta privada'}</p>
-                    </div>
+      <div className="grid h-[75vh] min-h-[360px] gap-4 lg:grid-cols-[280px,1fr]">
+        <aside className="flex h-full flex-col">
+          <div className="flex-1 overflow-hidden rounded-2xl border border-[#14212e]/10 bg-white/80 p-3 backdrop-blur">
+            <div className="flex h-full flex-col">
+              <div className="flex-1 space-y-2 overflow-y-auto pr-1">
+                {loadingThreads && (
+                  <div className="rounded-2xl border border-[#14212e]/10 bg-[#14212e]/5 p-4 text-sm text-[#14212e]/70">
+                    Cargando conversaciones…
                   </div>
-                  <div className="text-right">
-                    <p className="text-[11px] text-[#14212e]/50">{timeAgo || 'hace instantes'}</p>
-                    {thread.unreadCount > 0 && (
-                      <span className="mt-1 inline-flex items-center justify-center rounded-full bg-[#14212e] px-2 py-0.5 text-[10px] font-semibold text-white">
-                        {thread.unreadCount}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                {thread.lastMessageSnippet && (
-                  <p className="text-xs text-[#14212e]/60 line-clamp-2">
-                    {thread.lastMessageAuthorId === user?.id ? 'Vos: ' : ''}{thread.lastMessageSnippet}
-                  </p>
                 )}
-              </button>
-            )
-          })}
-        </div>
+                {!loadingThreads && threads.length === 0 && (
+                  <div className="rounded-2xl border border-dashed border-[#14212e]/20 bg-white/70 p-6 text-sm text-[#14212e]/70">
+                    Todavía no tenés chats. Respondé consultas desde tus publicaciones.
+                  </div>
+                )}
+                {threads.map((thread) => {
+                  const timeAgo = relativeTimeFromNow(thread.lastMessageCreatedAt ?? thread.last_message_at)
+                  const isActive = thread.id === activeThreadId
+                  return (
+                    <button
+                      key={thread.id}
+                      type="button"
+                      onClick={() => selectThread(thread.id)}
+                      className={`flex w-full flex-col gap-1 rounded-2xl border px-4 py-3 text-left transition ${
+                        isActive ? 'border-[#14212e] bg-white shadow' : 'border-[#14212e]/10 bg-white hover:border-[#14212e]/30'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-3">
+                          <span className="flex size-8 items-center justify-center rounded-full bg-[#14212e]/10 text-sm font-semibold text-[#14212e]">
+                            {thread.otherParticipantName.charAt(0).toUpperCase()}
+                          </span>
+                          <div>
+                            <p className="text-sm font-semibold text-[#14212e]">{thread.otherParticipantName}</p>
+                            <p className="text-xs text-[#14212e]/50">{thread.listing_title ?? 'Consulta privada'}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[11px] text-[#14212e]/50">{timeAgo || 'hace instantes'}</p>
+                          {thread.unreadCount > 0 && (
+                            <span className="mt-1 inline-flex items-center justify-center rounded-full bg-[#14212e] px-2 py-0.5 text-[10px] font-semibold text-white">
+                              {thread.unreadCount}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {thread.lastMessageSnippet && (
+                        <p className="text-xs text-[#14212e]/60 line-clamp-2">
+                          {thread.lastMessageAuthorId === user?.id ? 'Vos: ' : ''}{thread.lastMessageSnippet}
+                        </p>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+        </aside>
 
-        <div className="rounded-2xl border border-[#14212e]/10 bg-white p-0">
+        <section className="flex h-full flex-col rounded-2xl border border-[#14212e]/10 bg-white">
           {!activeThread && (
             <div className="flex h-full items-center justify-center p-6 text-sm text-[#14212e]/60">
               Seleccioná una conversación para verla.
@@ -1015,21 +1384,24 @@ function ChatView({ initialThreadId, clearThreadParam }: { initialThreadId?: str
               </form>
             </div>
           )}
-        </div>
+        </section>
       </div>
     </div>
   )
 }
+*/
 
 function EditProfileView({
   profile,
   listing,
   userId,
+  userEmail,
   onProfileUpdated,
 }: {
   profile: UserProfileRecord | null
   listing: Listing | undefined
   userId?: string
+  userEmail?: string | null
   onProfileUpdated?: () => Promise<void> | void
 }) {
   const [fullName, setFullName] = useState(profile?.full_name ?? '')
@@ -1085,7 +1457,8 @@ function EditProfileView({
     try {
       const url = await uploadAvatar(fileList[0], userId)
       if (!url) throw new Error('No pudimos subir la imagen')
-      await upsertUserProfile({ id: userId, avatarUrl: url })
+      const result = await upsertUserProfile({ id: userId, avatarUrl: url })
+      if (!result.success) throw new Error(result.error ?? 'No pudimos actualizar la foto')
       if (supabaseEnabled && supabase) {
         await supabase.from('listings').update({ seller_avatar: url }).eq('seller_id', userId)
       }
@@ -1102,7 +1475,11 @@ function EditProfileView({
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
-    if (!userId || !profile?.email) {
+    const profileEmail = typeof profile?.email === 'string' ? profile.email.trim() : ''
+    const fallbackEmail = typeof userEmail === 'string' ? userEmail.trim() : ''
+    const listingEmail = typeof listing?.sellerEmail === 'string' ? listing.sellerEmail.trim() : ''
+    const effectiveEmail = profileEmail || fallbackEmail || listingEmail || null
+    if (!userId || !effectiveEmail) {
       setError('Necesitás una sesión activa para guardar cambios.')
       return
     }
@@ -1114,16 +1491,16 @@ function EditProfileView({
     setSaving(true)
     setError(null)
     try {
-      await upsertUserProfile({
+      const result = await upsertUserProfile({
         id: userId,
-        email: profile.email,
+        email: effectiveEmail,
         fullName: fullName.trim(),
         province,
         city: finalCity,
         profileSlug: deriveProfileSlug({
           fullName: fullName.trim(),
           discipline: pickDiscipline(preferredBike ? [preferredBike] : []),
-          fallback: profile.email.split('@')[0] ?? 'usuario'
+          fallback: effectiveEmail.split('@')[0] ?? 'usuario'
         }),
         preferredBike: preferredBike || null,
         instagramHandle: instagram ? normaliseHandle(instagram) : null,
@@ -1131,6 +1508,9 @@ function EditProfileView({
         websiteUrl: website ? normaliseUrl(website) : null,
         whatsapp: normaliseWhatsapp(whatsapp)
       })
+      if (!result.success) {
+        throw new Error(result.error ?? 'No pudimos guardar tu perfil. Intentá nuevamente.')
+      }
       if (onProfileUpdated) await onProfileUpdated()
       setSuccess('Se actualizó el perfil correctamente.')
     } catch (err: any) {
@@ -1366,192 +1746,6 @@ function PlanStat({ label, value, helper }: { label: string; value: string; help
       <p className="text-xs uppercase tracking-wide text-[#14212e]/50">{label}</p>
       <p className="mt-1 text-lg font-semibold text-[#14212e]">{value}</p>
       {helper && <p className="text-xs text-[#14212e]/60">{helper}</p>}
-    </div>
-  )
-}
-
-function ProfileDetailsModal({
-  open,
-  onClose,
-  profile,
-  userId,
-  userEmail,
-  onSaved,
-}: {
-  open: boolean
-  onClose: () => void
-  profile: UserProfileRecord | null
-  userId?: string
-  userEmail?: string | null
-  onSaved?: () => Promise<void> | void
-}) {
-  const [fullName, setFullName] = useState(profile?.full_name ?? '')
-  const [province, setProvince] = useState(profile?.province ?? '')
-  const [city, setCity] = useState(profile?.city ?? '')
-  const [cityOther, setCityOther] = useState('')
-  const [preferredBike, setPreferredBike] = useState(profile?.preferred_bike ?? '')
-  const [instagram, setInstagram] = useState(profile?.instagram_handle ?? '')
-  const [facebook, setFacebook] = useState(profile?.facebook_handle ?? '')
-  const [website, setWebsite] = useState(profile?.website_url ?? '')
-  const [whatsapp, setWhatsapp] = useState(profile?.whatsapp_number ?? '')
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    setFullName(profile?.full_name ?? '')
-    setProvince(profile?.province ?? '')
-    setCity(profile?.city ?? '')
-    setPreferredBike(profile?.preferred_bike ?? '')
-    setInstagram(profile?.instagram_handle ?? '')
-    setFacebook(profile?.facebook_handle ?? '')
-    setWebsite(profile?.website_url ?? '')
-    setWhatsapp(profile?.whatsapp_number ?? '')
-  }, [profile])
-
-  const normaliseWhatsapp = (value?: string | null): string | null => {
-    if (!value) return null
-    const digits = value.replace(/[^0-9+]/g, '')
-    return digits.trim() || null
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!userId || !userEmail) {
-      setError('Necesitás una sesión activa para guardar el perfil.')
-      return
-    }
-    const finalCity = city === OTHER_CITY_OPTION ? cityOther.trim() : city
-    if (!fullName.trim() || !province || !finalCity.trim()) {
-      setError('Completá nombre, provincia y ciudad.')
-      return
-    }
-    setSaving(true)
-    setError(null)
-    try {
-      await upsertUserProfile({
-        id: userId,
-        email: userEmail,
-        fullName: fullName.trim(),
-        province,
-        city: finalCity,
-        profileSlug: deriveProfileSlug({
-          fullName: fullName.trim(),
-          discipline: pickDiscipline(preferredBike ? [preferredBike] : []),
-          fallback: userEmail.split('@')[0] ?? 'usuario'
-        }),
-        preferredBike: preferredBike || null,
-        instagramHandle: instagram ? normaliseHandle(instagram) : null,
-        facebookHandle: facebook ? normaliseUrl(facebook) : null,
-        websiteUrl: website ? normaliseUrl(website) : null,
-        whatsapp: normaliseWhatsapp(whatsapp)
-      })
-      if (onSaved) await onSaved()
-      onClose()
-    } catch (err: any) {
-      setError(err?.message ?? 'No pudimos guardar el perfil. Intentá nuevamente.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const cityOptions = province ? PROVINCES.find((p) => p.name === province)?.cities ?? [] : []
-  const showCityOther = city === OTHER_CITY_OPTION
-
-  if (!open) return null
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
-      <div className="w-full max-w-xl rounded-3xl bg-white p-6 shadow-xl">
-        <div className="flex items-start justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-[#14212e]">Completá tu perfil</h2>
-            <p className="text-sm text-[#14212e]/70">Necesitamos tu ubicación y preferencias para personalizar tu experiencia.</p>
-          </div>
-          <button type="button" onClick={onClose} aria-label="Cerrar">
-            ✕
-          </button>
-        </div>
-        <form className="mt-4 grid gap-4" onSubmit={handleSubmit}>
-          <label className="text-sm font-medium text-[#14212e]">
-            Nombre completo
-            <input className="input mt-1" value={fullName} onChange={(e) => setFullName(e.target.value)} />
-          </label>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="text-sm font-medium text-[#14212e]">
-              Provincia
-              <select className="select mt-1" value={province} onChange={(e) => { setProvince(e.target.value); setCity(''); setCityOther('') }}>
-                <option value="">Seleccioná provincia</option>
-                {PROVINCES.map((prov) => (
-                  <option key={prov.name} value={prov.name}>{prov.name}</option>
-                ))}
-              </select>
-            </label>
-            <label className="text-sm font-medium text-[#14212e]">
-              Ciudad
-              <select
-                className="select mt-1"
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
-                disabled={!province}
-              >
-                <option value="">{province ? 'Seleccioná ciudad' : 'Elegí provincia primero'}</option>
-                {cityOptions.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-                <option value={OTHER_CITY_OPTION}>{OTHER_CITY_OPTION}</option>
-              </select>
-            </label>
-          </div>
-          {showCityOther && (
-            <label className="text-sm font-medium text-[#14212e]">
-              Ciudad (especificar)
-              <input className="input mt-1" value={cityOther} onChange={(e) => setCityOther(e.target.value)} placeholder="Ingresá la ciudad" />
-            </label>
-          )}
-          <label className="text-sm font-medium text-[#14212e]">
-            Bicicleta preferida
-            <select className="select mt-1" value={preferredBike} onChange={(e) => setPreferredBike(e.target.value)}>
-              <option value="">Seleccioná una opción</option>
-              {BIKE_CATEGORIES.map((cat) => (
-                <option key={cat} value={cat}>{cat}</option>
-              ))}
-            </select>
-          </label>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="text-sm font-medium text-[#14212e]">
-              Instagram (opcional)
-              <input className="input mt-1" value={instagram} onChange={(e) => setInstagram(e.target.value)} placeholder="@ciclomarket" />
-            </label>
-            <label className="text-sm font-medium text-[#14212e]">
-              Facebook (opcional)
-              <input className="input mt-1" value={facebook} onChange={(e) => setFacebook(e.target.value)} placeholder="facebook.com/ciclomarket" />
-            </label>
-          </div>
-          <label className="text-sm font-medium text-[#14212e]">
-            Sitio web (opcional)
-            <input className="input mt-1" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://tusitio.com" />
-          </label>
-
-          <label className="text-sm font-medium text-[#14212e]">
-            WhatsApp (privado)
-            <input
-              className="input mt-1"
-              value={whatsapp}
-              onChange={(e) => setWhatsapp(e.target.value)}
-              placeholder="Ej.: +5491122334455"
-            />
-            <span className="text-xs text-[#14212e]/60">No se muestra públicamente; se usa para autocompletar tus publicaciones con botón de WhatsApp.</span>
-          </label>
-
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          <div className="flex justify-end gap-3">
-            <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>Cancelar</Button>
-            <Button type="submit" className="bg-[#14212e] text-white hover:bg-[#1b2f3f]" disabled={saving}>
-              {saving ? 'Guardando…' : 'Guardar perfil'}
-            </Button>
-          </div>
-        </form>
-      </div>
     </div>
   )
 }

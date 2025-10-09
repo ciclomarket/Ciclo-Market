@@ -53,6 +53,7 @@ export async function createUserProfile(payload: UserProfileInput): Promise<bool
       facebook_handle: payload.facebookHandle ?? null,
       website_url: payload.websiteUrl ?? null,
       verified: payload.verified ?? false,
+      // Renombrá a whatsapp si tu tabla no tiene whatsapp_number
       whatsapp_number: payload.whatsapp ?? null,
       created_at: new Date().toISOString()
     })
@@ -62,13 +63,16 @@ export async function createUserProfile(payload: UserProfileInput): Promise<bool
   }
 }
 
-export async function upsertUserProfile(payload: Partial<UserProfileInput> & { id: string }): Promise<boolean> {
-  if (!supabaseEnabled) return false
+export interface UpsertProfileResult {
+  success: boolean
+  error?: string
+}
+
+export async function upsertUserProfile(payload: Partial<UserProfileInput> & { id: string }): Promise<UpsertProfileResult> {
+  if (!supabaseEnabled) return { success: false, error: 'Supabase no habilitado' }
   try {
     const supabase = getSupabaseClient()
-    const updates: Record<string, any> = {
-      updated_at: new Date().toISOString()
-    }
+    const updates: Record<string, any> = {}
     if (payload.email !== undefined) updates.email = payload.email
     if (payload.fullName !== undefined) updates.full_name = payload.fullName
     if (payload.province !== undefined) updates.province = payload.province
@@ -89,12 +93,12 @@ export async function upsertUserProfile(payload: Partial<UserProfileInput> & { i
       .eq('id', payload.id)
       .select('id')
 
-    if (error) return false
-    if (data && data.length > 0) return true
+    if (error) return { success: false, error: error.message }
+    if (data && data.length > 0) return { success: true }
 
     if (!payload.email || !payload.fullName || !payload.province || !payload.city) {
       // Not enough info to create a new profile
-      return false
+      return { success: false, error: 'Faltan datos para crear el perfil' }
     }
 
     const insertPayload = {
@@ -115,9 +119,10 @@ export async function upsertUserProfile(payload: Partial<UserProfileInput> & { i
       created_at: new Date().toISOString()
     }
     const { error: insertError } = await supabase.from('users').insert(insertPayload)
-    return !insertError
-  } catch {
-    return false
+    if (insertError) return { success: false, error: insertError.message }
+    return { success: true }
+  } catch (err: any) {
+    return { success: false, error: err?.message ?? 'Error desconocido al guardar el perfil' }
   }
 }
 

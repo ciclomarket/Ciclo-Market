@@ -10,14 +10,14 @@ import { supabaseEnabled } from '../services/supabase'
 import type { Listing } from '../types'
 import { hasPaidPlan } from '../utils/plans'
 
-type Cat = 'Todos' | 'Ruta' | 'MTB' | 'Gravel' | 'Urbana' | 'Accesorios' | 'E-Bike' | 'Niños' | 'Pista' | 'Triatlón'
+type Cat = 'Todos' | 'Ruta' | 'MTB' | 'Gravel' | 'Urbana' | 'Accesorios' | 'Indumentaria' | 'E-Bike' | 'Niños' | 'Pista' | 'Triatlón'
 type FiltersState = {
   cat?: Cat
   brand?: string
   deal?: '1'
 }
 
-const CAT_VALUES: Cat[] = ['Todos','Ruta','MTB','Gravel','Urbana','Accesorios','E-Bike','Niños','Pista','Triatlón']
+const CAT_VALUES: Cat[] = ['Todos','Ruta','MTB','Gravel','Urbana','Accesorios','Indumentaria','E-Bike','Niños','Pista','Triatlón']
 
 const FILTER_PARAM_KEYS: Array<keyof FiltersState> = ['cat','brand','deal']
 
@@ -73,12 +73,12 @@ export default function Marketplace() {
       if (supabaseEnabled) {
         const data = await fetchListings()
         if (!active) return
-        setListings(data.filter((l) => l.category !== 'Accesorios'))
+        setListings(data)
         setLoading(false)
         return
       }
       if (!active) return
-      setListings(mockListings.filter((l) => l.category !== 'Accesorios'))
+      setListings(mockListings)
       setLoading(false)
     }
     load()
@@ -194,32 +194,36 @@ export default function Marketplace() {
         </div>
       </section>
 
-      <div id="listings" className="section-soft">
-        <Container>
+      <div id="listings" className="bg-[#14212e] text-white">
+        <Container className="text-white">
           <div className="py-10">
             <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <h2 className="text-xl font-bold text-[#14212e]">Explorá el marketplace</h2>
-                <p className="text-sm text-[#14212e]/70">{filtered.length} bicicletas conectando historias nuevas.</p>
+                <h2 className="text-xl font-bold text-white">Explorá el marketplace</h2>
+                <p className="text-sm text-white/70">{filtered.length} avisos conectando historias nuevas.</p>
               </div>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
                 <div className="flex flex-wrap gap-2">
-                  {['Todos','Ruta','MTB','Gravel','Urbana','Accesorios','E-Bike','Niños','Pista','Triatlón'].map((cat) => (
+                  {['Todos','Ruta','MTB','Gravel','Urbana','Accesorios','Indumentaria','E-Bike','Niños','Pista','Triatlón'].map((cat) => (
                     <button
                       key={cat}
                       onClick={() => handleCategory(cat as Cat)}
-                      className={`badge transition ${filters.cat === cat ? 'border-[#14212e] bg-white text-[#14212e]' : 'border-[#14212e]/20 text-[#14212e]/80 hover:bg-[#14212e]/10'}`}
+                      className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium transition ${
+                        filters.cat === cat
+                          ? 'border-white bg-white text-[#14212e] shadow-sm'
+                          : 'border-white/30 bg-white/10 text-white/75 hover:bg-white/20'
+                      }`}
                     >
                       {cat}
                     </button>
                   ))}
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-[#14212e]/70">Ordenar</span>
+                  <span className="text-sm text-white/70">Ordenar</span>
                   <select
                     value={sortMode}
                     onChange={(e) => setSortMode(e.target.value as 'relevance' | 'asc' | 'desc')}
-                    className="input w-auto bg-white/90"
+                    className="input w-auto bg-white/90 text-[#14212e]"
                   >
                     <option value="relevance">Relevancia</option>
                     <option value="desc">Precio: mayor a menor</option>
@@ -229,29 +233,29 @@ export default function Marketplace() {
               </div>
             </div>
 
-            <div className="mt-6 text-sm text-[#14212e]/60">{filtered.length} resultados</div>
+            <div className="mt-6 text-sm text-white/60">{filtered.length} resultados</div>
 
             {hasActiveFilters && (
-              <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+              <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-white">
                 {filters.brand && (
-                  <span className="inline-flex items-center rounded-full border border-[#14212e]/20 bg-white/80 px-3 py-1 text-[#14212e]">
+                  <span className="inline-flex items-center rounded-full border border-white/30 bg-white/15 px-3 py-1 text-white">
                     Marca: {filters.brand}
                   </span>
                 )}
                 {filters.deal && (
-                  <span className="inline-flex items-center rounded-full border border-[#14212e]/20 bg-white/80 px-3 py-1 text-[#14212e]">
+                  <span className="inline-flex items-center rounded-full border border-white/30 bg-white/15 px-3 py-1 text-white">
                     Ofertas activas
                   </span>
                 )}
                 {filters.cat && filters.cat !== 'Todos' && (
-                  <span className="inline-flex items-center rounded-full border border-[#14212e]/20 bg-white/80 px-3 py-1 text-[#14212e]">
+                  <span className="inline-flex items-center rounded-full border border-white/30 bg-white/15 px-3 py-1 text-white">
                     Categoría: {filters.cat}
                   </span>
                 )}
                 <button
                   type="button"
                   onClick={handleClearFilters}
-                  className="rounded-full border border-[#14212e]/20 px-3 py-1 text-sm text-[#14212e] transition hover:bg-[#14212e]/10"
+                  className="rounded-full border border-white/30 px-3 py-1 text-sm text-white transition hover:bg-white/20"
                 >
                   Limpiar filtros
                 </button>
@@ -276,7 +280,7 @@ export default function Marketplace() {
                   <div className="mt-4 flex justify-center">
                     <button
                       onClick={() => setCount((c) => Math.min(c + 40, filtered.length))}
-                      className="btn bg-[#14212e] text-white hover:bg-[#1b2f3f]"
+                      className="btn bg-white text-[#14212e] hover:bg-white/90"
                     >
                       Cargar más
                     </button>

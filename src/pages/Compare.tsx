@@ -141,6 +141,16 @@ export default function Compare() {
                             ×
                           </button>
                         </div>
+                        {item.images?.[0] && (
+                          <div className="mt-3 overflow-hidden rounded-xl border border-white/10">
+                            <img
+                              src={item.images[0]}
+                              alt={item.title}
+                              className="h-28 w-full object-cover"
+                              loading="lazy"
+                            />
+                          </div>
+                        )}
                         <div className="mt-2 flex items-baseline gap-2">
                           <span className="text-lg font-bold text-white">
                             {formatListingPrice(item.price, item.priceCurrency, format, fx)}
