@@ -19,6 +19,7 @@ import { applySeo, resetSeo } from '../utils/seo'
 import { sendChatMessage } from '../services/chat'
 import { updateListingPlan } from '../services/listings'
 import { fetchUserProfile, setUserVerificationStatus, type UserProfileRecord } from '../services/users'
+import { sendOfferEmail } from '../services/offers'
 
 export default function ListingDetail() {
   const params = useParams()
@@ -220,6 +221,36 @@ export default function ListingDetail() {
       }).format(numericAmount)
       const message = `Hola ${formatNameWithInitial(listing.sellerName, undefined)}. Te ofrezco ${amountLabel} por tu bicicleta ${listing.title}. ¿Podemos conversar?`
       await sendChatMessage(threadId, message)
+
+      const sellerEmail = listing.sellerEmail || sellerProfile?.email || null
+      if (sellerEmail) {
+        const buyerMetadata = user.user_metadata ?? {}
+        const buyerName =
+          (typeof buyerMetadata.full_name === 'string' && buyerMetadata.full_name.trim()) ||
+          (typeof buyerMetadata.name === 'string' && buyerMetadata.name.trim()) ||
+          user.email ||
+          null
+        const buyerWhatsapp =
+          (typeof buyerMetadata.whatsapp === 'string' && buyerMetadata.whatsapp.trim()) ||
+          (typeof buyerMetadata.phone === 'string' && buyerMetadata.phone.trim()) ||
+          null
+        const listingUrl = shareUrl || (typeof window !== 'undefined' ? window.location.href : '')
+        try {
+          await sendOfferEmail({
+            sellerEmail,
+            sellerName: listing.sellerName ?? sellerProfile?.full_name ?? null,
+            listingTitle: listing.title,
+            listingUrl,
+            amountLabel,
+            buyerName,
+            buyerEmail: user.email ?? null,
+            buyerWhatsapp
+          })
+        } catch (notifyError) {
+          console.warn('[listing-detail] offer email failed', notifyError)
+        }
+      }
+
       setShowOfferModal(false)
       setOfferAmount('')
       alert('Tu oferta fue enviada. Te avisaremos por email cuando el vendedor responda.')
