@@ -18,7 +18,7 @@ import { useChat } from '../context/ChatContext'
 import { applySeo, resetSeo } from '../utils/seo'
 import { sendChatMessage } from '../services/chat'
 import { updateListingPlan } from '../services/listings'
-import { fetchUserProfile, setUserVerificationStatus, type UserProfileRecord } from '../services/users'
+import { fetchUserProfile, fetchUserContactEmail, setUserVerificationStatus, type UserProfileRecord } from '../services/users'
 import { sendOfferEmail } from '../services/offers'
 
 export default function ListingDetail() {
@@ -36,6 +36,7 @@ export default function ListingDetail() {
   const [moderatorUpdating, setModeratorUpdating] = useState(false)
   const [sellerVerified, setSellerVerified] = useState(false)
   const [sellerProfile, setSellerProfile] = useState<UserProfileRecord | null>(null)
+  const [sellerAuthEmail, setSellerAuthEmail] = useState<string | null>(null)
   const { ids: compareIds, toggle: toggleCompare } = useCompare()
   const { has: hasFav, toggle: toggleFav } = useFaves()
   const listingKey = params.slug ?? params.id ?? ''
@@ -97,6 +98,26 @@ export default function ListingDetail() {
       setSellerVerified(Boolean(profile?.verified))
     }
     void loadSellerProfile()
+  }, [listing?.sellerId])
+
+  useEffect(() => {
+    let active = true
+    if (!listing?.sellerId) {
+      setSellerAuthEmail(null)
+      return
+    }
+    const load = async () => {
+      try {
+        const email = await fetchUserContactEmail(listing.sellerId)
+        if (active) setSellerAuthEmail(email)
+      } catch {
+        if (active) setSellerAuthEmail(null)
+      }
+    }
+    void load()
+    return () => {
+      active = false
+    }
   }, [listing?.sellerId])
 
   if (loading) return <Container>Cargando publicación…</Container>
@@ -222,7 +243,7 @@ export default function ListingDetail() {
       const message = `Hola ${formatNameWithInitial(listing.sellerName, undefined)}. Te ofrezco ${amountLabel} por tu bicicleta ${listing.title}. ¿Podemos conversar?`
       await sendChatMessage(threadId, message)
 
-      const sellerEmail = listing.sellerEmail || sellerProfile?.email || null
+      const sellerEmail = sellerAuthEmail || sellerProfile?.email || listing.sellerEmail || null
       if (sellerEmail) {
         const buyerMetadata = user.user_metadata ?? {}
         const buyerName =
@@ -296,7 +317,7 @@ export default function ListingDetail() {
 
   const ContactIcons = () => {
     const items: Array<{ id: string; label: string; onClick?: () => void; href?: string; icon: ReactNode; disabled?: boolean; className?: string }> = []
-    const emailRecipient = sellerProfile?.email || listing.sellerEmail || null
+    const emailRecipient = sellerAuthEmail || sellerProfile?.email || listing.sellerEmail || null
 
     if (waLink && !isOwner) {
       items.push({
@@ -320,36 +341,41 @@ export default function ListingDetail() {
     if (items.length === 0) return null
 
     return (
-      <div className="flex flex-wrap items-center gap-2">
-        {items.map((item) => (
-          item.href ? (
-            <a
-              key={item.id}
-              href={item.href}
-              target={item.href.startsWith('mailto:') ? undefined : '_blank'}
-              rel={item.href.startsWith('mailto:') ? undefined : 'noreferrer'}
-              className={`inline-flex h-10 w-10 items-center justify-center rounded-full text-white shadow transition hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70 ${item.className}`}
-              aria-label={item.label}
-              title={item.label}
-            >
-              <span className="sr-only">{item.label}</span>
-              <span className="text-white">{item.icon}</span>
-            </a>
-          ) : (
-            <button
-              key={item.id}
-              type="button"
-              onClick={item.onClick}
-              disabled={item.disabled}
-              className={`inline-flex h-10 w-10 items-center justify-center rounded-full text-white shadow transition hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70 ${item.className} ${item.disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
-              aria-label={item.label}
-              title={item.label}
-            >
-              <span className="sr-only">{item.label}</span>
-              <span className="text-white">{item.icon}</span>
-            </button>
-          )
-        ))}
+      <div className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-[#14212e]/60">
+          Contactate con el vendedor
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          {items.map((item) =>
+            item.href ? (
+              <a
+                key={item.id}
+                href={item.href}
+                target={item.href.startsWith('mailto:') ? undefined : '_blank'}
+                rel={item.href.startsWith('mailto:') ? undefined : 'noreferrer'}
+                className={`inline-flex h-10 w-10 items-center justify-center rounded-full text-white shadow transition hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70 ${item.className}`}
+                aria-label={item.label}
+                title={item.label}
+              >
+                <span className="sr-only">{item.label}</span>
+                <span className="text-white">{item.icon}</span>
+              </a>
+            ) : (
+              <button
+                key={item.id}
+                type="button"
+                onClick={item.onClick}
+                disabled={item.disabled}
+                className={`inline-flex h-10 w-10 items-center justify-center rounded-full text-white shadow transition hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70 ${item.className} ${item.disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
+                aria-label={item.label}
+                title={item.label}
+              >
+                <span className="sr-only">{item.label}</span>
+                <span className="text-white">{item.icon}</span>
+              </button>
+            )
+          )}
+        </div>
       </div>
     )
   }
