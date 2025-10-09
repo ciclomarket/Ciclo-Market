@@ -11,6 +11,7 @@ const express = require('express')
 const cors = require('cors')
 const { MercadoPagoConfig, Preference } = require('mercadopago')
 const { startRenewalNotificationJob } = require('./jobs/renewalNotifier')
+const { sendMail, isMailConfigured } = require('./lib/mail')
 
 const app = express()
 app.use(express.json())
@@ -32,6 +33,76 @@ app.options('*', cors())
 
 app.get('/', (_req, res) => {
   res.send('Ciclo Market API ready')
+})
+
+app.post('/api/offers/notify', async (req, res) => {
+  if (!isMailConfigured()) {
+    return res.status(503).json({ error: 'smtp_unavailable' })
+  }
+
+  const {
+    sellerEmail,
+    sellerName,
+    listingTitle,
+    listingUrl,
+    amountLabel,
+    buyerName,
+    buyerEmail,
+    buyerWhatsapp
+  } = req.body || {}
+
+  if (!sellerEmail || !listingTitle || !amountLabel) {
+    return res.status(400).json({ error: 'missing_fields' })
+  }
+
+  const from = process.env.SMTP_FROM || `Ciclo Market <${process.env.SMTP_USER}>`
+  const title = listingTitle || 'tu publicación'
+  const whatsappLabel = buyerWhatsapp ? String(buyerWhatsapp) : null
+  const whatsappSanitized = whatsappLabel ? whatsappLabel.replace(/[^0-9+]/g, '') : null
+  const whatsappLink = whatsappSanitized ? `https://wa.me/${whatsappSanitized.replace(/^[+]/, '')}` : null
+  const buyerDisplayName = buyerName || 'Un comprador interesado'
+  const buyerContactLine = [
+    buyerEmail ? `Email: ${buyerEmail}` : null,
+    whatsappLabel ? `WhatsApp: ${whatsappLabel}` : null
+  ].filter(Boolean).join(' • ')
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #14212e;">
+      <h2 style="color:#0c1723;">Nueva oferta para ${title}</h2>
+      <p>Hola ${sellerName || 'vendedor'},</p>
+      <p><strong>${buyerDisplayName}</strong> te envió una oferta por <strong>${amountLabel}</strong>.</p>
+      <p>Mensaje rápido: “Contactate si te interesa 💬”.</p>
+      ${listingUrl ? `<p>Ver publicación: <a href="${listingUrl}" style="color:#0c72ff;">${listingUrl}</a></p>` : ''}
+      ${buyerContactLine ? `<p>Datos de contacto: ${buyerContactLine}</p>` : ''}
+      ${whatsappLink ? `<p><a href="${whatsappLink}" style="display:inline-block;margin-top:12px;padding:10px 16px;background:#25D366;color:#fff;text-decoration:none;border-radius:6px;">Abrir WhatsApp</a></p>` : ''}
+      <hr style="margin:24px 0;border:none;border-top:1px solid #e1e5eb;" />
+      <p style="font-size:12px;color:#6b7280;">Este correo se generó automáticamente desde Ciclo Market.</p>
+    </div>
+  `
+
+  const textParts = [
+    `Nueva oferta para ${title}`,
+    `De: ${buyerDisplayName}`,
+    `Monto ofrecido: ${amountLabel}`,
+    'Mensaje: Contactate si te interesa',
+    listingUrl ? `Publicación: ${listingUrl}` : null,
+    buyerContactLine ? `Contacto: ${buyerContactLine}` : null,
+    whatsappLink ? `WhatsApp directo: ${whatsappLink}` : null
+  ].filter(Boolean)
+
+  try {
+    await sendMail({
+      from,
+      to: sellerEmail,
+      subject: `Tenés una nueva oferta para ${title}`,
+      text: textParts.join('\n'),
+      html
+    })
+    return res.json({ ok: true })
+  } catch (error) {
+    console.error('[offers] email send failed', error)
+    return res.status(500).json({ error: 'email_failed' })
+  }
 })
 
 // ---------- Mercado Pago (SDK v2) ----------

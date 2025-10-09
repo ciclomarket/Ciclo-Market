@@ -1,29 +1,10 @@
 const cron = require('node-cron')
-const nodemailer = require('nodemailer')
 const { getServerSupabaseClient } = require('../lib/supabaseClient')
+const { getMailTransport, isMailConfigured } = require('../lib/mail')
 
 const DEFAULT_WINDOW_HOURS = 48
 const DEFAULT_COOLDOWN_HOURS = 24
 const DEFAULT_CRON_SCHEDULE = '0 * * * *' // cada hora
-
-function createTransport() {
-  const host = process.env.SMTP_HOST
-  const port = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : undefined
-  const user = process.env.SMTP_USER
-  const pass = process.env.SMTP_PASSWORD
-
-  if (!host || !port || !user || !pass) {
-    console.warn('[renewalNotifier] SMTP incompleto: definí SMTP_HOST, SMTP_PORT, SMTP_USER y SMTP_PASSWORD para enviar emails.')
-    return null
-  }
-
-  return nodemailer.createTransport({
-    host,
-    port,
-    secure: process.env.SMTP_SECURE === 'true' || port === 465,
-    auth: { user, pass }
-  })
-}
 
 async function fetchExpiringListings({ supabase, windowHours, cooldownHours }) {
   const now = new Date()
@@ -128,11 +109,11 @@ function startRenewalNotificationJob() {
     return
   }
 
-  const transporter = createTransport()
-  if (!transporter) {
-    console.warn('[renewalNotifier] no se configuró transporte SMTP, el job no se iniciará')
+  if (!isMailConfigured()) {
+    console.warn('[renewalNotifier] no se configuró SMTP, el job no se iniciará')
     return
   }
+  const transporter = getMailTransport()
 
   const windowHours = Number(process.env.RENEWAL_REMINDER_WINDOW_HOURS || DEFAULT_WINDOW_HOURS)
   const cooldownHours = Number(process.env.RENEWAL_REMINDER_COOLDOWN_HOURS || DEFAULT_COOLDOWN_HOURS)
