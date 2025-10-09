@@ -1,4 +1,4 @@
-// server/src/lib/index.js
+// server/src/index.js
 try {
   require('dotenv').config()
 } catch (error) {
@@ -17,7 +17,7 @@ const { getServerSupabaseClient } = require('./lib/supabaseClient')
 const app = express()
 app.use(express.json())
 
-// CORS — admite múltiples dominios (coma-separado) y cookies/sesión si las usás
+/* ----------------------------- CORS --------------------------------------- */
 const allowed = (process.env.FRONTEND_URL || '')
   .split(',')
   .map((s) => s.trim())
@@ -32,10 +32,119 @@ app.use(
 // Preflight
 app.options('*', cors())
 
+/* ----------------------------- Utils OG ----------------------------------- */
+function isBot(req) {
+  const ua = String(req.headers['user-agent'] || '').toLowerCase()
+  return /facebookexternalhit|whatsapp|twitterbot|slackbot|linkedinbot|discordbot|telegrambot|vkshare|pinterest|bot|crawler|spider/.test(
+    ua
+  )
+}
+
+function escapeHtml(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+/* ----------------------------- Health ------------------------------------- */
 app.get('/', (_req, res) => {
   res.send('Ciclo Market API ready')
 })
 
+/* ----------------------- Open Graph for Listings --------------------------- */
+/**
+ * Sirve meta-tags OG para /listing/:id y /share/listing/:id en el BACKEND.
+ * - Si es un bot (WhatsApp/Facebook/etc.): devuelve HTML con <meta property="og:*">
+ * - Si es un humano: redirige al front (FRONTEND_URL).
+ */
+app.get(['/share/listing/:id', '/listing/:id'], async (req, res) => {
+  try {
+    const { id } = req.params
+    const supabase = getServerSupabaseClient()
+    const { data: listing, error } = await supabase
+      .from('listings')
+      .select('id, title, price, price_currency, description, images, status')
+      .eq('id', id)
+      .single()
+
+    const baseFront = (process.env.FRONTEND_URL || '').split(',')[0]?.trim() || 'https://ciclomarket.ar'
+    const canonicalUrl = `${baseFront}/listing/${encodeURIComponent(id)}`
+    const fallbackImg = process.env.SHARE_FALLBACK_IMAGE || `${baseFront}/og-preview.png`
+
+    if (error || !listing) {
+      const nf = `<!doctype html><html lang="es"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ciclo Market</title>
+<meta property="og:title" content="Publicación no encontrada · Ciclo Market" />
+<meta property="og:description" content="La bicicleta que buscás no está disponible." />
+<meta property="og:image" content="${fallbackImg}" />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="${canonicalUrl}" />
+<meta name="twitter:card" content="summary_large_image" />
+</head><body></body></html>`
+      res.set('Content-Type', 'text/html; charset=utf-8')
+      res.set('Cache-Control', 'public, max-age=300')
+      return res.status(404).send(nf)
+    }
+
+    // Imagen principal
+    let ogImage = null
+    if (Array.isArray(listing.images)) {
+      const first = listing.images[0]
+      ogImage = typeof first === 'string' ? first : (first && first.url) || null
+    }
+    if (!ogImage) ogImage = fallbackImg
+
+    // Título + precio
+    let priceFmt = null
+    if (typeof listing.price === 'number' && listing.price > 0) {
+      try {
+        priceFmt = new Intl.NumberFormat('es-AR', {
+          style: 'currency',
+          currency: listing.price_currency || 'ARS',
+          maximumFractionDigits: 0,
+        }).format(listing.price)
+      } catch {
+        priceFmt = `${listing.price_currency || 'ARS'} ${listing.price}`
+      }
+    }
+    const title = [listing.title, priceFmt].filter(Boolean).join(' · ')
+    const desc =
+      (listing.description || '').replace(/\s+/g, ' ').slice(0, 180) ||
+      'Mirá los detalles en Ciclo Market.'
+
+    const html = `<!doctype html><html lang="es"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${escapeHtml(title)} | Ciclo Market</title>
+
+<meta property="og:title" content="${escapeHtml(title)}" />
+<meta property="og:description" content="${escapeHtml(desc)}" />
+<meta property="og:image" content="${ogImage}" />
+<meta property="og:url" content="${canonicalUrl}" />
+<meta property="og:type" content="product" />
+<meta property="product:price:amount" content="${listing.price || ''}" />
+<meta property="product:price:currency" content="${listing.price_currency || 'ARS'}" />
+
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="${escapeHtml(title)}" />
+<meta name="twitter:description" content="${escapeHtml(desc)}" />
+<meta name="twitter:image" content="${ogImage}" />
+</head>
+<body>${isBot(req) ? '' : `<script>location.replace(${JSON.stringify(canonicalUrl)});</script>`}</body></html>`
+
+    res.set('Content-Type', 'text/html; charset=utf-8')
+    res.set('Cache-Control', 'public, max-age=300')
+    return res.status(200).send(html)
+  } catch (e) {
+    console.error('[og] error', e)
+    res.set('Content-Type', 'text/html; charset=utf-8')
+    return res.status(500).send('<!doctype html><title>Error</title>')
+  }
+})
+
+/* ----------------------------- Users / Mail -------------------------------- */
 app.get('/api/users/:id/contact-email', async (req, res) => {
   const userId = req.params.id
   if (!userId) return res.status(400).json({ error: 'missing_user_id' })
@@ -68,7 +177,7 @@ app.post('/api/offers/notify', async (req, res) => {
     amountLabel,
     buyerName,
     buyerEmail,
-    buyerWhatsapp
+    buyerWhatsapp,
   } = req.body || {}
 
   if (!sellerEmail || !listingTitle || !amountLabel) {
@@ -81,10 +190,9 @@ app.post('/api/offers/notify', async (req, res) => {
   const whatsappSanitized = whatsappLabel ? whatsappLabel.replace(/[^0-9+]/g, '') : null
   const whatsappLink = whatsappSanitized ? `https://wa.me/${whatsappSanitized.replace(/^[+]/, '')}` : null
   const buyerDisplayName = buyerName || 'Un comprador interesado'
-  const buyerContactLine = [
-    buyerEmail ? `Email: ${buyerEmail}` : null,
-    whatsappLabel ? `WhatsApp: ${whatsappLabel}` : null
-  ].filter(Boolean).join(' • ')
+  const buyerContactLine = [buyerEmail ? `Email: ${buyerEmail}` : null, whatsappLabel ? `WhatsApp: ${whatsappLabel}` : null]
+    .filter(Boolean)
+    .join(' • ')
 
   const html = `
     <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #14212e;">
@@ -107,7 +215,7 @@ app.post('/api/offers/notify', async (req, res) => {
     'Mensaje: Contactate si te interesa',
     listingUrl ? `Publicación: ${listingUrl}` : null,
     buyerContactLine ? `Contacto: ${buyerContactLine}` : null,
-    whatsappLink ? `WhatsApp directo: ${whatsappLink}` : null
+    whatsappLink ? `WhatsApp directo: ${whatsappLink}` : null,
   ].filter(Boolean)
 
   try {
@@ -116,7 +224,7 @@ app.post('/api/offers/notify', async (req, res) => {
       to: sellerEmail,
       subject: `Tenés una nueva oferta para ${title}`,
       text: textParts.join('\n'),
-      html
+      html,
     })
     return res.json({ ok: true })
   } catch (error) {
@@ -125,7 +233,7 @@ app.post('/api/offers/notify', async (req, res) => {
   }
 })
 
-// ---------- Mercado Pago (SDK v2) ----------
+/* ----------------------------- Mercado Pago -------------------------------- */
 const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN
 if (!accessToken) {
   console.warn('[checkout] MERCADOPAGO_ACCESS_TOKEN not configured – payments will fail.')
@@ -133,7 +241,6 @@ if (!accessToken) {
 const mpClient = new MercadoPagoConfig({ accessToken: accessToken || '' })
 const preferenceClient = new Preference(mpClient)
 
-// Aliases y helpers de planes
 const PLAN_CODE_ALIASES = {
   free: 'free',
   gratis: 'free',
@@ -170,16 +277,13 @@ function fallbackPriceFor(code) {
 app.post('/api/checkout', async (req, res) => {
   const startedAt = Date.now()
   try {
-    // --- Inputs ---
     const requestPlanCode = normalisePlanCode(req.body?.planCode || req.body?.plan || req.body?.planId)
     const requestPlanId = req.body?.planId || req.body?.plan || requestPlanCode || 'premium'
     const amountFromBody = Number(req.body?.amount)
     const autoRenew = Boolean(req.body?.autoRenew ?? true)
 
-    // --- Monto ---
     let amount = Number.isFinite(amountFromBody) && amountFromBody > 0 ? amountFromBody : 0
 
-    // 1) De AVAILABLE_PLANS (JSON en env)
     if (!amount) {
       try {
         if (process.env.AVAILABLE_PLANS) {
@@ -202,11 +306,7 @@ app.post('/api/checkout', async (req, res) => {
         console.warn('[checkout] AVAILABLE_PLANS parse failed', parseErr)
       }
     }
-    // 2) Fallback por código de plan
-    if (!amount && requestPlanCode) {
-      amount = fallbackPriceFor(requestPlanCode)
-    }
-    // 3) DEFAULT_PLAN_PRICE
+    if (!amount && requestPlanCode) amount = fallbackPriceFor(requestPlanCode)
     if (!amount && process.env.DEFAULT_PLAN_PRICE) {
       const fallback = Number(process.env.DEFAULT_PLAN_PRICE)
       if (!Number.isNaN(fallback) && fallback > 0) amount = fallback
@@ -214,7 +314,6 @@ app.post('/api/checkout', async (req, res) => {
 
     const unitPrice = Number.isFinite(amount) && amount > 0 ? Math.round(amount) : 0
 
-    // --- Back URLs ---
     const baseFront = (process.env.FRONTEND_URL || '').split(',')[0]?.trim()
     const redirectUrls = req.body?.redirectUrls ?? {}
     const successUrl = redirectUrls.success || (baseFront ? `${baseFront}/checkout/success` : undefined)
@@ -240,33 +339,26 @@ app.post('/api/checkout', async (req, res) => {
           currency_id: 'ARS',
         },
       ],
-      back_urls: {
-        success: successUrl,
-        failure: failureUrl,
-        pending: pendingUrl,
-      },
+      back_urls: { success: successUrl, failure: failureUrl, pending: pendingUrl },
       auto_return: 'approved',
       metadata: { planId: requestPlanId, planCode: requestPlanCode, autoRenew },
       ...(notificationUrl ? { notification_url: notificationUrl } : {}),
     }
 
-    // Crear preferencia
     const mpStart = Date.now()
     const mpRes = await preferenceClient.create({ body: preference })
     console.log('[checkout] preferenceClient.create duration:', Date.now() - mpStart, 'ms')
     const url = mpRes.init_point || null
 
     if (!url) {
-      console.error('checkout error: missing init_point', mpRes)
+      console.error('checkout error: missing_init_point', mpRes)
       return res.status(502).json({ error: 'missing_init_point' })
     }
-    // Guard anti-sandbox
     if (url.includes('sandbox.mercadopago.com')) {
       console.error('Received sandbox init_point unexpectedly:', url)
       return res.status(500).json({ error: 'received_sandbox_init_point' })
     }
 
-    // OK: solo producción
     console.log('[checkout] init_point:', url)
     return res.json({ url })
   } catch (e) {
@@ -277,12 +369,13 @@ app.post('/api/checkout', async (req, res) => {
   }
 })
 
-// Webhook de MP (si usás notificaciones)
+/* ----------------------------- Webhooks MP --------------------------------- */
 app.post('/api/webhooks/mercadopago', (req, res) => {
   console.log('[MP webhook]', JSON.stringify(req.body))
   res.sendStatus(200)
 })
 
+/* ------------------------------- Start ------------------------------------- */
 const PORT = process.env.PORT || 4000
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`API on :${PORT}`)
