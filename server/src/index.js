@@ -12,6 +12,7 @@ const cors = require('cors')
 const { MercadoPagoConfig, Preference } = require('mercadopago')
 const { startRenewalNotificationJob } = require('./jobs/renewalNotifier')
 const { sendMail, isMailConfigured } = require('./lib/mail')
+const { getServerSupabaseClient } = require('./lib/supabaseClient')
 
 const app = express()
 app.use(express.json())
@@ -33,6 +34,25 @@ app.options('*', cors())
 
 app.get('/', (_req, res) => {
   res.send('Ciclo Market API ready')
+})
+
+app.get('/api/users/:id/contact-email', async (req, res) => {
+  const userId = req.params.id
+  if (!userId) return res.status(400).json({ error: 'missing_user_id' })
+  try {
+    const supabase = getServerSupabaseClient()
+    const { data, error } = await supabase.auth.admin.getUserById(userId)
+    if (error) {
+      console.warn('[users] admin getUser failed', error)
+      return res.status(500).json({ error: 'lookup_failed' })
+    }
+    const email = data?.user?.email ?? null
+    if (!email) return res.status(404).json({ error: 'email_not_found' })
+    return res.json({ email })
+  } catch (err) {
+    console.warn('[users] contact email lookup error', err)
+    return res.status(500).json({ error: 'unexpected_error' })
+  }
 })
 
 app.post('/api/offers/notify', async (req, res) => {

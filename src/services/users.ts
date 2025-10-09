@@ -138,6 +138,18 @@ export async function fetchUserProfile(id: string): Promise<UserProfileRecord | 
   }
 }
 
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+
+export async function fetchUserContactEmail(userId: string): Promise<string | null> {
+  if (!userId) return null
+  const endpoint = API_BASE ? `${API_BASE}/api/users/${userId}/contact-email` : `/api/users/${userId}/contact-email`
+  const response = await fetch(endpoint)
+  if (!response.ok) return null
+  const data = await response.json().catch(() => null)
+  const email = typeof data?.email === 'string' ? data.email.trim() : ''
+  return email || null
+}
+
 export async function setUserVerificationStatus(id: string, verified: boolean): Promise<boolean> {
   if (!supabaseEnabled) return false
   try {
