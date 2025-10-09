@@ -75,7 +75,7 @@ export default function App() {
               />
               {/* Alias legado */}
               <Route path="/publish" element={<Navigate to="/publicar" replace />} />
-              <Route path="/publish/new" element={<Navigate to="/publicar/nueva" replace />} />
+              <Route path="/publish/new" element={<Navigate to="/publicar" replace />} />
 
               {/* Detalle */}
               <Route path="/listing/:slug" element={<ListingDetail />} />

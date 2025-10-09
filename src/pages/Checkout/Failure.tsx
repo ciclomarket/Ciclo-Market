@@ -7,10 +7,17 @@ export default function CheckoutFailure() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const plan = searchParams.get('plan') ?? 'premium'
+  const listingTypeParam = searchParams.get('type')
+  const listingType: 'bike' | 'accessory' | 'apparel' =
+    listingTypeParam === 'accessory'
+      ? 'accessory'
+      : listingTypeParam === 'apparel'
+        ? 'apparel'
+        : 'bike'
 
   const handleRetry = useCallback(() => {
-    navigate(`/publicar?plan=${encodeURIComponent(plan)}`)
-  }, [navigate, plan])
+    navigate(`/publicar?type=${listingType}&plan=${encodeURIComponent(plan)}`)
+  }, [navigate, plan, listingType])
 
   return (
     <StatusLayout

@@ -2,6 +2,7 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { supabase, supabaseEnabled, getSupabaseClient } from '../services/supabase'
+import { syncProfileFromAuthUser } from '../utils/authProfile'
 
 interface Ctx {
   user: User | null
@@ -77,6 +78,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { data } = await client.auth.getSession()
       const sessionUser = data.session?.user ?? null
       setUser(sessionUser)
+      if (sessionUser) {
+        await syncProfileFromAuthUser(sessionUser)
+      }
       await loadRole(sessionUser?.id ?? null)
       setLoading(false)
     }
@@ -87,6 +91,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(newUser)
       setLoading(false)
       void loadRole(newUser?.id ?? null)
+      void syncProfileFromAuthUser(newUser)
     })
     return () => {
       data.subscription.unsubscribe()

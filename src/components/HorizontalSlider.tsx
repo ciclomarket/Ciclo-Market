@@ -4,6 +4,8 @@ type Item = {
   id: string;
 };
 
+type Tone = "light" | "dark";
+
 type Props = {
   title: string;
   subtitle?: string;
@@ -11,6 +13,7 @@ type Props = {
   renderCard: (item: any) => React.ReactNode;
   maxItems?: number;     // default 20
   initialLoad?: number;  // default 8
+  tone?: Tone;
 };
 
 export default function HorizontalSlider({
@@ -20,10 +23,19 @@ export default function HorizontalSlider({
   renderCard,
   maxItems = 20,
   initialLoad = 8,
+  tone = "light",
 }: Props) {
   const maxToShow = Math.min(maxItems, items?.length || 0);
   const [count, setCount] = useState(Math.min(initialLoad, maxToShow));
   const viewportRef = useRef<HTMLDivElement>(null);
+  const titleClass =
+    tone === "dark" ? "text-white" : "text-[#14212e]";
+  const subtitleClass =
+    tone === "dark" ? "text-white/70" : "text-[#14212e]/70";
+  const arrowClass =
+    tone === "dark"
+      ? "border-white/30 bg-white/10 text-white hover:bg-white/20"
+      : "border-white/30 bg-[#14212e] text-white hover:bg-[#1b2f3f]";
 
   const visibleItems = useMemo(
     () => (items || []).slice(0, count),
@@ -72,10 +84,10 @@ export default function HorizontalSlider({
     return (
       <div>
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-[#14212e]">{title}</h2>
-          {subtitle && <span className="text-sm text-[#14212e]/70">{subtitle}</span>}
+          <h2 className={`text-xl font-semibold ${titleClass}`}>{title}</h2>
+          {subtitle && <span className={`text-sm ${subtitleClass}`}>{subtitle}</span>}
         </div>
-        <div className="text-sm text-[#14212e]/70">No hay elementos.</div>
+        <div className={`text-sm ${subtitleClass}`}>No hay elementos.</div>
       </div>
     );
   }
@@ -83,8 +95,8 @@ export default function HorizontalSlider({
   return (
     <div className="relative">
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-[#14212e]">{title}</h2>
-        {subtitle && <span className="text-sm text-[#14212e]/70">{subtitle}</span>}
+        <h2 className={`text-xl font-semibold ${titleClass}`}>{title}</h2>
+        {subtitle && <span className={`text-sm ${subtitleClass}`}>{subtitle}</span>}
       </div>
 
       {/* viewport */}
@@ -108,14 +120,14 @@ export default function HorizontalSlider({
       <button
         aria-label="Anterior"
         onClick={() => scrollByCards(-1)}
-        className="absolute left-4 top-1/2 z-10 hidden size-10 -translate-y-1/2 grid place-content-center rounded-full border border-white/30 bg-[#14212e] text-white shadow-lg transition hover:bg-[#1b2f3f] md:flex"
+        className={`absolute left-4 top-1/2 z-10 hidden size-10 -translate-y-1/2 grid place-content-center rounded-full border shadow-lg transition md:flex ${arrowClass}`}
       >
         ‹
       </button>
       <button
         aria-label="Siguiente"
         onClick={() => scrollByCards(1)}
-        className="absolute right-4 top-1/2 z-10 hidden size-10 -translate-y-1/2 grid place-content-center rounded-full border border-white/30 bg-[#14212e] text-white shadow-lg transition hover:bg-[#1b2f3f] md:flex"
+        className={`absolute right-4 top-1/2 z-10 hidden size-10 -translate-y-1/2 grid place-content-center rounded-full border shadow-lg transition md:flex ${arrowClass}`}
       >
         ›
       </button>

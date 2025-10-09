@@ -28,7 +28,6 @@ export default function ListingDetail() {
   const { format, fx } = useCurrency()
   const [listing, setListing] = useState<Listing | null>(null)
   const [loading, setLoading] = useState(true)
-  const [contacting, setContacting] = useState(false)
   const [showOfferModal, setShowOfferModal] = useState(false)
   const [offerAmount, setOfferAmount] = useState('')
   const [offerSubmitting, setOfferSubmitting] = useState(false)
@@ -102,9 +101,22 @@ export default function ListingDetail() {
   if (loading) return <Container>Cargando publicación…</Container>
   if (!listing) return <Container>Publicación no encontrada.</Container>
 
-  const waText = encodeURIComponent(`Hola! Vi tu ${listing.title} en Ciclo Market y me interesa. ¿Sigue disponible?`)
+  const articleSummaryParts = [listing.brand, listing.model, listing.year ? String(listing.year) : null].filter(Boolean)
+  const articleSummary = articleSummaryParts.length ? articleSummaryParts.join(' ') : listing.title
+  const sellerPreferredLink =
+    sellerProfile?.website_url
+    ?? (listing as any)?.sellerLink
+    ?? (listing as any)?.sellerWebsite
+    ?? (listing as any)?.sellerUrl
+    ?? null
+  const fallbackListingLink = typeof window !== 'undefined' ? window.location.href : ''
+  const linkForMessage = sellerPreferredLink || fallbackListingLink || ''
+  const waMessageBase = `Hola! Me interesa este artículo ${articleSummary}.`
+  const waMessage = linkForMessage ? `${waMessageBase} ${linkForMessage}` : waMessageBase
+  const waText = encodeURIComponent(waMessage.trim())
   const sellerWhatsappNumber = listing.sellerWhatsapp || sellerProfile?.whatsapp_number || null
-  const waLink = sellerWhatsappNumber ? `https://wa.me/${sellerWhatsappNumber.replace(/[^0-9]/g, '')}?text=${waText}` : null
+  const sanitizedWhatsapp = sellerWhatsappNumber ? sellerWhatsappNumber.replace(/[^0-9]/g, '') : null
+  const waLink = sanitizedWhatsapp ? `https://wa.me/${sanitizedWhatsapp}?text=${waText}` : null
 
   const formattedPrice = formatListingPrice(listing.price, listing.priceCurrency, format, fx)
   const originalPriceLabel = listing.originalPrice
@@ -210,7 +222,7 @@ export default function ListingDetail() {
       await sendChatMessage(threadId, message)
       setShowOfferModal(false)
       setOfferAmount('')
-      navigate(`/dashboard?tab=Chat&thread=${threadId}`)
+      alert('Tu oferta fue enviada. Te avisaremos por email cuando el vendedor responda.')
     } catch (error: any) {
       console.error('[listing-detail] offer failed', error)
       setOfferError(error?.message ?? 'No pudimos enviar la oferta. Intentá nuevamente.')
@@ -251,44 +263,10 @@ export default function ListingDetail() {
     }
   }
 
-  const handleContact = async () => {
-    if (!listing?.sellerId) return
-    if (!user) {
-      navigate('/login', {
-        state: {
-          from: { pathname: `/listing/${listing.slug ?? listing.id}` }
-        }
-      })
-      return
-    }
-    try {
-      setContacting(true)
-      const threadId = await createThread(listing.id, listing.sellerId)
-      if (threadId) {
-        navigate(`/dashboard?tab=Chat&thread=${threadId}`)
-      }
-    } catch (err) {
-      console.error('[listing-detail] contact failed', err)
-      alert('No pudimos iniciar el chat. Intentá nuevamente en unos minutos.')
-    } finally {
-      setContacting(false)
-    }
-  }
-
   const ContactIcons = () => {
     const items: Array<{ id: string; label: string; onClick?: () => void; href?: string; icon: ReactNode; disabled?: boolean; className?: string }> = []
     const emailRecipient = sellerProfile?.email || listing.sellerEmail || null
 
-    if (!isOwner) {
-      items.push({
-        id: 'chat',
-        label: 'Enviar mensaje interno',
-        onClick: handleContact,
-        disabled: contacting,
-        icon: <ChatBubbleIcon />,
-        className: 'bg-[#0b1724]'
-      })
-    }
     if (waLink && !isOwner) {
       items.push({
         id: 'whatsapp',
@@ -317,8 +295,8 @@ export default function ListingDetail() {
             <a
               key={item.id}
               href={item.href}
-              target="_blank"
-              rel="noreferrer"
+              target={item.href.startsWith('mailto:') ? undefined : '_blank'}
+              rel={item.href.startsWith('mailto:') ? undefined : 'noreferrer'}
               className={`inline-flex h-10 w-10 items-center justify-center rounded-full text-white shadow transition hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70 ${item.className}`}
               aria-label={item.label}
               title={item.label}
@@ -666,12 +644,6 @@ const VerifiedCheck = () => (
       <path d="m9 12 2 2 4-4" />
     </svg>
   </span>
-)
-
-const ChatBubbleIcon = () => (
-  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden="true">
-    <path d="M4 4h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-9l-4.5 3.6A1 1 0 0 1 5 18V15H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Zm3 4v1h10V8H7Zm0 3v1h6v-1H7Z" />
-  </svg>
 )
 
 const MailIcon = () => (

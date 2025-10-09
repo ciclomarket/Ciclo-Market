@@ -77,6 +77,7 @@ function fallbackPriceFor(code) {
 }
 
 app.post('/api/checkout', async (req, res) => {
+  const startedAt = Date.now()
   try {
     // --- Inputs ---
     const requestPlanCode = normalisePlanCode(req.body?.planCode || req.body?.plan || req.body?.planId)
@@ -159,7 +160,9 @@ app.post('/api/checkout', async (req, res) => {
     }
 
     // Crear preferencia
+    const mpStart = Date.now()
     const mpRes = await preferenceClient.create({ body: preference })
+    console.log('[checkout] preferenceClient.create duration:', Date.now() - mpStart, 'ms')
     const url = mpRes.init_point || null
 
     if (!url) {
@@ -178,6 +181,8 @@ app.post('/api/checkout', async (req, res) => {
   } catch (e) {
     console.error('[checkout] init failed', e?.message || e)
     return res.status(500).json({ error: 'checkout_failed' })
+  } finally {
+    console.log('[checkout] total handler duration:', Date.now() - startedAt, 'ms')
   }
 })
 

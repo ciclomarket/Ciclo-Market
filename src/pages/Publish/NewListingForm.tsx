@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Container from '../../components/Container'
 import { Field } from '../../components/FormFields'
 import Button from '../../components/Button'
@@ -36,6 +36,25 @@ const DRIVETRAIN_OPTIONS = [
 'Campagnolo Super Record 12v','Campagnolo Super Record EPS','Campagnolo Ekar 13v',
 ]
 
+const ACCESSORY_TYPES = [
+  'Componentes y partes',
+  'Ruedas y cubiertas',
+  'Herramientas y mantenimiento',
+  'Electrónica y sensores',
+  'Bikepacking y transporte',
+  'Lubricantes y limpieza',
+  'Otro'
+] as const
+
+const CONDITION_OPTIONS = ['Nuevo', 'Como nuevo', 'Usado'] as const
+
+const ACCESSORY_DISCIPLINES = ['Universal', 'Ruta', 'MTB', 'Gravel', 'Urbana', 'E-Bike', 'Pista', 'Triatlón', 'Niños'] as const
+
+const APPAREL_TYPES = ['Jersey', 'Bibs / Culotte', 'Campera / Chaleco', 'Casco', 'Zapatillas', 'Guantes', 'Lentes', 'Medias', 'Protección', 'Accesorio', 'Otro'] as const
+const APPAREL_SIZES = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', 'Talle único'] as const
+const APPAREL_SHOE_SIZES = Array.from({ length: 50 }, (_, index) => String(index + 1))
+const APPAREL_FIT_OPTIONS = ['Unisex', 'Hombre', 'Mujer'] as const
+
 export default function NewListingForm() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
@@ -44,6 +63,15 @@ export default function NewListingForm() {
   const { user, enabled } = useAuth()
   const { plans } = usePlans()
   const listingId = searchParams.get('id')
+  const listingTypeParam = searchParams.get('type')
+  const listingType: 'bike' | 'accessory' | 'apparel' =
+    listingTypeParam === 'accessory'
+      ? 'accessory'
+      : listingTypeParam === 'apparel'
+        ? 'apparel'
+        : 'bike'
+  const isAccessory = listingType === 'accessory'
+  const isApparel = listingType === 'apparel'
   const [editingListing, setEditingListing] = useState<Listing | null>(null)
   const [loadingListing, setLoadingListing] = useState(false)
   const [planOverride, setPlanOverride] = useState<PlanCode | null>(null)
@@ -83,7 +111,7 @@ export default function NewListingForm() {
   const maxPhotos = selectedPlan?.maxPhotos ?? 4
   const planName = selectedPlan?.name ?? 'Plan'
   const listingDuration = selectedPlan?.listingDurationDays ?? selectedPlan?.periodDays ?? 30
-  const whatsappEnabled = Boolean(selectedPlan?.whatsappEnabled)
+  const whatsappEnabled = true
 
   const listingExpiresLabel = useMemo(() => {
     if (editingListing?.expiresAt) {
@@ -115,7 +143,7 @@ export default function NewListingForm() {
     }).format(planPrice)
   }, [selectedPlan, planPrice])
 
-  const [category, setCategory] = useState<Category | null>(null)
+  const [category, setCategory] = useState<Category | null>(isAccessory ? 'Accesorios' : isApparel ? 'Indumentaria' : null)
   const [brand, setBrand] = useState('')
   const [model, setModel] = useState('')
   const [material, setMaterial] = useState(MATERIAL_OPTIONS[0])
@@ -136,15 +164,36 @@ export default function NewListingForm() {
   const [images, setImages] = useState<string[]>([])
   const [sellerWhatsappInput, setSellerWhatsappInput] = useState('')
   const [profile, setProfile] = useState<UserProfileRecord | null>(null)
+  const [draftRestored, setDraftRestored] = useState(false)
+  const [accessoryType, setAccessoryType] = useState<(typeof ACCESSORY_TYPES)[number]>(ACCESSORY_TYPES[0])
+  const [accessoryCondition, setAccessoryCondition] = useState<(typeof CONDITION_OPTIONS)[number]>(CONDITION_OPTIONS[1])
+  const [accessoryDiscipline, setAccessoryDiscipline] = useState<(typeof ACCESSORY_DISCIPLINES)[number]>('Universal')
+  const [accessoryUseNote, setAccessoryUseNote] = useState('')
+  const [apparelType, setApparelType] = useState<(typeof APPAREL_TYPES)[number]>(APPAREL_TYPES[0])
+  const [apparelSize, setApparelSize] = useState<string>(APPAREL_SIZES[3])
+  const [apparelFit, setApparelFit] = useState<(typeof APPAREL_FIT_OPTIONS)[number]>(APPAREL_FIT_OPTIONS[0])
+  const [apparelCondition, setApparelCondition] = useState<(typeof CONDITION_OPTIONS)[number]>(CONDITION_OPTIONS[1])
 
   const isEditing = Boolean(editingListing)
 
-  const materialValue = material === 'Otro' ? customMaterial.trim() : material
+  const materialValue = isAccessory || isApparel ? '' : (material === 'Otro' ? customMaterial.trim() : material)
   const drivetrainValue = drivetrain === 'Otro' ? drivetrainOther.trim() : drivetrain
   const priceNumber = Number(priceInput) || 0
 
+  const apparelSizeOptions = useMemo(
+    () => (apparelType === 'Zapatillas' ? APPAREL_SHOE_SIZES : [...APPAREL_SIZES]),
+    [apparelType]
+  )
+
+  useEffect(() => {
+    if (!apparelSizeOptions.includes(apparelSize)) {
+      setApparelSize(apparelSizeOptions[0] ?? '')
+    }
+  }, [apparelType, apparelSize, apparelSizeOptions])
+
   /** Habilitamos fotos cuando hay datos clave (para mejor UX) */
-  const photosEnabled = !!(category && model.trim() && materialValue && priceNumber > 0)
+  const photosBaseReady = !!(category && brand.trim() && model.trim() && priceNumber > 0)
+  const photosEnabled = (isAccessory || isApparel) ? photosBaseReady : !!(photosBaseReady && materialValue)
   const remainingPhotos = maxPhotos - images.length
 
   const finalCity = city === OTHER_CITY_OPTION ? cityOther.trim() : city
@@ -155,6 +204,163 @@ export default function NewListingForm() {
         ? `Otra ciudad, ${province}`
         : `${province}`
     : 'Ubicación por definir'
+
+  const storageKey = useMemo(() => {
+    if (typeof window === 'undefined') return null
+    if (!user?.id) return null
+    const scope = listingId ? `listing:${listingId}` : `listing:${listingType}:new`
+    return `mundobike:draft:${scope}:${user.id}`
+  }, [listingId, user?.id, listingType])
+
+  const clearDraft = useCallback(() => {
+    if (!storageKey) return
+    try {
+      window.localStorage.removeItem(storageKey)
+    } catch (err) {
+      console.warn('[listing-form] clear draft failed', err)
+    }
+  }, [storageKey])
+
+  useEffect(() => {
+    setDraftRestored(false)
+  }, [storageKey])
+
+  useEffect(() => {
+    if (!storageKey) {
+      if (!draftRestored) setDraftRestored(true)
+      return
+    }
+    if (draftRestored) return
+    if (loadingListing) return
+    try {
+      const raw = window.localStorage.getItem(storageKey)
+      if (!raw) {
+        setDraftRestored(true)
+        return
+      }
+      const draft = JSON.parse(raw) as Record<string, any>
+      if (draft.category) setCategory(draft.category as Category)
+      if (typeof draft.brand === 'string') setBrand(draft.brand)
+      if (typeof draft.model === 'string') setModel(draft.model)
+      if (typeof draft.material === 'string') {
+        if (MATERIAL_OPTIONS.includes(draft.material)) {
+          setMaterial(draft.material)
+          setCustomMaterial(draft.customMaterial ?? '')
+        } else {
+          setMaterial('Otro')
+          setCustomMaterial(draft.material)
+        }
+      } else if (draft.material === 'Otro' && typeof draft.customMaterial === 'string') {
+        setMaterial('Otro')
+        setCustomMaterial(draft.customMaterial)
+      }
+      if (typeof draft.frameSize === 'string') setFrameSize(draft.frameSize)
+      if (typeof draft.drivetrain === 'string') setDrivetrain(draft.drivetrain)
+      if (typeof draft.drivetrainOther === 'string') setDrivetrainOther(draft.drivetrainOther)
+      if (typeof draft.wheelset === 'string') setWheelset(draft.wheelset)
+      if (typeof draft.wheelSize === 'string') setWheelSize(draft.wheelSize)
+      if (typeof draft.extras === 'string') setExtras(draft.extras)
+      if (typeof draft.accessoryType === 'string' && (ACCESSORY_TYPES as readonly string[]).includes(draft.accessoryType)) setAccessoryType(draft.accessoryType as (typeof ACCESSORY_TYPES)[number])
+      if (typeof draft.accessoryCondition === 'string' && (CONDITION_OPTIONS as readonly string[]).includes(draft.accessoryCondition)) setAccessoryCondition(draft.accessoryCondition as (typeof CONDITION_OPTIONS)[number])
+      if (typeof draft.accessoryDiscipline === 'string' && (ACCESSORY_DISCIPLINES as readonly string[]).includes(draft.accessoryDiscipline)) setAccessoryDiscipline(draft.accessoryDiscipline as (typeof ACCESSORY_DISCIPLINES)[number])
+      if (typeof draft.accessoryUseNote === 'string') setAccessoryUseNote(draft.accessoryUseNote)
+      if (typeof draft.apparelType === 'string' && (APPAREL_TYPES as readonly string[]).includes(draft.apparelType)) setApparelType(draft.apparelType as (typeof APPAREL_TYPES)[number])
+      if (typeof draft.apparelSize === 'string') setApparelSize(draft.apparelSize)
+      if (typeof draft.apparelFit === 'string' && (APPAREL_FIT_OPTIONS as readonly string[]).includes(draft.apparelFit)) setApparelFit(draft.apparelFit as (typeof APPAREL_FIT_OPTIONS)[number])
+      if (typeof draft.apparelCondition === 'string' && (CONDITION_OPTIONS as readonly string[]).includes(draft.apparelCondition)) setApparelCondition(draft.apparelCondition as (typeof CONDITION_OPTIONS)[number])
+      if (typeof draft.priceCurrency === 'string') setPriceCurrency(draft.priceCurrency)
+      if (typeof draft.priceInput === 'string') setPriceInput(draft.priceInput)
+      if (typeof draft.year === 'string') setYear(draft.year)
+      if (typeof draft.province === 'string') setProvince(draft.province)
+      if (typeof draft.city === 'string') setCity(draft.city)
+      if (typeof draft.cityOther === 'string') setCityOther(draft.cityOther)
+      if (typeof draft.description === 'string') setDescription(draft.description)
+      if (Array.isArray(draft.images)) setImages(draft.images.filter((item: unknown) => typeof item === 'string'))
+      if (typeof draft.sellerWhatsappInput === 'string') setSellerWhatsappInput(draft.sellerWhatsappInput)
+      if (draft.planOverride) setPlanOverride(draft.planOverride as PlanCode)
+      setDraftRestored(true)
+    } catch (err) {
+      console.warn('[listing-form] draft restore failed', err)
+      setDraftRestored(true)
+    }
+  }, [storageKey, draftRestored, loadingListing])
+
+  useEffect(() => {
+    if (!storageKey) return
+    if (!draftRestored) return
+    if (loadingListing) return
+    try {
+      const payload = JSON.stringify({
+        category,
+        brand,
+        model,
+        material,
+        customMaterial,
+        frameSize,
+        drivetrain,
+        drivetrainOther,
+        wheelset,
+        wheelSize,
+        extras,
+        priceCurrency,
+        priceInput,
+        year,
+        province,
+        city,
+        cityOther,
+        description,
+        images,
+        sellerWhatsappInput,
+        planOverride,
+        accessoryType,
+        accessoryCondition,
+        accessoryDiscipline,
+        accessoryUseNote,
+        apparelType,
+        apparelSize,
+        apparelFit,
+        apparelCondition,
+        listingType
+      })
+      window.localStorage.setItem(storageKey, payload)
+    } catch (err) {
+      console.warn('[listing-form] draft save failed', err)
+    }
+  }, [
+    storageKey,
+    draftRestored,
+    loadingListing,
+    category,
+    brand,
+    model,
+    material,
+    customMaterial,
+    frameSize,
+    drivetrain,
+    drivetrainOther,
+    wheelset,
+    wheelSize,
+    extras,
+    priceCurrency,
+    priceInput,
+    year,
+    province,
+    city,
+    cityOther,
+    description,
+    images,
+    sellerWhatsappInput,
+    planOverride,
+    accessoryType,
+    accessoryCondition,
+    accessoryDiscipline,
+    accessoryUseNote,
+    apparelType,
+    apparelSize,
+    apparelFit,
+    apparelCondition,
+    listingType
+  ])
 
   useEffect(() => {
     if (!user?.id || !supabaseEnabled) {
@@ -178,8 +384,11 @@ export default function NewListingForm() {
 
   const autoTitle = useMemo(() => {
     const composed = `${brand.trim()} ${model.trim()}`.trim()
-    return composed || 'Bicicleta en venta'
-  }, [brand, model])
+    if (composed) return composed
+    if (isAccessory) return 'Accesorio en venta'
+    if (isApparel) return 'Indumentaria en venta'
+    return 'Bicicleta en venta'
+  }, [brand, model, isAccessory, isApparel])
 
   const normaliseWhatsapp = (value?: string | null): string | null => {
     if (!value) return null
@@ -215,24 +424,96 @@ export default function NewListingForm() {
         setPriceInput(existing.price ? existing.price.toString() : '')
         setYear(existing.year ? String(existing.year) : '')
         setImages(existing.images ?? [])
-        const materialFromDb = existing.material ?? ''
-        if (materialFromDb && MATERIAL_OPTIONS.includes(materialFromDb)) {
-          setMaterial(materialFromDb)
+
+        const extrasParts = (existing.extras ?? '')
+          .split('•')
+          .map((part) => part.trim())
+          .filter(Boolean)
+        const getExtraValue = (label: string) => {
+          const item = extrasParts.find((part) => part.toLowerCase().startsWith(`${label.toLowerCase()}:`))
+          if (!item) return null
+          return item.split(':').slice(1).join(':').trim() || null
+        }
+
+        if ((existing.category as Category) === 'Accesorios') {
+          const typeValue = getExtraValue('Tipo')
+          if (typeValue && (ACCESSORY_TYPES as readonly string[]).includes(typeValue)) {
+            setAccessoryType(typeValue as (typeof ACCESSORY_TYPES)[number])
+          }
+          const conditionValue = getExtraValue('Condición')
+          if (conditionValue && (CONDITION_OPTIONS as readonly string[]).includes(conditionValue)) {
+            setAccessoryCondition(conditionValue as (typeof CONDITION_OPTIONS)[number])
+          }
+          const disciplineValue = getExtraValue('Uso') ?? getExtraValue('Compatibilidad')
+          if (disciplineValue && (ACCESSORY_DISCIPLINES as readonly string[]).includes(disciplineValue)) {
+            setAccessoryDiscipline(disciplineValue as (typeof ACCESSORY_DISCIPLINES)[number])
+          }
+          const notesValue = getExtraValue('Notas')
+          if (notesValue) setAccessoryUseNote(notesValue)
+          else setAccessoryUseNote('')
+          const detailValue = getExtraValue('Detalle')
+          if (detailValue) setExtras(detailValue)
+          else setExtras('')
+          setMaterial(MATERIAL_OPTIONS[0])
           setCustomMaterial('')
-        } else if (materialFromDb) {
-          setMaterial('Otro')
-          setCustomMaterial(materialFromDb)
-        }
-        const drivetrainFromDb = existing.drivetrain ?? ''
-        if (drivetrainFromDb && DRIVETRAIN_OPTIONS.includes(drivetrainFromDb)) {
-          setDrivetrain(drivetrainFromDb)
+          setDrivetrain(DRIVETRAIN_OPTIONS[0])
           setDrivetrainOther('')
-        } else if (drivetrainFromDb) {
-          setDrivetrain('Otro')
-          setDrivetrainOther(existing.drivetrainDetail ?? drivetrainFromDb)
+          setWheelset('')
+          setWheelSize('')
+        } else if ((existing.category as Category) === 'Indumentaria') {
+          setAccessoryUseNote('')
+          setAccessoryDiscipline('Universal')
+          setAccessoryCondition(CONDITION_OPTIONS[1])
+          setAccessoryType(ACCESSORY_TYPES[0])
+          const typeValue = getExtraValue('Tipo')
+          if (typeValue && (APPAREL_TYPES as readonly string[]).includes(typeValue)) {
+            setApparelType(typeValue as (typeof APPAREL_TYPES)[number])
+          }
+          const sizeValue = getExtraValue('Talle')
+          if (sizeValue) {
+            setApparelSize(sizeValue)
+          }
+          const conditionValue = getExtraValue('Condición')
+          if (conditionValue && (CONDITION_OPTIONS as readonly string[]).includes(conditionValue)) {
+            setApparelCondition(conditionValue as (typeof CONDITION_OPTIONS)[number])
+          }
+          const fitValue = getExtraValue('Fit') ?? getExtraValue('Formato')
+          if (fitValue && (APPAREL_FIT_OPTIONS as readonly string[]).includes(fitValue)) {
+            setApparelFit(fitValue as (typeof APPAREL_FIT_OPTIONS)[number])
+          }
+          const notesValue = getExtraValue('Notas')
+          if (notesValue) {
+            setExtras(notesValue)
+          } else {
+            setExtras('')
+          }
+          setMaterial(MATERIAL_OPTIONS[0])
+          setCustomMaterial('')
+          setDrivetrain(DRIVETRAIN_OPTIONS[0])
+          setDrivetrainOther('')
+          setWheelset('')
+          setWheelSize('')
+          setYear('')
+        } else {
+          const materialFromDb = existing.material ?? ''
+          if (materialFromDb && MATERIAL_OPTIONS.includes(materialFromDb)) {
+            setMaterial(materialFromDb)
+            setCustomMaterial('')
+          } else if (materialFromDb) {
+            setMaterial('Otro')
+            setCustomMaterial(materialFromDb)
+          }
+          const drivetrainFromDb = existing.drivetrain ?? ''
+          if (drivetrainFromDb && DRIVETRAIN_OPTIONS.includes(drivetrainFromDb)) {
+            setDrivetrain(drivetrainFromDb)
+            setDrivetrainOther('')
+          } else if (drivetrainFromDb) {
+            setDrivetrain('Otro')
+            setDrivetrainOther(existing.drivetrainDetail ?? drivetrainFromDb)
+          }
+          setWheelset(existing.wheelset ?? '')
+          setWheelSize(existing.wheelSize ?? '')
         }
-        setWheelset(existing.wheelset ?? '')
-        setWheelSize(existing.wheelSize ?? '')
         const locationParts = (existing.location ?? '').split(',').map((part) => part.trim()).filter(Boolean)
         if (locationParts.length === 2) {
           const [cityValue, provinceValue] = locationParts
@@ -299,11 +580,14 @@ export default function NewListingForm() {
     if (!user) return alert('Iniciá sesión para crear una publicación')
     if (!planCode) return alert('No se detectó el plan seleccionado')
 
+    const finalCategory = (isAccessory ? 'Accesorios' : isApparel ? 'Indumentaria' : category) as Category | null
+
     // Validaciones base
-    if (!category) return alert('Seleccioná una categoría')
-    if (!brand.trim()) return alert('Ingresá la marca de la bicicleta')
-    if (!model.trim()) return alert('Ingresá el modelo de la bicicleta')
-    if (!materialValue) return alert('Indicá el material del cuadro')
+    if (!finalCategory) return alert('Seleccioná una categoría')
+    if (!brand.trim()) return alert(isAccessory || isApparel ? 'Ingresá la marca del producto' : 'Ingresá la marca de la bicicleta')
+    if (!model.trim()) return alert(isAccessory || isApparel ? 'Ingresá el nombre del producto' : 'Ingresá el modelo de la bicicleta')
+    if (!isAccessory && !isApparel && !materialValue) return alert('Indicá el material del cuadro')
+    if (isApparel && !apparelSize) return alert('Seleccioná un talle para la prenda')
     if (priceNumber <= 0) return alert('Ingresá un precio válido')
     if (!province) return alert('Seleccioná una provincia')
     if (!city) return alert('Seleccioná una ciudad')
@@ -342,8 +626,28 @@ export default function NewListingForm() {
     const sellerWhatsappFromProfile = metadata.whatsapp ?? metadata.phone ?? profileWhatsapp ?? undefined
 
     // Defaults exigidos por el negocio
-    const safeDescription = (description.trim() || 'No declara descripción específica')
-    const safeExtras = (extras.trim() || 'No tiene agregados extras, se encuentra original')
+    const safeDescription = (() => {
+      const base = description.trim()
+      if (base) return base
+      if (isAccessory || isApparel) return 'Sin descripción adicional'
+      return 'No declara descripción específica'
+    })()
+    const safeExtras = (() => {
+      if (isAccessory) {
+        const parts = [`Tipo: ${accessoryType}`, `Condición: ${accessoryCondition}`, `Uso: ${accessoryDiscipline}`]
+        if (accessoryUseNote.trim()) parts.push(`Notas: ${accessoryUseNote.trim()}`)
+        if (extras.trim()) parts.push(`Detalle: ${extras.trim()}`)
+        return parts.join(' • ')
+      }
+      if (isApparel) {
+        const parts = [`Tipo: ${apparelType}`, `Talle: ${apparelSize}`, `Condición: ${apparelCondition}`, `Fit: ${apparelFit}`]
+        if (extras.trim()) parts.push(`Notas: ${extras.trim()}`)
+        return parts.join(' • ')
+      }
+      const base = extras.trim()
+      if (base) return base
+      return 'No tiene agregados extras, se encuentra original'
+    })()
 
     const whatsappCandidate = sellerWhatsappInput.trim() || sellerWhatsappFromProfile || editingListing?.sellerWhatsapp || ''
     const formattedWhatsapp = whatsappEnabled
@@ -354,8 +658,8 @@ export default function NewListingForm() {
       title: autoTitle,
       brand: brand.trim(),
       model: model.trim(),
-      year: year ? Number(year) : undefined,
-      category,
+      year: (isAccessory || isApparel) ? undefined : year ? Number(year) : undefined,
+      category: finalCategory,
       price: priceForStorage,
       price_currency: priceCurrency,
       location,
@@ -366,12 +670,12 @@ export default function NewListingForm() {
       seller_whatsapp: formattedWhatsapp,
       seller_email: user.email,
       seller_plan: planCode,
-      material: materialValue || undefined,
-      frame_size: frameSize || undefined,
-      drivetrain: drivetrain === 'Otro' ? undefined : drivetrain,
-      drivetrain_detail: drivetrain === 'Otro' ? (drivetrainOther.trim() || undefined) : undefined,
-      wheelset: wheelset.trim() || undefined,
-      wheel_size: wheelSize || undefined,
+      material: (isAccessory || isApparel) ? undefined : (materialValue || undefined),
+      frame_size: (isAccessory || isApparel) ? undefined : (frameSize || undefined),
+      drivetrain: (isAccessory || isApparel) ? undefined : (drivetrain === 'Otro' ? undefined : drivetrain),
+      drivetrain_detail: (isAccessory || isApparel) ? undefined : (drivetrain === 'Otro' ? (drivetrainOther.trim() || undefined) : undefined),
+      wheelset: (isAccessory || isApparel) ? undefined : (wheelset.trim() || undefined),
+      wheel_size: (isAccessory || isApparel) ? undefined : (wheelSize || undefined),
       extras: safeExtras,
       plan_code: planCode,
       plan: planCode,
@@ -393,6 +697,7 @@ export default function NewListingForm() {
         alert('No pudimos actualizar la publicación. Intentá nuevamente.')
         return
       }
+      clearDraft()
       navigate(`/listing/${updated.slug ?? updated.id}`)
       return
     }
@@ -423,6 +728,7 @@ export default function NewListingForm() {
     }
 
     // Ya pagaste tu plan (si correspondía). Redirigimos al detalle del aviso.
+    clearDraft()
     navigate(`/listing/${inserted.slug ?? inserted.id}`)
   }
 
@@ -443,6 +749,12 @@ export default function NewListingForm() {
     if (city !== OTHER_CITY_OPTION) setCityOther('')
   }, [city])
 
+  useEffect(() => {
+    if (isAccessory && category !== 'Accesorios') setCategory('Accesorios')
+    if (isApparel && category !== 'Indumentaria') setCategory('Indumentaria')
+    if (!isAccessory && !isApparel && (category === 'Accesorios' || category === 'Indumentaria')) setCategory(null)
+  }, [isAccessory, isApparel, category])
+
   if (loadingListing) {
     return (
       <Container>
@@ -461,7 +773,11 @@ export default function NewListingForm() {
           <p className="text-sm text-black/60 mt-1">
             {isEditing
               ? 'Actualizá la información de tu aviso. Los cambios se publican al instante.'
-              : 'Completá los datos de tu bici y obtené una vista previa en tiempo real.'}
+              : isAccessory
+                ? 'Completá los datos de tu producto y mirá la vista previa en tiempo real.'
+                : isApparel
+                  ? 'Completá los datos de tu prenda y mirá la vista previa en tiempo real.'
+                  : 'Completá los datos de tu bici y obtené una vista previa en tiempo real.'}
           </p>
         </div>
         <div className="min-w-0 rounded-xl border border-mb-primary/30 bg-mb-primary/5 px-4 py-3 text-sm text-mb-ink max-w-full md:max-w-sm">
@@ -481,7 +797,7 @@ export default function NewListingForm() {
                 ? `Destacada ${selectedPlan.featuredDays} ${selectedPlan.featuredDays === 1 ? 'día' : 'días'} en portada`
                 : 'Sin destaque en portada'}
             </div>
-            <div>{selectedPlan?.whatsappEnabled ? 'Botón de WhatsApp habilitado' : 'Sin botón de WhatsApp'}</div>
+            <div>Botón de WhatsApp habilitado en todos los planes</div>
             {selectedPlan?.socialBoost && <div>Difusión en Instagram y Facebook</div>}
           </div>
         </div>
@@ -490,93 +806,262 @@ export default function NewListingForm() {
       <div className="grid w-full gap-6 md:grid-cols-2">
         <div className="card w-full max-w-full min-w-0 overflow-hidden p-6 space-y-6">
           <section>
-            <h2 className="text-lg font-semibold text-mb-ink">1. Categoría</h2>
-            <p className="text-sm text-black/60">Elegí la categoría que mejor describe tu bicicleta.</p>
-            <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {BIKE_CATEGORIES.map((option) => {
-                const active = category === option
-                return (
-                  <button
-                    key={option}
-                    type="button"
-                    onClick={() => setCategory(option)}
-                    className={`rounded-lg border px-3 py-2 text-sm text-left transition ${active ? 'border-mb-primary bg-mb-primary/10 font-semibold' : 'border-black/10 hover:border-black/20'}`}
+            <h2 className="text-lg font-semibold text-mb-ink">
+              {isAccessory ? '1. Tipo de accesorio' : isApparel ? '1. Tipo de indumentaria' : '1. Categoría'}
+            </h2>
+            <p className="text-sm text-black/60">
+              {isAccessory
+                ? 'Definí qué clase de accesorio vas a publicar y en qué estado se encuentra.'
+                : isApparel
+                  ? 'Contanos qué prenda querés publicar y el fit que mejor describe el producto.'
+                  : 'Elegí la categoría que mejor describe tu bicicleta.'}
+            </p>
+            {isAccessory && (
+              <div className="mt-4 space-y-4">
+                <Field label="Tipo de accesorio">
+                  <select
+                    className="select"
+                    value={accessoryType}
+                    onChange={(e) => setAccessoryType(e.target.value as (typeof ACCESSORY_TYPES)[number])}
                   >
-                    {option}
-                  </button>
-                )
-              })}
-            </div>
+                    {ACCESSORY_TYPES.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Condición">
+                  <select
+                    className="select"
+                    value={accessoryCondition}
+                    onChange={(e) => setAccessoryCondition(e.target.value as (typeof CONDITION_OPTIONS)[number])}
+                  >
+                    {CONDITION_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
+            )}
+            {isApparel && (
+              <div className="mt-4 space-y-4">
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <Field label="Tipo de prenda">
+                    <select
+                      className="select"
+                      value={apparelType}
+                      onChange={(e) => setApparelType(e.target.value as (typeof APPAREL_TYPES)[number])}
+                    >
+                      {APPAREL_TYPES.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Ajuste / Fit">
+                    <select
+                      className="select"
+                      value={apparelFit}
+                      onChange={(e) => setApparelFit(e.target.value as (typeof APPAREL_FIT_OPTIONS)[number])}
+                    >
+                      {APPAREL_FIT_OPTIONS.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                </div>
+                <Field label="Condición">
+                  <select
+                    className="select"
+                    value={apparelCondition}
+                    onChange={(e) => setApparelCondition(e.target.value as (typeof CONDITION_OPTIONS)[number])}
+                  >
+                    {CONDITION_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
+            )}
+            {!isAccessory && !isApparel && (
+              <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {BIKE_CATEGORIES.map((option) => {
+                  const active = category === option
+                  return (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => setCategory(option)}
+                      className={`rounded-lg border px-3 py-2 text-sm text-left transition ${active ? 'border-mb-primary bg-mb-primary/10 font-semibold' : 'border-black/10 hover:border-black/20'}`}
+                    >
+                      {option}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
           </section>
 
-          <section className={category ? 'space-y-4' : 'opacity-50 pointer-events-none select-none space-y-4'}>
-            <h2 className="text-lg font-semibold text-mb-ink">2. Detalles de la bici</h2>
-            {!category && <p className="text-sm text-black/50">Seleccioná una categoría para continuar.</p>}
+          <section className={(!isAccessory && !isApparel && !category) ? 'opacity-50 pointer-events-none select-none space-y-4' : 'space-y-4'}>
+            <h2 className="text-lg font-semibold text-mb-ink">
+              {isAccessory ? '2. Detalles del producto' : isApparel ? '2. Detalles de la indumentaria' : '2. Detalles de la bici'}
+            </h2>
+            {!isAccessory && !isApparel && !category && (
+              <p className="text-sm text-black/50">Seleccioná una categoría para continuar.</p>
+            )}
 
             <div className="grid sm:grid-cols-2 gap-4">
               <Field label="Marca">
-                <input className="input" value={brand} onChange={(e) => setBrand(e.target.value)} placeholder="Ej.: Specialized" />
+                <input
+                  className="input"
+                  value={brand}
+                  onChange={(e) => setBrand(e.target.value)}
+                  placeholder={
+                    isAccessory ? 'Ej.: Garmin' : isApparel ? 'Ej.: Rapha' : 'Ej.: Specialized'
+                  }
+                />
               </Field>
-              <Field label="Modelo">
-                <input className="input" value={model} onChange={(e) => setModel(e.target.value)} placeholder="Ej.: Tarmac SL7" />
+              <Field label={isAccessory || isApparel ? 'Producto / Modelo' : 'Modelo'}>
+                <input
+                  className="input"
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  placeholder={
+                    isAccessory ? 'Ej.: Edge 540' : isApparel ? 'Ej.: Jersey Pro Team' : 'Ej.: Tarmac SL7'
+                  }
+                />
               </Field>
             </div>
 
-            <div className="grid sm:grid-cols-2 gap-4">
-              <Field label="Material del cuadro">
-                <select className="select" value={material} onChange={(e) => setMaterial(e.target.value)}>
-                  {MATERIAL_OPTIONS.map((option) => (
-                    <option key={option} value={option}>{option}</option>
-                  ))}
-                </select>
-              </Field>
-              {material === 'Otro' && (
-                <Field label="Detalle del material">
-                  <input className="input" value={customMaterial} onChange={(e) => setCustomMaterial(e.target.value)} placeholder="Describí el material" />
+            {isAccessory && (
+              <>
+                <Field label="Uso recomendado">
+                  <select
+                    className="select"
+                    value={accessoryDiscipline}
+                    onChange={(e) => setAccessoryDiscipline(e.target.value as (typeof ACCESSORY_DISCIPLINES)[number])}
+                  >
+                    {ACCESSORY_DISCIPLINES.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
                 </Field>
-              )}
-            </div>
-
-            <div className="grid sm:grid-cols-2 gap-4">
-              <Field label="Talle (opcional)">
-                <select className="select" value={frameSize} onChange={(e) => setFrameSize(e.target.value)}>
-                  {FRAME_SIZES.map((size) => (
-                    <option key={size || 'none'} value={size}>{size ? size : 'Seleccionar talle'}</option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Rodado">
-                <select className="select" value={wheelSize} onChange={(e) => setWheelSize(e.target.value)}>
-                  {WHEEL_SIZE_OPTIONS.map((size) => (
-                    <option key={size || 'rodado-none'} value={size}>{size ? size : 'Seleccionar rodado'}</option>
-                  ))}
-                </select>
-              </Field>
-            </div>
-
-            <div className="grid sm:grid-cols-2 gap-4">
-              <Field label="Grupo de transmisión">
-                <select className="select" value={drivetrain} onChange={(e) => setDrivetrain(e.target.value)}>
-                  {DRIVETRAIN_OPTIONS.map((option) => (
-                    <option key={option} value={option}>{option === 'Otro' ? 'Otro…' : option}</option>
-                  ))}
-                </select>
-              </Field>
-              {drivetrain === 'Otro' && (
-                <Field label="Especificá el grupo">
-                  <input className="input" value={drivetrainOther} onChange={(e) => setDrivetrainOther(e.target.value)} placeholder="Detalle del grupo" />
+                <Field label="Compatibilidad o notas de uso (opcional)">
+                  <input
+                    className="input"
+                    value={accessoryUseNote}
+                    onChange={(e) => setAccessoryUseNote(e.target.value)}
+                    placeholder="Ej.: Para grupos SRAM AXS, incluye sensores, etc."
+                  />
                 </Field>
-              )}
-            </div>
+                <Field label="Notas adicionales (opcional)">
+                  <textarea
+                    className="textarea"
+                    value={extras}
+                    onChange={(e) => setExtras(e.target.value)}
+                    placeholder="Incluí más detalles sobre estado, garantía, accesorios incluidos..."
+                  />
+                </Field>
+              </>
+            )}
 
-            <Field label="Ruedas">
-              <input className="input" value={wheelset} onChange={(e) => setWheelset(e.target.value)} placeholder="Modelo de las ruedas" />
-              <p className="text-xs text-black/50 mt-1">Si las ruedas son las originales, indicá “Originales”.</p>
-            </Field>
+            {isApparel && (
+              <>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <Field label="Talle">
+                    <select
+                      className="select"
+                      value={apparelSize}
+                      onChange={(e) => setApparelSize(e.target.value)}
+                    >
+                      {apparelSizeOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Notas adicionales (opcional)">
+                    <textarea
+                      className="textarea"
+                      value={extras}
+                      onChange={(e) => setExtras(e.target.value)}
+                      placeholder="Ej.: Incluye etiquetas, usado 3 veces, color azul."
+                    />
+                  </Field>
+                </div>
+              </>
+            )}
 
-            <Field label="Agregados extras (opcional)">
-              <textarea className="textarea" value={extras} onChange={(e) => setExtras(e.target.value)} placeholder="Cambios, upgrades, mantenimiento, accesorios incluidos..." />
-            </Field>
+            {!isAccessory && !isApparel && (
+              <>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <Field label="Material del cuadro">
+                    <select className="select" value={material} onChange={(e) => setMaterial(e.target.value)}>
+                      {MATERIAL_OPTIONS.map((option) => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  {material === 'Otro' && (
+                    <Field label="Detalle del material">
+                      <input className="input" value={customMaterial} onChange={(e) => setCustomMaterial(e.target.value)} placeholder="Describí el material" />
+                    </Field>
+                  )}
+                </div>
+
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <Field label="Talle (opcional)">
+                    <select className="select" value={frameSize} onChange={(e) => setFrameSize(e.target.value)}>
+                      {FRAME_SIZES.map((size) => (
+                        <option key={size || 'none'} value={size}>{size ? size : 'Seleccionar talle'}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Rodado">
+                    <select className="select" value={wheelSize} onChange={(e) => setWheelSize(e.target.value)}>
+                      {WHEEL_SIZE_OPTIONS.map((size) => (
+                        <option key={size || 'rodado-none'} value={size}>{size ? size : 'Seleccionar rodado'}</option>
+                      ))}
+                    </select>
+                  </Field>
+                </div>
+
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <Field label="Grupo de transmisión">
+                    <select className="select" value={drivetrain} onChange={(e) => setDrivetrain(e.target.value)}>
+                      {DRIVETRAIN_OPTIONS.map((option) => (
+                        <option key={option} value={option}>{option === 'Otro' ? 'Otro…' : option}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  {drivetrain === 'Otro' && (
+                    <Field label="Especificá el grupo">
+                      <input className="input" value={drivetrainOther} onChange={(e) => setDrivetrainOther(e.target.value)} placeholder="Detalle del grupo" />
+                    </Field>
+                  )}
+                </div>
+
+                <Field label="Ruedas">
+                  <input className="input" value={wheelset} onChange={(e) => setWheelset(e.target.value)} placeholder="Modelo de las ruedas" />
+                  <p className="text-xs text-black/50 mt-1">Si las ruedas son las originales, indicá “Originales”.</p>
+                </Field>
+
+                <Field label="Agregados extras (opcional)">
+                  <textarea className="textarea" value={extras} onChange={(e) => setExtras(e.target.value)} placeholder="Cambios, upgrades, mantenimiento, accesorios incluidos..." />
+                </Field>
+              </>
+            )}
 
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="sm:col-span-2">
@@ -628,20 +1113,34 @@ export default function NewListingForm() {
               </Field>
             )}
 
-            <div className="grid sm:grid-cols-2 gap-4">
-              <Field label="Año (opcional)">
-                <input className="input" type="number" value={year} onChange={(e) => setYear(e.target.value)} placeholder="2023" />
-              </Field>
-            </div>
+            {(!isAccessory && !isApparel) && (
+              <div className="grid sm:grid-cols-2 gap-4">
+                <Field label="Año (opcional)">
+                  <input className="input" type="number" value={year} onChange={(e) => setYear(e.target.value)} placeholder="2023" />
+                </Field>
+              </div>
+            )}
 
             <Field label="Descripción">
               <textarea
                 className="textarea"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Contá el estado, mantenimiento y cualquier detalle relevante."
+                placeholder={
+                  isAccessory
+                    ? 'Detalle estado, uso, medidas, compatibilidad…'
+                    : isApparel
+                      ? 'Contá cuándo se usó, cuidados, temporadas, detalles de fit.'
+                      : 'Contá el estado, mantenimiento y cualquier detalle relevante.'
+                }
               />
-              <p className="text-xs text-black/50 mt-1">Si la dejás vacía: “No declara descripción específica”.</p>
+              <p className="text-xs text-black/50 mt-1">
+                {isAccessory
+                  ? 'Si la dejás vacía: “Sin descripción adicional”.'
+                  : isApparel
+                    ? 'Si la dejás vacía: “Sin descripción adicional”.'
+                    : 'Si la dejás vacía: “No declara descripción específica”.'}
+              </p>
             </Field>
           </section>
 
@@ -657,13 +1156,19 @@ export default function NewListingForm() {
               className={!photosEnabled ? 'opacity-50 cursor-not-allowed' : ''}
             />
             {!photosEnabled && (
-              <p className="text-xs text-black/50">Completá categoría, marca, modelo, material y precio para habilitar las fotos.</p>
+              <p className="text-xs text-black/50">
+                {isAccessory
+                  ? 'Completá tipo, marca, modelo y precio para habilitar las fotos.'
+                  : isApparel
+                    ? 'Completá tipo, marca, modelo, talle y precio para habilitar las fotos.'
+                    : 'Completá categoría, marca, modelo, material y precio para habilitar las fotos.'}
+              </p>
             )}
             {uploading && <p className="text-sm mt-1">Subiendo… {progress}%</p>}
             <div className="grid grid-cols-3 gap-2">
               {images.map((src, index) => (
                 <div key={index} className="relative aspect-square overflow-hidden rounded-md border border-black/10">
-                  <img src={src} alt="Foto de la bicicleta" className="w-full h-full object-cover" />
+                  <img src={src} alt="Foto del producto" className="w-full h-full object-cover" />
                 </div>
               ))}
             </div>
@@ -698,39 +1203,82 @@ export default function NewListingForm() {
               <dt className="font-medium text-black/80">Marca / Modelo</dt>
               <dd className="text-right">{[brand || '—', model || '—'].filter(Boolean).join(' • ')}</dd>
             </div>
-            <div className="flex justify-between gap-4">
-              <dt className="font-medium text-black/80">Material</dt>
-              <dd>{materialValue || '—'}</dd>
-            </div>
-            <div className="flex justify-between gap-4">
-              <dt className="font-medium text-black/80">Rodado</dt>
-              <dd>{wheelSize || '—'}</dd>
-            </div>
-            <div className="flex justify-between gap-4">
-              <dt className="font-medium text-black/80">Talle</dt>
-              <dd>{frameSize || '—'}</dd>
-            </div>
-            <div className="flex justify-between gap-4">
-              <dt className="font-medium text-black/80">Grupo</dt>
-              <dd>{drivetrainValue || '—'}</dd>
-            </div>
-            <div className="flex justify-between gap-4">
-              <dt className="font-medium text-black/80">Ruedas</dt>
-              <dd className="text-right">{wheelset || '—'}</dd>
-            </div>
+            {isAccessory ? (
+              <>
+                <div className="flex justify-between gap-4">
+                  <dt className="font-medium text-black/80">Tipo</dt>
+                  <dd>{accessoryType}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="font-medium text-black/80">Condición</dt>
+                  <dd>{accessoryCondition}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="font-medium text-black/80">Uso</dt>
+                  <dd>{accessoryDiscipline}</dd>
+                </div>
+              </>
+            ) : isApparel ? (
+              <>
+                <div className="flex justify-between gap-4">
+                  <dt className="font-medium text-black/80">Tipo</dt>
+                  <dd>{apparelType}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="font-medium text-black/80">Talle</dt>
+                  <dd>{apparelSize}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="font-medium text-black/80">Condición</dt>
+                  <dd>{apparelCondition}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="font-medium text-black/80">Fit</dt>
+                  <dd>{apparelFit}</dd>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex justify-between gap-4">
+                  <dt className="font-medium text-black/80">Material</dt>
+                  <dd>{materialValue || '—'}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="font-medium text-black/80">Rodado</dt>
+                  <dd>{wheelSize || '—'}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="font-medium text-black/80">Talle</dt>
+                  <dd>{frameSize || '—'}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="font-medium text-black/80">Grupo</dt>
+                  <dd>{drivetrainValue || '—'}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="font-medium text-black/80">Ruedas</dt>
+                  <dd className="text-right">{wheelset || '—'}</dd>
+                </div>
+              </>
+            )}
           </dl>
 
           <div>
             <h3 className="text-sm font-semibold text-black/70">Extras</h3>
             <p className="text-sm text-black/60 mt-1 whitespace-pre-line">
-              {extras.trim() || 'No tiene agregados extras, se encuentra original'}
+              {extras.trim() ||
+                (isAccessory
+                  ? 'Sin notas adicionales'
+                  : isApparel
+                    ? 'Sin notas adicionales'
+                    : 'No tiene agregados extras, se encuentra original')}
             </p>
           </div>
 
           <div>
             <h3 className="text-sm font-semibold text-black/70">Descripción</h3>
             <p className="text-sm text-black/60 mt-1 whitespace-pre-line">
-              {description.trim() || 'No declara descripción específica'}
+              {description.trim() || (isAccessory ? 'Sin descripción adicional' : 'No declara descripción específica')}
             </p>
           </div>
         </aside>

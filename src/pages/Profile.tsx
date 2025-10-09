@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import Container from '../components/Container'
 import ListingCard from '../components/ListingCard'
@@ -9,9 +9,8 @@ import { supabaseEnabled } from '../services/supabase'
 import { mockListings } from '../mock/mockData'
 import type { Listing } from '../types'
 import { useAuth } from '../context/AuthContext'
-import { useChat } from '../context/ChatContext'
 
-const TABS = ['Perfil', 'Publicaciones', 'Reseñas', 'Chat', 'Intereses'] as const
+const TABS = ['Perfil', 'Publicaciones', 'Reseñas', 'Intereses'] as const
 type SellerTab = (typeof TABS)[number]
 
 const RELATIVE_FORMATTER = new Intl.RelativeTimeFormat('es-AR', { numeric: 'auto' })
@@ -75,14 +74,12 @@ export default function Profile() {
   const { sellerId } = useParams()
   const navigate = useNavigate()
   const { user } = useAuth()
-  const { createThread } = useChat()
   const [activeTab, setActiveTab] = useState<SellerTab>('Perfil')
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [profile, setProfile] = useState<UserProfileRecord | null>(null)
   const [listings, setListings] = useState<Listing[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [chatError, setChatError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!sellerId) {
@@ -180,39 +177,6 @@ export default function Profile() {
     if (Number.isNaN(created.getTime())) return null
     return new Intl.DateTimeFormat('es-AR', { dateStyle: 'long' }).format(created)
   }, [profile?.created_at])
-
-  const handleStartChat = useCallback(async () => {
-    if (!sellerId) return
-    if (!user) {
-      navigate('/login', { state: { from: { pathname: `/vendedor/${sellerId}` } } })
-      return
-    }
-    if (user.id === sellerId) {
-      setChatError('Este es tu perfil.')
-      return
-    }
-    if (!supabaseEnabled) {
-      setChatError('El chat requiere conexión con Supabase.')
-      return
-    }
-    const listingForChat = listings[0]
-    if (!listingForChat) {
-      setChatError('Este vendedor aún no tiene publicaciones activas para iniciar un chat.')
-      return
-    }
-    setChatError(null)
-    try {
-      const threadId = await createThread(listingForChat.id, sellerId)
-      if (threadId) {
-        navigate(`/dashboard?tab=Chat&thread=${threadId}`)
-      } else {
-        setChatError('No pudimos iniciar la conversación. Intentá nuevamente.')
-      }
-    } catch (err: any) {
-      console.warn('[seller-profile] start chat failed', err)
-      setChatError(err?.message ?? 'No pudimos iniciar la conversación. Intentá nuevamente.')
-    }
-  }, [sellerId, user, listings, createThread, navigate])
 
   if (loading) {
     return (
@@ -396,29 +360,6 @@ export default function Profile() {
                   <h2 className="text-lg font-semibold text-[#14212e]">Reseñas</h2>
                   <div className="rounded-2xl border border-[#14212e]/10 bg-[#f2f6fb] p-6 text-sm text-[#14212e]/70">
                     Las reseñas de compradores estarán disponibles próximamente.
-                  </div>
-                </div>
-              )}
-
-              {activeTab === 'Chat' && (
-                <div className="space-y-4">
-                  <h2 className="text-lg font-semibold text-[#14212e]">Contactar al vendedor</h2>
-                  <p className="text-sm text-[#14212e]/70">
-                    Iniciá una conversación interna para coordinar detalles o enviar una oferta directa.
-                  </p>
-                  {chatError && <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">{chatError}</div>}
-                  <div className="flex flex-wrap items-center gap-3">
-                    <Button
-                      type="button"
-                      onClick={handleStartChat}
-                      className="bg-[#14212e] text-white hover:bg-[#1b2f3f]"
-                      disabled={!supabaseEnabled}
-                    >
-                      {user ? 'Iniciar chat' : 'Ingresar para chatear'}
-                    </Button>
-                    <p className="text-xs text-[#14212e]/60">
-                      El chat se abre en tu panel de vendedor.
-                    </p>
                   </div>
                 </div>
               )}
