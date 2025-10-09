@@ -1,6 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Helmet } from 'react-helmet-async'
 import Container from '../components/Container'
 import ImageCarousel from '../components/ImageCarousel'
 import Button from '../components/Button'
@@ -16,11 +15,11 @@ import type { Listing } from '../types'
 import { formatNameWithInitial } from '../utils/user'
 import { useAuth } from '../context/AuthContext'
 import { useChat } from '../context/ChatContext'
-import { applySeo, resetSeo } from '../utils/seo'
 import { sendChatMessage } from '../services/chat'
 import { updateListingPlan } from '../services/listings'
 import { fetchUserProfile, fetchUserContactEmail, setUserVerificationStatus, type UserProfileRecord } from '../services/users'
 import { sendOfferEmail } from '../services/offers'
+import SEO from '../components/SEO'
 
 export default function ListingDetail() {
   const params = useParams()
@@ -72,21 +71,6 @@ export default function ListingDetail() {
   }, [listingKey])
 
   useEffect(() => {
-    if (!listing) return
-    const title = [listing.brand, listing.model, listing.year].filter(Boolean).join(' ')
-    const descriptionParts = [listing.material, listing.extras]
-      .filter((value) => value && value !== 'No tiene agregados extras, se encuentra original')
-      .join(' · ')
-    const description = descriptionParts || `${listing.title} disponible en Ciclo Market.`
-    const image = listing.images?.[0]
-    const url = typeof window !== 'undefined' ? window.location.href : undefined
-    applySeo({ title: `${title} | Ciclo Market`, description, image, url })
-    return () => {
-      resetSeo()
-    }
-  }, [listing])
-
-  useEffect(() => {
     const loadSellerProfile = async () => {
       if (!listing?.sellerId || !supabaseEnabled) {
         setSellerProfile(null)
@@ -126,20 +110,51 @@ export default function ListingDetail() {
 
   const articleSummaryParts = [listing.brand, listing.model, listing.year ? String(listing.year) : null].filter(Boolean)
   const articleSummary = articleSummaryParts.length ? articleSummaryParts.join(' ') : listing.title
+  const listingSlugOrId = listing.slug ?? listing.id
+  const listingPath = `/listing/${listingSlugOrId}`
+  const envFrontendOrigin = (import.meta.env.VITE_FRONTEND_URL || '').trim()
+  const runtimeOrigin = typeof window !== 'undefined' ? window.location.origin : ''
+  const frontendOrigin = (envFrontendOrigin || runtimeOrigin || 'https://ciclomarket.ar').replace(/\/$/, '')
+  const canonicalUrl = `${frontendOrigin}${listingPath}`
+  const envShareBase = (import.meta.env.VITE_SHARE_BASE_URL || import.meta.env.VITE_API_BASE_URL || '').trim()
+  const shareBase = envShareBase ? envShareBase.replace(/\/$/, '') : ''
+  const resolvedShareOrigin = (shareBase || frontendOrigin || '').replace(/\/$/, '')
+  const shareUrl = resolvedShareOrigin ? `${resolvedShareOrigin}/share/listing/${listingSlugOrId}` : canonicalUrl
   const sellerPreferredLink =
-    sellerProfile?.website_url
-    ?? (listing as any)?.sellerLink
-    ?? (listing as any)?.sellerWebsite
-    ?? (listing as any)?.sellerUrl
-    ?? null
-  const fallbackListingLink = typeof window !== 'undefined' ? window.location.href : ''
-  const linkForMessage = sellerPreferredLink || fallbackListingLink || ''
+    sellerProfile?.website_url ??
+    (listing as any)?.sellerLink ??
+    (listing as any)?.sellerWebsite ??
+    (listing as any)?.sellerUrl ??
+    null
+  const linkForMessage = sellerPreferredLink || shareUrl
   const waMessageBase = `Hola! Me interesa este artículo ${articleSummary}.`
   const waMessage = linkForMessage ? `${waMessageBase} ${linkForMessage}` : waMessageBase
   const waText = encodeURIComponent(waMessage.trim())
-  const sellerWhatsappNumber = listing.sellerWhatsapp || sellerProfile?.whatsapp_number || null
-  const sanitizedWhatsapp = sellerWhatsappNumber ? sellerWhatsappNumber.replace(/[^0-9]/g, '') : null
-  const waLink = sanitizedWhatsapp ? `https://wa.me/${sanitizedWhatsapp}?text=${waText}` : null
+  const sellerWhatsappRaw = (listing.sellerWhatsapp || sellerProfile?.whatsapp_number || '').trim()
+  const waLink = (() => {
+    if (!sellerWhatsappRaw) return null
+    const maybeUrl = sellerWhatsappRaw.startsWith('http://') || sellerWhatsappRaw.startsWith('https://')
+    const maybeBareWhatsappUrl = /^(wa\.me|api\.whatsapp\.com|wa\.link)\//i.test(sellerWhatsappRaw)
+
+    if (maybeUrl || maybeBareWhatsappUrl) {
+      const baseUrl = maybeUrl ? sellerWhatsappRaw : `https://${sellerWhatsappRaw}`
+      try {
+        const url = new URL(baseUrl)
+        const host = url.hostname.toLowerCase()
+        const canAppendText = host.includes('wa.me') || host.includes('whatsapp.com')
+        if (canAppendText && waText && !url.searchParams.has('text')) {
+          url.searchParams.set('text', waText)
+        }
+        return url.toString()
+      } catch {
+        // Si no podemos construir la URL, intentamos tratarlo como número.
+      }
+    }
+
+    const digits = sellerWhatsappRaw.replace(/[^0-9]/g, '')
+    if (!digits) return null
+    return `https://wa.me/${digits}?text=${waText}`
+  })()
 
   const formattedPrice = formatListingPrice(listing.price, listing.priceCurrency, format, fx)
   const originalPriceLabel = listing.originalPrice
@@ -154,7 +169,6 @@ export default function ListingDetail() {
   const isOwner = user?.id === listing.sellerId
   const isFeaturedListing = hasPaidPlan(effectivePlan, listing.sellerPlanExpires)
 
-  const shareUrl = typeof window !== 'undefined' ? window.location.href : ''
   const shareTitle = `${listing.brand} ${listing.model}${listing.year ? ` ${listing.year}` : ''}`.trim()
   const shareDescription = listing.description?.slice(0, 120) ?? 'Encontrá esta bicicleta en Ciclo Market.'
   const shareImage = listing.images?.[0]
@@ -256,7 +270,7 @@ export default function ListingDetail() {
           (typeof buyerMetadata.whatsapp === 'string' && buyerMetadata.whatsapp.trim()) ||
           (typeof buyerMetadata.phone === 'string' && buyerMetadata.phone.trim()) ||
           null
-        const listingUrl = shareUrl || (typeof window !== 'undefined' ? window.location.href : '')
+        const listingUrl = canonicalUrl
         try {
           await sendOfferEmail({
             sellerEmail,
@@ -317,6 +331,17 @@ export default function ListingDetail() {
   }
 
   const ContactIcons = () => {
+    if (!user) {
+      return (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-[#14212e]/60">
+            Contactate con el vendedor
+          </p>
+          <p className="text-sm text-[#14212e]/70">Registrate para ver información de contacto</p>
+        </div>
+      )
+    }
+
     const items: Array<{ id: string; label: string; onClick?: () => void; href?: string; icon: ReactNode; disabled?: boolean; className?: string }> = []
     const emailRecipient = sellerAuthEmail || sellerProfile?.email || listing.sellerEmail || null
 
@@ -381,26 +406,23 @@ export default function ListingDetail() {
     )
   }
 
-  const firstImage = listing.images?.[0] ?? ''
+  const firstImage = listing.images?.[0]
   const metaDescription = listing.description?.trim() || 'Bicicleta disponible en Ciclo Market.'
-  const fallbackListingUrl = typeof window !== 'undefined'
-    ? `${window.location.origin}/listing/${listing.slug ?? listing.id}`
-    : `https://ciclomarket.ar/listing/${listing.slug ?? listing.id}`
-  const canonicalUrl = shareUrl || fallbackListingUrl
+  const priceAmount = Number.isFinite(listing.price) ? listing.price.toString() : null
+  const priceCurrency = (listing.priceCurrency ?? 'ARS').toUpperCase()
+  const productAvailability = listing.status === 'sold' ? 'oos' : 'instock'
 
   return (
     <>
-      <Helmet>
-        <title>{`${listing.title} | Ciclo Market`}</title>
-        <meta property="og:title" content={listing.title} />
-        <meta property="og:description" content={metaDescription} />
-        {firstImage ? <meta property="og:image" content={firstImage} /> : null}
-        <meta property="og:url" content={canonicalUrl} />
-        <meta property="og:type" content="product" />
-        <meta property="og:site_name" content="Ciclo Market" />
-        <meta name="twitter:card" content="summary_large_image" />
-        {firstImage ? <meta name="twitter:image" content={firstImage} /> : null}
-      </Helmet>
+      <SEO title={listing.title} description={metaDescription} image={firstImage} url={canonicalUrl} type="product">
+        <meta property="product:availability" content={productAvailability} />
+        {priceAmount ? (
+          <>
+            <meta property="product:price:amount" content={priceAmount} />
+            <meta property="product:price:currency" content={priceCurrency} />
+          </>
+        ) : null}
+      </SEO>
       <Container>
       <div className="grid w-full gap-6 lg:grid-cols-[2fr_1fr] lg:grid-rows-[auto_auto]">
         <div className="order-1 w-full min-w-0 space-y-6 lg:col-start-1 lg:row-start-1">

@@ -1,4 +1,5 @@
 
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Listing } from '../types'
 import useFaves from '../hooks/useFaves'
@@ -9,6 +10,7 @@ import { buildListingSlug } from '../utils/slug'
 import { hasPaidPlan } from '../utils/plans'
 
 export default function ListingCard({ l }: { l: Listing }) {
+  const [imageLoaded, setImageLoaded] = useState(false)
   const { has, toggle } = useFaves()
   const { ids: compareIds, toggle: toggleCompare } = useCompare()
   const { format, fx } = useCurrency()
@@ -87,8 +89,20 @@ export default function ListingCard({ l }: { l: Listing }) {
         </div>
       </div>
       <Link to={`/listing/${slug}`} className="card-flat group flex h-full flex-col overflow-hidden">
-        <div className="aspect-video overflow-hidden bg-black/40">
-          <img src={l.images[0]} alt={l.title} className="h-full w-full object-cover transition group-hover:scale-105"/>
+        <div className="aspect-video relative overflow-hidden bg-black/10">
+          <img
+            src={l.images[0]}
+            alt={l.title}
+            loading="lazy"
+            decoding="async"
+            onLoad={() => setImageLoaded(true)}
+            onError={() => setImageLoaded(true)}
+            className={`h-full w-full object-cover transition duration-700 ${imageLoaded ? 'opacity-100 scale-100' : 'opacity-0 scale-105'} group-hover:scale-105`}
+          />
+          <div
+            aria-hidden="true"
+            className={`pointer-events-none absolute inset-0 bg-gradient-to-br from-white/40 via-white/10 to-white/40 transition-opacity duration-500 ${imageLoaded ? 'opacity-0' : 'opacity-100 animate-pulse'}`}
+          />
         </div>
         <div className="flex flex-1 flex-col p-4">
           <div className="flex items-start justify-between gap-3">

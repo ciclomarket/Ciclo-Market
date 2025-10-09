@@ -303,14 +303,6 @@ export default function Header() {
   const [loginLoading, setLoginLoading] = useState(false)
   const navigate = useNavigate()
   const hoverTimer = useRef<number | null>(null)
-  const promoMessages = useMemo(
-    () => [
-      '🔥Seguinos en Instagram y obtené una publicación premium gratis🔥',
-      'Escribinos para ayudarte a cotizar tu bicicleta',
-    ],
-    []
-  )
-  const [promoIndex, setPromoIndex] = useState(0)
 
   useEffect(() => {
     if (user) {
@@ -320,14 +312,6 @@ export default function Header() {
       setLoginError(null)
     }
   }, [user])
-
-  useEffect(() => {
-    if (promoMessages.length <= 1) return
-    const timer = window.setInterval(() => {
-      setPromoIndex((idx) => (idx + 1) % promoMessages.length)
-    }, 6000)
-    return () => window.clearInterval(timer)
-  }, [promoMessages])
 
   useEffect(() => {
     if (mobileMenuOpen) setOpenIdx(null)
@@ -435,25 +419,6 @@ export default function Header() {
 
   const header = (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/70">
-      <div className="hidden md:block bg-black text-white text-xs">
-        <div className="max-w-6xl mx-auto px-4 py-2 flex items-center gap-6">
-          <span className="uppercase tracking-[0.4em] text-white/70">Marketplace de bicicletas</span>
-         <div className="flex-1 flex items-center justify-center">
-            <span key={promoIndex} className="text-white text-sm font-medium transition-opacity duration-500">
-              {promoMessages[promoIndex]}
-            </span>
-          </div>
-          <div className="flex items-center gap-4 text-white/70">
-            <Link to="/faq" className="hover:text-white">Centro de ayuda</Link>
-            <Link to="/publicar" className="hover:text-white">Publicar bici</Link>
-          </div>
-        </div>
-      </div>
-
-      <div className="md:hidden bg-black text-white text-xs text-center py-2">
-        {promoMessages[promoIndex]}
-      </div>
-
       <div className="max-w-6xl mx-auto px-4 py-4 flex items-center gap-3">
         <button
           type="button"

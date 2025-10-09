@@ -1,8 +1,10 @@
 import Container from '../components/Container'
+import AnalyticsTag from '../components/AnalyticsTag'
 
 export default function HowToPublish() {
   return (
     <div className="bg-[#14212e] py-12 text-white">
+      <AnalyticsTag />
       <Container className="mx-auto max-w-4xl space-y-10">
         <header className="space-y-4 text-center">
           <h1 className="text-3xl font-bold text-white">Cómo publicar tu bicicleta</h1>

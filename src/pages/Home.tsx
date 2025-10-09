@@ -14,7 +14,7 @@ import { supabaseEnabled } from '../services/supabase'
 import type { Listing } from '../types'
 import { buildListingSlug } from '../utils/slug'
 import { hasPaidPlan } from '../utils/plans'
-import { applySeo } from '../utils/seo'
+import AnalyticsTag from '../components/AnalyticsTag'
 
 import specializedLogo from '/brands/specialized.png'
 import canyonLogo from '/brands/canyon.png'
@@ -201,10 +201,6 @@ export default function Home() {
       setDataStatus('ready')
     }
     load()
-    applySeo({
-      title: 'Ciclo Market | Comprá y vendé bicicletas en Argentina',
-      description: 'Explorá el marketplace de bicicletas Ciclo Market: publicaciones destacadas, planes flexibles y contacto directo con vendedores verificados.'
-    })
     return () => {
       active = false
     }
@@ -247,6 +243,7 @@ export default function Home() {
       className="relative isolate overflow-hidden text-white"
       style={{ background: '#14212e' }}
     >
+      <AnalyticsTag />
       {/* HERO */}
       <section className="relative overflow-hidden border-b border-white/10 text-white">
         <img
