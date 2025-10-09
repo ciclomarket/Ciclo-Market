@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Helmet } from 'react-helmet-async'
 import Container from '../components/Container'
 import ImageCarousel from '../components/ImageCarousel'
 import Button from '../components/Button'
@@ -380,8 +381,27 @@ export default function ListingDetail() {
     )
   }
 
+  const firstImage = listing.images?.[0] ?? ''
+  const metaDescription = listing.description?.trim() || 'Bicicleta disponible en Ciclo Market.'
+  const fallbackListingUrl = typeof window !== 'undefined'
+    ? `${window.location.origin}/listing/${listing.slug ?? listing.id}`
+    : `https://ciclomarket.ar/listing/${listing.slug ?? listing.id}`
+  const canonicalUrl = shareUrl || fallbackListingUrl
+
   return (
-    <Container>
+    <>
+      <Helmet>
+        <title>{`${listing.title} | Ciclo Market`}</title>
+        <meta property="og:title" content={listing.title} />
+        <meta property="og:description" content={metaDescription} />
+        {firstImage ? <meta property="og:image" content={firstImage} /> : null}
+        <meta property="og:url" content={canonicalUrl} />
+        <meta property="og:type" content="product" />
+        <meta property="og:site_name" content="Ciclo Market" />
+        <meta name="twitter:card" content="summary_large_image" />
+        {firstImage ? <meta name="twitter:image" content={firstImage} /> : null}
+      </Helmet>
+      <Container>
       <div className="grid w-full gap-6 lg:grid-cols-[2fr_1fr] lg:grid-rows-[auto_auto]">
         <div className="order-1 w-full min-w-0 space-y-6 lg:col-start-1 lg:row-start-1">
           <ImageCarousel images={listing.images} />
@@ -592,7 +612,8 @@ export default function ListingDetail() {
           error={offerError}
         />
       )}
-    </Container>
+      </Container>
+    </>
   )
 }
 
