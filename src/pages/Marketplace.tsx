@@ -9,6 +9,7 @@ import { fetchListings } from '../services/listings'
 import { supabaseEnabled } from '../services/supabase'
 import type { Listing } from '../types'
 import { hasPaidPlan } from '../utils/plans'
+import AnalyticsTag from '../components/AnalyticsTag'
 
 type Cat = 'Todos' | 'Ruta' | 'MTB' | 'Gravel' | 'Urbana' | 'Accesorios' | 'Indumentaria' | 'E-Bike' | 'Niños' | 'Pista' | 'Triatlón'
 type FiltersState = {
@@ -152,6 +153,7 @@ export default function Marketplace() {
 
   return (
     <>
+      <AnalyticsTag />
       <section className="relative overflow-hidden text-white">
         <img
           src="/hero-market.jpg"

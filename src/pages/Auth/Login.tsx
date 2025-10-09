@@ -5,6 +5,7 @@ import Button from '../../components/Button'
 import { SocialAuthButtons } from '../../components/SocialAuthButtons'
 import { useAuth } from '../../context/AuthContext'
 import { getSupabaseClient, supabaseEnabled } from '../../services/supabase'
+import AnalyticsTag from '../../components/AnalyticsTag'
 
 type OAuthProvider = 'google'
 
@@ -66,6 +67,7 @@ export default function Login() {
 
   return (
     <div className="relative isolate min-h-[calc(100vh-140px)] overflow-hidden bg-[#0c1723] py-14 text-white">
+      <AnalyticsTag />
       <div className="absolute inset-0 -z-10 bg-[radial-gradient(1200px_520px_at_-10%_0%,rgba(255,255,255,0.12),transparent_70%)] opacity-70" />
       <div className="absolute inset-0 -z-20 bg-[radial-gradient(900px_520px_at_110%_20%,rgba(14,26,38,0.26),transparent_75%)]" />
       <Container>

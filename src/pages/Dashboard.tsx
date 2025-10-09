@@ -867,7 +867,7 @@ function ListingsView({ listings, onRefresh }: { listings: Listing[]; onRefresh?
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 items-start">
         {listings.map((listing) => (
           <div key={listing.id} className="space-y-3">
             <ListingCard l={listing} />
@@ -1446,8 +1446,22 @@ function EditProfileView({
 
   const normaliseWhatsapp = useCallback((value?: string | null): string | null => {
     if (!value) return null
-    const digits = value.replace(/[^0-9+]/g, '')
-    return digits.trim() || null
+    const trimmed = value.trim()
+    if (!trimmed) return null
+
+    const looksLikeUrl = /^(https?:\/\/|wa\.(?:me|link)\/|api\.whatsapp\.com\/)/i.test(trimmed)
+    if (looksLikeUrl) {
+      const prefixed = trimmed.startsWith('http') ? trimmed : `https://${trimmed}`
+      try {
+        const url = new URL(prefixed)
+        return url.toString()
+      } catch {
+        // Si no es URL válida seguimos con fallback numérico.
+      }
+    }
+
+    const digits = trimmed.replace(/[^0-9]/g, '')
+    return digits || null
   }, [])
 
   const handleAvatarUpload = async (fileList: FileList | null) => {

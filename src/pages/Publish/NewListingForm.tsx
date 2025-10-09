@@ -392,8 +392,22 @@ export default function NewListingForm() {
 
   const normaliseWhatsapp = (value?: string | null): string | null => {
     if (!value) return null
-    const digits = value.replace(/[^0-9+]/g, '')
-    return digits.trim() || null
+    const trimmed = value.trim()
+    if (!trimmed) return null
+
+    const looksLikeUrl = /^(https?:\/\/|wa\.(?:me|link)\/|api\.whatsapp\.com\/)/i.test(trimmed)
+    if (looksLikeUrl) {
+      const prefixed = trimmed.startsWith('http') ? trimmed : `https://${trimmed}`
+      try {
+        const url = new URL(prefixed)
+        return url.toString()
+      } catch {
+        // Si no es una URL válida continuamos intentando como número.
+      }
+    }
+
+    const digits = trimmed.replace(/[^0-9]/g, '')
+    return digits || null
   }
 
   useEffect(() => {
