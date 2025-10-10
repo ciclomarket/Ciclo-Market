@@ -395,6 +395,11 @@ app.post('/api/questions/notify', async (req, res) => {
     let emailStatus = 'skipped'
     if (isMailConfigured()) {
       try {
+        console.info('[questions] sending email to seller', {
+          listingId: listing.id,
+          sellerId: listing.seller_id,
+          sellerEmail,
+        })
         await sendMail({
           from,
           to: sellerEmail,
@@ -405,7 +410,11 @@ app.post('/api/questions/notify', async (req, res) => {
         emailStatus = 'sent'
       } catch (mailError) {
         emailStatus = 'failed'
-        console.warn('[questions] email to seller failed', mailError)
+        console.warn('[questions] email to seller failed', {
+          message: mailError?.message,
+          code: mailError?.code,
+          command: mailError?.command,
+        })
       }
     }
 
@@ -466,6 +475,11 @@ app.post('/api/questions/notify', async (req, res) => {
     let emailStatus = 'skipped'
     if (isMailConfigured()) {
       try {
+        console.info('[questions] sending email to buyer', {
+          listingId: listing.id,
+          buyerId: question.asker_id,
+          buyerEmail,
+        })
         await sendMail({
           from,
           to: buyerEmail,
@@ -476,7 +490,11 @@ app.post('/api/questions/notify', async (req, res) => {
         emailStatus = 'sent'
       } catch (mailError) {
         emailStatus = 'failed'
-        console.warn('[questions] email to buyer failed', mailError)
+        console.warn('[questions] email to buyer failed', {
+          message: mailError?.message,
+          code: mailError?.code,
+          command: mailError?.command,
+        })
       }
     }
 
@@ -496,24 +514,6 @@ app.post('/api/questions/notify', async (req, res) => {
   }
 
   return res.status(400).json({ error: 'unsupported_event' })
-})
-
-app.get('/api/debug/smtp', async (_req, res) => {
-  if (!isMailConfigured()) {
-    return res.status(503).json({ ok: false, error: 'smtp_not_configured' })
-  }
-  try {
-    await sendMail({
-      from: process.env.SMTP_FROM || `Ciclo Market <${process.env.SMTP_USER}>`,
-      to: process.env.SMTP_TEST_TO || process.env.SMTP_USER,
-      subject: 'Brevo SMTP test',
-      text: 'Probando conexión desde Render',
-    })
-    return res.json({ ok: true })
-  } catch (error) {
-    console.error('[debug] smtp test failed', error)
-    return res.status(500).json({ ok: false, error: error.message || 'smtp_failed' })
-  }
 })
 
 /* ----------------------------- Mercado Pago -------------------------------- */

@@ -18,13 +18,28 @@ function getMailTransport() {
   if (cachedTransport) return cachedTransport
 
   const port = Number(process.env.SMTP_PORT)
+  const secure = process.env.SMTP_SECURE === 'true' || port === 465
+  const loggerEnabled = process.env.SMTP_LOGGER === 'true'
+  if (loggerEnabled) {
+    console.info('[mail] creating transport', {
+      host: process.env.SMTP_HOST,
+      port,
+      secure,
+      user: process.env.SMTP_USER,
+    })
+  }
   cachedTransport = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port,
-    secure: process.env.SMTP_SECURE === 'true' || port === 465,
+    secure,
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASSWORD
+    },
+    logger: loggerEnabled,
+    debug: loggerEnabled,
+    tls: {
+      rejectUnauthorized: false
     }
   })
   return cachedTransport
@@ -32,6 +47,12 @@ function getMailTransport() {
 
 async function sendMail(options) {
   const transporter = getMailTransport()
+  if (process.env.SMTP_LOGGER === 'true') {
+    console.info('[mail] sending message', {
+      to: options.to,
+      subject: options.subject,
+    })
+  }
   return transporter.sendMail(options)
 }
 
