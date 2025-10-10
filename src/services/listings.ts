@@ -45,6 +45,7 @@ type ListingRow = {
 const normalizeListing = (row: ListingRow): Listing => {
   const normalizedSellerPlan = canonicalPlanCode((row.seller_plan ?? row.plan ?? row.plan_code ?? null) as string | null) ?? undefined
   const normalizedPlan = canonicalPlanCode((row.plan ?? row.plan_code ?? row.seller_plan ?? null) as string | null)
+  const rawStatus = typeof row.status === 'string' ? row.status.trim().toLowerCase() : undefined
 
   return {
     id: row.id,
@@ -76,7 +77,7 @@ const normalizeListing = (row: ListingRow): Listing => {
     wheelset: row.wheelset ?? undefined,
     wheelSize: row.wheel_size ?? undefined,
     extras: row.extras ?? undefined,
-    status: (row.status ?? undefined) as Listing['status'],
+    status: (rawStatus ?? undefined) as Listing['status'],
     expiresAt: row.expires_at ? Date.parse(row.expires_at) : null,
     renewalNotifiedAt: row.renewal_notified_at ? Date.parse(row.renewal_notified_at) : null,
     createdAt: row.created_at ? Date.parse(row.created_at) : Date.now()
@@ -93,8 +94,8 @@ export async function fetchListings(): Promise<Listing[]> {
       .order('created_at', { ascending: false })
     if (error || !data) return []
     const filtered = data.filter((row: any) => {
-      const status = (row?.status ?? 'active') as string
-      return status === 'active'
+      const status = typeof row?.status === 'string' ? row.status.trim().toLowerCase() : 'active'
+      return status !== 'draft' && status !== 'deleted'
     })
     return filtered.map((row: any) => normalizeListing(row as ListingRow))
   } catch {
@@ -113,7 +114,8 @@ export async function fetchListing(identifier: string): Promise<Listing | null> 
       .maybeSingle()
 
     if (bySlug) {
-      if ((bySlug as any)?.status === 'deleted') return null
+      const status = typeof (bySlug as any)?.status === 'string' ? (bySlug as any).status.trim().toLowerCase() : undefined
+      if (status === 'deleted') return null
       return normalizeListing(bySlug as ListingRow)
     }
     if (slugError && slugError.code && slugError.code !== 'PGRST116') return null
@@ -125,7 +127,8 @@ export async function fetchListing(identifier: string): Promise<Listing | null> 
       .eq('id', lookupId)
       .maybeSingle()
     if (idError || !byId) return null
-    if ((byId as any)?.status === 'deleted') return null
+    const status = typeof (byId as any)?.status === 'string' ? (byId as any).status.trim().toLowerCase() : undefined
+    if (status === 'deleted') return null
     return normalizeListing(byId as ListingRow)
   } catch {
     return null
@@ -141,7 +144,10 @@ export async function fetchListingsByIds(ids: string[]): Promise<Listing[]> {
       .select('*')
       .in('id', ids)
     if (error || !data) return []
-    const filtered = data.filter((row: any) => (row?.status ?? '') !== 'deleted')
+    const filtered = data.filter((row: any) => {
+      const status = typeof row?.status === 'string' ? row.status.trim().toLowerCase() : ''
+      return status !== 'deleted'
+    })
     return filtered.map((row: any) => normalizeListing(row as ListingRow))
   } catch {
     return []
@@ -158,7 +164,10 @@ export async function fetchListingsBySeller(sellerId: string): Promise<Listing[]
       .eq('seller_id', sellerId)
       .order('created_at', { ascending: false })
     if (error || !data) return []
-    const filtered = data.filter((row: any) => (row?.status ?? '') !== 'deleted')
+    const filtered = data.filter((row: any) => {
+      const status = typeof row?.status === 'string' ? row.status.trim().toLowerCase() : ''
+      return status !== 'deleted'
+    })
     return filtered.map((row: any) => normalizeListing(row as ListingRow))
   } catch {
     return []

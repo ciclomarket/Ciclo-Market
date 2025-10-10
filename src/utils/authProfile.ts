@@ -1,6 +1,6 @@
 import type { User } from '@supabase/supabase-js'
 import { getSupabaseClient, supabaseEnabled } from '../services/supabase'
-import { createUserProfile, upsertUserProfile } from '../services/users'
+import { createUserProfile, upsertUserProfile, type UserProfileInput } from '../services/users'
 import { deriveProfileSlug, pickDiscipline } from './user'
 
 type Metadata = Record<string, any>
@@ -66,7 +66,7 @@ export async function syncProfileFromAuthUser(user: User | null): Promise<void> 
       })
 
     if (existing) {
-      const updates: Record<string, unknown> = { id: user.id }
+      const updates: Partial<UserProfileInput> & { id: string } = { id: user.id }
       let shouldUpdate = false
       if (!existing.full_name && fullName) {
         updates.fullName = fullName
