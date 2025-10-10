@@ -92,7 +92,7 @@ export default function HowToPublish() {
               <b>Publicaciones</b>: editá precios, archivá avisos, destacá bicicletas y controlá el rendimiento de tus anuncios.
             </li>
             <li>
-              <b>Notificaciones y Chat</b>: respondé mensajes, ofertas y recordatorios sin salir de la plataforma.
+              <b>Consultas y notificaciones</b>: respondé preguntas y ofertas desde el detalle de la publicación y recibí alertas por email.
             </li>
             <li>
               <b>Editar perfil</b>: actualizá tu avatar y preferencias para tener una ficha de vendedor completa.
@@ -108,7 +108,7 @@ export default function HowToPublish() {
           <ul className="space-y-3 text-sm text-white/80">
             <li>Usá fotos horizontales y con buena luz. Mostrá detalles importantes como transmisión o ruedas.</li>
             <li>Mantené tu descripción actualizada con el estado real y las modificaciones más recientes.</li>
-            <li>Respondé rápido los mensajes: mejorarás tu reputación y chances de venta.</li>
+            <li>Respondé rápido las consultas y ofertas: mejorarás tu reputación y chances de venta.</li>
           </ul>
         </section>
       </Container>

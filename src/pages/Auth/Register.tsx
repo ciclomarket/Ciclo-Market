@@ -182,7 +182,7 @@ export default function Register() {
               </li>
               <li className="flex items-start gap-3">
                 <span className="mt-1 h-2 w-2 rounded-full bg-mb-primary" />
-                <span>Historial de chats y seguimiento de operaciones en un solo lugar.</span>
+                <span>Consultas públicas, ofertas y seguimiento de operaciones en un solo lugar.</span>
               </li>
               <li className="flex items-start gap-3">
                 <span className="mt-1 h-2 w-2 rounded-full bg-mb-primary" />

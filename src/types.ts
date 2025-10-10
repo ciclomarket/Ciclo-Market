@@ -39,6 +39,19 @@ export interface Listing {
   createdAt: number
 }
 
+export interface ListingQuestion {
+  id: string
+  listingId: string
+  questionerId: string
+  questionBody: string
+  createdAt: number
+  questionerName?: string | null
+  answerBody?: string | null
+  answerAuthorId?: string | null
+  answerAuthorName?: string | null
+  answeredAt?: number | null
+}
+
 export interface UserProfile {
   uid: string
   name: string

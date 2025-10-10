@@ -58,7 +58,7 @@ export const FALLBACK_PLANS: Plan[] = [
     featuredDays: 0,
     whatsappEnabled: false,
     socialBoost: false,
-    description: 'Publicá gratis por 30 días. Hasta 4 fotos, contacto por chat y email.'
+    description: 'Publicá gratis por 30 días. Hasta 4 fotos, consultas públicas y contacto por email.'
   },
   {
     id: 'basic',
@@ -73,7 +73,7 @@ export const FALLBACK_PLANS: Plan[] = [
     featuredDays: 7,
     whatsappEnabled: true,
     socialBoost: false,
-    description: '60 días online, destaque 7 días y contacto directo por WhatsApp.'
+    description: '60 días online, destaque 7 días, consultas públicas y contacto directo por WhatsApp.'
   },
   {
     id: 'premium',
@@ -88,7 +88,7 @@ export const FALLBACK_PLANS: Plan[] = [
     featuredDays: 14,
     whatsappEnabled: true,
     socialBoost: true,
-    description: 'Destaque 14 días, publicación en Instagram y Facebook y contacto por WhatsApp.'
+    description: 'Destaque 14 días, publicación en Instagram y Facebook, consultas públicas y contacto por WhatsApp.'
   }
 ]
 
