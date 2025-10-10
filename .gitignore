@@ -23,3 +23,4 @@ users.csv
 *.DS_Store
 gcloud auth login/
 .env.local
+node_modules/
