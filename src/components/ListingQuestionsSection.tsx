@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Button from './Button'
 import { useAuth } from '../context/AuthContext'
 import { getSupabaseClient, supabaseEnabled } from '../services/supabase'
@@ -6,9 +6,11 @@ import {
   answerListingQuestion,
   askListingQuestion,
   fetchListingQuestions,
+  notifyListingQuestionEvent,
 } from '../services/listingQuestions'
 import type { Listing, ListingQuestion } from '../types'
 import { formatNameWithInitial } from '../utils/user'
+import { fetchUserDisplayNames } from '../services/users'
 
 type Props = {
   listing: Listing
@@ -37,21 +39,17 @@ function relativeTimeFromNow(timestamp?: number | null): string {
   return `hace ${diffYears} años`
 }
 
-function displayQuestionerName(question: ListingQuestion): string {
-  if (question.questionerName && question.questionerName.trim()) {
-    return formatNameWithInitial(question.questionerName, null)
+function displayQuestionerName(fullName?: string | null): string {
+  if (fullName && fullName.trim()) {
+    return formatNameWithInitial(fullName, null)
   }
   return 'Comprador'
 }
 
-function displayAnswerAuthor(question: ListingQuestion, fallback?: string): string {
-  if (question.answerAuthorName && question.answerAuthorName.trim()) {
-    return formatNameWithInitial(question.answerAuthorName, null)
-  }
-  if (fallback && fallback.trim()) {
-    return formatNameWithInitial(fallback, null)
-  }
-  return 'Vendedor'
+function displayAnswerAuthor(fullName?: string | null, fallback?: string | null): string {
+  const base = (fullName && fullName.trim()) || (fallback && fallback.trim()) || ''
+  if (!base) return 'Vendedor'
+  return formatNameWithInitial(base, null)
 }
 
 export default function ListingQuestionsSection({ listing, listingUnavailable }: Props) {
@@ -64,6 +62,8 @@ export default function ListingQuestionsSection({ listing, listingUnavailable }:
   const [answerDrafts, setAnswerDrafts] = useState<Record<string, string>>({})
   const [answerSubmitting, setAnswerSubmitting] = useState<Record<string, boolean>>({})
   const [answerErrors, setAnswerErrors] = useState<Record<string, string | null>>({})
+  const [userNames, setUserNames] = useState<Record<string, string>>({})
+  const userNamesRef = useRef<Record<string, string>>({})
 
   const isSeller = user?.id === listing.sellerId
   const canAsk = Boolean(user && !isSeller && !listingUnavailable && supabaseEnabled)
@@ -79,6 +79,25 @@ export default function ListingQuestionsSection({ listing, listingUnavailable }:
     [questions]
   )
 
+  const ensureUserNames = useCallback(
+    async (ids: Array<string | null | undefined>) => {
+      if (!supabaseEnabled) return
+      const lookup = userNamesRef.current
+      const missing = Array.from(
+        new Set(
+          ids
+            .filter((id): id is string => Boolean(id))
+        )
+      ).filter((id) => !lookup[id])
+      if (!missing.length) return
+      const fetched = await fetchUserDisplayNames(missing)
+      if (Object.keys(fetched).length > 0) {
+        setUserNames((prev) => ({ ...prev, ...fetched }))
+      }
+    },
+    []
+  )
+
   const loadQuestions = useCallback(async () => {
     if (!supabaseEnabled) {
       setQuestions([])
@@ -89,14 +108,39 @@ export default function ListingQuestionsSection({ listing, listingUnavailable }:
     try {
       const data = await fetchListingQuestions(listing.id)
       setQuestions(data)
+      const ids = data.flatMap((item) =>
+        [item.questionerId, item.answerAuthorId].filter((id): id is string => Boolean(id))
+      )
+      if (ids.length) {
+        void ensureUserNames(ids)
+      }
     } finally {
       setLoading(false)
     }
-  }, [listing.id])
+  }, [ensureUserNames, listing.id])
 
   useEffect(() => {
     void loadQuestions()
   }, [loadQuestions])
+
+  useEffect(() => {
+    if (!listing?.sellerId) return
+    if (!listing.sellerName) return
+    setUserNames((prev) => {
+      if (prev[listing.sellerId]) return prev
+      return { ...prev, [listing.sellerId]: listing.sellerName ?? '' }
+    })
+  }, [listing?.sellerId, listing?.sellerName])
+
+  const resolveFullName = useCallback(
+    (id?: string | null, fallback?: string | null) => {
+      if (!id) return fallback ?? null
+      const stored = userNamesRef.current[id]
+      if (stored && stored.trim()) return stored
+      return fallback ?? null
+    },
+    []
+  )
 
   useEffect(() => {
     if (!supabaseEnabled) return
@@ -130,12 +174,34 @@ export default function ListingQuestionsSection({ listing, listingUnavailable }:
     try {
       const created = await askListingQuestion(listing.id, text)
       if (created) {
-        setQuestions((prev) => [...prev, created])
+        const rawUserName =
+          (typeof user?.user_metadata?.full_name === 'string' && user.user_metadata.full_name.trim()) ||
+          (typeof user?.user_metadata?.name === 'string' && user.user_metadata.name.trim()) ||
+          null
+        const enriched: ListingQuestion = {
+          ...created,
+          questionerName: rawUserName ?? created.questionerName ?? null,
+        }
+        setQuestions((prev) => [...prev, enriched])
+        if (user?.id && rawUserName) {
+          setUserNames((prev) => (prev[user.id] ? prev : { ...prev, [user.id]: rawUserName }))
+        }
         setQuestionDraft('')
+        void notifyListingQuestionEvent(created.id, 'asked')
+        const idsToEnsure = [created.questionerId, created.answerAuthorId].filter(
+          (id): id is string => Boolean(id)
+        )
+        if (idsToEnsure.length) {
+          void ensureUserNames(idsToEnsure)
+        }
       }
     } catch (error: any) {
       console.warn('[listing-questions] ask error', error)
-      setQuestionError('No pudimos enviar tu consulta. Intentá nuevamente.')
+      const message =
+        typeof error?.message === 'string' && error.message.trim()
+          ? error.message.trim()
+          : 'No pudimos enviar tu consulta. Intentá nuevamente.'
+      setQuestionError(message)
     } finally {
       setQuestionSubmitting(false)
     }
@@ -158,14 +224,36 @@ export default function ListingQuestionsSection({ listing, listingUnavailable }:
     try {
       const updated = await answerListingQuestion(questionId, text)
       if (updated) {
-        setQuestions((prev) => prev.map((item) => (item.id === questionId ? updated : item)))
+        const enriched: ListingQuestion = {
+          ...updated,
+          answerAuthorName: resolveFullName(updated.answerAuthorId, listing.sellerName ?? null),
+        }
+        setQuestions((prev) => prev.map((item) => (item.id === questionId ? enriched : item)))
+        const authorId = typeof updated.answerAuthorId === 'string' && updated.answerAuthorId.trim()
+          ? updated.answerAuthorId.trim()
+          : null
+        if (authorId && listing.sellerName) {
+          setUserNames((prev) => {
+            if (prev[authorId]) return prev
+            return { ...prev, [authorId]: listing.sellerName ?? '' }
+          })
+        }
         setAnswerDrafts((prev) => ({ ...prev, [questionId]: '' }))
+        void notifyListingQuestionEvent(updated.id, 'answered')
+        const idsToEnsure = [updated.answerAuthorId].filter((id): id is string => Boolean(id))
+        if (idsToEnsure.length) {
+          void ensureUserNames(idsToEnsure)
+        }
       }
     } catch (error: any) {
       console.warn('[listing-questions] answer error', error)
+      const message =
+        typeof error?.message === 'string' && error.message.trim()
+          ? error.message.trim()
+          : 'No pudimos publicar la respuesta. Intentá nuevamente.'
       setAnswerErrors((prev) => ({
         ...prev,
-        [questionId]: 'No pudimos publicar la respuesta. Intentá nuevamente.',
+        [questionId]: message,
       }))
     } finally {
       setAnswerSubmitting((prev) => ({ ...prev, [questionId]: false }))
@@ -181,6 +269,10 @@ export default function ListingQuestionsSection({ listing, listingUnavailable }:
     () => sortedQuestions.filter((item) => Boolean(item.answerBody)),
     [sortedQuestions]
   )
+
+  useEffect(() => {
+    userNamesRef.current = userNames
+  }, [userNames])
 
   return (
     <section className="card p-6">
@@ -268,83 +360,93 @@ export default function ListingQuestionsSection({ listing, listingUnavailable }:
 
             {pendingQuestions.length > 0 && (
               <div className="space-y-4">
-                {pendingQuestions.map((question) => (
-                  <div key={question.id} className="rounded-2xl border border-[#14212e]/10 bg-white/90 p-4">
-                    <p className="text-sm font-semibold text-[#14212e]">
-                      {displayQuestionerName(question)}
-                      <span className="ml-2 text-xs font-normal text-[#14212e]/50">
-                        {relativeTimeFromNow(question.createdAt)}
-                      </span>
-                    </p>
-                    <p className="mt-2 whitespace-pre-wrap text-sm text-[#14212e]/80">
-                      {question.questionBody}
-                    </p>
-                    {isSeller ? (
-                      <div className="mt-3 space-y-2">
-                        <textarea
-                          className="input h-24 resize-none"
-                          placeholder="Escribí tu respuesta pública"
-                          value={answerDrafts[question.id] ?? ''}
-                          onChange={(event) => handleAnswerChange(question.id, event.target.value)}
-                          maxLength={600}
-                          disabled={answerSubmitting[question.id]}
-                        />
-                        {answerErrors[question.id] && (
-                          <p className="text-sm text-red-600">{answerErrors[question.id]}</p>
-                        )}
-                        <div className="flex items-center justify-end gap-3">
-                          <span className="text-xs text-[#14212e]/50">
-                            {(answerDrafts[question.id] ?? '').trim().length}/{600}
-                          </span>
-                          <Button
-                            type="button"
-                            onClick={() => void handleAnswerSubmit(question.id)}
-                            disabled={
-                              answerSubmitting[question.id] ||
-                              (answerDrafts[question.id] ?? '').trim().length < MIN_ANSWER_LENGTH
-                            }
-                            className="px-4 py-2"
-                          >
-                            {answerSubmitting[question.id] ? 'Publicando…' : 'Responder'}
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="mt-3 text-xs text-[#14212e]/50">
-                        El vendedor responderá en esta sección.
+                {pendingQuestions.map((question) => {
+                  const questionerFullName = resolveFullName(question.questionerId, question.questionerName ?? null)
+                  return (
+                    <div key={question.id} className="rounded-2xl border border-[#14212e]/10 bg-white/90 p-4">
+                      <p className="text-sm font-semibold text-[#14212e]">
+                        {displayQuestionerName(questionerFullName)}
+                        <span className="ml-2 text-xs font-normal text-[#14212e]/50">
+                          {relativeTimeFromNow(question.createdAt)}
+                        </span>
                       </p>
-                    )}
-                  </div>
-                ))}
+                      <p className="mt-2 whitespace-pre-wrap text-sm text-[#14212e]/80">
+                        {question.questionBody}
+                      </p>
+                      {isSeller ? (
+                        <div className="mt-3 space-y-2">
+                          <textarea
+                            className="input h-24 resize-none"
+                            placeholder="Escribí tu respuesta pública"
+                            value={answerDrafts[question.id] ?? ''}
+                            onChange={(event) => handleAnswerChange(question.id, event.target.value)}
+                            maxLength={600}
+                            disabled={answerSubmitting[question.id]}
+                          />
+                          {answerErrors[question.id] && (
+                            <p className="text-sm text-red-600">{answerErrors[question.id]}</p>
+                          )}
+                          <div className="flex items-center justify-end gap-3">
+                            <span className="text-xs text-[#14212e]/50">
+                              {(answerDrafts[question.id] ?? '').trim().length}/{600}
+                            </span>
+                            <Button
+                              type="button"
+                              onClick={() => void handleAnswerSubmit(question.id)}
+                              disabled={
+                                answerSubmitting[question.id] ||
+                                (answerDrafts[question.id] ?? '').trim().length < MIN_ANSWER_LENGTH
+                              }
+                              className="px-4 py-2"
+                            >
+                              {answerSubmitting[question.id] ? 'Publicando…' : 'Responder'}
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="mt-3 text-xs text-[#14212e]/50">
+                          El vendedor responderá en esta sección.
+                        </p>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             )}
 
             {answeredQuestions.length > 0 && (
               <div className="space-y-4">
-                {answeredQuestions.map((question) => (
-                  <div key={question.id} className="rounded-2xl border border-[#14212e]/10 bg-white p-4">
-                    <p className="text-sm font-semibold text-[#14212e]">
-                      {displayQuestionerName(question)}
-                      <span className="ml-2 text-xs font-normal text-[#14212e]/50">
-                        {relativeTimeFromNow(question.createdAt)}
-                      </span>
-                    </p>
-                    <p className="mt-2 whitespace-pre-wrap text-sm text-[#14212e]/80">
-                      {question.questionBody}
-                    </p>
-                    <div className="mt-3 rounded-2xl bg-[#14212e]/5 p-3">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-[#14212e]/70">
-                        Respuesta del vendedor · {relativeTimeFromNow(question.answeredAt)}
+                {answeredQuestions.map((question) => {
+                  const questionerFullName = resolveFullName(question.questionerId, question.questionerName ?? null)
+                  const answerFullName = resolveFullName(
+                    question.answerAuthorId,
+                    question.answerAuthorName ?? listing.sellerName ?? null
+                  )
+                  return (
+                    <div key={question.id} className="rounded-2xl border border-[#14212e]/10 bg-white p-4">
+                      <p className="text-sm font-semibold text-[#14212e]">
+                        {displayQuestionerName(questionerFullName)}
+                        <span className="ml-2 text-xs font-normal text-[#14212e]/50">
+                          {relativeTimeFromNow(question.createdAt)}
+                        </span>
                       </p>
-                      <p className="mt-2 whitespace-pre-wrap text-sm text-[#14212e]/90">
-                        {question.answerBody}
+                      <p className="mt-2 whitespace-pre-wrap text-sm text-[#14212e]/80">
+                        {question.questionBody}
                       </p>
-                      <p className="mt-2 text-xs text-[#14212e]/50">
-                        {displayAnswerAuthor(question, listing.sellerName)}
-                      </p>
+                      <div className="mt-3 rounded-2xl bg-[#14212e]/5 p-3">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-[#14212e]/70">
+                          Respuesta del vendedor · {relativeTimeFromNow(question.answeredAt)}
+                        </p>
+                        <p className="mt-2 whitespace-pre-wrap text-sm text-[#14212e]/90">
+                          {question.answerBody}
+                        </p>
+                        <p className="mt-2 text-xs text-[#14212e]/50">
+                          {displayAnswerAuthor(answerFullName, listing.sellerName)}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>
@@ -353,4 +455,3 @@ export default function ListingQuestionsSection({ listing, listingUnavailable }:
     </section>
   )
 }
-

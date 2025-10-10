@@ -161,3 +161,28 @@ export async function setUserVerificationStatus(id: string, verified: boolean): 
     return false
   }
 }
+
+export async function fetchUserDisplayNames(userIds: string[]): Promise<Record<string, string>> {
+  if (!supabaseEnabled) return {}
+  const uniqueIds = Array.from(new Set(userIds.filter((id): id is string => Boolean(id))))
+  if (uniqueIds.length === 0) return {}
+  try {
+    const supabase = getSupabaseClient()
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, full_name')
+      .in('id', uniqueIds)
+
+    if (error || !data) return {}
+
+    return data.reduce<Record<string, string>>((acc, row: any) => {
+      if (row?.id && typeof row.full_name === 'string' && row.full_name.trim()) {
+        acc[row.id] = row.full_name.trim()
+      }
+      return acc
+    }, {})
+  } catch (err) {
+    console.warn('[users] fetchUserDisplayNames failed', err)
+    return {}
+  }
+}

@@ -262,6 +262,234 @@ app.post('/api/offers/notify', async (req, res) => {
   }
 })
 
+async function resolveUserEmail(supabase, userId) {
+  if (!userId) return null
+  try {
+    const { data, error } = await supabase.auth.admin.getUserById(userId)
+    if (error) {
+      console.warn('[questions] resolveUserEmail failed', error)
+      return null
+    }
+    return data?.user?.email ?? null
+  } catch (err) {
+    console.warn('[questions] resolveUserEmail unexpected error', err)
+    return null
+  }
+}
+
+app.post('/api/questions/notify', async (req, res) => {
+  if (!isMailConfigured()) {
+    return res.status(503).json({ error: 'smtp_unavailable' })
+  }
+
+  const event = typeof req.body?.event === 'string' ? req.body.event.toLowerCase() : ''
+  const questionId = req.body?.questionId
+
+  if (!questionId || (event !== 'asked' && event !== 'answered')) {
+    return res.status(400).json({ error: 'invalid_request' })
+  }
+
+  let supabase
+  try {
+    supabase = getServerSupabaseClient()
+  } catch (error) {
+    console.warn('[questions] supabase client unavailable', error)
+    return res.status(500).json({ error: 'supabase_unavailable' })
+  }
+
+  const { data: question, error: fetchError } = await supabase
+    .from('listing_questions')
+    .select(
+      `
+        id,
+        listing_id,
+        question_body,
+        answer_body,
+        created_at,
+        answered_at,
+        asker_id,
+        answerer_id,
+        listing:listing_id (
+          id,
+          slug,
+          title,
+          seller_id,
+          seller_name,
+          seller_email
+        )
+      `
+    )
+    .eq('id', questionId)
+    .maybeSingle()
+
+  if (fetchError) {
+    console.warn('[questions] fetch failed', fetchError)
+    return res.status(500).json({ error: 'fetch_failed' })
+  }
+  if (!question) {
+    return res.status(404).json({ error: 'question_not_found' })
+  }
+
+  const listing = question.listing || {}
+  const listingTitle = listing.title || 'tu publicación'
+  const baseFront =
+    (process.env.FRONTEND_URL || '').split(',').map((s) => s.trim()).filter(Boolean)[0] || 'https://ciclomarket.ar'
+  const cleanBase = baseFront.replace(/\/$/, '')
+  const listingSlug = listing.slug || listing.id
+  const listingUrl = listingSlug ? `${cleanBase}/listing/${encodeURIComponent(listingSlug)}` : cleanBase
+  const from = process.env.SMTP_FROM || `Ciclo Market <${process.env.SMTP_USER}>`
+
+  const createNotification = async ({
+    userId,
+    title,
+    body,
+    cta,
+    metadata,
+  }) => {
+    if (!userId) return
+    try {
+      await supabase
+        .from('notifications')
+        .insert({
+          user_id: userId,
+          type: 'question',
+          title,
+          body,
+          metadata,
+          cta_url: cta,
+        })
+    } catch (notificationError) {
+      console.warn('[questions] notification insert failed', notificationError)
+    }
+  }
+
+  if (event === 'asked') {
+    const sellerEmail = listing.seller_email || (await resolveUserEmail(supabase, listing.seller_id))
+    if (!sellerEmail) {
+      return res.status(404).json({ error: 'seller_email_not_found' })
+    }
+
+    const sellerName = escapeHtml(listing.seller_name || 'vendedor')
+    const safeQuestion = escapeHtml(question.question_body || '').replace(/\n/g, '<br />')
+    const html = `
+      <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #14212e;">
+        <h2 style="color:#0c1723;">Tenés una nueva consulta sobre ${escapeHtml(listingTitle)}</h2>
+        <p>Hola ${sellerName},</p>
+        <p>Un comprador dejó la siguiente pregunta:</p>
+        <blockquote style="margin:16px 0;padding:12px 16px;border-left:4px solid #0c72ff;background:#f3f6fb;">
+          ${safeQuestion}
+        </blockquote>
+        <p>Respondé desde la publicación para que todos los interesados vean la respuesta.</p>
+        <p>
+          <a href="${listingUrl}" style="display:inline-block;margin-top:12px;padding:10px 16px;background:#0c72ff;color:#fff;text-decoration:none;border-radius:6px;">
+            Ver publicación
+          </a>
+        </p>
+        <hr style="margin:24px 0;border:none;border-top:1px solid #e1e5eb;" />
+        <p style="font-size:12px;color:#6b7280;">Este correo se generó automáticamente desde Ciclo Market.</p>
+      </div>
+    `
+
+    const text = [
+      `Tenés una nueva consulta sobre ${listingTitle}`,
+      `Pregunta: ${question.question_body}`,
+      `Respondé desde: ${listingUrl}`,
+    ].join('\n')
+
+    try {
+      await sendMail({
+        from,
+        to: sellerEmail,
+        subject: `Nueva consulta sobre ${listingTitle}`,
+        text,
+        html,
+      })
+      await createNotification({
+        userId: listing.seller_id,
+        title: `Nueva consulta en ${listingTitle}`,
+        body: (question.question_body || '').slice(0, 160),
+        cta: listingUrl,
+        metadata: {
+          question_id: question.id,
+          listing_id: listing.id,
+          event: 'asked',
+        },
+      })
+      return res.json({ ok: true })
+    } catch (error) {
+      console.error('[questions] email to seller failed', error)
+      return res.status(500).json({ error: 'email_failed' })
+    }
+  }
+
+  if (event === 'answered') {
+    if (!question.answer_body) {
+      return res.status(400).json({ error: 'missing_answer' })
+    }
+    const buyerEmail = await resolveUserEmail(supabase, question.asker_id)
+    if (!buyerEmail) {
+      return res.status(404).json({ error: 'buyer_email_not_found' })
+    }
+
+    const safeQuestion = escapeHtml(question.question_body || '').replace(/\n/g, '<br />')
+    const safeAnswer = escapeHtml(question.answer_body || '').replace(/\n/g, '<br />')
+    const html = `
+      <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #14212e;">
+        <h2 style="color:#0c1723;">El vendedor respondió tu consulta</h2>
+        <p>Consulta original:</p>
+        <blockquote style="margin:16px 0;padding:12px 16px;border-left:4px solid #94a3b8;background:#f8fafc;">
+          ${safeQuestion}
+        </blockquote>
+        <p>Respuesta del vendedor:</p>
+        <blockquote style="margin:16px 0;padding:12px 16px;border-left:4px solid #10b981;background:#ecfdf5;">
+          ${safeAnswer}
+        </blockquote>
+        <p>
+          <a href="${listingUrl}" style="display:inline-block;margin-top:12px;padding:10px 16px;background:#0c72ff;color:#fff;text-decoration:none;border-radius:6px;">
+            Ver publicación
+          </a>
+        </p>
+        <hr style="margin:24px 0;border:none;border-top:1px solid #e1e5eb;" />
+        <p style="font-size:12px;color:#6b7280;">Este correo se generó automáticamente desde Ciclo Market.</p>
+      </div>
+    `
+
+    const text = [
+      'El vendedor respondió tu consulta:',
+      `Pregunta: ${question.question_body}`,
+      `Respuesta: ${question.answer_body}`,
+      `Ver publicación: ${listingUrl}`,
+    ].join('\n')
+
+    try {
+      await sendMail({
+        from,
+        to: buyerEmail,
+        subject: `${listingTitle}: el vendedor respondió tu consulta`,
+        text,
+        html,
+      })
+      await createNotification({
+        userId: question.asker_id,
+        title: `Respuesta sobre ${listingTitle}`,
+        body: (question.answer_body || '').slice(0, 160),
+        cta: listingUrl,
+        metadata: {
+          question_id: question.id,
+          listing_id: listing.id,
+          event: 'answered',
+        },
+      })
+      return res.json({ ok: true })
+    } catch (error) {
+      console.error('[questions] email to buyer failed', error)
+      return res.status(500).json({ error: 'email_failed' })
+    }
+  }
+
+  return res.status(400).json({ error: 'unsupported_event' })
+})
+
 /* ----------------------------- Mercado Pago -------------------------------- */
 const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN
 if (!accessToken) {

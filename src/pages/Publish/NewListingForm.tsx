@@ -269,7 +269,9 @@ export default function NewListingForm() {
       if (typeof draft.apparelSize === 'string') setApparelSize(draft.apparelSize)
       if (typeof draft.apparelFit === 'string' && (APPAREL_FIT_OPTIONS as readonly string[]).includes(draft.apparelFit)) setApparelFit(draft.apparelFit as (typeof APPAREL_FIT_OPTIONS)[number])
       if (typeof draft.apparelCondition === 'string' && (CONDITION_OPTIONS as readonly string[]).includes(draft.apparelCondition)) setApparelCondition(draft.apparelCondition as (typeof CONDITION_OPTIONS)[number])
-      if (typeof draft.priceCurrency === 'string') setPriceCurrency(draft.priceCurrency)
+      if (draft.priceCurrency === 'USD' || draft.priceCurrency === 'ARS') {
+        setPriceCurrency(draft.priceCurrency)
+      }
       if (typeof draft.priceInput === 'string') setPriceInput(draft.priceInput)
       if (typeof draft.year === 'string') setYear(draft.year)
       if (typeof draft.province === 'string') setProvince(draft.province)

@@ -460,13 +460,8 @@ export default function ListingDetail() {
         ) : null}
       </SEO>
       <Container>
-      <div className="grid w-full gap-6 lg:grid-cols-[2fr_1fr] lg:grid-rows-[auto_auto]">
-        <div className="order-1 w-full min-w-0 space-y-6 lg:col-start-1 lg:row-start-1">
-          <ImageCarousel images={listing.images} />
-        </div>
-
-        <div className="order-2 w-full min-w-0 lg:col-start-2 lg:row-start-1">
-          <div className="flex flex-col gap-6 lg:sticky lg:top-6 lg:self-start">
+        <div className="grid w-full gap-6 lg:grid-cols-[2fr_1fr]">
+          <div className="order-1 w-full min-w-0 lg:col-start-2 lg:row-start-1 lg:self-start lg:sticky lg:top-6">
             <div className="card p-6">
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -499,7 +494,40 @@ export default function ListingDetail() {
                 Guardá o compará esta bici para decidir más tarde.
               </p>
             </div>
+          </div>
 
+          <div className="order-2 w-full min-w-0 lg:col-start-1 lg:row-start-1">
+            <ImageCarousel images={listing.images} />
+          </div>
+
+          <div className="order-3 w-full min-w-0 lg:col-start-1 lg:row-start-2">
+            <section className="card p-6">
+              <h2 className="text-lg font-semibold text-[#14212e]">Descripción</h2>
+              <p className="mt-3 text-sm leading-relaxed text-[#14212e]/80 whitespace-pre-wrap">
+                {listing.description}
+              </p>
+            </section>
+          </div>
+
+          <div className="order-4 w-full min-w-0 lg:col-start-1 lg:row-start-3">
+            <section className="card p-6">
+              <h2 className="text-lg font-semibold text-[#14212e]">Especificaciones</h2>
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <Spec label="Marca" value={listing.brand} />
+                <Spec label="Modelo" value={listing.model} />
+                <Spec label="Año" value={listing.year ? String(listing.year) : '—'} />
+                <Spec label="Categoría" value={listing.category} />
+                <Spec label="Material" value={listing.material || '—'} />
+                <Spec label="Talle / Medida" value={listing.frameSize || '—'} />
+                <Spec label="Grupo" value={listing.drivetrain || listing.drivetrainDetail || '—'} />
+                <Spec label="Ruedas" value={listing.wheelset || '—'} />
+                <Spec label="Rodado" value={listing.wheelSize || '—'} />
+                <Spec label="Extras" value={listing.extras || '—'} fullWidth />
+              </div>
+            </section>
+          </div>
+
+          <div className="order-5 w-full min-w-0 lg:col-start-2 lg:row-start-2 lg:self-start lg:mt-6">
             <div className="card p-6 space-y-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
@@ -576,9 +604,9 @@ export default function ListingDetail() {
                 </div>
               </div>
               <p className="text-xs text-[#14212e]/60">
-              {verifiedVendor
-                ? 'Vendedor verificado: tus ofertas generan alertas prioritarias en su bandeja y correo.'
-                : 'Las ofertas llegan a la bandeja de Mensajes del vendedor y se notifican por correo.'}
+                {verifiedVendor
+                  ? 'Vendedor verificado: tus ofertas generan alertas prioritarias en su bandeja y correo.'
+                  : 'Las ofertas llegan a la bandeja de Mensajes del vendedor y se notifican por correo.'}
               </p>
               {isFeaturedListing && (
                 <p className="text-xs font-semibold text-[#14212e]">
@@ -646,36 +674,12 @@ export default function ListingDetail() {
               )}
             </div>
           </div>
+
+          <div className="order-6 w-full min-w-0 lg:col-start-1 lg:row-start-4">
+            <ListingQuestionsSection listing={listing} listingUnavailable={listingUnavailable} />
+          </div>
         </div>
-
-        <div className="order-3 space-y-6 lg:col-start-1 lg:row-start-2">
-          <section className="card p-6">
-            <h2 className="text-lg font-semibold text-[#14212e]">Descripción</h2>
-            <p className="mt-3 text-sm leading-relaxed text-[#14212e]/80 whitespace-pre-wrap">
-              {listing.description}
-            </p>
-          </section>
-
-          <section className="card p-6">
-            <h2 className="text-lg font-semibold text-[#14212e]">Especificaciones</h2>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <Spec label="Marca" value={listing.brand} />
-              <Spec label="Modelo" value={listing.model} />
-              <Spec label="Año" value={listing.year ? String(listing.year) : '—'} />
-              <Spec label="Categoría" value={listing.category} />
-              <Spec label="Material" value={listing.material || '—'} />
-              <Spec label="Talle / Medida" value={listing.frameSize || '—'} />
-              <Spec label="Grupo" value={listing.drivetrain || listing.drivetrainDetail || '—'} />
-              <Spec label="Ruedas" value={listing.wheelset || '—'} />
-              <Spec label="Rodado" value={listing.wheelSize || '—'} />
-              <Spec label="Extras" value={listing.extras || '—'} fullWidth />
-            </div>
-          </section>
-
-          <ListingQuestionsSection listing={listing} listingUnavailable={listingUnavailable} />
-        </div>
-      </div>
-      {showOfferModal && (
+        {showOfferModal && (
         <OfferModal
           amount={offerAmount}
           onChange={(value) => {
@@ -837,7 +841,7 @@ const MailIcon = () => (
 
 function Spec({ label, value, fullWidth = false }: { label: string; value: string; fullWidth?: boolean }) {
   return (
-    <div className={fullWidth ? 'sm:col-span-2' : undefined}>
+    <div className={fullWidth ? 'col-span-2' : undefined}>
       <p className="text-xs uppercase tracking-wide text-[#14212e]/50">{label}</p>
       <p className="mt-1 text-sm font-medium text-[#14212e]">{value || '—'}</p>
     </div>

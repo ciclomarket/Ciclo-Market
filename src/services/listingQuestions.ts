@@ -1,17 +1,15 @@
 import { getSupabaseClient, supabaseEnabled } from './supabase'
 import type { ListingQuestion } from '../types'
 
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+
 type ListingQuestionRow = {
   id: string
   listing_id: string
   question_body: string
   asker_id: string
-  asker_full_name?: string | null
-  asker_name?: string | null
   answer_body?: string | null
   answerer_id?: string | null
-  answerer_full_name?: string | null
-  answerer_name?: string | null
   created_at?: string | null
   answered_at?: string | null
   updated_at?: string | null
@@ -23,12 +21,8 @@ function normalizeQuestion(row: ListingQuestionRow): ListingQuestion {
     listing_id,
     question_body,
     asker_id,
-    asker_full_name,
-    asker_name,
     answer_body,
     answerer_id,
-    answerer_full_name,
-    answerer_name,
     created_at,
     answered_at,
   } = row
@@ -39,10 +33,10 @@ function normalizeQuestion(row: ListingQuestionRow): ListingQuestion {
     questionerId: asker_id,
     questionBody: question_body,
     createdAt: created_at ? Date.parse(created_at) : Date.now(),
-    questionerName: asker_full_name || asker_name || null,
+    questionerName: null,
     answerBody: answer_body || null,
     answerAuthorId: answerer_id || null,
-    answerAuthorName: answerer_full_name || answerer_name || null,
+    answerAuthorName: null,
     answeredAt: answered_at ? Date.parse(answered_at) : null,
   }
 }
@@ -59,7 +53,7 @@ export async function fetchListingQuestions(listingId: string): Promise<ListingQ
     const { data, error } = await supabase
       .from('listing_questions')
       .select(
-        'id, listing_id, question_body, asker_id, asker_full_name, asker_name, answer_body, answerer_id, answerer_full_name, answerer_name, created_at, answered_at'
+        'id, listing_id, question_body, asker_id, answer_body, answerer_id, created_at, answered_at'
       )
       .eq('listing_id', listingId)
       .order('created_at', { ascending: true })
@@ -83,7 +77,7 @@ export async function askListingQuestion(listingId: string, body: string): Promi
     .from('listing_questions')
     .insert(payload)
     .select(
-      'id, listing_id, question_body, asker_id, asker_full_name, asker_name, answer_body, answerer_id, answerer_full_name, answerer_name, created_at, answered_at'
+      'id, listing_id, question_body, asker_id, answer_body, answerer_id, created_at, answered_at'
     )
     .maybeSingle()
 
@@ -107,8 +101,9 @@ export async function answerListingQuestion(questionId: string, body: string): P
     .from('listing_questions')
     .update(payload)
     .eq('id', questionId)
+    .is('answer_body', null)
     .select(
-      'id, listing_id, question_body, asker_id, asker_full_name, asker_name, answer_body, answerer_id, answerer_full_name, answerer_name, created_at, answered_at'
+      'id, listing_id, question_body, asker_id, answer_body, answerer_id, created_at, answered_at'
     )
     .maybeSingle()
 
@@ -117,6 +112,32 @@ export async function answerListingQuestion(questionId: string, body: string): P
     throw error
   }
 
-  return data ? normalizeQuestion(data as ListingQuestionRow) : null
+  if (!data) {
+    throw new Error('Esta consulta ya fue respondida.')
+  }
+
+  return normalizeQuestion(data as ListingQuestionRow)
 }
 
+export async function notifyListingQuestionEvent(questionId: string, event: 'asked' | 'answered'): Promise<void> {
+  if (!questionId) return
+  const endpoint = API_BASE ? `${API_BASE}/api/questions/notify` : '/api/questions/notify'
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ questionId, event }),
+    })
+    if (response.status === 404) {
+      // El backend puede no tener el endpoint (deploy viejo). Ignoramos silenciosamente.
+      return
+    }
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}))
+      const message = data?.error || 'No se pudo enviar la notificación.'
+      throw new Error(message)
+    }
+  } catch (error) {
+    console.warn('[listing-questions] notify failed', error)
+  }
+}
