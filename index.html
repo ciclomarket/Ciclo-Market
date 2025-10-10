@@ -8,8 +8,13 @@
     <meta name="description" content="Publicá tu bici, encontrá ofertas y conectá con vendedores en Ciclo Market. Clasificados de bicicletas en Argentina." />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="icon" type="image/png" href="https://ciclomarket.ar/site-logo.png" />
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" media="print" onload="this.media='all'">
+    <noscript>
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+    </noscript>
+    <link rel="preload" as="image" href="/bicicletas-home.jpg" imagesrcset="/bicicletas-home-card.jpg 720w, /bicicletas-home.jpg 1520w" imagesizes="100vw">
+    <link rel="icon" type="image/png" href="/favicon.png" />
 
     <!-- OpenGraph -->
     <meta property="og:title" content="Ciclo Market – Marketplace de bicicletas" />

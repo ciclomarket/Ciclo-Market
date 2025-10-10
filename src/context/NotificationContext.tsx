@@ -6,7 +6,7 @@ import type { PostgrestSingleResponse } from '@supabase/supabase-js'
 export interface NotificationRecord {
   id: string
   user_id: string | null
-  type: 'marketing' | 'chat' | 'offer' | 'system'
+  type: 'marketing' | 'question' | 'offer' | 'system'
   title: string
   body: string
   metadata?: Record<string, unknown> | null

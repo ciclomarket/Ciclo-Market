@@ -26,7 +26,6 @@ import { CompareProvider } from './context/CompareContext'
 import CompareTray from './components/CompareTray'
 import { PlanProvider } from './context/PlanContext'
 import { NotificationsProvider } from './context/NotificationContext'
-import { ChatProvider } from './context/ChatContext'
 import CheckoutSuccess from './pages/Checkout/Success'
 import CheckoutFailure from './pages/Checkout/Failure'
 import CheckoutPending from './pages/Checkout/Pending'
@@ -259,9 +258,8 @@ export default function App() {
     <AuthProvider>
       <PlanProvider>
         <NotificationsProvider>
-          <ChatProvider>
-            <CurrencyProvider>
-              <CompareProvider>
+          <CurrencyProvider>
+            <CompareProvider>
                 <div className="min-h-screen flex flex-col">
                   <SEO {...seoConfig} />
                   <Header />
@@ -338,9 +336,8 @@ export default function App() {
                   <CompareTray />
                   <Footer />
                 </div>
-              </CompareProvider>
-            </CurrencyProvider>
-          </ChatProvider>
+            </CompareProvider>
+          </CurrencyProvider>
         </NotificationsProvider>
       </PlanProvider>
     </AuthProvider>

@@ -15,17 +15,15 @@ import type { Listing } from '../types'
 import { formatNameWithInitial } from '../utils/user'
 import { normaliseWhatsapp, extractLocalWhatsapp, sanitizeLocalWhatsappInput, buildWhatsappUrl } from '../utils/whatsapp'
 import { useAuth } from '../context/AuthContext'
-import { useChat } from '../context/ChatContext'
-import { sendChatMessage } from '../services/chat'
 import { fetchUserProfile, fetchUserContactEmail, setUserVerificationStatus, type UserProfileRecord } from '../services/users'
 import { sendOfferEmail } from '../services/offers'
 import SEO from '../components/SEO'
+import ListingQuestionsSection from '../components/ListingQuestionsSection'
 
 export default function ListingDetail() {
   const params = useParams()
   const navigate = useNavigate()
   const { user, isModerator } = useAuth()
-  const { createThread } = useChat()
   const { format, fx } = useCurrency()
   const [listing, setListing] = useState<Listing | null>(null)
   const [loading, setLoading] = useState(true)
@@ -251,20 +249,16 @@ export default function ListingDetail() {
     setOfferSubmitting(true)
     setOfferError(null)
     try {
-      const threadId = await createThread(listing.id, listing.sellerId)
-      if (!threadId) {
-        throw new Error('No se pudo iniciar el chat con el vendedor.')
-      }
       const currency = listing.priceCurrency ?? 'USD'
       const amountLabel = new Intl.NumberFormat(currency === 'USD' ? 'en-US' : 'es-AR', {
         style: 'currency',
         currency,
         maximumFractionDigits: 0
       }).format(numericAmount)
-      const message = `Hola ${formatNameWithInitial(listing.sellerName, undefined)}. Te ofrezco ${amountLabel} por tu bicicleta ${listing.title}. Podés escribirme en ${buyerWhatsappLink}.`
-      await sendChatMessage(threadId, message)
 
       const sellerEmail = sellerAuthEmail || sellerProfile?.email || listing.sellerEmail || null
+      const notices: string[] = []
+
       if (sellerEmail) {
         const buyerMetadata = user.user_metadata ?? {}
         const buyerName =
@@ -284,34 +278,32 @@ export default function ListingDetail() {
             buyerEmail: user.email ?? null,
             buyerWhatsapp: `+${buyerWhatsappDigits}`
           })
+          notices.push('Avisamos al vendedor por correo electrónico.')
         } catch (notifyError) {
           console.warn('[listing-detail] offer email failed', notifyError)
+          notices.push('No pudimos enviar el correo al vendedor. Intentá nuevamente más tarde.')
         }
       }
 
-      let whatsappNotice = ''
       if (sellerWhatsappNumber) {
         const whatsappMessage = `Hola ${formatNameWithInitial(listing.sellerName, undefined)}. Quisiera ofrecerte ${amountLabel} por tu bicicleta ${listing.title}. Podés escribirme por WhatsApp acá: ${buyerWhatsappLink}`
         const whatsappUrl = buildWhatsappUrl(sellerWhatsappNumber, whatsappMessage)
         if (whatsappUrl) {
           window.open(whatsappUrl, '_blank', 'noopener,noreferrer')
-          whatsappNotice = 'Abrimos WhatsApp para que envíes tu oferta.'
+          notices.push('Abrimos WhatsApp para que puedas enviar tu oferta.')
         } else {
-          whatsappNotice = 'No pudimos abrir WhatsApp automáticamente. Verificá el número del vendedor.'
+          notices.push('No pudimos abrir WhatsApp automáticamente. Verificá el número del vendedor.')
         }
       } else {
-        whatsappNotice = 'El vendedor no tiene WhatsApp configurado, pero igual le enviaremos tu oferta por chat y correo.'
+        notices.push('El vendedor no tiene WhatsApp configurado, pero recibirá tu oferta por correo.')
       }
 
       setShowOfferModal(false)
       setOfferAmount('')
       setOfferError(null)
       setOfferWhatsappLocal(sanitizedWhatsapp)
-      if (whatsappNotice) {
-        const finalMessage = whatsappNotice.includes('correo')
-          ? whatsappNotice
-          : `${whatsappNotice} También te avisaremos por email cuando el vendedor responda.`
-        alert(finalMessage)
+      if (notices.length) {
+        alert(notices.join(' '))
       }
     } catch (error: any) {
       console.error('[listing-detail] offer failed', error)
@@ -679,6 +671,8 @@ export default function ListingDetail() {
               <Spec label="Extras" value={listing.extras || '—'} fullWidth />
             </div>
           </section>
+
+          <ListingQuestionsSection listing={listing} listingUnavailable={listingUnavailable} />
         </div>
       </div>
       {showOfferModal && (

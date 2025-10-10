@@ -22,9 +22,15 @@ app.use(express.json())
 const publicDir = path.join(__dirname, '../public')
 app.use(
   express.static(publicDir, {
+    maxAge: '30d',
     setHeaders(res, filePath) {
       if (filePath.endsWith('.xml')) {
         res.setHeader('Content-Type', 'application/xml; charset=utf-8')
+      }
+      if (/\.(?:html|xml|txt|json)$/i.test(filePath)) {
+        res.setHeader('Cache-Control', 'public, max-age=300, must-revalidate')
+      } else {
+        res.setHeader('Cache-Control', 'public, max-age=2592000, immutable')
       }
     },
   })

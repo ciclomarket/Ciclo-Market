@@ -251,8 +251,13 @@ export default function Home() {
       <section className="relative overflow-hidden border-b border-white/10 text-white">
         <img
           src="/bicicletas-home.jpg"
+          srcSet="/bicicletas-home-card.jpg 720w, /bicicletas-home.jpg 1520w"
+          sizes="100vw"
           alt="Ciclistas rodando en ruta"
           className="absolute inset-0 -z-20 h-full w-full object-cover"
+          loading="eager"
+          fetchPriority="high"
+          decoding="async"
         />
         <div className="absolute inset-0 -z-10 bg-[#14212e]/60" />
         <div className="absolute inset-0 -z-10 bg-[radial-gradient(1200px_600px_at_-20%_-10%,rgba(255,255,255,0.18),transparent_70%)]" />
@@ -292,9 +297,13 @@ export default function Home() {
             <div className="order-1 hidden justify-center lg:order-2 lg:flex">
               <div className="relative aspect-[4/5] w-full max-w-xs overflow-hidden rounded-[32px] border border-white/20 bg-white/5 shadow-[0_25px_60px_rgba(12,20,28,0.45)] backdrop-blur">
                 <img
-                  src="/bicicletas-home.jpg"
+                  src="/bicicletas-home-card.jpg"
+                  srcSet="/bicicletas-home-card-small.jpg 360w, /bicicletas-home-card.jpg 720w"
+                  sizes="(min-width: 1024px) 320px, 70vw"
                   alt="Detalle de bicicleta"
                   className="h-full w-full object-cover"
+                  loading="lazy"
+                  decoding="async"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-[#14212e]/70 via-[#14212e]/10 to-transparent" />
               </div>

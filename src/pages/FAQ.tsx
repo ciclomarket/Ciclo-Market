@@ -26,7 +26,7 @@ const QUESTIONS: Array<{ question: string; answer: string }> = [
   {
     question: '¿Cómo contacto al vendedor?',
     answer:
-      'Dentro del detalle de la bicicleta verás los botones disponibles: chat interno, WhatsApp o correo. Elegí la opción que prefieras para enviar tu consulta al vendedor.'
+      'Dentro del detalle de la bicicleta vas a encontrar el bloque de consultas públicas y los botones de contacto. Podés dejar tu pregunta ahí mismo o usar WhatsApp/correo según prefieras.'
   },
   {
     question: '¿Puedo editar la publicación después de crearla?',
@@ -46,7 +46,7 @@ const QUESTIONS: Array<{ question: string; answer: string }> = [
   {
     question: '¿Cómo gestiono mis mensajes y ofertas?',
     answer:
-      'En el dashboard, dentro del tab “Chat”, encontrarás todas las conversaciones y ofertas recibidas. Podés responder, enviar fotos y hacer seguimiento sin salir de la plataforma.'
+      'Cuando recibís una consulta u oferta te avisamos por email y notificaciones. Podés responder directamente desde la publicación de la bici y mantener todo el historial visible para otros compradores.'
   },
   {
     question: '¿Puedo publicar accesorios o repuestos?',
