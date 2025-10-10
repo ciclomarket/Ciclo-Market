@@ -33,7 +33,7 @@ export interface Listing {
   wheelSize?: string
   extras?: string
   plan?: string
-  status?: 'draft' | 'active' | 'paused' | 'sold' | 'expired' | 'archived'
+  status?: 'draft' | 'active' | 'paused' | 'sold' | 'expired' | 'archived' | 'deleted'
   expiresAt?: number | null
   renewalNotifiedAt?: number | null
   createdAt: number

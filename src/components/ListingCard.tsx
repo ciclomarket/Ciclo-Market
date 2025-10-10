@@ -56,6 +56,12 @@ export default function ListingCard({ l }: { l: Listing }) {
     metaParts = [sizeLabel, drivetrainLabel, city]
   }
   const metaDisplay = metaParts.filter(Boolean) as string[]
+  const isSold = l.status === 'sold'
+  const isArchived = l.status === 'archived'
+  const statusLabel = isSold ? 'Vendida' : isArchived ? 'Archivada' : null
+  const imageStatusClass = isArchived ? 'opacity-60 grayscale' : isSold ? 'opacity-85' : ''
+  const titleClass = isArchived ? 'line-clamp-1 font-semibold text-[#14212e]/50' : 'line-clamp-1 font-semibold text-[#14212e]'
+  const metaClass = isArchived ? 'mt-1 text-sm text-[#14212e]/50' : 'mt-1 text-sm text-[#14212e]/70'
   return (
     <div className="relative h-full">
       <div className="absolute top-2 left-2 right-2 z-10 flex items-center justify-between gap-2">
@@ -76,6 +82,11 @@ export default function ListingCard({ l }: { l: Listing }) {
           </button>
         </div>
         <div className="flex items-center gap-2">
+          {statusLabel && (
+            <span className={`rounded-full px-3 py-1 text-xs font-semibold text-white shadow ${isSold ? 'bg-[#0f766e]' : 'bg-[#6b7280]'}`}>
+              {statusLabel}
+            </span>
+          )}
           {discountPct !== null && discountPct > 0 && (
             <span className="rounded-full bg-mb-secondary px-3 py-1 text-xs font-semibold text-white shadow">
               -{discountPct}%
@@ -97,7 +108,7 @@ export default function ListingCard({ l }: { l: Listing }) {
             decoding="async"
             onLoad={() => setImageLoaded(true)}
             onError={() => setImageLoaded(true)}
-            className={`h-full w-full object-cover transition duration-700 ${imageLoaded ? 'opacity-100 scale-100' : 'opacity-0 scale-105'} group-hover:scale-105`}
+            className={`h-full w-full object-cover transition duration-700 ${imageLoaded ? 'opacity-100 scale-100' : 'opacity-0 scale-105'} ${imageStatusClass} group-hover:scale-105`}
           />
           <div
             aria-hidden="true"
@@ -106,7 +117,7 @@ export default function ListingCard({ l }: { l: Listing }) {
         </div>
         <div className="flex flex-1 flex-col p-4">
           <div className="flex items-start justify-between gap-3">
-            <h3 className="line-clamp-1 font-semibold text-[#14212e]">{l.title}</h3>
+            <h3 className={titleClass}>{l.title}</h3>
             <div className="text-right leading-none">
               <span className="block font-semibold text-mb-primary">{priceLabel}</span>
               {originalPriceLabel && (
@@ -114,7 +125,7 @@ export default function ListingCard({ l }: { l: Listing }) {
               )}
             </div>
           </div>
-          <p className="mt-1 text-sm text-[#14212e]/70">{metaDisplay.join(' • ')}</p>
+          <p className={metaClass}>{metaDisplay.join(' • ')}</p>
         </div>
       </Link>
     </div>

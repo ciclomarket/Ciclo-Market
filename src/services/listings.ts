@@ -92,7 +92,11 @@ export async function fetchListings(): Promise<Listing[]> {
       .select('*')
       .order('created_at', { ascending: false })
     if (error || !data) return []
-    return data.map((row: any) => normalizeListing(row as ListingRow))
+    const filtered = data.filter((row: any) => {
+      const status = (row?.status ?? 'active') as string
+      return status === 'active'
+    })
+    return filtered.map((row: any) => normalizeListing(row as ListingRow))
   } catch {
     return []
   }
@@ -108,7 +112,10 @@ export async function fetchListing(identifier: string): Promise<Listing | null> 
       .eq('slug', identifier)
       .maybeSingle()
 
-    if (bySlug) return normalizeListing(bySlug as ListingRow)
+    if (bySlug) {
+      if ((bySlug as any)?.status === 'deleted') return null
+      return normalizeListing(bySlug as ListingRow)
+    }
     if (slugError && slugError.code && slugError.code !== 'PGRST116') return null
 
     const lookupId = extractListingId(identifier)
@@ -118,6 +125,7 @@ export async function fetchListing(identifier: string): Promise<Listing | null> 
       .eq('id', lookupId)
       .maybeSingle()
     if (idError || !byId) return null
+    if ((byId as any)?.status === 'deleted') return null
     return normalizeListing(byId as ListingRow)
   } catch {
     return null
@@ -133,7 +141,8 @@ export async function fetchListingsByIds(ids: string[]): Promise<Listing[]> {
       .select('*')
       .in('id', ids)
     if (error || !data) return []
-    return data.map((row: any) => normalizeListing(row as ListingRow))
+    const filtered = data.filter((row: any) => (row?.status ?? '') !== 'deleted')
+    return filtered.map((row: any) => normalizeListing(row as ListingRow))
   } catch {
     return []
   }
@@ -149,7 +158,8 @@ export async function fetchListingsBySeller(sellerId: string): Promise<Listing[]
       .eq('seller_id', sellerId)
       .order('created_at', { ascending: false })
     if (error || !data) return []
-    return data.map((row: any) => normalizeListing(row as ListingRow))
+    const filtered = data.filter((row: any) => (row?.status ?? '') !== 'deleted')
+    return filtered.map((row: any) => normalizeListing(row as ListingRow))
   } catch {
     return []
   }
@@ -188,6 +198,46 @@ export async function archiveListing(id: string): Promise<boolean> {
     return !error
   } catch (err) {
     console.warn('[listings] archive error', err)
+    return false
+  }
+}
+
+export async function updateListingStatus(id: string, status: Listing['status']): Promise<Listing | null> {
+  if (!supabaseEnabled) return null
+  try {
+    const supabase = getSupabaseClient()
+    const { data, error } = await supabase
+      .from('listings')
+      .update({ status })
+      .eq('id', id)
+      .select('*')
+      .maybeSingle()
+    if (error) {
+      console.warn('[listings] update status error', error)
+      return null
+    }
+    return data ? normalizeListing(data as ListingRow) : null
+  } catch (err) {
+    console.warn('[listings] update status exception', err)
+    return null
+  }
+}
+
+export async function deleteListing(id: string): Promise<boolean> {
+  if (!supabaseEnabled) return false
+  try {
+    const supabase = getSupabaseClient()
+    const { error } = await supabase
+      .from('listings')
+      .update({ status: 'deleted' })
+      .eq('id', id)
+    if (error) {
+      console.warn('[listings] delete error', error)
+      return false
+    }
+    return true
+  } catch (err) {
+    console.warn('[listings] delete exception', err)
     return false
   }
 }
