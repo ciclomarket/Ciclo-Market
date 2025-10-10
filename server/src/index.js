@@ -278,10 +278,6 @@ async function resolveUserEmail(supabase, userId) {
 }
 
 app.post('/api/questions/notify', async (req, res) => {
-  if (!isMailConfigured()) {
-    return res.status(503).json({ error: 'smtp_unavailable' })
-  }
-
   const event = typeof req.body?.event === 'string' ? req.body.event.toLowerCase() : ''
   const questionId = req.body?.questionId
 
@@ -397,13 +393,15 @@ app.post('/api/questions/notify', async (req, res) => {
     ].join('\n')
 
     try {
-      await sendMail({
-        from,
-        to: sellerEmail,
-        subject: `Nueva consulta sobre ${listingTitle}`,
-        text,
-        html,
-      })
+      if (isMailConfigured()) {
+        await sendMail({
+          from,
+          to: sellerEmail,
+          subject: `Nueva consulta sobre ${listingTitle}`,
+          text,
+          html,
+        })
+      }
       await createNotification({
         userId: listing.seller_id,
         title: `Nueva consulta en ${listingTitle}`,
@@ -415,10 +413,10 @@ app.post('/api/questions/notify', async (req, res) => {
           event: 'asked',
         },
       })
-      return res.json({ ok: true })
+      return res.json({ ok: true, email: isMailConfigured() ? 'sent' : 'skipped' })
     } catch (error) {
-      console.error('[questions] email to seller failed', error)
-      return res.status(500).json({ error: 'email_failed' })
+      console.error('[questions] notify seller failed', error)
+      return res.status(500).json({ error: 'notify_failed' })
     }
   }
 
@@ -462,13 +460,15 @@ app.post('/api/questions/notify', async (req, res) => {
     ].join('\n')
 
     try {
-      await sendMail({
-        from,
-        to: buyerEmail,
-        subject: `${listingTitle}: el vendedor respondió tu consulta`,
-        text,
-        html,
-      })
+      if (isMailConfigured()) {
+        await sendMail({
+          from,
+          to: buyerEmail,
+          subject: `${listingTitle}: el vendedor respondió tu consulta`,
+          text,
+          html,
+        })
+      }
       await createNotification({
         userId: question.asker_id,
         title: `Respuesta sobre ${listingTitle}`,
@@ -480,10 +480,10 @@ app.post('/api/questions/notify', async (req, res) => {
           event: 'answered',
         },
       })
-      return res.json({ ok: true })
+      return res.json({ ok: true, email: isMailConfigured() ? 'sent' : 'skipped' })
     } catch (error) {
-      console.error('[questions] email to buyer failed', error)
-      return res.status(500).json({ error: 'email_failed' })
+      console.error('[questions] notify buyer failed', error)
+      return res.status(500).json({ error: 'notify_failed' })
     }
   }
 
