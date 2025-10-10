@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from 'react'
 import SkeletonCard from '../components/SkeletonCard'
 import { Link, useNavigate } from 'react-router-dom'
 import { useCurrency } from '../context/CurrencyContext'
+import { formatListingPrice } from '../utils/pricing'
 import HorizontalSlider from '../components/HorizontalSlider'
 import { fetchListings } from '../services/listings'
 import { supabaseEnabled } from '../services/supabase'
@@ -49,7 +50,7 @@ const BRAND_LOGOS: Record<(typeof BRANDS)[number]['slug'], string> = {
 }
 
 function OfferCard({ l }: { l: any }) {
-  const { format } = useCurrency()
+  const { format, fx } = useCurrency()
   const hasOriginal = typeof l.originalPrice === 'number' && l.originalPrice > l.price
   const offPct = hasOriginal ? Math.round((1 - l.price / l.originalPrice) * 100) : 0
   const slug = l.slug ?? buildListingSlug({ id: l.id, title: l.title, brand: l.brand, model: l.model, category: l.category })
@@ -105,10 +106,12 @@ function OfferCard({ l }: { l: any }) {
         <h3 className="line-clamp-1 font-semibold text-[#14212e]">{l.title}</h3>
         <p className="mt-1 text-sm text-[#14212e]/70">{metaDisplay.join(' • ')}</p>
         <div className="mt-2 flex items-baseline gap-2">
-          <span className="font-bold text-mb-primary">{format(l.price)}</span>
+          <span className="font-bold text-mb-primary">
+            {formatListingPrice(l.price, l.priceCurrency, format, fx)}
+          </span>
           {hasOriginal && (
             <span className="text-sm text-black/50 line-through">
-              {format(l.originalPrice)}
+              {formatListingPrice(l.originalPrice, l.priceCurrency, format, fx)}
             </span>
           )}
         </div>

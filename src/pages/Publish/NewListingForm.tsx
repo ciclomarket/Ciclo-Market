@@ -427,15 +427,7 @@ export default function NewListingForm() {
         setExtras(existing.extras ?? '')
         const existingCurrency = (existing.priceCurrency as 'USD' | 'ARS') ?? 'USD'
         setPriceCurrency(existingCurrency)
-        if (existing.price) {
-          const inputValue =
-            existingCurrency === 'ARS'
-              ? Math.round(existing.price * fx).toString()
-              : existing.price.toString()
-          setPriceInput(inputValue)
-        } else {
-          setPriceInput('')
-        }
+        setPriceInput(existing.price ? existing.price.toString() : '')
         setYear(existing.year ? String(existing.year) : '')
         setImages(existing.images ?? [])
 
@@ -559,7 +551,7 @@ export default function NewListingForm() {
       }
     }
     void loadListing()
-  }, [listingId, supabaseEnabled, user?.id, fx])
+  }, [listingId, supabaseEnabled, user?.id])
 
   useEffect(() => {
     if (listingId || !whatsappEnabled) return
@@ -635,8 +627,8 @@ export default function NewListingForm() {
       }
     }
 
-    // Guardamos siempre precio en USD (si elegiste ARS, convertimos)
-    const priceForStorage = priceCurrency === 'ARS' ? Number((priceNumber / fx).toFixed(2)) : priceNumber
+    // Guardamos el precio tal cual lo ingresó el usuario según la moneda seleccionada
+    const priceForStorage = priceNumber
     const location = finalCity ? `${finalCity}, ${province}` : province
 
     const expiresAtDate = new Date()
