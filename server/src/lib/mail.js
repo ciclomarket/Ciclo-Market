@@ -2,7 +2,12 @@ const nodemailer = require('nodemailer')
 
 let cachedTransport = null
 
+function smtpEnabled() {
+  return process.env.SMTP_ENABLED === 'true'
+}
+
 function isMailConfigured() {
+  if (!smtpEnabled()) return false
   return Boolean(
     process.env.SMTP_HOST &&
     process.env.SMTP_PORT &&
