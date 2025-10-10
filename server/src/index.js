@@ -392,8 +392,9 @@ app.post('/api/questions/notify', async (req, res) => {
       `Respondé desde: ${listingUrl}`,
     ].join('\n')
 
-    try {
-      if (isMailConfigured()) {
+    let emailStatus = 'skipped'
+    if (isMailConfigured()) {
+      try {
         await sendMail({
           from,
           to: sellerEmail,
@@ -401,23 +402,26 @@ app.post('/api/questions/notify', async (req, res) => {
           text,
           html,
         })
+        emailStatus = 'sent'
+      } catch (mailError) {
+        emailStatus = 'failed'
+        console.warn('[questions] email to seller failed', mailError)
       }
-      await createNotification({
-        userId: listing.seller_id,
-        title: `Nueva consulta en ${listingTitle}`,
-        body: (question.question_body || '').slice(0, 160),
-        cta: listingUrl,
-        metadata: {
-          question_id: question.id,
-          listing_id: listing.id,
-          event: 'asked',
-        },
-      })
-      return res.json({ ok: true, email: isMailConfigured() ? 'sent' : 'skipped' })
-    } catch (error) {
-      console.error('[questions] notify seller failed', error)
-      return res.status(500).json({ error: 'notify_failed' })
     }
+
+    await createNotification({
+      userId: listing.seller_id,
+      title: `Nueva consulta en ${listingTitle}`,
+      body: (question.question_body || '').slice(0, 160),
+      cta: listingUrl,
+      metadata: {
+        question_id: question.id,
+        listing_id: listing.id,
+        event: 'asked',
+      },
+    })
+
+    return res.json({ ok: true, email: emailStatus })
   }
 
   if (event === 'answered') {
@@ -459,8 +463,9 @@ app.post('/api/questions/notify', async (req, res) => {
       `Ver publicación: ${listingUrl}`,
     ].join('\n')
 
-    try {
-      if (isMailConfigured()) {
+    let emailStatus = 'skipped'
+    if (isMailConfigured()) {
+      try {
         await sendMail({
           from,
           to: buyerEmail,
@@ -468,23 +473,26 @@ app.post('/api/questions/notify', async (req, res) => {
           text,
           html,
         })
+        emailStatus = 'sent'
+      } catch (mailError) {
+        emailStatus = 'failed'
+        console.warn('[questions] email to buyer failed', mailError)
       }
-      await createNotification({
-        userId: question.asker_id,
-        title: `Respuesta sobre ${listingTitle}`,
-        body: (question.answer_body || '').slice(0, 160),
-        cta: listingUrl,
-        metadata: {
-          question_id: question.id,
-          listing_id: listing.id,
-          event: 'answered',
-        },
-      })
-      return res.json({ ok: true, email: isMailConfigured() ? 'sent' : 'skipped' })
-    } catch (error) {
-      console.error('[questions] notify buyer failed', error)
-      return res.status(500).json({ error: 'notify_failed' })
     }
+
+    await createNotification({
+      userId: question.asker_id,
+      title: `Respuesta sobre ${listingTitle}`,
+      body: (question.answer_body || '').slice(0, 160),
+      cta: listingUrl,
+      metadata: {
+        question_id: question.id,
+        listing_id: listing.id,
+        event: 'answered',
+      },
+    })
+
+    return res.json({ ok: true, email: emailStatus })
   }
 
   return res.status(400).json({ error: 'unsupported_event' })
