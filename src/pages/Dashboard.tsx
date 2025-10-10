@@ -6,7 +6,7 @@ import ListingCard from '../components/ListingCard'
 import { mockListings } from '../mock/mockData'
 import { useAuth } from '../context/AuthContext'
 import { supabase, supabaseEnabled } from '../services/supabase'
-import { archiveListing, fetchListingsBySeller, reduceListingPrice, fetchListingsByIds } from '../services/listings'
+import { archiveListing, fetchListingsBySeller, reduceListingPrice, fetchListingsByIds, updateListingStatus, deleteListing } from '../services/listings'
 import { fetchUserProfile, type UserProfileRecord, upsertUserProfile } from '../services/users'
 import type { Listing } from '../types'
 import { usePlans } from '../context/PlanContext'
@@ -15,6 +15,7 @@ import { uploadAvatar } from '../services/storage'
 import { PROVINCES, OTHER_CITY_OPTION } from '../constants/locations'
 import { BIKE_CATEGORIES } from '../constants/catalog'
 import { deriveProfileSlug, pickDiscipline } from '../utils/user'
+import { normaliseWhatsapp, extractLocalWhatsapp, sanitizeLocalWhatsappInput } from '../utils/whatsapp'
 import { useNotifications } from '../context/NotificationContext'
 import useFaves from '../hooks/useFaves'
 
@@ -807,15 +808,57 @@ function ListingsView({ listings, onRefresh }: { listings: Listing[]; onRefresh?
     )
   }
 
-  const handleDelete = async (id: string) => {
+  const handleArchive = async (id: string) => {
     const confirmed = window.confirm('¿Seguro que querés archivar esta publicación? Podrás reactivarla luego.')
     if (!confirmed) return
+    if (!supabaseEnabled) {
+      alert('Archivar requiere la conexión con Supabase activada.')
+      return
+    }
     const ok = await archiveListing(id)
     if (!ok) {
       alert('No pudimos archivar la publicación. Intentá nuevamente.')
       return
     }
     if (onRefresh) await onRefresh()
+    setSuccessMessage('La publicación fue archivada. Podés reactivarla cuando quieras.')
+  }
+
+  const handleToggleSold = async (listing: Listing) => {
+    const isSold = listing.status === 'sold'
+    const message = isSold
+      ? '¿Querés volver a marcar esta publicación como disponible?'
+      : '¿Querés marcar esta publicación como vendida?'
+    const confirmed = window.confirm(message)
+    if (!confirmed) return
+    if (!supabaseEnabled) {
+      alert('Cambiar el estado requiere la conexión con Supabase activada.')
+      return
+    }
+    const nextStatus: Listing['status'] = isSold ? 'active' : 'sold'
+    const updated = await updateListingStatus(listing.id, nextStatus)
+    if (!updated) {
+      alert('No pudimos actualizar el estado. Intentá nuevamente.')
+      return
+    }
+    if (onRefresh) await onRefresh()
+    setSuccessMessage(isSold ? 'La publicación vuelve a estar activa.' : 'Marcaste la publicación como vendida.')
+  }
+
+  const handleDelete = async (id: string) => {
+    const confirmed = window.confirm('Esta acción elimina la publicación de forma definitiva. ¿Querés continuar?')
+    if (!confirmed) return
+    if (!supabaseEnabled) {
+      alert('Eliminar publicaciones requiere la conexión con Supabase activada.')
+      return
+    }
+    const ok = await deleteListing(id)
+    if (!ok) {
+      alert('No pudimos eliminar la publicación. Intentá nuevamente.')
+      return
+    }
+    if (onRefresh) await onRefresh()
+    setSuccessMessage('La publicación fue eliminada permanentemente.')
   }
 
   const handleReducePrice = async (listing: Listing) => {
@@ -891,17 +934,32 @@ function ListingsView({ listings, onRefresh }: { listings: Listing[]; onRefresh?
               </Button>
               <Button
                 variant="secondary"
+                className={`flex-1 min-w-[150px] text-xs py-2 ${listing.status === 'sold' ? 'border border-[#14212e]/20 bg-[#14212e]/10 text-[#14212e]' : ''}`}
+                onClick={() => void handleToggleSold(listing)}
+              >
+                {listing.status === 'sold' ? 'Marcar disponible' : 'Marcar vendida'}
+              </Button>
+              <Button
+                variant="secondary"
                 className="flex-1 min-w-[150px] text-xs py-2"
                 onClick={() => void handleReducePrice(listing)}
+                disabled={listing.status === 'sold'}
               >
                 Reducir precio
+              </Button>
+              <Button
+                variant="ghost"
+                className="flex-1 min-w-[150px] text-xs py-2"
+                onClick={() => void handleArchive(listing.id)}
+              >
+                Archivar
               </Button>
               <Button
                 variant="ghost"
                 className="flex-1 min-w-[150px] text-xs py-2 text-red-600"
                 onClick={() => void handleDelete(listing.id)}
               >
-                Archivar
+                Eliminar
               </Button>
             </div>
           </div>
@@ -1412,7 +1470,7 @@ function EditProfileView({
   const [instagram, setInstagram] = useState(profile?.instagram_handle ?? '')
   const [facebook, setFacebook] = useState(profile?.facebook_handle ?? '')
   const [website, setWebsite] = useState(profile?.website_url ?? '')
-  const [whatsapp, setWhatsapp] = useState(profile?.whatsapp_number ?? '')
+  const [whatsappLocal, setWhatsappLocal] = useState(() => sanitizeLocalWhatsappInput(extractLocalWhatsapp(profile?.whatsapp_number ?? '')))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -1431,7 +1489,7 @@ function EditProfileView({
     setInstagram(profile?.instagram_handle ?? '')
     setFacebook(profile?.facebook_handle ?? '')
     setWebsite(profile?.website_url ?? '')
-    setWhatsapp(profile?.whatsapp_number ?? '')
+    setWhatsappLocal(sanitizeLocalWhatsappInput(extractLocalWhatsapp(profile?.whatsapp_number ?? '')))
     setAvatarUrl(initialAvatar)
   }, [profile, initialAvatar])
 
@@ -1443,26 +1501,6 @@ function EditProfileView({
 
   const cityOptions = province ? PROVINCES.find((item) => item.name === province)?.cities ?? [] : []
   const showCityOther = city === OTHER_CITY_OPTION
-
-  const normaliseWhatsapp = useCallback((value?: string | null): string | null => {
-    if (!value) return null
-    const trimmed = value.trim()
-    if (!trimmed) return null
-
-    const looksLikeUrl = /^(https?:\/\/|wa\.(?:me|link)\/|api\.whatsapp\.com\/)/i.test(trimmed)
-    if (looksLikeUrl) {
-      const prefixed = trimmed.startsWith('http') ? trimmed : `https://${trimmed}`
-      try {
-        const url = new URL(prefixed)
-        return url.toString()
-      } catch {
-        // Si no es URL válida seguimos con fallback numérico.
-      }
-    }
-
-    const digits = trimmed.replace(/[^0-9]/g, '')
-    return digits || null
-  }, [])
 
   const handleAvatarUpload = async (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0 || !userId) return
@@ -1505,6 +1543,7 @@ function EditProfileView({
     setSaving(true)
     setError(null)
     try {
+      const formattedWhatsapp = whatsappLocal ? normaliseWhatsapp(whatsappLocal) : null
       const result = await upsertUserProfile({
         id: userId,
         email: effectiveEmail,
@@ -1520,7 +1559,7 @@ function EditProfileView({
         instagramHandle: instagram ? normaliseHandle(instagram) : null,
         facebookHandle: facebook ? normaliseUrl(facebook) : null,
         websiteUrl: website ? normaliseUrl(website) : null,
-        whatsapp: normaliseWhatsapp(whatsapp)
+        whatsapp: formattedWhatsapp
       })
       if (!result.success) {
         throw new Error(result.error ?? 'No pudimos guardar tu perfil. Intentá nuevamente.')
@@ -1635,13 +1674,22 @@ function EditProfileView({
         {/* WhatsApp — único input */}
         <label className="text-sm font-medium text-[#14212e]">
           WhatsApp (privado)
-          <input
-            className="input mt-1"
-            value={whatsapp}
-            onChange={(e) => setWhatsapp(e.target.value)}
-            placeholder="Ej.: +5491122334455"
-          />
-          <span className="text-xs text-[#14212e]/60">No se muestra públicamente; se usa para autocompletar publicaciones con botón de WhatsApp.</span>
+          <div className="mt-1 flex items-stretch">
+            <span className="inline-flex items-center rounded-l-lg border border-[#14212e]/10 border-r-0 bg-[#14212e]/5 px-3 text-sm text-[#14212e]/80">
+              +54
+            </span>
+            <input
+              className="input mt-0 rounded-l-none"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={whatsappLocal}
+              onChange={(e) => setWhatsappLocal(sanitizeLocalWhatsappInput(e.target.value))}
+              placeholder="91122334455"
+            />
+          </div>
+          <span className="text-xs text-[#14212e]/60">
+            Ingresá tu número local sin el +54. Lo usamos para autocompletar tus publicaciones con botón de WhatsApp.
+          </span>
         </label>
 
         {error && <p className="text-sm text-red-600">{error}</p>}

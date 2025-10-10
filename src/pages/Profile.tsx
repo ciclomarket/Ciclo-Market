@@ -153,7 +153,10 @@ export default function Profile() {
   const displayName = profile?.full_name || listings[0]?.sellerName || 'Vendedor Ciclo Market'
   const avatarUrl = profile?.avatar_url || listings[0]?.sellerAvatar || null
   const totalListings = listings.length
-  const activeListings = useMemo(() => listings.filter((item) => item.status !== 'archived'), [listings])
+  const activeListings = useMemo(
+    () => listings.filter((item) => !item.status || item.status === 'active'),
+    [listings]
+  )
   const locationLabel = useMemo(() => {
     if (!profile) return listings[0]?.sellerLocation ?? 'Ubicación reservada'
     const city = profile.city?.trim()

@@ -13,6 +13,7 @@ import { supabase, supabaseEnabled, getSupabaseClient } from '../../services/sup
 import { usePlans } from '../../context/PlanContext'
 import { canonicalPlanCode, normalisePlanText, resolvePlanCode, type PlanCode } from '../../utils/planCodes'
 import { formatNameWithInitial } from '../../utils/user'
+import { normaliseWhatsapp, extractLocalWhatsapp, sanitizeLocalWhatsappInput } from '../../utils/whatsapp'
 import { fetchListing } from '../../services/listings'
 import { fetchUserProfile, type UserProfileRecord } from '../../services/users'
 
@@ -162,7 +163,7 @@ export default function NewListingForm() {
   const [cityOther, setCityOther] = useState<string>('')
   const [description, setDescription] = useState('')
   const [images, setImages] = useState<string[]>([])
-  const [sellerWhatsappInput, setSellerWhatsappInput] = useState('')
+  const [sellerWhatsappLocal, setSellerWhatsappLocal] = useState('')
   const [profile, setProfile] = useState<UserProfileRecord | null>(null)
   const [draftRestored, setDraftRestored] = useState(false)
   const [accessoryType, setAccessoryType] = useState<(typeof ACCESSORY_TYPES)[number]>(ACCESSORY_TYPES[0])
@@ -276,7 +277,16 @@ export default function NewListingForm() {
       if (typeof draft.cityOther === 'string') setCityOther(draft.cityOther)
       if (typeof draft.description === 'string') setDescription(draft.description)
       if (Array.isArray(draft.images)) setImages(draft.images.filter((item: unknown) => typeof item === 'string'))
-      if (typeof draft.sellerWhatsappInput === 'string') setSellerWhatsappInput(draft.sellerWhatsappInput)
+      const draftWhatsappRaw =
+        typeof draft.sellerWhatsappLocal === 'string'
+          ? draft.sellerWhatsappLocal
+          : typeof draft.sellerWhatsappInput === 'string'
+            ? draft.sellerWhatsappInput
+            : ''
+      if (draftWhatsappRaw) {
+        const localValue = sanitizeLocalWhatsappInput(extractLocalWhatsapp(draftWhatsappRaw) || draftWhatsappRaw)
+        setSellerWhatsappLocal(localValue)
+      }
       if (draft.planOverride) setPlanOverride(draft.planOverride as PlanCode)
       setDraftRestored(true)
     } catch (err) {
@@ -310,7 +320,7 @@ export default function NewListingForm() {
         cityOther,
         description,
         images,
-        sellerWhatsappInput,
+        sellerWhatsappLocal,
         planOverride,
         accessoryType,
         accessoryCondition,
@@ -349,7 +359,7 @@ export default function NewListingForm() {
     cityOther,
     description,
     images,
-    sellerWhatsappInput,
+    sellerWhatsappLocal,
     planOverride,
     accessoryType,
     accessoryCondition,
@@ -372,15 +382,16 @@ export default function NewListingForm() {
       const data = await fetchUserProfile(user.id)
       if (!active) return
       setProfile(data)
-      if (whatsappEnabled && !sellerWhatsappInput && data?.whatsapp_number) {
-        setSellerWhatsappInput(data.whatsapp_number)
+      if (whatsappEnabled && !sellerWhatsappLocal && data?.whatsapp_number) {
+        const localValue = sanitizeLocalWhatsappInput(extractLocalWhatsapp(data.whatsapp_number))
+        if (localValue) setSellerWhatsappLocal(localValue)
       }
     }
     void loadProfile()
     return () => {
       active = false
     }
-  }, [user?.id, whatsappEnabled, sellerWhatsappInput])
+  }, [user?.id, whatsappEnabled, sellerWhatsappLocal])
 
   const autoTitle = useMemo(() => {
     const composed = `${brand.trim()} ${model.trim()}`.trim()
@@ -389,26 +400,6 @@ export default function NewListingForm() {
     if (isApparel) return 'Indumentaria en venta'
     return 'Bicicleta en venta'
   }, [brand, model, isAccessory, isApparel])
-
-  const normaliseWhatsapp = (value?: string | null): string | null => {
-    if (!value) return null
-    const trimmed = value.trim()
-    if (!trimmed) return null
-
-    const looksLikeUrl = /^(https?:\/\/|wa\.(?:me|link)\/|api\.whatsapp\.com\/)/i.test(trimmed)
-    if (looksLikeUrl) {
-      const prefixed = trimmed.startsWith('http') ? trimmed : `https://${trimmed}`
-      try {
-        const url = new URL(prefixed)
-        return url.toString()
-      } catch {
-        // Si no es una URL válida continuamos intentando como número.
-      }
-    }
-
-    const digits = trimmed.replace(/[^0-9]/g, '')
-    return digits || null
-  }
 
   useEffect(() => {
     const loadListing = async () => {
@@ -546,7 +537,14 @@ export default function NewListingForm() {
             setCityOther(cityValue)
           }
         }
-        setSellerWhatsappInput(existing.sellerWhatsapp ?? profile?.whatsapp_number ?? '')
+        const existingWhatsappRaw = existing.sellerWhatsapp ?? ''
+        if (existingWhatsappRaw) {
+          const localValue = sanitizeLocalWhatsappInput(extractLocalWhatsapp(existingWhatsappRaw))
+          setSellerWhatsappLocal(localValue)
+        } else if (profile?.whatsapp_number) {
+          const localValue = sanitizeLocalWhatsappInput(extractLocalWhatsapp(profile.whatsapp_number))
+          if (localValue) setSellerWhatsappLocal(localValue)
+        }
       } finally {
         setLoadingListing(false)
       }
@@ -556,21 +554,23 @@ export default function NewListingForm() {
 
   useEffect(() => {
     if (listingId || !whatsappEnabled) return
-    if (sellerWhatsappInput) return
+    if (sellerWhatsappLocal) return
     const metaWhatsapp = (user?.user_metadata?.whatsapp as string | undefined) ?? (user?.user_metadata?.phone as string | undefined) ?? ''
     const profileWhatsapp = profile?.whatsapp_number ?? ''
     const defaultWhatsapp = profileWhatsapp || metaWhatsapp
     if (defaultWhatsapp) {
-      setSellerWhatsappInput(defaultWhatsapp)
+      const localValue = sanitizeLocalWhatsappInput(extractLocalWhatsapp(defaultWhatsapp) || defaultWhatsapp)
+      if (localValue) setSellerWhatsappLocal(localValue)
     }
-  }, [listingId, whatsappEnabled, profile?.whatsapp_number, sellerWhatsappInput, user?.user_metadata?.phone, user?.user_metadata?.whatsapp])
+  }, [listingId, whatsappEnabled, profile?.whatsapp_number, sellerWhatsappLocal, user?.user_metadata?.phone, user?.user_metadata?.whatsapp])
 
   useEffect(() => {
     if (!listingId || !whatsappEnabled) return
     if (!profile?.whatsapp_number) return
-    if (sellerWhatsappInput) return
-    setSellerWhatsappInput(profile.whatsapp_number)
-  }, [listingId, whatsappEnabled, profile?.whatsapp_number, sellerWhatsappInput])
+    if (sellerWhatsappLocal) return
+    const localValue = sanitizeLocalWhatsappInput(extractLocalWhatsapp(profile.whatsapp_number))
+    if (localValue) setSellerWhatsappLocal(localValue)
+  }, [listingId, whatsappEnabled, profile?.whatsapp_number, sellerWhatsappLocal])
 
   /** 2) Subida de fotos (usa hook existente) */
   const handleFiles = async (files: FileList | null) => {
@@ -585,6 +585,10 @@ export default function NewListingForm() {
     const selected = Array.from(files).slice(0, remainingPhotos)
     const urls = await uploadFiles(selected) // Ideal: acá podrías comprimir a WebP antes
     setImages((prev) => [...prev, ...urls])
+  }
+
+  const removeImageAt = (index: number) => {
+    setImages((prev) => prev.filter((_, idx) => idx !== index))
   }
 
   /** 3) Submit: inserta listing o actualiza si corresponde */
@@ -636,8 +640,9 @@ export default function NewListingForm() {
     const sellerLocation = metadata.city
       ? (metadata.province ? `${metadata.city}, ${metadata.province}` : metadata.city)
       : undefined
-    const profileWhatsapp = profile?.whatsapp_number ?? undefined
-    const sellerWhatsappFromProfile = metadata.whatsapp ?? metadata.phone ?? profileWhatsapp ?? undefined
+    const profileWhatsapp = profile?.whatsapp_number ?? null
+    const metadataWhatsapp = typeof metadata.whatsapp === 'string' ? metadata.whatsapp : null
+    const metadataPhone = typeof metadata.phone === 'string' ? metadata.phone : null
 
     // Defaults exigidos por el negocio
     const safeDescription = (() => {
@@ -663,10 +668,26 @@ export default function NewListingForm() {
       return 'No tiene agregados extras, se encuentra original'
     })()
 
-    const whatsappCandidate = sellerWhatsappInput.trim() || sellerWhatsappFromProfile || editingListing?.sellerWhatsapp || ''
-    const formattedWhatsapp = whatsappEnabled
-      ? normaliseWhatsapp(whatsappCandidate)
-      : editingListing?.sellerWhatsapp ?? null
+    const candidateSources: Array<string | null> = [
+      sellerWhatsappLocal,
+      profileWhatsapp,
+      metadataWhatsapp,
+      metadataPhone,
+      editingListing?.sellerWhatsapp ?? null
+    ]
+    let formattedWhatsapp: string | null = null
+    if (whatsappEnabled) {
+      for (const source of candidateSources) {
+        if (!source) continue
+        const normalized = normaliseWhatsapp(source)
+        if (normalized) {
+          formattedWhatsapp = normalized
+          break
+        }
+      }
+    } else {
+      formattedWhatsapp = editingListing?.sellerWhatsapp ?? null
+    }
 
     const payload = {
       title: autoTitle,
@@ -1117,13 +1138,20 @@ export default function NewListingForm() {
             )}
             {whatsappEnabled && (
               <Field label="WhatsApp de contacto">
-                <input
-                  className="input"
-                  value={sellerWhatsappInput}
-                  onChange={(e) => setSellerWhatsappInput(e.target.value)}
-                  placeholder="Ej.: +5491122334455"
-                />
-                <p className="mt-1 text-xs text-black/50">Se mostrará un botón de WhatsApp en la publicación.</p>
+                <div className="flex items-stretch">
+                  <span className="inline-flex items-center rounded-l-lg border border-black/10 border-r-0 bg-black/5 px-3 text-sm text-black/70">
+                    +54
+                  </span>
+                  <input
+                    className="input rounded-l-none"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={sellerWhatsappLocal}
+                    onChange={(e) => setSellerWhatsappLocal(sanitizeLocalWhatsappInput(e.target.value))}
+                    placeholder="91122334455"
+                  />
+                </div>
+                <p className="mt-1 text-xs text-black/50">Ingresá tu número local sin el +54. Lo agregamos automáticamente en la publicación.</p>
               </Field>
             )}
 
@@ -1183,6 +1211,14 @@ export default function NewListingForm() {
               {images.map((src, index) => (
                 <div key={index} className="relative aspect-square overflow-hidden rounded-md border border-black/10">
                   <img src={src} alt="Foto del producto" className="w-full h-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => removeImageAt(index)}
+                    className="absolute right-1 top-1 rounded-full bg-black/70 p-1 text-white transition hover:bg-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                    aria-label={`Eliminar foto ${index + 1}`}
+                  >
+                    ✕
+                  </button>
                 </div>
               ))}
             </div>
