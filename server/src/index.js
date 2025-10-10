@@ -498,6 +498,24 @@ app.post('/api/questions/notify', async (req, res) => {
   return res.status(400).json({ error: 'unsupported_event' })
 })
 
+app.get('/api/debug/smtp', async (_req, res) => {
+  if (!isMailConfigured()) {
+    return res.status(503).json({ ok: false, error: 'smtp_not_configured' })
+  }
+  try {
+    await sendMail({
+      from: process.env.SMTP_FROM || `Ciclo Market <${process.env.SMTP_USER}>`,
+      to: process.env.SMTP_TEST_TO || process.env.SMTP_USER,
+      subject: 'Brevo SMTP test',
+      text: 'Probando conexión desde Render',
+    })
+    return res.json({ ok: true })
+  } catch (error) {
+    console.error('[debug] smtp test failed', error)
+    return res.status(500).json({ ok: false, error: error.message || 'smtp_failed' })
+  }
+})
+
 /* ----------------------------- Mercado Pago -------------------------------- */
 const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN
 if (!accessToken) {
