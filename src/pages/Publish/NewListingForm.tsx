@@ -425,8 +425,17 @@ export default function NewListingForm() {
         setModel(existing.model)
         setDescription(existing.description ?? '')
         setExtras(existing.extras ?? '')
-        setPriceCurrency((existing.priceCurrency as 'USD' | 'ARS') ?? 'USD')
-        setPriceInput(existing.price ? existing.price.toString() : '')
+        const existingCurrency = (existing.priceCurrency as 'USD' | 'ARS') ?? 'USD'
+        setPriceCurrency(existingCurrency)
+        if (existing.price) {
+          const inputValue =
+            existingCurrency === 'ARS'
+              ? Math.round(existing.price * fx).toString()
+              : existing.price.toString()
+          setPriceInput(inputValue)
+        } else {
+          setPriceInput('')
+        }
         setYear(existing.year ? String(existing.year) : '')
         setImages(existing.images ?? [])
 
@@ -550,7 +559,7 @@ export default function NewListingForm() {
       }
     }
     void loadListing()
-  }, [listingId, supabaseEnabled, user?.id])
+  }, [listingId, supabaseEnabled, user?.id, fx])
 
   useEffect(() => {
     if (listingId || !whatsappEnabled) return
