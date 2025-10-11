@@ -344,7 +344,7 @@ app.post('/api/questions/notify', async (req, res) => {
   }) => {
     if (!userId) return
     try {
-      await supabase
+      const { error: insertError } = await supabase
         .from('notifications')
         .insert({
           user_id: userId,
@@ -354,6 +354,9 @@ app.post('/api/questions/notify', async (req, res) => {
           metadata,
           cta_url: cta,
         })
+      if (insertError) {
+        console.warn('[questions] notification insert failed', insertError)
+      }
     } catch (notificationError) {
       console.warn('[questions] notification insert failed', notificationError)
     }

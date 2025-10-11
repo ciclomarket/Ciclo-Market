@@ -67,12 +67,13 @@ export default function ListingQuestionsSection({ listing, listingUnavailable }:
 
   const isSeller = user?.id === listing.sellerId
   const canAsk = Boolean(user && !isSeller && !listingUnavailable && supabaseEnabled)
-  const requiresLoginToAsk = !user && !listingUnavailable && supabaseEnabled
+  const canViewQuestions = Boolean(user && supabaseEnabled)
+  const requiresLoginToView = !user && supabaseEnabled
   const askingDisabledReason = useMemo(() => {
     if (listingUnavailable) return 'La publicación ya no está activa.'
     if (!supabaseEnabled) return 'Las consultas estarán disponibles pronto.'
     return null
-  }, [listingUnavailable])
+  }, [listingUnavailable, supabaseEnabled])
 
   const sortedQuestions = useMemo(
     () => [...questions].sort((a, b) => a.createdAt - b.createdAt),
@@ -99,7 +100,7 @@ export default function ListingQuestionsSection({ listing, listingUnavailable }:
   )
 
   const loadQuestions = useCallback(async () => {
-    if (!supabaseEnabled) {
+    if (!supabaseEnabled || !user) {
       setQuestions([])
       setLoading(false)
       return
@@ -117,7 +118,7 @@ export default function ListingQuestionsSection({ listing, listingUnavailable }:
     } finally {
       setLoading(false)
     }
-  }, [ensureUserNames, listing.id])
+  }, [ensureUserNames, listing.id, !!user])
 
   useEffect(() => {
     void loadQuestions()
@@ -143,7 +144,7 @@ export default function ListingQuestionsSection({ listing, listingUnavailable }:
   )
 
   useEffect(() => {
-    if (!supabaseEnabled) return
+    if (!supabaseEnabled || !user) return
     const supabase = getSupabaseClient()
     const channel = supabase
       .channel(`listing-questions-${listing.id}`)
@@ -159,7 +160,7 @@ export default function ListingQuestionsSection({ listing, listingUnavailable }:
     return () => {
       void supabase.removeChannel(channel)
     }
-  }, [listing.id, loadQuestions])
+  }, [listing.id, loadQuestions, !!user])
 
   const handleAsk = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -182,7 +183,7 @@ export default function ListingQuestionsSection({ listing, listingUnavailable }:
           ...created,
           questionerName: rawUserName ?? created.questionerName ?? null,
         }
-        setQuestions((prev) => [...prev, enriched])
+        setQuestions((prev) => (prev.some((q) => q.id === enriched.id) ? prev : [...prev, enriched]))
         if (user?.id && rawUserName) {
           setUserNames((prev) => (prev[user.id] ? prev : { ...prev, [user.id]: rawUserName }))
         }
@@ -229,14 +230,10 @@ export default function ListingQuestionsSection({ listing, listingUnavailable }:
           answerAuthorName: resolveFullName(updated.answerAuthorId, listing.sellerName ?? null),
         }
         setQuestions((prev) => prev.map((item) => (item.id === questionId ? enriched : item)))
-        const authorId = typeof updated.answerAuthorId === 'string' && updated.answerAuthorId.trim()
-          ? updated.answerAuthorId.trim()
-          : null
-        if (authorId && listing.sellerName) {
-          setUserNames((prev) => {
-            if (prev[authorId]) return prev
-            return { ...prev, [authorId]: listing.sellerName ?? '' }
-          })
+        if (updated.answerAuthorId && listing.sellerName) {
+          const authorId: string = updated.answerAuthorId as string
+          const sellerName: string = listing.sellerName as string
+          setUserNames((prev) => (prev[authorId] ? prev : { ...prev, [authorId]: sellerName }))
         }
         setAnswerDrafts((prev) => ({ ...prev, [questionId]: '' }))
         void notifyListingQuestionEvent(updated.id, 'answered')
@@ -325,22 +322,7 @@ export default function ListingQuestionsSection({ listing, listingUnavailable }:
               </form>
             )}
 
-            {requiresLoginToAsk && (
-              <div className="rounded-xl border border-[#14212e]/10 bg-[#f4f7fb] p-4 text-sm text-[#14212e]/70">
-                <p className="font-medium text-[#14212e]">Ingresá para preguntar</p>
-                <p className="mt-1">
-                  Iniciá sesión o registrate para dejar una consulta al vendedor.
-                </p>
-                <div className="mt-3 flex gap-2">
-                  <Button to="/login" variant="secondary" className="px-3 py-1 text-sm">
-                    Iniciar sesión
-                  </Button>
-                  <Button to="/register" className="px-3 py-1 text-sm">
-                    Crear cuenta
-                  </Button>
-                </div>
-              </div>
-            )}
+            {/* Aviso de login unificado más abajo (para ver y hacer consultas) */}
 
             {askingDisabledReason && (
               <div className="rounded-xl border border-[#14212e]/10 bg-white/80 p-3 text-sm text-[#14212e]/60">
@@ -349,6 +331,39 @@ export default function ListingQuestionsSection({ listing, listingUnavailable }:
             )}
           </div>
 
+          {requiresLoginToView && (
+            <div className="mt-6">
+              <div className="rounded-xl border border-[#14212e]/10 bg-[#f4f7fb] p-4 text-sm text-[#14212e]/70">
+                <p className="font-medium text-[#14212e]">Ingresá o registrate para ver y hacer consultas</p>
+                <p className="mt-1">Para ver o hacer una consulta, iniciá sesión o creá una cuenta.</p>
+                <div className="mt-3 flex gap-2">
+                  <Button to="/login" variant="secondary" className="px-3 py-1 text-sm">Iniciar sesión</Button>
+                  <Button to="/register" className="px-3 py-1 text-sm">Crear cuenta</Button>
+                </div>
+              </div>
+              <div className="relative mt-4">
+                <div className="space-y-4 filter blur-sm pointer-events-none select-none">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="rounded-2xl border border-[#14212e]/10 bg-white p-4">
+                      <div className="flex items-center gap-2">
+                        <div className="h-3 w-28 rounded bg-[#14212e]/10" />
+                        <div className="h-3 w-12 rounded bg-[#14212e]/10" />
+                      </div>
+                      <div className="mt-2 h-4 w-3/4 rounded bg-[#14212e]/10" />
+                      <div className="mt-2 h-16 w-full rounded bg-[#14212e]/10" />
+                    </div>
+                  ))}
+                </div>
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                  <div className="rounded-lg border border-[#14212e]/10 bg-white/80 px-3 py-1 text-xs text-[#14212e]/70">
+                    Ingresá o registrate para ver las consultas completas
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {canViewQuestions && (
           <div className="mt-6 space-y-6">
             {loading && <p className="text-sm text-[#14212e]/60">Cargando consultas…</p>}
 
@@ -450,6 +465,7 @@ export default function ListingQuestionsSection({ listing, listingUnavailable }:
               </div>
             )}
           </div>
+          )}
         </>
       )}
     </section>

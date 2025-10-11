@@ -1,6 +1,6 @@
 const cron = require('node-cron')
 const { getServerSupabaseClient } = require('../lib/supabaseClient')
-const { getMailTransport, isMailConfigured } = require('../lib/mail')
+const { sendMail, isMailConfigured } = require('../lib/mail')
 
 const DEFAULT_WINDOW_HOURS = 48
 const DEFAULT_COOLDOWN_HOURS = 24
@@ -51,7 +51,7 @@ async function fetchSellerProfiles(supabase, sellerIds) {
   return map
 }
 
-async function sendReminder({ transporter, listing, profile }) {
+async function sendReminder({ listing, profile }) {
   if (!profile?.email) {
     console.warn('[renewalNotifier] publicación sin email de contacto', listing.id)
     return false
@@ -76,7 +76,7 @@ async function sendReminder({ transporter, listing, profile }) {
   }
 
   try {
-    await transporter.sendMail(mailOptions)
+    await sendMail(mailOptions)
     return true
   } catch (error) {
     console.error('[renewalNotifier] error al enviar email', error)
@@ -110,10 +110,9 @@ function startRenewalNotificationJob() {
   }
 
   if (!isMailConfigured()) {
-    console.warn('[renewalNotifier] no se configuró SMTP, el job no se iniciará')
+    console.warn('[renewalNotifier] mail no configurado (SMTP o Resend), el job no se iniciará')
     return
   }
-  const transporter = getMailTransport()
 
   const windowHours = Number(process.env.RENEWAL_REMINDER_WINDOW_HOURS || DEFAULT_WINDOW_HOURS)
   const cooldownHours = Number(process.env.RENEWAL_REMINDER_COOLDOWN_HOURS || DEFAULT_COOLDOWN_HOURS)
@@ -132,7 +131,7 @@ function startRenewalNotificationJob() {
         const notifiedIds = []
         for (const listing of listings) {
           const profile = profilesMap.get(listing.seller_id)
-          const sent = await sendReminder({ transporter, listing, profile })
+          const sent = await sendReminder({ listing, profile })
           if (sent) notifiedIds.push(listing.id)
         }
 

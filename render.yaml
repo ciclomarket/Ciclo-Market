@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: mundobike-api
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm run server
+    autoDeploy: true
+    envVars:
+      # CORS: allowed frontends (comma-separated)
+      - key: FRONTEND_URL
+        value: https://your-frontend.web.app,https://your-domain.com
+
+      # Supabase server credentials
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+
+      # Resend SMTP
+      # Prefer API (HTTP) to avoid SMTP egress issues on PaaS
+      - key: RESEND_API_KEY
+        sync: false
+      - key: SMTP_FROM
+        value: Ciclo Market <notificaciones@your-domain.com>
+
+      # Optional
+      - key: SHARE_FALLBACK_IMAGE
+        value: https://your-domain.com/og-preview.png
+      - key: MERCADOPAGO_ACCESS_TOKEN
+        sync: false
