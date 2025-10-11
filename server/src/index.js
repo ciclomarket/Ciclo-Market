@@ -309,6 +309,7 @@ app.post('/api/questions/notify', async (req, res) => {
           id,
           slug,
           title,
+          images,
           seller_id,
           seller_name,
           seller_email
@@ -334,6 +335,17 @@ app.post('/api/questions/notify', async (req, res) => {
   const listingSlug = listing.slug || listing.id
   const listingUrl = listingSlug ? `${cleanBase}/listing/${encodeURIComponent(listingSlug)}` : cleanBase
   const from = process.env.SMTP_FROM || `Ciclo Market <${process.env.SMTP_USER}>`
+
+  // Primary listing image (if available)
+  let listingImage = null
+  try {
+    if (Array.isArray(listing.images)) {
+      const first = listing.images[0]
+      listingImage = typeof first === 'string' ? first : (first && first.url) || null
+    }
+  } catch (_) {
+    // ignore
+  }
 
   const createNotification = async ({
     userId,
@@ -374,17 +386,22 @@ app.post('/api/questions/notify', async (req, res) => {
 
     const sellerName = escapeHtml(listing.seller_name || 'vendedor')
     const safeQuestion = escapeHtml(question.question_body || '').replace(/\n/g, '<br />')
+    const logoUrl = `${cleanBase}/site-logo.png`
     const html = `
       <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #14212e;">
+        <div style="margin-bottom:12px">
+          <img src="${logoUrl}" alt="Ciclo Market" style="height:28px; width:auto; display:block" />
+        </div>
+        ${listingImage ? `<img src="${listingImage}" alt="${escapeHtml(listingTitle)}" style="display:block;width:100%;max-width:640px;border-radius:12px;margin:0 0 12px 0;" />` : ''}
         <h2 style="color:#0c1723;">Tenés una nueva consulta sobre ${escapeHtml(listingTitle)}</h2>
         <p>Hola ${sellerName},</p>
-        <p>Un comprador dejó la siguiente pregunta:</p>
+        <p>Un interesado dejó la siguiente pregunta:</p>
         <blockquote style="margin:16px 0;padding:12px 16px;border-left:4px solid #0c72ff;background:#f3f6fb;">
           ${safeQuestion}
         </blockquote>
         <p>Respondé desde la publicación para que todos los interesados vean la respuesta.</p>
         <p>
-          <a href="${listingUrl}" style="display:inline-block;margin-top:12px;padding:10px 16px;background:#0c72ff;color:#fff;text-decoration:none;border-radius:6px;">
+          <a href="${listingUrl}" style="display:inline-block;margin-top:12px;padding:10px 16px;background:#14212e;color:#fff;text-decoration:none;border-radius:6px;">
             Ver publicación
           </a>
         </p>
@@ -452,8 +469,13 @@ app.post('/api/questions/notify', async (req, res) => {
 
     const safeQuestion = escapeHtml(question.question_body || '').replace(/\n/g, '<br />')
     const safeAnswer = escapeHtml(question.answer_body || '').replace(/\n/g, '<br />')
+    const logoUrl = `${cleanBase}/site-logo.png`
     const html = `
       <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #14212e;">
+        <div style="margin-bottom:12px">
+          <img src="${logoUrl}" alt="Ciclo Market" style="height:28px; width:auto; display:block" />
+        </div>
+        ${listingImage ? `<img src="${listingImage}" alt="${escapeHtml(listingTitle)}" style="display:block;width:100%;max-width:640px;border-radius:12px;margin:0 0 12px 0;" />` : ''}
         <h2 style="color:#0c1723;">El vendedor respondió tu consulta</h2>
         <p>Consulta original:</p>
         <blockquote style="margin:16px 0;padding:12px 16px;border-left:4px solid #94a3b8;background:#f8fafc;">
@@ -464,7 +486,7 @@ app.post('/api/questions/notify', async (req, res) => {
           ${safeAnswer}
         </blockquote>
         <p>
-          <a href="${listingUrl}" style="display:inline-block;margin-top:12px;padding:10px 16px;background:#0c72ff;color:#fff;text-decoration:none;border-radius:6px;">
+          <a href="${listingUrl}" style="display:inline-block;margin-top:12px;padding:10px 16px;background:#14212e;color:#fff;text-decoration:none;border-radius:6px;">
             Ver publicación
           </a>
         </p>
