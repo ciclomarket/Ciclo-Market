@@ -309,7 +309,6 @@ app.post('/api/questions/notify', async (req, res) => {
           id,
           slug,
           title,
-          images,
           seller_id,
           seller_name,
           seller_email
@@ -336,16 +335,7 @@ app.post('/api/questions/notify', async (req, res) => {
   const listingUrl = listingSlug ? `${cleanBase}/listing/${encodeURIComponent(listingSlug)}` : cleanBase
   const from = process.env.SMTP_FROM || `Ciclo Market <${process.env.SMTP_USER}>`
 
-  // Primary listing image (if available)
-  let listingImage = null
-  try {
-    if (Array.isArray(listing.images)) {
-      const first = listing.images[0]
-      listingImage = typeof first === 'string' ? first : (first && first.url) || null
-    }
-  } catch (_) {
-    // ignore
-  }
+  // No incluimos imagen del listing en el email por diseño
 
   const createNotification = async ({
     userId,
@@ -390,9 +380,8 @@ app.post('/api/questions/notify', async (req, res) => {
     const html = `
       <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #14212e;">
         <div style="margin-bottom:12px">
-          <img src="${logoUrl}" alt="Ciclo Market" style="height:28px; width:auto; display:block" />
+          <img src="${logoUrl}" alt="Ciclo Market" style="height:40px; width:auto; display:block" />
         </div>
-        ${listingImage ? `<img src="${listingImage}" alt="${escapeHtml(listingTitle)}" style="display:block;width:100%;max-width:640px;border-radius:12px;margin:0 0 12px 0;" />` : ''}
         <h2 style="color:#0c1723;">Tenés una nueva consulta sobre ${escapeHtml(listingTitle)}</h2>
         <p>Hola ${sellerName},</p>
         <p>Un interesado dejó la siguiente pregunta:</p>
@@ -473,9 +462,8 @@ app.post('/api/questions/notify', async (req, res) => {
     const html = `
       <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #14212e;">
         <div style="margin-bottom:12px">
-          <img src="${logoUrl}" alt="Ciclo Market" style="height:28px; width:auto; display:block" />
+          <img src="${logoUrl}" alt="Ciclo Market" style="height:40px; width:auto; display:block" />
         </div>
-        ${listingImage ? `<img src="${listingImage}" alt="${escapeHtml(listingTitle)}" style="display:block;width:100%;max-width:640px;border-radius:12px;margin:0 0 12px 0;" />` : ''}
         <h2 style="color:#0c1723;">El vendedor respondió tu consulta</h2>
         <p>Consulta original:</p>
         <blockquote style="margin:16px 0;padding:12px 16px;border-left:4px solid #94a3b8;background:#f8fafc;">
