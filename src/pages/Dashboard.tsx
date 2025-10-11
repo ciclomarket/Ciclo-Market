@@ -1139,7 +1139,7 @@ function NotificationsView() {
         })}
       </div>
       <p className="text-xs text-[#14212e]/60">
-        Recibirás alertas por email para que ninguna oferta o mensaje importante se pierda.
+        Recibirás alertas por email para que ninguna oferta o consulta importante se pierda.
       </p>
     </div>
   )

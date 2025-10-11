@@ -605,8 +605,8 @@ export default function ListingDetail() {
               </div>
               <p className="text-xs text-[#14212e]/60">
                 {verifiedVendor
-                  ? 'Vendedor verificado: tus ofertas generan alertas prioritarias en su bandeja y correo.'
-                  : 'Las ofertas llegan a la bandeja de Mensajes del vendedor y se notifican por correo.'}
+                  ? 'Vendedor verificado: tus ofertas generan alertas prioritarias por correo y notificaciones.'
+                  : 'Las ofertas se notifican por correo y en el panel del vendedor.'}
               </p>
               {isFeaturedListing && (
                 <p className="text-xs font-semibold text-[#14212e]">

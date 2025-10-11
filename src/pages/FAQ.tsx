@@ -21,7 +21,7 @@ const QUESTIONS: Array<{ question: string; answer: string }> = [
   {
     question: '¿Cómo me registro o ingreso?',
     answer:
-      'Podés crear una cuenta con tu email y contraseña o ingresar directo con Google. Una vez autenticado, accedés al dashboard para administrar tus publicaciones, mensajes y suscripción.'
+      'Podés crear una cuenta con tu email y contraseña o ingresar directo con Google. Una vez autenticado, accedés al dashboard para administrar tus publicaciones, consultas y suscripción.'
   },
   {
     question: '¿Cómo contacto al vendedor?',
@@ -44,9 +44,9 @@ const QUESTIONS: Array<{ question: string; answer: string }> = [
       'Recomendamos imágenes horizontales, de al menos 1200 px, con buena iluminación y fondo neutro. Mostrá la bicicleta completa y detalles de transmisión, ruedas y componentes especiales.'
   },
   {
-    question: '¿Cómo gestiono mis mensajes y ofertas?',
+    question: '¿Cómo gestiono mis consultas y ofertas?',
     answer:
-      'Cuando recibís una consulta u oferta te avisamos por email y notificaciones. Podés responder directamente desde la publicación de la bici y mantener todo el historial visible para otros compradores.'
+      'Cuando recibís una consulta u oferta te avisamos por email y notificaciones. Podés responder directamente desde la publicación y mantener todo el historial visible para otros compradores.'
   },
   {
     question: '¿Puedo publicar accesorios o repuestos?',

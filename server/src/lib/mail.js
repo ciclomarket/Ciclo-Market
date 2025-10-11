@@ -71,26 +71,35 @@ async function sendViaSMTP(options) {
 }
 
 async function sendViaResend(options) {
-  const { Resend } = require('resend')
-  const resend = new Resend(process.env.RESEND_API_KEY)
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey) throw new Error('RESEND_API_KEY no configurado')
   const from = options.from || process.env.SMTP_FROM || process.env.SMTP_USER
+  const to = Array.isArray(options.to) ? options.to : [options.to]
   const payload = {
     from,
-    to: Array.isArray(options.to) ? options.to : [options.to],
+    to,
     subject: options.subject,
     html: options.html,
     text: options.text,
   }
   if (process.env.SMTP_LOGGER === 'true') {
-    console.info('[mail] sending via Resend', { to: payload.to, subject: payload.subject })
+    console.info('[mail] sending via Resend', { to, subject: options.subject })
   }
-  const result = await resend.emails.send(payload)
-  if (result.error) {
-    const err = new Error(result.error?.message || 'Resend email failed')
-    err.code = result.error?.code
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    const err = new Error(data?.error?.message || data?.message || 'Resend API error')
+    err.code = data?.error?.code
     throw err
   }
-  return result
+  return data
 }
 
 async function sendMail(options) {

@@ -341,19 +341,23 @@ app.post('/api/questions/notify', async (req, res) => {
     body,
     cta,
     metadata,
+    actorId,
   }) => {
     if (!userId) return
     try {
+      const insertPayload = {
+        user_id: userId,
+        type: 'question',
+        title,
+        body,
+        metadata,
+        cta_url: cta,
+      }
+      if (actorId) insertPayload.actor_id = actorId
+
       const { error: insertError } = await supabase
         .from('notifications')
-        .insert({
-          user_id: userId,
-          type: 'question',
-          title,
-          body,
-          metadata,
-          cta_url: cta,
-        })
+        .insert(insertPayload)
       if (insertError) {
         console.warn('[questions] notification insert failed', insertError)
       }
@@ -431,6 +435,7 @@ app.post('/api/questions/notify', async (req, res) => {
         listing_id: listing.id,
         event: 'asked',
       },
+      actorId: question.asker_id,
     })
 
     return res.json({ ok: true, email: emailStatus })
@@ -511,6 +516,7 @@ app.post('/api/questions/notify', async (req, res) => {
         listing_id: listing.id,
         event: 'answered',
       },
+      actorId: question.answerer_id || listing.seller_id,
     })
 
     return res.json({ ok: true, email: emailStatus })

@@ -420,7 +420,7 @@ export default function Home() {
             <div className="grid md:grid-cols-4 gap-6 items-stretch">
               <Step n={1} t="Registrate" d="Creá tu cuenta en minutos." />
               <Step n={2} t="Publicá" d="Elegí un plan y subí tu bici." />
-              <Step n={3} t="Contactá" d="Respondé mensajes y coordiná la venta." />
+              <Step n={3} t="Contactá" d="Respondé consultas y coordiná la venta." />
               <Step n={4} t="Vende" d="Concretá la operación de forma segura." />
             </div>
           </div>

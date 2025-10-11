@@ -210,7 +210,7 @@ function resolveSeoForPath(pathname: string): SEOProps {
   if (normalized.startsWith('/dashboard')) {
     return {
       title: 'Panel del vendedor',
-      description: 'Gestioná tus publicaciones, estadísticas y mensajes en un solo lugar.',
+      description: 'Gestioná tus publicaciones, estadísticas y consultas en un solo lugar.',
       noIndex: true
     }
   }
