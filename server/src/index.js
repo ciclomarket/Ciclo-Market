@@ -305,6 +305,8 @@ app.post('/api/questions/notify', async (req, res) => {
         answered_at,
         asker_id,
         answerer_id,
+        asker:asker_id ( id, full_name ),
+        answerer:answerer_id ( id, full_name ),
         listing:listing_id (
           id,
           slug,
@@ -334,6 +336,9 @@ app.post('/api/questions/notify', async (req, res) => {
   const listingSlug = listing.slug || listing.id
   const listingUrl = listingSlug ? `${cleanBase}/listing/${encodeURIComponent(listingSlug)}` : cleanBase
   const from = process.env.SMTP_FROM || `Ciclo Market <${process.env.SMTP_USER}>`
+  const bikesUrl = `${cleanBase}/marketplace?cat=Ruta`
+  const partsUrl = `${cleanBase}/marketplace?cat=Accesorios`
+  const apparelUrl = `${cleanBase}/marketplace?cat=Indumentaria`
 
   // No incluimos imagen del listing en el email por diseño
 
@@ -377,25 +382,71 @@ app.post('/api/questions/notify', async (req, res) => {
     const sellerName = escapeHtml(listing.seller_name || 'vendedor')
     const safeQuestion = escapeHtml(question.question_body || '').replace(/\n/g, '<br />')
     const logoUrl = `${cleanBase}/site-logo.png`
+    const askerName = escapeHtml((question.asker && question.asker.full_name) || 'un interesado')
     const html = `
-      <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #14212e;">
-        <div style="margin-bottom:12px">
-          <img src="${logoUrl}" alt="Ciclo Market" style="height:40px; width:auto; display:block" />
-        </div>
-        <h2 style="color:#0c1723;">Tenés una nueva consulta sobre ${escapeHtml(listingTitle)}</h2>
-        <p>Hola ${sellerName},</p>
-        <p>Un interesado dejó la siguiente pregunta:</p>
-        <blockquote style="margin:16px 0;padding:12px 16px;border-left:4px solid #0c72ff;background:#f3f6fb;">
-          ${safeQuestion}
-        </blockquote>
-        <p>Respondé desde la publicación para que todos los interesados vean la respuesta.</p>
-        <p>
-          <a href="${listingUrl}" style="display:inline-block;margin-top:12px;padding:10px 16px;background:#14212e;color:#fff;text-decoration:none;border-radius:6px;">
-            Ver publicación
-          </a>
-        </p>
-        <hr style="margin:24px 0;border:none;border-top:1px solid #e1e5eb;" />
-        <p style="font-size:12px;color:#6b7280;">Este correo se generó automáticamente desde Ciclo Market.</p>
+      <div style="background:#ffffff;margin:0 auto;max-width:600px;font-family:Arial, sans-serif;color:#14212e">
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="width:100%">
+          <tr>
+            <td style="padding:20px 24px;text-align:center">
+              <img src="${logoUrl}" alt="Ciclo Market" style="height:64px;width:auto;display:inline-block" />
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#14212e;color:#fff;text-align:center;padding:12px">
+              <a href="${bikesUrl}" style="color:#fff;text-decoration:none;margin:0 10px;font-size:14px">Bicicletas</a>
+              <a href="${partsUrl}" style="color:#fff;text-decoration:none;margin:0 10px;font-size:14px">Accesorios</a>
+              <a href="${apparelUrl}" style="color:#fff;text-decoration:none;margin:0 10px;font-size:14px">Indumentaria</a>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:24px">
+              <h2 style="margin:0 0 8px;font-size:20px;color:#0c1723">Tenés una nueva consulta sobre ${escapeHtml(listingTitle)}</h2>
+              <p style="margin:0 0 8px">Hola ${sellerName},</p>
+              <p style="margin:0 0 12px">Respondé desde la publicación para que todos los interesados vean la respuesta.</p>
+              <p style="margin:0 0 16px;text-align:center">
+                <a href="${listingUrl}" style="display:inline-block;padding:12px 18px;background:#14212e;color:#fff;text-decoration:none;border-radius:8px;font-weight:600">Ver publicación</a>
+              </p>
+              <p style="margin:0 0 8px">Recibiste un mensaje de <b>${askerName}</b>:</p>
+              <blockquote style="margin:12px 0;padding:12px 16px;border-left:4px solid #0c72ff;background:#f3f6fb;border-radius:6px">${safeQuestion}</blockquote>
+              <p style="font-size:12px;color:#6b7280;margin:16px 0 0">Si el botón no funciona, copiá y pegá este enlace: <a href="${listingUrl}" style="color:#0c72ff;text-decoration:underline">${listingUrl}</a></p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:8px 24px">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="text-align:center">
+                <tr>
+                  <td style="padding:10px">
+                    <div style="font-size:14px;color:#0c1723;font-weight:600">Registrate</div>
+                    <div style="font-size:12px;color:#475569">Creá tu cuenta en minutos.</div>
+                  </td>
+                  <td style="padding:10px">
+                    <div style="font-size:14px;color:#0c1723;font-weight:600">Publicá</div>
+                    <div style="font-size:12px;color:#475569">Subí tu bici y elegí un plan.</div>
+                  </td>
+                  <td style="padding:10px">
+                    <div style="font-size:14px;color:#0c1723;font-weight:600">Vende seguro</div>
+                    <div style="font-size:12px;color:#475569">Coordiná con soporte y notificaciones.</div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:16px 24px;border-top:1px solid #e1e5eb">
+              <div style="font-size:16px;margin:0 0 6px;color:#0c1723"><b>¿Tenés consultas?</b></div>
+              <div style="font-size:14px;color:#475569;margin:0">Nuestro equipo está listo para ayudarte. Respondé este correo con tu consulta.</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:16px 24px;background:#f6f8fb">
+              <div style="font-size:14px;color:#0c1723;margin:0 0 8px"><b>Seguinos</b></div>
+              <div style="font-size:13px;color:#475569;line-height:1.6">
+                Instagram: <a href="https://instagram.com/ciclomarket" style="color:#0c72ff;text-decoration:underline">@ciclomarket</a><br />
+                Strava: <a href="https://www.strava.com/clubs/1770147" style="color:#0c72ff;text-decoration:underline">ciclomarket en Strava</a>
+              </div>
+            </td>
+          </tr>
+        </table>
       </div>
     `
 
@@ -460,26 +511,70 @@ app.post('/api/questions/notify', async (req, res) => {
     const safeAnswer = escapeHtml(question.answer_body || '').replace(/\n/g, '<br />')
     const logoUrl = `${cleanBase}/site-logo.png`
     const html = `
-      <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #14212e;">
-        <div style="margin-bottom:12px">
-          <img src="${logoUrl}" alt="Ciclo Market" style="height:40px; width:auto; display:block" />
-        </div>
-        <h2 style="color:#0c1723;">El vendedor respondió tu consulta</h2>
-        <p>Consulta original:</p>
-        <blockquote style="margin:16px 0;padding:12px 16px;border-left:4px solid #94a3b8;background:#f8fafc;">
-          ${safeQuestion}
-        </blockquote>
-        <p>Respuesta del vendedor:</p>
-        <blockquote style="margin:16px 0;padding:12px 16px;border-left:4px solid #10b981;background:#ecfdf5;">
-          ${safeAnswer}
-        </blockquote>
-        <p>
-          <a href="${listingUrl}" style="display:inline-block;margin-top:12px;padding:10px 16px;background:#14212e;color:#fff;text-decoration:none;border-radius:6px;">
-            Ver publicación
-          </a>
-        </p>
-        <hr style="margin:24px 0;border:none;border-top:1px solid #e1e5eb;" />
-        <p style="font-size:12px;color:#6b7280;">Este correo se generó automáticamente desde Ciclo Market.</p>
+      <div style="background:#ffffff;margin:0 auto;max-width:600px;font-family:Arial, sans-serif;color:#14212e">
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="width:100%">
+          <tr>
+            <td style="padding:20px 24px;text-align:center">
+              <img src="${logoUrl}" alt="Ciclo Market" style="height:64px;width:auto;display:inline-block" />
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#14212e;color:#fff;text-align:center;padding:12px">
+              <a href="${bikesUrl}" style="color:#fff;text-decoration:none;margin:0 10px;font-size:14px">Bicicletas</a>
+              <a href="${partsUrl}" style="color:#fff;text-decoration:none;margin:0 10px;font-size:14px">Accesorios</a>
+              <a href="${apparelUrl}" style="color:#fff;text-decoration:none;margin:0 10px;font-size:14px">Indumentaria</a>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:24px">
+              <h2 style="margin:0 0 8px;font-size:20px;color:#0c1723">El vendedor respondió tu consulta</h2>
+              <p style="margin:0 0 12px">Podés ver la respuesta completa desde la publicación.</p>
+              <p style="margin:0 0 16px;text-align:center">
+                <a href="${listingUrl}" style="display:inline-block;padding:12px 18px;background:#14212e;color:#fff;text-decoration:none;border-radius:8px;font-weight:600">Ver publicación</a>
+              </p>
+              <p style="margin:0 0 8px">Consulta original:</p>
+              <blockquote style="margin:12px 0;padding:12px 16px;border-left:4px solid #94a3b8;background:#f8fafc;border-radius:6px">${safeQuestion}</blockquote>
+              <p style="margin:8px 0 8px">Respuesta del vendedor:</p>
+              <blockquote style="margin:12px 0;padding:12px 16px;border-left:4px solid #10b981;background:#ecfdf5;border-radius:6px">${safeAnswer}</blockquote>
+              <p style="font-size:12px;color:#6b7280;margin:16px 0 0">Si el botón no funciona, copiá y pegá este enlace: <a href="${listingUrl}" style="color:#0c72ff;text-decoration:underline">${listingUrl}</a></p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:8px 24px">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="text-align:center">
+                <tr>
+                  <td style="padding:10px">
+                    <div style="font-size:14px;color:#0c1723;font-weight:600">Registrate</div>
+                    <div style="font-size:12px;color:#475569">Creá tu cuenta en minutos.</div>
+                  </td>
+                  <td style="padding:10px">
+                    <div style="font-size:14px;color:#0c1723;font-weight:600">Publicá</div>
+                    <div style="font-size:12px;color:#475569">Subí tu bici y elegí un plan.</div>
+                  </td>
+                  <td style="padding:10px">
+                    <div style="font-size:14px;color:#0c1723;font-weight:600">Vende seguro</div>
+                    <div style="font-size:12px;color:#475569">Coordiná con soporte y notificaciones.</div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:16px 24px;border-top:1px solid #e1e5eb">
+              <div style="font-size:16px;margin:0 0 6px;color:#0c1723"><b>¿Tenés consultas?</b></div>
+              <div style="font-size:14px;color:#475569;margin:0">Nuestro equipo está listo para ayudarte. Respondé este correo con tu consulta.</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:16px 24px;background:#f6f8fb">
+              <div style="font-size:14px;color:#0c1723;margin:0 0 8px"><b>Seguinos</b></div>
+              <div style="font-size:13px;color:#475569;line-height:1.6">
+                Instagram: <a href="https://instagram.com/ciclomarket" style="color:#0c72ff;text-decoration:underline">@ciclomarket</a><br />
+                Strava: <a href="https://www.strava.com/clubs/1770147" style="color:#0c72ff;text-decoration:underline">ciclomarket en Strava</a>
+              </div>
+            </td>
+          </tr>
+        </table>
       </div>
     `
 
