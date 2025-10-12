@@ -52,13 +52,13 @@ export const FALLBACK_PLANS: Plan[] = [
     price: 0,
     currency: 'ARS',
     periodDays: 30,
-    listingDurationDays: 30,
+    listingDurationDays: 15,
     maxListings: 1,
     maxPhotos: 4,
     featuredDays: 0,
     whatsappEnabled: false,
     socialBoost: false,
-    description: 'Publicá gratis por 30 días. Hasta 4 fotos, consultas públicas y contacto por email.'
+    description: 'Publicá gratis por 15 días. Hasta 4 fotos, consultas públicas y contacto por email.'
   },
   {
     id: 'basic',

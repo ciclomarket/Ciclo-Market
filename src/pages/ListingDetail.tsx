@@ -21,6 +21,8 @@ import { logContactEvent, fetchSellerReviews } from '../services/reviews'
 import SEO from '../components/SEO'
 import { useToast } from '../context/ToastContext'
 import ListingQuestionsSection from '../components/ListingQuestionsSection'
+import { submitShareBoost } from '../services/shareBoost'
+import useUpload from '../hooks/useUpload'
 
 export default function ListingDetail() {
   const params = useParams()
@@ -414,7 +416,8 @@ export default function ListingDetail() {
     const items: Array<{ id: string; label: string; onClick?: () => void; href?: string; icon: ReactNode; disabled?: boolean; className?: string }> = []
     const emailRecipient = sellerAuthEmail || sellerProfile?.email || listing.sellerEmail || null
 
-    if (waLink && !isOwner && !listingUnavailable) {
+    // WhatsApp sólo para planes pagos activos
+    if (waLink && !isOwner && !listingUnavailable && paidPlanActive) {
       items.push({
         id: 'whatsapp',
         label: 'Abrir WhatsApp',
@@ -471,6 +474,9 @@ export default function ListingDetail() {
             )
           )}
         </div>
+        {!paidPlanActive && (
+          <p className="mt-2 text-xs text-[#14212e]/60">El contacto por WhatsApp está disponible con publicaciones destacadas.</p>
+        )}
       </div>
     )
   }
@@ -617,6 +623,15 @@ export default function ListingDetail() {
                       icon={<InstagramIcon />}
                     />
                   </div>
+                  <div className="mt-3">
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-2 rounded-full border border-[#14212e]/20 px-3 py-1.5 text-xs font-semibold text-[#14212e] hover:bg-[#14212e]/5"
+                      onClick={() => setShareModalOpen(true)}
+                    >
+                      Compartí y ganá 7 días de destaque
+                    </button>
+                  </div>
                 </div>
                 <p className="text-xs text-[#14212e]/60 lg:hidden">
                   {verifiedVendor
@@ -748,6 +763,13 @@ export default function ListingDetail() {
           }}
           loading={offerSubmitting}
           error={offerError}
+        />
+      )}
+      {shareModalOpen && listing && (
+        <ShareBoostModal
+          listingId={listing.id}
+          sellerId={listing.sellerId}
+          onClose={() => setShareModalOpen(false)}
         />
       )}
     </>
@@ -918,6 +940,93 @@ function IconButton({ label, children, onClick }: { label: string; children: Rea
   )
 }
 
+function ShareBoostModal({ listingId, sellerId, onClose }: { listingId: string; sellerId: string; onClose: () => void }) {
+  const { show: showToast } = useToast()
+  const { uploadFiles, uploading, progress } = useUpload()
+  const [handle, setHandle] = useState('')
+  const [note, setNote] = useState('')
+  const [proofUrl, setProofUrl] = useState<string | null>(null)
+  const [type, setType] = useState<'story' | 'post'>('story')
+  const [reward, setReward] = useState<'boost7' | 'photos2'>('boost7')
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  const onUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return
+    try {
+      const urls = await uploadFiles([files[0]])
+      setProofUrl(urls[0] || null)
+    } catch (err: any) {
+      setError(err?.message || 'No pudimos subir la imagen')
+    }
+  }
+
+  const onSubmit = async () => {
+    setSaving(true)
+    setError(null)
+    try {
+      await submitShareBoost({ listingId, sellerId, type, handle: handle.trim() || null, proofUrl, note: note.trim() || null, reward })
+      showToast('Enviamos tu comprobante. Lo revisaremos en breve.')
+      onClose()
+    } catch (err: any) {
+      setError(err?.message || 'No pudimos enviar el comprobante.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+      <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-[#14212e]">Compartí y obtené beneficios</h2>
+            <p className="text-sm text-[#14212e]/70">Enviá una captura de tu story o post mencionando @ciclomarket.ar</p>
+          </div>
+          <button type="button" aria-label="Cerrar" onClick={onClose}>✕</button>
+        </div>
+        <div className="mt-4 space-y-3">
+          <div className="flex gap-3">
+            <label className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs ${type === 'story' ? 'border-[#14212e] bg-[#14212e]/10 text-[#14212e]' : 'border-[#14212e]/20 text-[#14212e]/80'}`}>
+              <input type="radio" name="sb-type" checked={type === 'story'} onChange={() => setType('story')} /> Story
+            </label>
+            <label className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs ${type === 'post' ? 'border-[#14212e] bg-[#14212e]/10 text-[#14212e]' : 'border-[#14212e]/20 text-[#14212e]/80'}`}>
+              <input type="radio" name="sb-type" checked={type === 'post'} onChange={() => setType('post')} /> Post
+            </label>
+          </div>
+          <div className="flex gap-3">
+            <label className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs ${reward === 'boost7' ? 'border-[#14212e] bg-[#14212e]/10 text-[#14212e]' : 'border-[#14212e]/20 text-[#14212e]/80'}`}>
+              <input type="radio" name="sb-reward" checked={reward === 'boost7'} onChange={() => setReward('boost7')} /> 7 días destacado
+            </label>
+            <label className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs ${reward === 'photos2' ? 'border-[#14212e] bg-[#14212e]/10 text-[#14212e]' : 'border-[#14212e]/20 text-[#14212e]/80'}`}>
+              <input type="radio" name="sb-reward" checked={reward === 'photos2'} onChange={() => setReward('photos2')} /> +2 fotos
+            </label>
+          </div>
+          <div>
+            <label className="text-sm font-medium text-[#14212e]">Tu Instagram (opcional)</label>
+            <input className="input mt-1" placeholder="@tu_usuario" value={handle} onChange={(e) => setHandle(e.target.value)} />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-[#14212e]">Nota (opcional)</label>
+            <input className="input mt-1" placeholder="Algo para que veamos en la captura" value={note} onChange={(e) => setNote(e.target.value)} />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-[#14212e]">Subí una captura</label>
+            <input className="mt-1" type="file" accept="image/*" onChange={(e) => onUpload(e.target.files)} />
+            {uploading && <p className="text-xs text-[#14212e]/60 mt-1">Subiendo… {progress}%</p>}
+            {proofUrl && <p className="text-xs text-[#14212e]/70 mt-1">Comprobante cargado ✔</p>}
+          </div>
+          {error && <p className="text-sm text-red-600">{error}</p>}
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={onClose} disabled={saving}>Cancelar</Button>
+            <Button onClick={() => void onSubmit()} disabled={saving} className="bg-[#14212e] text-white hover:bg-[#1b2f3f]">{saving ? 'Enviando…' : 'Enviar'}</Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function StarRating({ value }: { value: number }) {
   const full = Math.floor(value)
   const half = value - full >= 0.5
@@ -955,3 +1064,4 @@ function StarRating({ value }: { value: number }) {
     </span>
   )
 }
+  const [shareModalOpen, setShareModalOpen] = useState(false)

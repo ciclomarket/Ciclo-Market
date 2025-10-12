@@ -11,6 +11,7 @@ import { fetchUserProfile, type UserProfileRecord, upsertUserProfile } from '../
 import type { Listing } from '../types'
 import { usePlans } from '../context/PlanContext'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { fetchPendingShareBoosts, reviewShareBoost } from '../services/shareBoost'
 import { uploadAvatar } from '../services/storage'
 import { PROVINCES, OTHER_CITY_OPTION } from '../constants/locations'
 import { BIKE_CATEGORIES } from '../constants/catalog'
@@ -19,6 +20,8 @@ import { normaliseWhatsapp, extractLocalWhatsapp, sanitizeLocalWhatsappInput } f
 import { useNotifications } from '../context/NotificationContext'
 import { useToast } from '../context/ToastContext'
 import useFaves from '../hooks/useFaves'
+import { fetchPendingShareBoosts } from '../services/shareBoost'
+import { createGift } from '../services/gifts'
 
 const TABS = ['Perfil', 'Publicaciones', 'Favoritos', 'Notificaciones', 'Editar perfil', 'Suscripción', 'Cerrar sesión'] as const
 type SellerTab = (typeof TABS)[number]
@@ -147,6 +150,21 @@ export default function Dashboard() {
   const { unreadCount: unreadNotifications } = useNotifications()
   const { ids: favouriteIds } = useFaves()
   const favouritesCount = favouriteIds.length
+  // Moderación (share-boost)
+  const [modOpen, setModOpen] = useState(false)
+  const [modItems, setModItems] = useState<any[]>([])
+  const [modLoading, setModLoading] = useState(false)
+  // Crear regalos (gift codes)
+  const [giftOpen, setGiftOpen] = useState(false)
+  const [giftPlan, setGiftPlan] = useState<'basic' | 'premium'>('basic')
+  const [giftUses, setGiftUses] = useState(1)
+  const [giftExpires, setGiftExpires] = useState('')
+  const [giftAdminToken, setGiftAdminToken] = useState<string>(() => (typeof window !== 'undefined' ? localStorage.getItem('cm:adminToken') || '' : ''))
+  const [giftCreating, setGiftCreating] = useState(false)
+  const [giftCode, setGiftCode] = useState<string | null>(null)
+  const [modOpen, setModOpen] = useState(false)
+  const [modItems, setModItems] = useState<any[]>([])
+  const [modLoading, setModLoading] = useState(false)
 
   const loadData = useCallback(async () => {
     if (!user?.id) {
@@ -448,9 +466,40 @@ export default function Dashboard() {
                   </svg>
                 </button>
               </div>
-              <Button to="/publicar" className="bg-white text-[#14212e] hover:bg-white/90">
-                Nueva publicación
-              </Button>
+              <div className="flex items-center gap-2">
+                {isModerator && (
+                  <button
+                    type="button"
+                    className="rounded-full border border-white/30 px-4 py-2 text-sm font-semibold text-white hover:border-white/60"
+                    onClick={async () => {
+                      setModOpen(true)
+                      setModLoading(true)
+                      try {
+                        const items = await fetchPendingShareBoosts()
+                        setModItems(items)
+                      } catch (e) {
+                        // ignore
+                      } finally {
+                        setModLoading(false)
+                      }
+                    }}
+                  >
+                    Moderación
+                  </button>
+                )}
+                {isModerator && (
+                  <button
+                    type="button"
+                    className="rounded-full border border-white/30 px-4 py-2 text-sm font-semibold text-white hover:border-white/60"
+                    onClick={() => setGiftOpen(true)}
+                  >
+                    Crear regalo
+                  </button>
+                )}
+                <Button to="/publicar" className="bg-white text-[#14212e] hover:bg-white/90">
+                  Nueva publicación
+                </Button>
+              </div>
             </div>
           </header>
 
@@ -534,6 +583,134 @@ export default function Dashboard() {
           </div>
         )}
       </Container>
+      {modOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4" onClick={() => setModOpen(false)}>
+          <div className="max-h-[80vh] w-full max-w-3xl overflow-auto rounded-3xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start justify-between">
+              <h2 className="text-xl font-semibold text-[#14212e]">Comprobantes de compartidos</h2>
+              <button type="button" onClick={() => setModOpen(false)} aria-label="Cerrar">✕</button>
+            </div>
+            {modLoading ? (
+              <p className="mt-4 text-sm text-[#14212e]/70">Cargando…</p>
+            ) : modItems.length === 0 ? (
+              <p className="mt-4 text-sm text-[#14212e]/70">No hay comprobantes pendientes.</p>
+            ) : (
+              <div className="mt-4 space-y-3">
+                {modItems.map((item) => (
+                  <div key={item.id} className="rounded-2xl border border-[#14212e]/10 bg-white p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-[#14212e]">Listing: {item.listing_id}</p>
+                        <p className="text-xs text-[#14212e]/70">Seller: {item.seller_id} · Tipo: {item.type} · Recompensa: {item.reward}</p>
+                        {item.handle && <p className="text-xs text-[#14212e]/70">Handle: {item.handle}</p>}
+                        {item.note && <p className="text-xs text-[#14212e]/70">Nota: {item.note}</p>}
+                        <p className="text-xs text-[#14212e]/60">Enviado: {new Date(item.created_at).toLocaleString('es-AR')}</p>
+                      </div>
+                      {item.proof_url && (
+                        <a href={item.proof_url} target="_blank" rel="noreferrer" className="rounded-xl border border-[#14212e]/15 p-2 text-xs text-[#14212e] hover:bg-[#14212e]/5">Ver captura</a>
+                      )}
+                    </div>
+                    <div className="mt-3 flex gap-2">
+                      <Button
+                        variant="secondary"
+                        onClick={async () => {
+                          try {
+                            await reviewShareBoost(item.id, true, user?.id)
+                            setModItems((prev) => prev.filter((x) => x.id !== item.id))
+                          } catch {}
+                        }}
+                        className="text-xs"
+                      >
+                        Aprobar
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        onClick={async () => {
+                          try {
+                            await reviewShareBoost(item.id, false, user?.id)
+                            setModItems((prev) => prev.filter((x) => x.id !== item.id))
+                          } catch {}
+                        }}
+                        className="text-xs text-red-600"
+                      >
+                        Rechazar
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      {giftOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4" onClick={() => setGiftOpen(false)}>
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start justify-between">
+              <h2 className="text-xl font-semibold text-[#14212e]">Crear código de regalo</h2>
+              <button type="button" onClick={() => setGiftOpen(false)} aria-label="Cerrar">✕</button>
+            </div>
+            <div className="mt-4 space-y-3">
+              <div className="flex gap-3">
+                <label className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs ${giftPlan === 'basic' ? 'border-[#14212e] bg-[#14212e]/10 text-[#14212e]' : 'border-[#14212e]/20 text-[#14212e]/80'}`}>
+                  <input type="radio" name="gift-plan" checked={giftPlan === 'basic'} onChange={() => setGiftPlan('basic')} /> Básico
+                </label>
+                <label className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs ${giftPlan === 'premium' ? 'border-[#14212e] bg-[#14212e]/10 text-[#14212e]' : 'border-[#14212e]/20 text-[#14212e]/80'}`}>
+                  <input type="radio" name="gift-plan" checked={giftPlan === 'premium'} onChange={() => setGiftPlan('premium')} /> Premium
+                </label>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sm font-medium text-[#14212e]">Usos</label>
+                  <input className="input mt-1" type="number" min={1} value={giftUses} onChange={(e) => setGiftUses(Math.max(1, Number(e.target.value) || 1))} />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-[#14212e]">Vence (opcional)</label>
+                  <input className="input mt-1" type="date" value={giftExpires} onChange={(e) => setGiftExpires(e.target.value)} />
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-[#14212e]">Token admin</label>
+                <input className="input mt-1" type="password" value={giftAdminToken} onChange={(e) => setGiftAdminToken(e.target.value)} onBlur={() => { try { localStorage.setItem('cm:adminToken', giftAdminToken) } catch {} }} />
+                <p className="text-[11px] text-[#14212e]/60 mt-1">Se guarda localmente. Requerido para crear códigos.</p>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="ghost" onClick={() => setGiftOpen(false)} disabled={giftCreating}>Cancelar</Button>
+                <Button
+                  onClick={async () => {
+                    setGiftCreating(true)
+                    setGiftCode(null)
+                    try {
+                      const iso = giftExpires ? new Date(giftExpires).toISOString() : undefined
+                      const res = await createGift(giftPlan, giftUses, iso, giftAdminToken)
+                      if (!res.ok || !res.code) throw new Error('No pudimos generar el código')
+                      setGiftCode(res.code)
+                    } catch (e) {
+                      // noop
+                    } finally {
+                      setGiftCreating(false)
+                    }
+                  }}
+                  disabled={giftCreating || !giftAdminToken.trim()}
+                  className="bg-[#14212e] text-white hover:bg-[#1b2f3f]"
+                >
+                  {giftCreating ? 'Creando…' : 'Crear código'}
+                </Button>
+              </div>
+              {giftCode && (
+                <div className="rounded-xl border border-[#14212e]/10 bg-[#14212e]/5 p-3">
+                  <p className="text-sm font-semibold text-[#14212e]">Código generado</p>
+                  <p className="mt-1 text-sm text-[#14212e]/80 break-all">{giftCode}</p>
+                  <p className="mt-2 text-xs text-[#14212e]/70">Link:</p>
+                  <p className="text-sm text-[#14212e] break-all">
+                    {typeof window !== 'undefined' ? `${window.location.origin}/publicar?plan=${giftPlan}&gift=${giftCode}` : `/publicar?plan=${giftPlan}&gift=${giftCode}`}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -619,7 +619,8 @@ export default function NewListingForm() {
     // (Opcional) límite de publicaciones activas por usuario según plan visible en UI
     const client = getSupabaseClient()
 
-    if (!editingListing && supabaseEnabled && (selectedPlan as any)?.maxListings && (selectedPlan as any).maxListings > 1) {
+    // Límite de publicaciones activas por plan (free=1)
+    if (!editingListing && supabaseEnabled && (selectedPlan as any)?.maxListings && (selectedPlan as any).maxListings >= 1) {
       const { count } = await client
         .from('listings')
         .select('id', { count: 'exact', head: true })

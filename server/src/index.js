@@ -192,6 +192,179 @@ app.get('/api/users/:id/contact-email', async (req, res) => {
   }
 })
 
+/* ----------------------------- Share Boost --------------------------------- */
+// Estructura esperada (tabla sugerida en Supabase):
+// create table share_boosts (
+//   id uuid primary key default gen_random_uuid(),
+//   seller_id text not null,
+//   listing_id text not null,
+//   type text not null check (type in ('story','post')),
+//   handle text null,
+//   proof_url text null,
+//   note text null,
+//   reward text not null default 'boost7', -- 'boost7' | 'photos2'
+//   status text not null default 'pending', -- 'pending' | 'approved' | 'rejected'
+//   created_at timestamptz not null default now(),
+//   reviewed_at timestamptz null,
+//   reviewed_by text null
+// );
+app.post('/api/share-boost/submit', async (req, res) => {
+  try {
+    const { sellerId, listingId, type, handle, proofUrl, note, reward } = req.body || {}
+    if (!sellerId || !listingId || !type) return res.status(400).send('missing_fields')
+    const supabase = getServerSupabaseClient()
+    const payload = {
+      seller_id: sellerId,
+      listing_id: listingId,
+      type,
+      handle: handle || null,
+      proof_url: proofUrl || null,
+      note: note || null,
+      reward: reward || 'boost7',
+      status: 'pending',
+    }
+    const { error } = await supabase.from('share_boosts').insert([payload])
+    if (error) return res.status(500).send('insert_failed')
+    return res.json({ ok: true })
+  } catch (err) {
+    console.warn('[share-boost] submit failed', err)
+    return res.status(500).send('unexpected_error')
+  }
+})
+
+app.get('/api/share-boost/pending', async (_req, res) => {
+  try {
+    const supabase = getServerSupabaseClient()
+    const { data, error } = await supabase
+      .from('share_boosts')
+      .select('*')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+    if (error) return res.status(500).send('fetch_failed')
+    return res.json({ items: data || [] })
+  } catch (err) {
+    console.warn('[share-boost] list failed', err)
+    return res.status(500).send('unexpected_error')
+  }
+})
+
+// Moderadores pueden aprobar/rechazar y aplicar premio
+app.post('/api/share-boost/review', async (req, res) => {
+  try {
+    const { id, approve, reviewerId } = req.body || {}
+    if (!id) return res.status(400).send('missing_id')
+    const supabase = getServerSupabaseClient()
+    const newStatus = approve ? 'approved' : 'rejected'
+    const { data, error } = await supabase.from('share_boosts').update({ status: newStatus, reviewed_at: new Date().toISOString(), reviewed_by: reviewerId || null }).eq('id', id).select().single()
+    if (error || !data) return res.status(500).send('update_failed')
+
+    if (approve && data.reward === 'boost7') {
+      // Aplicar destaque 7 días: setear seller_plan básico por 7 días desde hoy
+      const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+      const { error: upd } = await supabase
+        .from('listings')
+        .update({ seller_plan: 'basic', seller_plan_expires: expires })
+        .eq('id', data.listing_id)
+      if (upd) console.warn('[share-boost] apply boost failed', upd)
+    }
+    // Nota: para reward 'photos2' requeriría un campo adicional por listing; pendiente
+    return res.json({ ok: true })
+  } catch (err) {
+    console.warn('[share-boost] review failed', err)
+    return res.status(500).send('unexpected_error')
+  }
+})
+
+/* ----------------------------- Gifts (plan codes) -------------------------- */
+// Tablas sugeridas en Supabase:
+// create table if not exists gift_codes (
+//   code text primary key,
+//   plan text not null check (plan in ('basic','premium')),
+//   uses_left int not null default 1,
+//   expires_at timestamptz null,
+//   created_at timestamptz not null default now()
+// );
+// create table if not exists gift_redemptions (
+//   id uuid primary key default gen_random_uuid(),
+//   code text not null references gift_codes(code),
+//   seller_id text not null,
+//   redeemed_at timestamptz not null default now()
+// );
+
+app.post('/api/gifts/create', async (req, res) => {
+  try {
+    const { plan, uses, expiresAt } = req.body || {}
+    if (!plan || !['basic', 'premium'].includes(plan)) return res.status(400).send('invalid_plan')
+    const supabase = getServerSupabaseClient()
+    // Generar un código simple (suficiente para casos de regalo manual)
+    const code = (Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6)).toUpperCase()
+    const payload = {
+      code,
+      plan,
+      uses_left: Math.max(1, Number(uses) || 1),
+      expires_at: expiresAt || null,
+    }
+    const { error } = await supabase.from('gift_codes').insert([payload])
+    if (error) return res.status(500).send('insert_failed')
+    return res.json({ ok: true, code })
+  } catch (err) {
+    console.warn('[gifts] create failed', err)
+    return res.status(500).send('unexpected_error')
+  }
+})
+
+app.get('/api/gifts/validate', async (req, res) => {
+  try {
+    const code = String(req.query.code || '')
+    if (!code) return res.status(400).json({ ok: false, error: 'missing_code' })
+    const supabase = getServerSupabaseClient()
+    const { data, error } = await supabase
+      .from('gift_codes')
+      .select('*')
+      .eq('code', code)
+      .maybeSingle()
+    if (error || !data) return res.json({ ok: false, error: 'invalid_code' })
+    if (data.uses_left <= 0) return res.json({ ok: false, error: 'no_uses_left' })
+    if (data.expires_at && new Date(data.expires_at).getTime() < Date.now()) return res.json({ ok: false, error: 'expired' })
+    return res.json({ ok: true, plan: data.plan })
+  } catch (err) {
+    console.warn('[gifts] validate failed', err)
+    return res.status(500).json({ ok: false })
+  }
+})
+
+app.post('/api/gifts/redeem', async (req, res) => {
+  try {
+    const { code, sellerId } = req.body || {}
+    if (!code || !sellerId) return res.status(400).send('missing_fields')
+    const supabase = getServerSupabaseClient()
+    const { data, error } = await supabase
+      .from('gift_codes')
+      .select('*')
+      .eq('code', code)
+      .maybeSingle()
+    if (error || !data) return res.status(400).send('invalid_code')
+    if (data.uses_left <= 0) return res.status(400).send('no_uses_left')
+    if (data.expires_at && new Date(data.expires_at).getTime() < Date.now()) return res.status(400).send('expired')
+
+    // Registrar redención
+    const { error: ins } = await supabase.from('gift_redemptions').insert([{ code, seller_id: sellerId }])
+    if (ins) console.warn('[gifts] redemption insert warn', ins)
+
+    // Decrementar usos (protegido contra negativos)
+    const { error: upd } = await supabase
+      .from('gift_codes')
+      .update({ uses_left: (data.uses_left - 1) < 0 ? 0 : (data.uses_left - 1) })
+      .eq('code', code)
+    if (upd) console.warn('[gifts] decrement warn', upd)
+
+    return res.json({ ok: true })
+  } catch (err) {
+    console.warn('[gifts] redeem failed', err)
+    return res.status(500).send('unexpected_error')
+  }
+})
+
 app.post('/api/offers/notify', async (req, res) => {
   if (!isMailConfigured()) {
     return res.status(503).json({ error: 'smtp_unavailable' })
