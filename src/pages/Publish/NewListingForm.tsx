@@ -15,6 +15,7 @@ import { canonicalPlanCode, normalisePlanText, resolvePlanCode, type PlanCode } 
 import { formatNameWithInitial } from '../../utils/user'
 import { normaliseWhatsapp, extractLocalWhatsapp, sanitizeLocalWhatsappInput } from '../../utils/whatsapp'
 import { fetchListing } from '../../services/listings'
+import { validateGift, redeemGift } from '../../services/gifts'
 import { fetchUserProfile, type UserProfileRecord } from '../../services/users'
 import { useToast } from '../../context/ToastContext'
 
@@ -78,6 +79,10 @@ export default function NewListingForm() {
   const [editingListing, setEditingListing] = useState<Listing | null>(null)
   const [loadingListing, setLoadingListing] = useState(false)
   const [planOverride, setPlanOverride] = useState<PlanCode | null>(null)
+  const [giftCode, setGiftCode] = useState<string | null>(null)
+  const [giftPlan, setGiftPlan] = useState<PlanCode | null>(null)
+  const [giftValidating, setGiftValidating] = useState(false)
+  const [giftError, setGiftError] = useState<string | null>(null)
 
   /** 1) Plan seleccionado por query (?plan=free|basic|premium) */
   const selectedPlan = useMemo(() => {
@@ -104,6 +109,35 @@ export default function NewListingForm() {
 
     return explicitMatch ?? plans[0]
   }, [plans, planOverride, searchParams])
+
+  // Detectar y validar gift code (?gift=CODE). Si es válido, sobreescribe el plan a basic/premium.
+  useEffect(() => {
+    const code = searchParams.get('gift')?.trim()
+    if (!code) { setGiftCode(null); setGiftPlan(null); return }
+    let active = true
+    setGiftValidating(true)
+    setGiftError(null)
+    ;(async () => {
+      try {
+        const res = await validateGift(code)
+        if (!active) return
+        if (res.ok && (res.plan === 'basic' || res.plan === 'premium')) {
+          setGiftCode(code)
+          setGiftPlan(res.plan as PlanCode)
+          setPlanOverride(res.plan as PlanCode)
+        } else {
+          setGiftError('El código de regalo no es válido o está vencido.')
+          setGiftCode(null)
+          setGiftPlan(null)
+        }
+      } catch {
+        if (active) setGiftError('No pudimos validar el código de regalo.')
+      } finally {
+        if (active) setGiftValidating(false)
+      }
+    })()
+    return () => { active = false }
+  }, [searchParams])
 
   // Canonizamos el código de plan (lo usa la DB y el backend)
   const resolvedPlanCode = selectedPlan ? resolvePlanCode(selectedPlan) : null
@@ -145,6 +179,11 @@ export default function NewListingForm() {
       maximumFractionDigits: 0
     }).format(planPrice)
   }, [selectedPlan, planPrice])
+
+  const effectivePlanLabel = useMemo(() => {
+    if (giftPlan) return 'Bonificado'
+    return planPriceLabel ?? 'Sin costo'
+  }, [giftPlan, planPriceLabel])
 
   const [category, setCategory] = useState<Category | null>(isAccessory ? 'Accesorios' : isApparel ? 'Indumentaria' : null)
   const [brand, setBrand] = useState('')
@@ -768,6 +807,11 @@ export default function NewListingForm() {
       return
     }
 
+    // 3.c Redimir gift si corresponde (best-effort)
+    if (giftCode && user?.id) {
+      try { await redeemGift(giftCode, user.id) } catch {}
+    }
+
     // Ya pagaste tu plan (si correspondía). Redirigimos al detalle del aviso.
     clearDraft()
     showToast(isEditing ? 'Publicación actualizada con éxito' : 'Publicación creada con éxito')
@@ -809,7 +853,7 @@ export default function NewListingForm() {
 
   return (
     <div className="bg-[#14212e]">
-    <Container className="text-white">
+      <Container className="text-white">
       <div className="flex w-full flex-col gap-3 md:flex-row md:items-center md:justify-between mb-6">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold text-white">{isEditing ? 'Editar publicación' : 'Nueva publicación'}</h1>
@@ -826,8 +870,19 @@ export default function NewListingForm() {
         <div className="min-w-0 rounded-xl border border-white/30 bg-white/10 px-4 py-3 text-sm text-white max-w-full md:max-w-sm">
           <div className="font-semibold text-white">{isEditing ? `Plan en uso: ${planName}` : `Plan seleccionado: ${planName}`}</div>
           <div className="text-xs font-semibold text-white/90">
-            {isEditing ? 'Podés cambiar de plan desde tu panel de vendedor.' : (planPriceLabel ?? 'Sin costo')}
+            {isEditing ? 'Podés cambiar de plan desde tu panel de vendedor.' : effectivePlanLabel}
           </div>
+          {giftValidating && (
+            <div className="mt-2 text-xs text-white/80">Verificando código de regalo…</div>
+          )}
+          {giftCode && giftPlan && (
+            <div className="mt-2 rounded-lg border border-white/20 bg-white/10 p-2 text-xs">
+              Cortesía aplicada: plan {giftPlan === 'basic' ? 'Básico' : 'Premium'} (código {giftCode}).
+            </div>
+          )}
+          {giftError && (
+            <div className="mt-2 text-xs text-red-200">{giftError}</div>
+          )}
           {selectedPlan?.description && (
             <div className="mt-2 text-xs text-white/80">{selectedPlan.description}</div>
           )}

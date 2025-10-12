@@ -161,9 +161,6 @@ export default function Dashboard() {
   const [giftExpires, setGiftExpires] = useState('')
   const [giftCreating, setGiftCreating] = useState(false)
   const [giftCode, setGiftCode] = useState<string | null>(null)
-  const [modOpen, setModOpen] = useState(false)
-  const [modItems, setModItems] = useState<any[]>([])
-  const [modLoading, setModLoading] = useState(false)
 
   const loadData = useCallback(async () => {
     if (!user?.id) {
@@ -513,7 +510,7 @@ export default function Dashboard() {
                       className={`w-full rounded-2xl px-4 py-3 text-left transition ${
                         activeTab === tab
                           ? 'bg-white text-[#14212e] shadow-lg'
-                          : 'hover:bg白/10'.replace('白', 'white') /* evita encoding raro */
+                          : 'hover:bg-white/10'
                       }`}
                     >
                       {tab}
@@ -668,11 +665,6 @@ export default function Dashboard() {
                   <input className="input mt-1" type="date" value={giftExpires} onChange={(e) => setGiftExpires(e.target.value)} />
                 </div>
               </div>
-              <div>
-                <label className="text-sm font-medium text-[#14212e]">Token admin</label>
-                <input className="input mt-1" type="password" value={giftAdminToken} onChange={(e) => setGiftAdminToken(e.target.value)} onBlur={() => { try { localStorage.setItem('cm:adminToken', giftAdminToken) } catch {} }} />
-                <p className="text-[11px] text-[#14212e]/60 mt-1">Se guarda localmente. Requerido para crear códigos.</p>
-              </div>
               <div className="flex justify-end gap-2">
                 <Button variant="ghost" onClick={() => setGiftOpen(false)} disabled={giftCreating}>Cancelar</Button>
                 <Button
@@ -681,7 +673,7 @@ export default function Dashboard() {
                     setGiftCode(null)
                     try {
                       const iso = giftExpires ? new Date(giftExpires).toISOString() : undefined
-                      const res = await createGift(giftPlan, giftUses, iso, giftAdminToken)
+                      const res = await createGift(giftPlan, giftUses, iso)
                       if (!res.ok || !res.code) throw new Error('No pudimos generar el código')
                       setGiftCode(res.code)
                     } catch (e) {
@@ -690,7 +682,7 @@ export default function Dashboard() {
                       setGiftCreating(false)
                     }
                   }}
-                  disabled={giftCreating || !giftAdminToken.trim()}
+                  disabled={giftCreating}
                   className="bg-[#14212e] text-white hover:bg-[#1b2f3f]"
                 >
                   {giftCreating ? 'Creando…' : 'Crear código'}

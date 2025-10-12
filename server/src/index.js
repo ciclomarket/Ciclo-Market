@@ -36,19 +36,21 @@ app.use(
 )
 
 /* ----------------------------- CORS --------------------------------------- */
+// Permitir CORS amplio (ajustable por FRONTEND_URL si se quiere restringir)
 const allowed = (process.env.FRONTEND_URL || '')
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean)
 
-app.use(
-  cors({
-    origin: allowed.length ? allowed : true,
-    credentials: true,
-  })
-)
-// Preflight
-app.options('*', cors())
+const corsOptions = {
+  origin: allowed.length ? allowed : (origin, cb) => cb(null, true),
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+}
+
+app.use(cors(corsOptions))
+app.options('*', cors(corsOptions))
 
 /* ----------------------------- Utils OG ----------------------------------- */
 function isBot(req) {

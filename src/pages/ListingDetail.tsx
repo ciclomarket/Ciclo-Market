@@ -37,6 +37,7 @@ export default function ListingDetail() {
   const [offerWhatsappLocal, setOfferWhatsappLocal] = useState('')
   const [offerSubmitting, setOfferSubmitting] = useState(false)
   const [offerError, setOfferError] = useState<string | null>(null)
+  const [shareModalOpen, setShareModalOpen] = useState(false)
   const [moderatorUpdating, setModeratorUpdating] = useState(false)
   const [sellerVerified, setSellerVerified] = useState(false)
   const [sellerProfile, setSellerProfile] = useState<UserProfileRecord | null>(null)
@@ -1064,4 +1065,3 @@ function StarRating({ value }: { value: number }) {
     </span>
   )
 }
-  const [shareModalOpen, setShareModalOpen] = useState(false)
