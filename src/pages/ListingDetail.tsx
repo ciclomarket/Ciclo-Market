@@ -17,7 +17,9 @@ import { normaliseWhatsapp, extractLocalWhatsapp, sanitizeLocalWhatsappInput, bu
 import { useAuth } from '../context/AuthContext'
 import { fetchUserProfile, fetchUserContactEmail, setUserVerificationStatus, type UserProfileRecord } from '../services/users'
 import { sendOfferEmail } from '../services/offers'
+import { logContactEvent, fetchSellerReviews } from '../services/reviews'
 import SEO from '../components/SEO'
+import { useToast } from '../context/ToastContext'
 import ListingQuestionsSection from '../components/ListingQuestionsSection'
 
 export default function ListingDetail() {
@@ -25,6 +27,7 @@ export default function ListingDetail() {
   const navigate = useNavigate()
   const { user, isModerator } = useAuth()
   const { format, fx } = useCurrency()
+  const { show: showToast } = useToast()
   const [listing, setListing] = useState<Listing | null>(null)
   const [loading, setLoading] = useState(true)
   const [showOfferModal, setShowOfferModal] = useState(false)
@@ -36,6 +39,7 @@ export default function ListingDetail() {
   const [sellerVerified, setSellerVerified] = useState(false)
   const [sellerProfile, setSellerProfile] = useState<UserProfileRecord | null>(null)
   const [sellerAuthEmail, setSellerAuthEmail] = useState<string | null>(null)
+  const [sellerRating, setSellerRating] = useState<{ avg: number; count: number } | null>(null)
   const { ids: compareIds, toggle: toggleCompare } = useCompare()
   const { has: hasFav, toggle: toggleFav } = useFaves()
   const listingKey = params.slug ?? params.id ?? ''
@@ -86,6 +90,18 @@ export default function ListingDetail() {
 
   useEffect(() => {
     let active = true
+    const load = async () => {
+      if (!listing?.sellerId) { setSellerRating(null); return }
+      const data = await fetchSellerReviews(listing.sellerId)
+      if (!active) return
+      if (data?.summary) setSellerRating({ avg: data.summary.avgRating, count: data.summary.count })
+    }
+    void load()
+    return () => { active = false }
+  }, [listing?.sellerId])
+
+  useEffect(() => {
+    let active = true
     if (!listing?.sellerId) {
       setSellerAuthEmail(null)
       return
@@ -132,7 +148,9 @@ export default function ListingDetail() {
   const envShareBase = (import.meta.env.VITE_SHARE_BASE_URL || import.meta.env.VITE_API_BASE_URL || '').trim()
   const shareBase = envShareBase ? envShareBase.replace(/\/$/, '') : ''
   const resolvedShareOrigin = (shareBase || frontendOrigin || '').replace(/\/$/, '')
-  const shareUrl = resolvedShareOrigin ? `${resolvedShareOrigin}/share/listing/${listingSlugOrId}` : canonicalUrl
+  // Para previews OG en WhatsApp/Facebook, usamos siempre el ID en el endpoint del backend
+  const shareId = listing.id
+  const shareUrl = resolvedShareOrigin ? `${resolvedShareOrigin}/share/listing/${shareId}` : canonicalUrl
   const sellerPreferredLink =
     sellerProfile?.website_url ??
     (listing as any)?.sellerLink ??
@@ -145,6 +163,7 @@ export default function ListingDetail() {
   const sellerWhatsappRaw = listing.sellerWhatsapp ?? sellerProfile?.whatsapp_number ?? ''
   const sellerWhatsappNumber = normaliseWhatsapp(sellerWhatsappRaw)
   const waLink = buildWhatsappUrl(sellerWhatsappNumber ?? sellerWhatsappRaw, waMessage.trim())
+  const sellerAvatarUrl = listing.sellerAvatar || sellerProfile?.avatar_url || null
 
   const formattedPrice = formatListingPrice(listing.price, listing.priceCurrency, format, fx)
   const originalPriceLabel = listing.originalPrice
@@ -172,7 +191,7 @@ export default function ListingDetail() {
     window.open(url, '_blank', 'noopener,noreferrer')
   }
 
-  const handleShare = (platform: 'whatsapp' | 'facebook' | 'x' | 'sms') => {
+  const handleShare = (platform: 'whatsapp' | 'facebook') => {
     if (!shareUrl) return
     const encodedUrl = encodeURIComponent(shareUrl)
     const encodedText = encodeURIComponent(shareText)
@@ -181,15 +200,8 @@ export default function ListingDetail() {
         openShareWindow(`https://wa.me/?text=${encodedText}%20${encodedUrl}`)
         break
       case 'facebook':
-        openShareWindow(`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`)
-        break
-      case 'x':
-        openShareWindow(`https://twitter.com/intent/tweet?url=${encodedUrl}&text=${encodedText}`)
-        break
-      case 'sms':
-        if (typeof window !== 'undefined') {
-          window.location.href = `sms:?body=${encodedText}%20${encodedUrl}`
-        }
+        // Usa sharer con quote para prellenar texto; la imagen se toma de las OG tags
+        openShareWindow(`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}&quote=${encodedText}`)
         break
       default:
         break
@@ -197,24 +209,46 @@ export default function ListingDetail() {
   }
 
   const handleInstagramShare = async () => {
-    if (!shareImage) {
-      alert('Necesitás al menos una foto para compartir en Instagram.')
-      return
-    }
+    // Intento 1: Web Share API (móvil) para abrir hoja de compartir (incluye Instagram si está instalada)
     try {
-      const response = await fetch(shareImage)
-      const blob = await response.blob()
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `${listing.slug ?? listing.id}-ciclomarket.jpg`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      URL.revokeObjectURL(url)
-    } catch (error) {
-      console.error('[listing-detail] instagram share failed', error)
-      alert('No pudimos preparar la imagen. Intentá nuevamente.')
+      const navShare = (navigator as any)?.share
+      if (navShare && typeof navShare === 'function') {
+        await (navigator as any).share({ title: shareTitle, text: shareText, url: shareUrl })
+        return
+      }
+    } catch (err) {
+      // Si el usuario cancela o falla, seguimos al fallback
+      console.warn('[listing-detail] web share cancelled or failed', err)
+    }
+
+    // Intento 2: Copiar enlace al portapapeles y abrir Instagram Direct en una pestaña nueva
+    try {
+      await navigator.clipboard?.writeText?.(shareUrl)
+      showToast('Link copiado. Abrimos Instagram Direct…')
+    } catch {
+      // ignorar si no hay permisos
+    }
+    openShareWindow('https://www.instagram.com/direct/new/')
+  }
+
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard?.writeText?.(shareUrl)
+      showToast('Link copiado al portapapeles')
+    } catch {
+      try {
+        const ta = document.createElement('textarea')
+        ta.value = shareUrl
+        ta.style.position = 'fixed'
+        ta.style.opacity = '0'
+        document.body.appendChild(ta)
+        ta.select()
+        document.execCommand('copy')
+        document.body.removeChild(ta)
+        showToast('Link copiado al portapapeles')
+      } catch {
+        showToast('No pudimos copiar el link automáticamente', { variant: 'error' })
+      }
     }
   }
 
@@ -302,9 +336,8 @@ export default function ListingDetail() {
       setOfferAmount('')
       setOfferError(null)
       setOfferWhatsappLocal(sanitizedWhatsapp)
-      if (notices.length) {
-        alert(notices.join(' '))
-      }
+      // Aviso de éxito
+      showToast('Oferta enviada al vendedor')
     } catch (error: any) {
       console.error('[listing-detail] offer failed', error)
       setOfferError(error?.message ?? 'No pudimos enviar la oferta. Intentá nuevamente.')
@@ -356,7 +389,7 @@ export default function ListingDetail() {
         alert('No pudimos eliminar la publicación. Intentá nuevamente.')
         return
       }
-      alert('La publicación fue eliminada correctamente.')
+      showToast('La publicación fue eliminada correctamente')
       navigate('/marketplace')
     } catch (error) {
       console.error('[listing-detail] moderator delete failed', error)
@@ -459,16 +492,17 @@ export default function ListingDetail() {
           </>
         ) : null}
       </SEO>
-      <Container>
-        <div className="grid w-full gap-6 lg:grid-cols-[2fr_1fr]">
-          <div className="order-1 w-full min-w-0 lg:col-start-2 lg:row-start-1 lg:self-start lg:sticky lg:top-6">
-            <div className="card p-6">
+      <div className="bg-[#14212e]">
+        <Container>
+          <div className="grid w-full gap-4 lg:gap-6 lg:grid-cols-[2fr_1fr]">
+          <div className="order-2 w-full min-w-0 lg:col-start-2 lg:row-start-1 lg:self-start lg:sticky lg:top-32">
+            <div className="card p-6 lg:p-5">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <h1 className="text-2xl font-bold text-[#14212e] leading-tight">{listing.title}</h1>
-                  <p className="mt-2 text-sm text-[#14212e]/70">{listing.location}</p>
+                  <h1 className="text-2xl lg:text-xl font-bold text-[#14212e] leading-tight">{listing.title}</h1>
+                  <p className="mt-2 lg:mt-1 text-sm text-[#14212e]/70">{listing.location}</p>
                   {isFeaturedListing && (
-                    <span className="mt-3 inline-flex items-center gap-2 rounded-full bg-[#14212e] px-3 py-1 text-xs font-semibold text-white">
+                    <span className="mt-3 lg:mt-2 inline-flex items-center gap-2 rounded-full bg-[#14212e] px-3 py-1 text-xs font-semibold text-white">
                       Destacada 🔥
                     </span>
                   )}
@@ -486,30 +520,181 @@ export default function ListingDetail() {
                   </IconButton>
                 </div>
               </div>
-              <div className="mt-4 flex items-end gap-3">
-                <span className="text-3xl font-extrabold text-mb-primary">{formattedPrice}</span>
+              <div className="mt-2 flex items-end gap-3">
+                <span className="text-3xl lg:text-2xl font-extrabold text-mb-primary">{formattedPrice}</span>
                 {originalPriceLabel && <span className="text-sm text-[#14212e]/60 line-through">{originalPriceLabel}</span>}
               </div>
-              <p className="mt-4 text-xs text-[#14212e]/60">
+              <p className="mt-4 text-xs text-[#14212e]/60 lg:hidden">
                 Guardá o compará esta bici para decidir más tarde.
               </p>
+
+              <div className="mt-5 lg:mt-4 space-y-3 lg:space-y-2 border-t border-[#14212e]/10 pt-5 lg:pt-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    {sellerAvatarUrl && (
+                      <img
+                        src={sellerAvatarUrl}
+                        alt={formatNameWithInitial(listing.sellerName, 'Vendedor')}
+                        className="h-10 w-10 rounded-full object-cover border border-[#14212e]/10"
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-sm text-[#14212e]/70">Publicado por</p>
+                      <h3 className="text-lg font-semibold text-[#14212e]">
+                        <Link
+                          to={`/vendedor/${listing.sellerId}`}
+                          className="inline-flex items-center gap-2 transition hover:text-mb-primary"
+                        >
+                          {formatNameWithInitial(listing.sellerName, undefined)}
+                          {sellerVerified && <VerifiedCheck />}
+                        </Link>
+                      </h3>
+                      <p className="text-xs text-[#14212e]/60">{listing.sellerLocation || 'Ubicación reservada'}</p>
+                      {sellerRating && sellerRating.count > 0 && (
+                        <div className="mt-1 flex items-center gap-2 text-xs text-[#14212e]/70">
+                          <StarRating value={sellerRating.avg} />
+                          <span>({sellerRating.count})</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="text-xs text-[#14212e]/60">
+                  <Link to={`/vendedor/${listing.sellerId}`} className="inline-flex items-center gap-1 text-[#14212e] underline">
+                    Ver perfil del vendedor
+                  </Link>
+                  {isFeaturedListing && <p className="mt-1 text-[11px] text-[#14212e]/60">Publicación destacada en el marketplace.</p>}
+                </div>
+                <div className="space-y-3">
+                  {canSubmitOffer && (
+                    <button
+                      type="button"
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#14212e] px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-[#1b2f3f]"
+                      onClick={() => setShowOfferModal(true)}
+                    >
+                      Hacer oferta
+                    </button>
+                  )}
+                  <ContactIcons />
+                  {!canSubmitOffer && listingSold && (
+                    <p className="text-xs font-semibold text-[#0f766e]">Esta publicación está marcada como vendida.</p>
+                  )}
+                  {!canSubmitOffer && !listingSold && !isOwner && (
+                    <p className="text-xs text-[#14212e]/60">La publicación no está disponible para recibir ofertas en este momento.</p>
+                  )}
+                </div>
+                <div className="mt-3 pt-3 border-t border-[#14212e]/10">
+                  <p className="text-xs text-[#14212e]/60 uppercase tracking-wide">Compartir publicación</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <IconCircleButton
+                      size="sm"
+                      label="Copiar link"
+                      onClick={handleCopyLink}
+                      className="bg-white text-[#14212e] border border-[#14212e]"
+                      icon={<LinkIcon />}
+                    />
+                    <IconCircleButton
+                      size="sm"
+                      label="Compartir por WhatsApp"
+                      onClick={() => handleShare('whatsapp')}
+                      className="bg-white text-[#25D366] border border-[#25D366]"
+                      icon={<WhatsappIcon />}
+                    />
+                    <IconCircleButton
+                      size="sm"
+                      label="Compartir en Facebook"
+                      onClick={() => handleShare('facebook')}
+                      className="bg-white text-[#1877F2] border border-[#1877F2]"
+                      icon={<FacebookIcon />}
+                    />
+                    <IconCircleButton
+                      size="sm"
+                      label="Enviar por Instagram"
+                      onClick={handleInstagramShare}
+                      className="bg-white text-[#c13584] border border-[#c13584]"
+                      icon={<InstagramIcon />}
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-[#14212e]/60 lg:hidden">
+                  {verifiedVendor
+                    ? 'Vendedor verificado: tus ofertas generan alertas prioritarias por correo y notificaciones.'
+                    : 'Las ofertas se notifican por correo y en el panel del vendedor.'}
+                </p>
+                {isFeaturedListing && (
+                  <p className="text-xs font-semibold text-[#14212e] lg:hidden">
+                    Esta publicación está destacada con prioridad en la sección de destacados.
+                  </p>
+                )}
+                {sellerVerified && (
+                  <p className="text-xs text-[#14212e]/70 lg:hidden">Vendedor verificado por el equipo de moderación.</p>
+                )}
+                {isModerator && (
+                  <div className="mt-4 space-y-2 border-t border-[#14212e]/10 pt-3">
+                    <p className="text-xs uppercase tracking-wide text-[#14212e]/60">Acciones de moderador</p>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="ghost"
+                        disabled={moderatorUpdating}
+                        onClick={() => handleModeratorHighlight('basic', 7)}
+                      >
+                        Destacar 7 días 🔥
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        disabled={moderatorUpdating}
+                        onClick={() => handleModeratorHighlight('premium', 14)}
+                      >
+                        Destacar 14 días ⚡
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        disabled={moderatorUpdating}
+                        onClick={() => handleModeratorHighlight(null as any, null)}
+                        className="text-red-600"
+                      >
+                        Quitar destaque
+                      </Button>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="ghost"
+                        disabled={moderatorUpdating || sellerVerified}
+                        onClick={() => handleModeratorVerify(true)}
+                      >
+                        Verificar vendedor
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        disabled={moderatorUpdating || !sellerVerified}
+                        onClick={() => handleModeratorVerify(false)}
+                        className="text-red-600"
+                      >
+                        Quitar verificación
+                      </Button>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="ghost"
+                        disabled={moderatorUpdating}
+                        onClick={() => void handleModeratorDelete()}
+                        className="text-red-600"
+                      >
+                        Eliminar publicación
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-
-          <div className="order-2 w-full min-w-0 lg:col-start-1 lg:row-start-1">
+          <div className="order-1 w-full min-w-0 lg:col-start-1 lg:row-start-1">
             <ImageCarousel images={listing.images} />
           </div>
 
           <div className="order-3 w-full min-w-0 lg:col-start-1 lg:row-start-2">
-            <section className="card p-6">
-              <h2 className="text-lg font-semibold text-[#14212e]">Descripción</h2>
-              <p className="mt-3 text-sm leading-relaxed text-[#14212e]/80 whitespace-pre-wrap">
-                {listing.description}
-              </p>
-            </section>
-          </div>
-
-          <div className="order-4 w-full min-w-0 lg:col-start-1 lg:row-start-3">
             <section className="card p-6">
               <h2 className="text-lg font-semibold text-[#14212e]">Especificaciones</h2>
               <div className="mt-4 grid grid-cols-2 gap-3">
@@ -527,159 +712,24 @@ export default function ListingDetail() {
             </section>
           </div>
 
-          <div className="order-5 w-full min-w-0 lg:col-start-2 lg:row-start-2 lg:self-start lg:mt-6">
-            <div className="card p-6 space-y-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm text-[#14212e]/70">Publicado por</p>
-                  <h3 className="text-lg font-semibold text-[#14212e]">
-                    <Link
-                      to={`/vendedor/${listing.sellerId}`}
-                      className="inline-flex items-center gap-2 transition hover:text-mb-primary"
-                    >
-                      {formatNameWithInitial(listing.sellerName, undefined)}
-                      {sellerVerified && <VerifiedCheck />}
-                    </Link>
-                  </h3>
-                  <p className="text-xs text-[#14212e]/60">{listing.sellerLocation || 'Ubicación reservada'}</p>
-                </div>
-              </div>
-              <div className="text-xs text-[#14212e]/60">
-                <Link to={`/vendedor/${listing.sellerId}`} className="inline-flex items-center gap-1 text-[#14212e] underline">
-                  Ver perfil del vendedor
-                </Link>
-                {isFeaturedListing && <p className="mt-1 text-[11px] text-[#14212e]/60">Publicación destacada en el marketplace.</p>}
-              </div>
-              <div className="space-y-3">
-                {canSubmitOffer && (
-                  <button
-                    type="button"
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#14212e] px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-[#1b2f3f]"
-                    onClick={() => setShowOfferModal(true)}
-                  >
-                    Hacer oferta
-                  </button>
-                )}
-                <ContactIcons />
-                {!canSubmitOffer && listingSold && (
-                  <p className="text-xs font-semibold text-[#0f766e]">Esta publicación está marcada como vendida.</p>
-                )}
-                {!canSubmitOffer && !listingSold && !isOwner && (
-                  <p className="text-xs text-[#14212e]/60">La publicación no está disponible para recibir ofertas en este momento.</p>
-                )}
-              </div>
-              <div className="pt-4">
-                <p className="text-xs text-[#14212e]/60 uppercase tracking-wide">Compartir</p>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <IconCircleButton
-                    label="Compartir por WhatsApp"
-                    onClick={() => handleShare('whatsapp')}
-                    className="bg-[#25D366]"
-                    icon={<WhatsappIcon />}
-                  />
-                  <IconCircleButton
-                    label="Compartir en Facebook"
-                    onClick={() => handleShare('facebook')}
-                    className="bg-[#1877F2]"
-                    icon={<FacebookIcon />}
-                  />
-                  <IconCircleButton
-                    label="Compartir en X"
-                    onClick={() => handleShare('x')}
-                    className="bg-black"
-                    icon={<XIcon />}
-                  />
-                  <IconCircleButton
-                    label="Compartir por SMS"
-                    onClick={() => handleShare('sms')}
-                    className="bg-[#0f766e]"
-                    icon={<SmsIcon />}
-                  />
-                  <IconCircleButton
-                    label="Descargar para Instagram"
-                    onClick={handleInstagramShare}
-                    className="bg-gradient-to-tr from-pink-500 via-fuchsia-500 to-yellow-400"
-                    icon={<InstagramIcon />}
-                  />
-                </div>
-              </div>
-              <p className="text-xs text-[#14212e]/60">
-                {verifiedVendor
-                  ? 'Vendedor verificado: tus ofertas generan alertas prioritarias por correo y notificaciones.'
-                  : 'Las ofertas se notifican por correo y en el panel del vendedor.'}
+          <div className="order-4 w-full min-w-0 lg:col-start-1 lg:row-start-3">
+            <section className="card p-6">
+              <h2 className="text-lg font-semibold text-[#14212e]">Descripción</h2>
+              <p className="mt-3 text-sm leading-relaxed text-[#14212e]/80 whitespace-pre-wrap">
+                {listing.description}
               </p>
-              {isFeaturedListing && (
-                <p className="text-xs font-semibold text-[#14212e]">
-                  Esta publicación está destacada con prioridad en la sección de destacados.
-                </p>
-              )}
-              {sellerVerified && (
-                <p className="text-xs text-[#14212e]/70">Vendedor verificado por el equipo de moderación.</p>
-              )}
-              {isModerator && (
-                <div className="mt-4 space-y-2 border-t border-[#14212e]/10 pt-3">
-                  <p className="text-xs uppercase tracking-wide text-[#14212e]/60">Acciones de moderador</p>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      variant="ghost"
-                      disabled={moderatorUpdating}
-                      onClick={() => handleModeratorHighlight('basic', 7)}
-                    >
-                      Destacar 7 días 🔥
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      disabled={moderatorUpdating}
-                      onClick={() => handleModeratorHighlight('premium', 14)}
-                    >
-                      Destacar 14 días ⚡
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      disabled={moderatorUpdating}
-                      onClick={() => handleModeratorHighlight(null as any, null)}
-                      className="text-red-600"
-                    >
-                      Quitar destaque
-                    </Button>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      variant="ghost"
-                      disabled={moderatorUpdating || sellerVerified}
-                      onClick={() => handleModeratorVerify(true)}
-                    >
-                      Verificar vendedor
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      disabled={moderatorUpdating || !sellerVerified}
-                      onClick={() => handleModeratorVerify(false)}
-                      className="text-red-600"
-                    >
-                      Quitar verificación
-                    </Button>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      variant="ghost"
-                      disabled={moderatorUpdating}
-                      onClick={() => void handleModeratorDelete()}
-                      className="text-red-600"
-                    >
-                      Eliminar publicación
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
+            </section>
           </div>
+
+          
 
           <div className="order-6 w-full min-w-0 lg:col-start-1 lg:row-start-4">
             <ListingQuestionsSection listing={listing} listingUnavailable={listingUnavailable} />
           </div>
         </div>
-        {showOfferModal && (
+        </Container>
+      </div>
+      {showOfferModal && (
         <OfferModal
           amount={offerAmount}
           onChange={(value) => {
@@ -700,7 +750,6 @@ export default function ListingDetail() {
           error={offerError}
         />
       )}
-      </Container>
     </>
   )
 }
@@ -778,17 +827,18 @@ function OfferModal({
   )
 }
 
-function IconCircleButton({ label, icon, onClick, className }: { label: string; icon: ReactNode; onClick: () => void; className?: string }) {
+function IconCircleButton({ label, icon, onClick, className, size = 'md' }: { label: string; icon: ReactNode; onClick: () => void; className?: string; size?: 'sm' | 'md' }) {
+  const sizeClass = size === 'sm' ? 'h-8 w-8' : 'h-10 w-10'
   return (
     <button
       type="button"
       onClick={onClick}
       aria-label={label}
       title={label}
-      className={`inline-flex h-10 w-10 items-center justify-center rounded-full text-white shadow transition hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70 ${className ?? ''}`}
+      className={`inline-flex ${sizeClass} items-center justify-center rounded-full shadow transition hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70 ${className ?? ''}`}
     >
       <span className="sr-only">{label}</span>
-      <span className="text-white">{icon}</span>
+      <span>{icon}</span>
     </button>
   )
 }
@@ -821,6 +871,13 @@ const SmsIcon = () => (
 const InstagramIcon = () => (
   <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden="true">
     <path d="M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5Zm0 2a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3H7Zm5 3.5a4.5 4.5 0 1 1-4.5 4.5A4.5 4.5 0 0 1 12 7.5Zm0 2a2.5 2.5 0 1 0 2.5 2.5A2.5 2.5 0 0 0 12 9.5Zm5-3a1 1 0 1 1-1-1 1 1 0 0 1 1 1Z" />
+  </svg>
+)
+
+const LinkIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M10 13a5 5 0 0 0 7.07 0l2.12-2.12a5 5 0 1 0-7.07-7.07L10.6 5.33" />
+    <path d="M14 11a5 5 0 0 0-7.07 0L4.81 13.1a5 5 0 0 0 7.07 7.07L13.4 18.67" />
   </svg>
 )
 
@@ -858,5 +915,43 @@ function IconButton({ label, children, onClick }: { label: string; children: Rea
     >
       {children}
     </button>
+  )
+}
+
+function StarRating({ value }: { value: number }) {
+  const full = Math.floor(value)
+  const half = value - full >= 0.5
+  const total = 5
+  return (
+    <span className="inline-flex items-center gap-0.5 align-middle">
+      {Array.from({ length: total }).map((_, i) => {
+        const idx = i + 1
+        const type = idx <= full ? 'full' : (idx === full + 1 && half ? 'half' : 'empty')
+        return (
+          <span key={idx} aria-hidden>
+            {type === 'full' ? (
+              <svg viewBox="0 0 24 24" className="h-4 w-4 text-amber-400" fill="currentColor">
+                <path d="M12 17.3 6.5 20.2l1-5.8L3 10.2l5.8-.9L12 4l3.2 5.3 5.8.9-4.5 4.2 1 5.8Z" />
+              </svg>
+            ) : type === 'half' ? (
+              <svg viewBox="0 0 24 24" className="h-4 w-4 text-amber-400" fill="currentColor">
+                <defs>
+                  <linearGradient id="half-grad" x1="0" x2="1">
+                    <stop offset="50%" stopColor="currentColor" />
+                    <stop offset="50%" stopColor="transparent" />
+                  </linearGradient>
+                </defs>
+                <path d="M12 17.3 6.5 20.2l1-5.8L3 10.2l5.8-.9L12 4l3.2 5.3 5.8.9-4.5 4.2 1 5.8Z" fill="url(#half-grad)" />
+                <path d="M12 17.3 6.5 20.2l1-5.8L3 10.2l5.8-.9L12 4l3.2 5.3 5.8.9-4.5 4.2 1 5.8Z" fill="none" stroke="currentColor" strokeWidth="1.2" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" className="h-4 w-4 text-amber-400" fill="none" stroke="currentColor" strokeWidth="1.2">
+                <path d="M12 17.3 6.5 20.2l1-5.8L3 10.2l5.8-.9L12 4l3.2 5.3 5.8.9-4.5 4.2 1 5.8Z" />
+              </svg>
+            )}
+          </span>
+        )
+      })}
+    </span>
   )
 }

@@ -26,6 +26,7 @@ import { CompareProvider } from './context/CompareContext'
 import CompareTray from './components/CompareTray'
 import { PlanProvider } from './context/PlanContext'
 import { NotificationsProvider } from './context/NotificationContext'
+import { ToastProvider } from './context/ToastContext'
 import CheckoutSuccess from './pages/Checkout/Success'
 import CheckoutFailure from './pages/Checkout/Failure'
 import CheckoutPending from './pages/Checkout/Pending'
@@ -250,6 +251,17 @@ function resolveSeoForPath(pathname: string): SEOProps {
   return {}
 }
 
+// Fuerza scroll al tope en cada cambio de ruta
+function ScrollToTop() {
+  const location = useLocation()
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, left: 0, behavior: 'smooth' })
+    }
+  }, [location.pathname])
+  return null
+}
+
 export default function App() {
   const location = useLocation()
   const seoConfig = useMemo(() => resolveSeoForPath(location.pathname), [location.pathname])
@@ -259,10 +271,12 @@ export default function App() {
       <PlanProvider>
         <NotificationsProvider>
           <CurrencyProvider>
+            <ToastProvider>
             <CompareProvider>
                 <div className="min-h-screen flex flex-col">
                   <SEO {...seoConfig} />
                   <Header />
+                  <ScrollToTop />
 
                   <main className="flex-1">
                     <Routes>
@@ -337,6 +351,7 @@ export default function App() {
                   <Footer />
                 </div>
             </CompareProvider>
+            </ToastProvider>
           </CurrencyProvider>
         </NotificationsProvider>
       </PlanProvider>

@@ -261,6 +261,105 @@ app.post('/api/offers/notify', async (req, res) => {
   }
 })
 
+/* ----------------------------- Contacts + Reviews ------------------------- */
+// Registra un evento de contacto (whatsapp/email) para habilitar reseñas 24h después
+app.post('/api/contacts/log', async (req, res) => {
+  try {
+    const { sellerId, listingId, buyerId, type } = req.body || {}
+    if (!sellerId || !type) return res.status(400).json({ error: 'missing_fields' })
+    const supabase = getServerSupabaseClient()
+    const payload = {
+      seller_id: sellerId,
+      buyer_id: buyerId || null,
+      listing_id: listingId || null,
+      type,
+    }
+    const { error } = await supabase.from('contact_events').insert([payload])
+    if (error) {
+      console.warn('[contacts] insert failed', error)
+    }
+    return res.json({ ok: true })
+  } catch (err) {
+    console.warn('[contacts] log failed', err)
+    return res.status(500).json({ error: 'unexpected_error' })
+  }
+})
+
+// Devuelve reseñas + resumen por vendedor
+app.get('/api/reviews/:sellerId', async (req, res) => {
+  try {
+    const { sellerId } = req.params
+    const supabase = getServerSupabaseClient()
+    const { data: reviews, error } = await supabase
+      .from('reviews')
+      .select('id,seller_id,buyer_id,listing_id,rating,tags,comment,created_at')
+      .eq('seller_id', sellerId)
+      .order('created_at', { ascending: false })
+    if (error) return res.status(500).json({ error: 'fetch_failed' })
+    const count = reviews?.length || 0
+    const avgRating = count ? (reviews.reduce((acc, r) => acc + (r.rating || 0), 0) / count) : 0
+    return res.json({ reviews: reviews || [], summary: { sellerId, count, avgRating } })
+  } catch (err) {
+    console.warn('[reviews] fetch failed', err)
+    return res.status(500).json({ error: 'unexpected_error' })
+  }
+})
+
+// ¿Puede buyer reseñar a seller? Requiere evento de contacto > 24h y no haber reseñado antes
+app.get('/api/reviews/can-review', async (req, res) => {
+  try {
+    const buyerId = String(req.query.buyerId || '')
+    const sellerId = String(req.query.sellerId || '')
+    if (!buyerId || !sellerId) return res.status(400).json({ allowed: false })
+    const supabase = getServerSupabaseClient()
+    const cutoffIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    const { data: contacts } = await supabase
+      .from('contact_events')
+      .select('id,created_at')
+      .eq('seller_id', sellerId)
+      .eq('buyer_id', buyerId)
+      .lte('created_at', cutoffIso)
+      .limit(1)
+    if (!contacts || contacts.length === 0) return res.json({ allowed: false, reason: 'Esperá 24 h desde el primer contacto.' })
+    const { data: existing } = await supabase
+      .from('reviews')
+      .select('id')
+      .eq('seller_id', sellerId)
+      .eq('buyer_id', buyerId)
+      .limit(1)
+    if (existing && existing.length > 0) return res.json({ allowed: false, reason: 'Ya publicaste una reseña.' })
+    return res.json({ allowed: true })
+  } catch (err) {
+    console.warn('[reviews] can-review failed', err)
+    return res.status(500).json({ allowed: false })
+  }
+})
+
+// Publica reseña
+app.post('/api/reviews/submit', async (req, res) => {
+  try {
+    const { sellerId, buyerId, listingId, rating, tags, comment } = req.body || {}
+    if (!sellerId || !buyerId || !rating) return res.status(400).send('missing_fields')
+    const r = Number(rating)
+    if (!Number.isFinite(r) || r < 1 || r > 5) return res.status(400).send('invalid_rating')
+    const supabase = getServerSupabaseClient()
+    const payload = {
+      seller_id: sellerId,
+      buyer_id: buyerId,
+      listing_id: listingId || null,
+      rating: r,
+      tags: Array.isArray(tags) ? tags : null,
+      comment: typeof comment === 'string' && comment.trim() ? String(comment).slice(0, 1000) : null,
+    }
+    const { error } = await supabase.from('reviews').insert([payload])
+    if (error) return res.status(500).send('insert_failed')
+    return res.json({ ok: true })
+  } catch (err) {
+    console.warn('[reviews] submit failed', err)
+    return res.status(500).send('unexpected_error')
+  }
+})
+
 async function resolveUserEmail(supabase, userId) {
   if (!userId) return null
   try {

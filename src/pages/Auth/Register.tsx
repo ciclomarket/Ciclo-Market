@@ -11,6 +11,7 @@ import { getSupabaseClient, supabaseEnabled } from '../../services/supabase'
 import { createUserProfile } from '../../services/users'
 import { deriveProfileSlug, pickDiscipline } from '../../utils/user'
 import AnalyticsTag from '../../components/AnalyticsTag'
+import { useToast } from '../../context/ToastContext'
 
 type OAuthProvider = 'google'
 export default function Register() {
@@ -29,6 +30,7 @@ export default function Register() {
   const [socialLoading, setSocialLoading] = useState<Partial<Record<OAuthProvider, boolean>>>({})
   const nav = useNavigate()
   const { enabled } = useAuth()
+  const { show: showToast } = useToast()
 
   const setProviderLoading = (provider: OAuthProvider, value: boolean) => {
     setSocialLoading((prev) => ({ ...prev, [provider]: value }))
@@ -97,6 +99,7 @@ export default function Register() {
       }
 
       setSuccess(true)
+      showToast('Registro completado con éxito')
       setTimeout(() => nav('/dashboard'), 500)
     } catch (err: any) {
       console.error('Error en registro Supabase:', err)

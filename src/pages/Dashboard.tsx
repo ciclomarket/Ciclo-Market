@@ -17,6 +17,7 @@ import { BIKE_CATEGORIES } from '../constants/catalog'
 import { deriveProfileSlug, pickDiscipline } from '../utils/user'
 import { normaliseWhatsapp, extractLocalWhatsapp, sanitizeLocalWhatsappInput } from '../utils/whatsapp'
 import { useNotifications } from '../context/NotificationContext'
+import { useToast } from '../context/ToastContext'
 import useFaves from '../hooks/useFaves'
 
 const TABS = ['Perfil', 'Publicaciones', 'Favoritos', 'Notificaciones', 'Editar perfil', 'Suscripción', 'Cerrar sesión'] as const
@@ -421,7 +422,7 @@ export default function Dashboard() {
   return (
     <div className="min-h-[calc(100vh-120px)] bg-[#101c29] py-10">
       <Container>
-        <div className="overflow-hidden rounded-[28px] border border-white/10 bg-white/5 backdrop-blur-xl shadow-[0_35px_80px_rgba(12,20,28,0.45)]">
+        <div className="overflow-visible rounded-[28px] border border-white/10 bg-white/5 backdrop-blur-xl shadow-[0_35px_80px_rgba(12,20,28,0.45)]">
           <header className="border-b border-white/10 bg-[#14212e]/90 px-6 py-6 text-white">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-start justify-between gap-3 sm:block">
@@ -788,6 +789,8 @@ function ProfileView({
 function ListingsView({ listings, onRefresh }: { listings: Listing[]; onRefresh?: () => Promise<void> | void }) {
   const navigate = useNavigate()
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const { show: showToast } = useToast()
+  const [openMenuFor, setOpenMenuFor] = useState<string | null>(null)
 
   useEffect(() => {
     if (!successMessage || typeof window === 'undefined') return
@@ -821,7 +824,9 @@ function ListingsView({ listings, onRefresh }: { listings: Listing[]; onRefresh?
       return
     }
     if (onRefresh) await onRefresh()
-    setSuccessMessage('La publicación fue archivada. Podés reactivarla cuando quieras.')
+    const msg = 'La publicación fue archivada. Podés reactivarla cuando quieras.'
+    setSuccessMessage(msg)
+    showToast(msg)
   }
 
   const handleToggleSold = async (listing: Listing) => {
@@ -842,7 +847,9 @@ function ListingsView({ listings, onRefresh }: { listings: Listing[]; onRefresh?
       return
     }
     if (onRefresh) await onRefresh()
-    setSuccessMessage(isSold ? 'La publicación vuelve a estar activa.' : 'Marcaste la publicación como vendida.')
+    const msg = isSold ? 'La publicación vuelve a estar activa.' : 'Marcaste la publicación como vendida.'
+    setSuccessMessage(msg)
+    showToast(msg)
   }
 
   const handleDelete = async (id: string) => {
@@ -858,7 +865,9 @@ function ListingsView({ listings, onRefresh }: { listings: Listing[]; onRefresh?
       return
     }
     if (onRefresh) await onRefresh()
-    setSuccessMessage('La publicación fue eliminada permanentemente.')
+    const msg = 'La publicación fue eliminada permanentemente.'
+    setSuccessMessage(msg)
+    showToast(msg)
   }
 
   const handleReducePrice = async (listing: Listing) => {
@@ -890,11 +899,26 @@ function ListingsView({ listings, onRefresh }: { listings: Listing[]; onRefresh?
       return
     }
     if (onRefresh) await onRefresh()
-    setSuccessMessage('Se actualizó el precio correctamente.')
+    const msg = 'Se actualizó el precio correctamente.'
+    setSuccessMessage(msg)
+    showToast(msg)
   }
+
+  // Cerrar menú con Escape
+  useEffect(() => {
+    if (!openMenuFor) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpenMenuFor(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [openMenuFor])
 
   return (
     <div className="space-y-4">
+      {openMenuFor && (
+        <span className="sr-only" aria-live="polite">Menú de opciones abierto</span>
+      )}
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-xl font-semibold text-[#14212e]">Tus publicaciones</h2>
@@ -910,57 +934,79 @@ function ListingsView({ listings, onRefresh }: { listings: Listing[]; onRefresh?
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 items-start">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 items-start relative">
+        {openMenuFor && (
+          <div className="fixed inset-0 z-40" onClick={() => setOpenMenuFor(null)} aria-hidden />
+        )}
         {listings.map((listing) => (
           <div key={listing.id} className="space-y-3">
             <ListingCard l={listing} />
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="secondary"
-                className="flex-1 min-w-[150px] text-xs py-2"
-                onClick={() =>
-                  navigate(
-                    `/publicar/nueva?id=${listing.id}&type=${
-                      listing.category === 'Accesorios'
-                        ? 'accessory'
-                        : listing.category === 'Indumentaria'
-                          ? 'apparel'
-                          : 'bike'
-                    }`
-                  )
-                }
+            <div className="relative">
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded-full border border-[#14212e]/20 bg-white px-3 py-1.5 text-xs font-semibold text-[#14212e] shadow-sm hover:bg-white/90"
+                onClick={() => setOpenMenuFor((prev) => (prev === listing.id ? null : listing.id))}
+                aria-haspopup="menu"
+                aria-expanded={openMenuFor === listing.id}
               >
-                Editar
-              </Button>
-              <Button
-                variant="secondary"
-                className={`flex-1 min-w-[150px] text-xs py-2 ${listing.status === 'sold' ? 'border border-[#14212e]/20 bg-[#14212e]/10 text-[#14212e]' : ''}`}
-                onClick={() => void handleToggleSold(listing)}
-              >
-                {listing.status === 'sold' ? 'Marcar disponible' : 'Marcar vendida'}
-              </Button>
-              <Button
-                variant="secondary"
-                className="flex-1 min-w-[150px] text-xs py-2"
-                onClick={() => void handleReducePrice(listing)}
-                disabled={listing.status === 'sold'}
-              >
-                Reducir precio
-              </Button>
-              <Button
-                variant="ghost"
-                className="flex-1 min-w-[150px] text-xs py-2"
-                onClick={() => void handleArchive(listing.id)}
-              >
-                Archivar
-              </Button>
-              <Button
-                variant="ghost"
-                className="flex-1 min-w-[150px] text-xs py-2 text-red-600"
-                onClick={() => void handleDelete(listing.id)}
-              >
-                Eliminar
-              </Button>
+                Opciones
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden>
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </button>
+
+              {openMenuFor === listing.id && (
+                <div className="absolute left-0 bottom-full z-50 mb-2 w-full min-w-[220px] rounded-xl border border-[#14212e]/10 bg-white p-2 text-sm text-[#14212e] shadow-xl">
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-[#14212e]/5"
+                    onClick={() => {
+                      navigate(
+                        `/publicar/nueva?id=${listing.id}&type=${
+                          listing.category === 'Accesorios'
+                            ? 'accessory'
+                            : listing.category === 'Indumentaria'
+                              ? 'apparel'
+                              : 'bike'
+                        }`
+                      )
+                      setOpenMenuFor(null)
+                    }}
+                  >
+                    Editar
+                    <span className="text-xs text-[#14212e]/60">E</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-[#14212e]/5"
+                    onClick={() => { void handleToggleSold(listing); setOpenMenuFor(null) }}
+                  >
+                    {listing.status === 'sold' ? 'Marcar disponible' : 'Marcar vendida'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={listing.status === 'sold'}
+                    className={`flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-[#14212e]/5 ${listing.status === 'sold' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    onClick={() => { void handleReducePrice(listing); setOpenMenuFor(null) }}
+                  >
+                    Reducir precio
+                  </button>
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-[#14212e]/5"
+                    onClick={() => { void handleArchive(listing.id); setOpenMenuFor(null) }}
+                  >
+                    Archivar
+                  </button>
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-red-600 hover:bg-red-50"
+                    onClick={() => { void handleDelete(listing.id); setOpenMenuFor(null) }}
+                  >
+                    Eliminar
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -1237,6 +1283,7 @@ function EditProfileView({
   const [avatarUploading, setAvatarUploading] = useState(false)
   const [avatarError, setAvatarError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const { show: showToast } = useToast()
 
   useEffect(() => {
     setFullName(profile?.full_name ?? '')
@@ -1274,6 +1321,7 @@ function EditProfileView({
       setAvatarUrl(url)
       if (onProfileUpdated) await onProfileUpdated()
       setSuccess('Se actualizó el perfil correctamente.')
+      showToast('Se actualizó el perfil correctamente.')
     } catch (err: any) {
       setAvatarError(err?.message ?? 'No pudimos subir la imagen. Intentá nuevamente.')
     } finally {
@@ -1323,6 +1371,7 @@ function EditProfileView({
       }
       if (onProfileUpdated) await onProfileUpdated()
       setSuccess('Se actualizó el perfil correctamente.')
+      showToast('Se actualizó el perfil correctamente.')
     } catch (err: any) {
       setError(err?.message ?? 'No pudimos guardar tu perfil. Intentá nuevamente.')
     } finally {

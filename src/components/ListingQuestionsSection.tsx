@@ -11,6 +11,7 @@ import {
   notifyListingQuestionEvent,
 } from '../services/listingQuestions'
 import type { Listing, ListingQuestion } from '../types'
+import { useToast } from '../context/ToastContext'
 import { formatNameWithInitial } from '../utils/user'
 import { fetchUserDisplayNames } from '../services/users'
 
@@ -56,6 +57,7 @@ function displayAnswerAuthor(fullName?: string | null, fallback?: string | null)
 
 export default function ListingQuestionsSection({ listing, listingUnavailable }: Props) {
   const { user, isModerator } = useAuth()
+  const { show: showToast } = useToast()
   const [questions, setQuestions] = useState<ListingQuestion[]>([])
   const [loading, setLoading] = useState(true)
   const [questionDraft, setQuestionDraft] = useState('')
@@ -192,6 +194,7 @@ export default function ListingQuestionsSection({ listing, listingUnavailable }:
         }
         setQuestionDraft('')
         void notifyListingQuestionEvent(created.id, 'asked')
+        showToast('Consulta enviada')
         const idsToEnsure = [created.questionerId, created.answerAuthorId].filter(
           (id): id is string => Boolean(id)
         )
@@ -240,6 +243,7 @@ export default function ListingQuestionsSection({ listing, listingUnavailable }:
         }
         setAnswerDrafts((prev) => ({ ...prev, [questionId]: '' }))
         void notifyListingQuestionEvent(updated.id, 'answered')
+        showToast('Respuesta publicada')
         const idsToEnsure = [updated.answerAuthorId].filter((id): id is string => Boolean(id))
         if (idsToEnsure.length) {
           void ensureUserNames(idsToEnsure)
@@ -266,8 +270,8 @@ export default function ListingQuestionsSection({ listing, listingUnavailable }:
     if (!proceed) return
     setModerating((p) => ({ ...p, [questionId]: true }))
     try {
-      // Notificar antes de borrar, así el backend puede cargar la fila
-      void notifyListingQuestionEvent(questionId, 'moderator_deleted_question')
+      // Notificar antes de borrar, y esperar para evitar 404 en el backend
+      await notifyListingQuestionEvent(questionId, 'moderator_deleted_question')
       await deleteListingQuestion(questionId)
       setQuestions((prev) => prev.filter((q) => q.id !== questionId))
     } catch (err) {

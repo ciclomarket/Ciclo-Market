@@ -16,6 +16,7 @@ import { formatNameWithInitial } from '../../utils/user'
 import { normaliseWhatsapp, extractLocalWhatsapp, sanitizeLocalWhatsappInput } from '../../utils/whatsapp'
 import { fetchListing } from '../../services/listings'
 import { fetchUserProfile, type UserProfileRecord } from '../../services/users'
+import { useToast } from '../../context/ToastContext'
 
 const MATERIAL_OPTIONS = ['Aluminio','Carbono','Aluminio + Carbono','Titanio','Acero','Otro']
 
@@ -63,6 +64,7 @@ export default function NewListingForm() {
   const { uploadFiles, uploading, progress } = useUpload()
   const { user, enabled } = useAuth()
   const { plans } = usePlans()
+  const { show: showToast } = useToast()
   const listingId = searchParams.get('id')
   const listingTypeParam = searchParams.get('type')
   const listingType: 'bike' | 'accessory' | 'apparel' =
@@ -767,6 +769,7 @@ export default function NewListingForm() {
 
     // Ya pagaste tu plan (si correspondía). Redirigimos al detalle del aviso.
     clearDraft()
+    showToast(isEditing ? 'Publicación actualizada con éxito' : 'Publicación creada con éxito')
     navigate(`/listing/${inserted.slug ?? inserted.id}`)
   }
 
@@ -804,11 +807,12 @@ export default function NewListingForm() {
   }
 
   return (
-    <Container>
+    <div className="bg-[#14212e]">
+    <Container className="text-white">
       <div className="flex w-full flex-col gap-3 md:flex-row md:items-center md:justify-between mb-6">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold">{isEditing ? 'Editar publicación' : 'Nueva publicación'}</h1>
-          <p className="text-sm text-black/60 mt-1">
+          <h1 className="text-2xl font-bold text-white">{isEditing ? 'Editar publicación' : 'Nueva publicación'}</h1>
+          <p className="text-sm text-white/75 mt-1">
             {isEditing
               ? 'Actualizá la información de tu aviso. Los cambios se publican al instante.'
               : isAccessory
@@ -818,15 +822,15 @@ export default function NewListingForm() {
                   : 'Completá los datos de tu bici y obtené una vista previa en tiempo real.'}
           </p>
         </div>
-        <div className="min-w-0 rounded-xl border border-mb-primary/30 bg-mb-primary/5 px-4 py-3 text-sm text-mb-ink max-w-full md:max-w-sm">
-          <div className="font-semibold text-mb-primary">{isEditing ? `Plan en uso: ${planName}` : `Plan seleccionado: ${planName}`}</div>
-          <div className="text-xs font-semibold text-mb-primary/80">
+        <div className="min-w-0 rounded-xl border border-white/30 bg-white/10 px-4 py-3 text-sm text-white max-w-full md:max-w-sm">
+          <div className="font-semibold text-white">{isEditing ? `Plan en uso: ${planName}` : `Plan seleccionado: ${planName}`}</div>
+          <div className="text-xs font-semibold text-white/90">
             {isEditing ? 'Podés cambiar de plan desde tu panel de vendedor.' : (planPriceLabel ?? 'Sin costo')}
           </div>
           {selectedPlan?.description && (
-            <div className="mt-2 text-xs text-black/70">{selectedPlan.description}</div>
+            <div className="mt-2 text-xs text-white/80">{selectedPlan.description}</div>
           )}
-          <div className="mt-2 space-y-1 text-xs text-black/60">
+          <div className="mt-2 space-y-1 text-xs text-white/70">
             <div>Duración de la publicación: {listingDuration} días</div>
             <div>Expira aprox.: {listingExpiresLabel}</div>
             <div>Fotos permitidas: {maxPhotos}</div>
@@ -842,7 +846,7 @@ export default function NewListingForm() {
       </div>
 
       <div className="grid w-full gap-6 md:grid-cols-2">
-        <div className="card w-full max-w-full min-w-0 overflow-hidden p-6 space-y-6">
+        <div className="card w-full max-w-full min-w-0 overflow-hidden p-6 space-y-6 text-[#14212e]">
           <section>
             <h2 className="text-lg font-semibold text-mb-ink">
               {isAccessory ? '1. Tipo de accesorio' : isApparel ? '1. Tipo de indumentaria' : '1. Categoría'}
@@ -1230,7 +1234,7 @@ export default function NewListingForm() {
           <Button onClick={submit} className="w-full">Publicar</Button>
         </div>
 
-        <aside className="card w-full max-w-full min-w-0 overflow-hidden p-6 space-y-5 md:sticky md:top-6 md:max-w-sm h-fit">
+        <aside className="card w-full max-w-full min-w-0 overflow-hidden p-6 space-y-5 md:sticky md:top-6 md:max-w-sm h-fit text-[#14212e]">
           <h2 className="text-lg font-semibold text-mb-ink">Ficha técnica</h2>
           <div className="rounded-lg border border-black/10 overflow-hidden">
             {images[0] ? (
@@ -1337,5 +1341,6 @@ export default function NewListingForm() {
         </aside>
       </div>
     </Container>
+    </div>
   )
 }
