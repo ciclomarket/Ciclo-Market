@@ -4,6 +4,8 @@ import { useAuth } from '../context/AuthContext'
 import { getSupabaseClient, supabaseEnabled } from '../services/supabase'
 import {
   answerListingQuestion,
+  deleteListingQuestion,
+  clearListingAnswer,
   askListingQuestion,
   fetchListingQuestions,
   notifyListingQuestionEvent,
@@ -53,7 +55,7 @@ function displayAnswerAuthor(fullName?: string | null, fallback?: string | null)
 }
 
 export default function ListingQuestionsSection({ listing, listingUnavailable }: Props) {
-  const { user } = useAuth()
+  const { user, isModerator } = useAuth()
   const [questions, setQuestions] = useState<ListingQuestion[]>([])
   const [loading, setLoading] = useState(true)
   const [questionDraft, setQuestionDraft] = useState('')
@@ -64,6 +66,7 @@ export default function ListingQuestionsSection({ listing, listingUnavailable }:
   const [answerErrors, setAnswerErrors] = useState<Record<string, string | null>>({})
   const [userNames, setUserNames] = useState<Record<string, string>>({})
   const userNamesRef = useRef<Record<string, string>>({})
+  const [moderating, setModerating] = useState<Record<string, boolean>>({})
 
   const isSeller = user?.id === listing.sellerId
   const canAsk = Boolean(user && !isSeller && !listingUnavailable && supabaseEnabled)
@@ -257,6 +260,41 @@ export default function ListingQuestionsSection({ listing, listingUnavailable }:
     }
   }
 
+  const handleModeratorDeleteQuestion = async (questionId: string) => {
+    if (!supabaseEnabled) return
+    const proceed = window.confirm('¿Eliminar definitivamente esta consulta?')
+    if (!proceed) return
+    setModerating((p) => ({ ...p, [questionId]: true }))
+    try {
+      // Notificar antes de borrar, así el backend puede cargar la fila
+      void notifyListingQuestionEvent(questionId, 'moderator_deleted_question')
+      await deleteListingQuestion(questionId)
+      setQuestions((prev) => prev.filter((q) => q.id !== questionId))
+    } catch (err) {
+      console.warn('[listing-questions] moderator delete failed', err)
+    } finally {
+      setModerating((p) => ({ ...p, [questionId]: false }))
+    }
+  }
+
+  const handleModeratorClearAnswer = async (questionId: string) => {
+    if (!supabaseEnabled) return
+    const proceed = window.confirm('¿Eliminar la respuesta del vendedor para esta consulta?')
+    if (!proceed) return
+    setModerating((p) => ({ ...p, [questionId]: true }))
+    try {
+      const updated = await clearListingAnswer(questionId)
+      if (updated) {
+        setQuestions((prev) => prev.map((q) => (q.id === questionId ? updated : q)))
+      }
+      void notifyListingQuestionEvent(questionId, 'moderator_cleared_answer')
+    } catch (err) {
+      console.warn('[listing-questions] moderator clear answer failed', err)
+    } finally {
+      setModerating((p) => ({ ...p, [questionId]: false }))
+    }
+  }
+
   const pendingQuestions = useMemo(
     () => sortedQuestions.filter((item) => !item.answerBody),
     [sortedQuestions]
@@ -423,6 +461,19 @@ export default function ListingQuestionsSection({ listing, listingUnavailable }:
                           El vendedor responderá en esta sección.
                         </p>
                       )}
+                      {isModerator && (
+                        <div className="mt-3 flex items-center justify-end gap-2">
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            className="px-3 py-1 text-xs"
+                            disabled={moderating[question.id]}
+                            onClick={() => void handleModeratorDeleteQuestion(question.id)}
+                          >
+                            Eliminar consulta
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   )
                 })}
@@ -458,6 +509,28 @@ export default function ListingQuestionsSection({ listing, listingUnavailable }:
                         <p className="mt-2 text-xs text-[#14212e]/50">
                           {displayAnswerAuthor(answerFullName, listing.sellerName)}
                         </p>
+                        {isModerator && (
+                          <div className="mt-2 flex items-center justify-end gap-2">
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              className="px-3 py-1 text-xs"
+                              disabled={moderating[question.id]}
+                              onClick={() => void handleModeratorClearAnswer(question.id)}
+                            >
+                              Eliminar respuesta
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              className="px-3 py-1 text-xs text-red-700"
+                              disabled={moderating[question.id]}
+                              onClick={() => void handleModeratorDeleteQuestion(question.id)}
+                            >
+                              Eliminar consulta
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )

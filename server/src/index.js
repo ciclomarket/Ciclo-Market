@@ -278,10 +278,12 @@ async function resolveUserEmail(supabase, userId) {
 }
 
 app.post('/api/questions/notify', async (req, res) => {
-  const event = typeof req.body?.event === 'string' ? req.body.event.toLowerCase() : ''
+  const rawEvent = typeof req.body?.event === 'string' ? req.body.event.toLowerCase() : ''
+  const event = rawEvent
   const questionId = req.body?.questionId
 
-  if (!questionId || (event !== 'asked' && event !== 'answered')) {
+  const allowed = new Set(['asked','answered','moderator_deleted_question','moderator_cleared_answer'])
+  if (!questionId || !allowed.has(event)) {
     return res.status(400).json({ error: 'invalid_request' })
   }
 
@@ -637,6 +639,114 @@ app.post('/api/questions/notify', async (req, res) => {
         event: 'answered',
       },
       actorId: question.answerer_id || listing.seller_id,
+    })
+
+    return res.json({ ok: true, email: emailStatus })
+  }
+
+  if (event === 'moderator_deleted_question') {
+    // Notifica al comprador (asker) que su consulta fue eliminada
+    const buyerEmail = await resolveUserEmail(supabase, question.asker_id)
+    const html = `
+      <div style="background:#ffffff;margin:0 auto;max-width:600px;font-family:Arial, sans-serif;color:#14212e">
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="width:100%">
+          <tr>
+            <td style="padding:20px 24px;text-align:center">
+              <img src="${cleanBase}/site-logo.png" alt="Ciclo Market" style="height:64px;width:auto;display:inline-block" />
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:24px">
+              <h2 style="margin:0 0 8px;font-size:20px;color:#0c1723">Un moderador eliminó tu consulta</h2>
+              <p style="margin:0 0 12px">Tu consulta en “${escapeHtml(listingTitle)}” fue eliminada porque no cumple con nuestras bases y condiciones.</p>
+              <p style="margin:0 0 12px">Si tenés dudas, escribinos a <a href="mailto:admin@ciclomarket.ar" style="color:#0c72ff;text-decoration:underline">admin@ciclomarket.ar</a>.</p>
+              <p style="margin:0 0 16px;text-align:center">
+                <a href="${listingUrl}" style="display:inline-block;padding:12px 18px;background:#14212e;color:#fff;text-decoration:none;border-radius:8px;font-weight:600">Ver publicación</a>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </div>
+    `
+    const text = [
+      'Un moderador eliminó tu consulta',
+      `Publicación: ${listingTitle}`,
+      `Ver: ${listingUrl}`,
+      'Contacto: admin@ciclomarket.ar'
+    ].join('\n')
+
+    let emailStatus = 'skipped'
+    if (isMailConfigured() && buyerEmail) {
+      try {
+        await sendMail({ from, to: buyerEmail, subject: `Consulta eliminada en ${listingTitle}`, html, text })
+        emailStatus = 'sent'
+      } catch (e) {
+        console.warn('[questions] moderator delete email failed', e)
+        emailStatus = 'failed'
+      }
+    }
+
+    await createNotification({
+      userId: question.asker_id,
+      title: `Consulta eliminada en ${listingTitle}`,
+      body: 'Un moderador eliminó tu consulta por incumplir las reglas.',
+      cta: listingUrl,
+      metadata: { question_id: question.id, listing_id: listing.id, event: 'moderator_deleted_question' },
+      actorId: listing.seller_id,
+    })
+
+    return res.json({ ok: true, email: emailStatus })
+  }
+
+  if (event === 'moderator_cleared_answer') {
+    // Notifica al vendedor que se eliminó su respuesta
+    const sellerEmail = listing.seller_email || (await resolveUserEmail(supabase, listing.seller_id))
+    const html = `
+      <div style="background:#ffffff;margin:0 auto;max-width:600px;font-family:Arial, sans-serif;color:#14212e">
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="width:100%">
+          <tr>
+            <td style="padding:20px 24px;text-align:center">
+              <img src="${cleanBase}/site-logo.png" alt="Ciclo Market" style="height:64px;width:auto;display:inline-block" />
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:24px">
+              <h2 style="margin:0 0 8px;font-size:20px;color:#0c1723">Un moderador eliminó tu respuesta</h2>
+              <p style="margin:0 0 12px">Tu respuesta en “${escapeHtml(listingTitle)}” fue eliminada porque no cumple con nuestras bases y condiciones.</p>
+              <p style="margin:0 0 12px">Si tenés dudas, escribinos a <a href="mailto:admin@ciclomarket.ar" style="color:#0c72ff;text-decoration:underline">admin@ciclomarket.ar</a>.</p>
+              <p style="margin:0 0 16px;text-align:center">
+                <a href="${listingUrl}" style="display:inline-block;padding:12px 18px;background:#14212e;color:#fff;text-decoration:none;border-radius:8px;font-weight:600">Ver publicación</a>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </div>
+    `
+    const text = [
+      'Un moderador eliminó tu respuesta',
+      `Publicación: ${listingTitle}`,
+      `Ver: ${listingUrl}`,
+      'Contacto: admin@ciclomarket.ar'
+    ].join('\n')
+
+    let emailStatus = 'skipped'
+    if (isMailConfigured() && sellerEmail) {
+      try {
+        await sendMail({ from, to: sellerEmail, subject: `Respuesta eliminada en ${listingTitle}`, html, text })
+        emailStatus = 'sent'
+      } catch (e) {
+        console.warn('[questions] moderator clear email failed', e)
+        emailStatus = 'failed'
+      }
+    }
+
+    await createNotification({
+      userId: listing.seller_id,
+      title: `Respuesta eliminada en ${listingTitle}`,
+      body: 'Un moderador eliminó tu respuesta por incumplir las reglas.',
+      cta: listingUrl,
+      metadata: { question_id: question.id, listing_id: listing.id, event: 'moderator_cleared_answer' },
+      actorId: question.asker_id,
     })
 
     return res.json({ ok: true, email: emailStatus })

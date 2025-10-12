@@ -119,7 +119,42 @@ export async function answerListingQuestion(questionId: string, body: string): P
   return normalizeQuestion(data as ListingQuestionRow)
 }
 
-export async function notifyListingQuestionEvent(questionId: string, event: 'asked' | 'answered'): Promise<void> {
+export async function deleteListingQuestion(questionId: string): Promise<boolean> {
+  if (!supabaseEnabled) throw new Error('Supabase no habilitado')
+  const supabase = getSupabaseClient()
+  const { error } = await supabase
+    .from('listing_questions')
+    .delete()
+    .eq('id', questionId)
+  if (error) {
+    console.warn('[listing-questions] delete failed', error)
+    throw error
+  }
+  return true
+}
+
+export async function clearListingAnswer(questionId: string): Promise<ListingQuestion | null> {
+  if (!supabaseEnabled) throw new Error('Supabase no habilitado')
+  const supabase = getSupabaseClient()
+  const payload = { answer_body: null, answered_at: null, answerer_id: null }
+  const { data, error } = await supabase
+    .from('listing_questions')
+    .update(payload)
+    .eq('id', questionId)
+    .select(
+      'id, listing_id, question_body, asker_id, answer_body, answerer_id, created_at, answered_at'
+    )
+    .maybeSingle()
+  if (error) {
+    console.warn('[listing-questions] clear answer failed', error)
+    throw error
+  }
+  return data ? normalizeQuestion(data as any) : null
+}
+
+export type ListingQuestionEvent = 'asked' | 'answered' | 'moderator_deleted_question' | 'moderator_cleared_answer'
+
+export async function notifyListingQuestionEvent(questionId: string, event: ListingQuestionEvent): Promise<void> {
   if (!questionId) return
   const endpoint = API_BASE ? `${API_BASE}/api/questions/notify` : '/api/questions/notify'
   try {
