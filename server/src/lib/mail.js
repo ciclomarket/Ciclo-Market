@@ -1,5 +1,5 @@
-const nodemailer = require('nodemailer')
 let cachedTransport = null
+let _nodemailer = null
 
 function smtpEnabled() {
   return process.env.SMTP_ENABLED === 'true'
@@ -42,7 +42,14 @@ function getMailTransport() {
       user: process.env.SMTP_USER,
     })
   }
-  cachedTransport = nodemailer.createTransport({
+  if (!_nodemailer) {
+    try {
+      _nodemailer = require('nodemailer')
+    } catch (e) {
+      throw new Error('nodemailer no está instalado y se requiere para SMTP')
+    }
+  }
+  cachedTransport = _nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port,
     secure,
