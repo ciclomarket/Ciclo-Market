@@ -159,7 +159,6 @@ export default function Dashboard() {
   const [giftPlan, setGiftPlan] = useState<'basic' | 'premium'>('basic')
   const [giftUses, setGiftUses] = useState(1)
   const [giftExpires, setGiftExpires] = useState('')
-  const [giftAdminToken, setGiftAdminToken] = useState<string>(() => (typeof window !== 'undefined' ? localStorage.getItem('cm:adminToken') || '' : ''))
   const [giftCreating, setGiftCreating] = useState(false)
   const [giftCode, setGiftCode] = useState<string | null>(null)
   const [modOpen, setModOpen] = useState(false)

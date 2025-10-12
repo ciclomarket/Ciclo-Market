@@ -20,11 +20,11 @@ export async function redeemGift(code: string, sellerId: string): Promise<{ ok: 
   return res.json()
 }
 
-export async function createGift(plan: GiftPlan, uses: number = 1, expiresAt?: string, adminToken?: string): Promise<{ ok: boolean; code?: string }> {
+export async function createGift(plan: GiftPlan, uses: number = 1, expiresAt?: string): Promise<{ ok: boolean; code?: string }> {
   const endpoint = API_BASE ? `${API_BASE}/api/gifts/create` : '/api/gifts/create'
   const res = await fetch(endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...(adminToken ? { 'X-Admin-Token': adminToken } : {}) },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ plan, uses, expiresAt })
   })
   if (!res.ok) return { ok: false }
