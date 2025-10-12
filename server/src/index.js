@@ -10,7 +10,6 @@ try {
 const express = require('express')
 const cors = require('cors')
 const { MercadoPagoConfig, Preference } = require('mercadopago')
-const { startRenewalNotificationJob } = require('./jobs/renewalNotifier')
 const { sendMail, isMailConfigured } = require('./lib/mail')
 const { getServerSupabaseClient } = require('./lib/supabaseClient')
 const path = require('path')
@@ -901,5 +900,14 @@ app.post('/api/webhooks/mercadopago', (req, res) => {
 const PORT = process.env.PORT || 4000
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`API on :${PORT}`)
-  startRenewalNotificationJob()
+  if (process.env.RENEWAL_NOTIFIER_ENABLED === 'true') {
+    try {
+      const { startRenewalNotificationJob } = require('./jobs/renewalNotifier')
+      startRenewalNotificationJob()
+    } catch (err) {
+      console.warn('[renewalNotifier] not started:', err?.message || err)
+    }
+  } else {
+    console.info('[renewalNotifier] disabled (RENEWAL_NOTIFIER_ENABLED != "true")')
+  }
 })
