@@ -305,8 +305,6 @@ app.post('/api/questions/notify', async (req, res) => {
         answered_at,
         asker_id,
         answerer_id,
-        asker:asker_id ( id, full_name ),
-        answerer:answerer_id ( id, full_name ),
         listing:listing_id (
           id,
           slug,
@@ -339,6 +337,22 @@ app.post('/api/questions/notify', async (req, res) => {
   const bikesUrl = `${cleanBase}/marketplace?cat=Ruta`
   const partsUrl = `${cleanBase}/marketplace?cat=Accesorios`
   const apparelUrl = `${cleanBase}/marketplace?cat=Indumentaria`
+
+  async function resolveUserFullName(userId) {
+    if (!userId) return null
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('full_name')
+        .eq('id', userId)
+        .maybeSingle()
+      if (error) return null
+      const name = typeof data?.full_name === 'string' ? data.full_name.trim() : ''
+      return name || null
+    } catch (_) {
+      return null
+    }
+  }
 
   // No incluimos imagen del listing en el email por diseño
 
@@ -382,7 +396,8 @@ app.post('/api/questions/notify', async (req, res) => {
     const sellerName = escapeHtml(listing.seller_name || 'vendedor')
     const safeQuestion = escapeHtml(question.question_body || '').replace(/\n/g, '<br />')
     const logoUrl = `${cleanBase}/site-logo.png`
-    const askerName = escapeHtml((question.asker && question.asker.full_name) || 'un interesado')
+    const askerResolved = await resolveUserFullName(question.asker_id)
+    const askerName = escapeHtml(askerResolved || 'un interesado')
     const html = `
       <div style="background:#ffffff;margin:0 auto;max-width:600px;font-family:Arial, sans-serif;color:#14212e">
         <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="width:100%">
