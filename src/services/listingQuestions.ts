@@ -158,11 +158,16 @@ export async function notifyListingQuestionEvent(questionId: string, event: List
   if (!questionId) return
   const endpoint = API_BASE ? `${API_BASE}/api/questions/notify` : '/api/questions/notify'
   try {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 10000)
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ questionId, event }),
+      keepalive: true,
+      signal: controller.signal,
     })
+    clearTimeout(timeout)
     if (response.status === 404) {
       // El backend puede no tener el endpoint (deploy viejo). Ignoramos silenciosamente.
       return
