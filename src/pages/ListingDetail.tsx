@@ -624,15 +624,17 @@ export default function ListingDetail() {
                       icon={<InstagramIcon />}
                     />
                   </div>
-                  <div className="mt-3">
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-2 rounded-full border border-[#14212e]/20 px-3 py-1.5 text-xs font-semibold text-[#14212e] hover:bg-[#14212e]/5"
-                      onClick={() => setShareModalOpen(true)}
-                    >
-                      Compartí y ganá 7 días de destaque
-                    </button>
-                  </div>
+                  {isOwner && (
+                    <div className="mt-3">
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-2 rounded-full border border-[#14212e]/20 px-3 py-1.5 text-xs font-semibold text-[#14212e] hover:bg-[#14212e]/5"
+                        onClick={() => setShareModalOpen(true)}
+                      >
+                        Compartí y ganá 7 días de destaque
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <p className="text-xs text-[#14212e]/60 lg:hidden">
                   {verifiedVendor
@@ -766,7 +768,7 @@ export default function ListingDetail() {
           error={offerError}
         />
       )}
-      {shareModalOpen && listing && (
+      {shareModalOpen && listing && isOwner && (
         <ShareBoostModal
           listingId={listing.id}
           sellerId={listing.sellerId}

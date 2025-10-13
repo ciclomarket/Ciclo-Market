@@ -6,6 +6,7 @@ import Button from '../../components/Button'
 import Container from '../../components/Container'
 import { useAuth } from '../../context/AuthContext'
 import { usePlans } from '../../context/PlanContext'
+import { validateGift } from '../../services/gifts'
 import type { Plan } from '../../types'
 import { PLAN_ORDER, type PlanCode, canonicalPlanCode, resolvePlanCode } from '../../utils/planCodes'
 
@@ -139,6 +140,10 @@ export default function Plans() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const [processingPlan, setProcessingPlan] = useState<PlanCode | null>(null)
+  const [giftCode, setGiftCode] = useState<string | null>(null)
+  const [giftPlan, setGiftPlan] = useState<PlanCode | null>(null)
+  const [giftValidating, setGiftValidating] = useState(false)
+  const [giftError, setGiftError] = useState<string | null>(null)
 
   const typeParam = searchParams.get('type')
   const listingType: ListingType | null = ((): ListingType | null => {
@@ -148,6 +153,34 @@ export default function Plans() {
 
   const paymentStatus = searchParams.get('payment') ?? undefined
   const paymentPlanParam = canonicalPlanCode(searchParams.get('plan'))
+
+  // Detectar y validar gift en esta pantalla también, así preselecciona y evita checkout
+  useMemo(() => {
+    const code = searchParams.get('gift')?.trim() || null
+    if (!code) { setGiftCode(null); setGiftPlan(null); setGiftError(null); return null }
+    let cancelled = false
+    setGiftValidating(true)
+    setGiftError(null)
+    ;(async () => {
+      try {
+        const res = await validateGift(code)
+        if (cancelled) return
+        if (res.ok && (res.plan === 'basic' || res.plan === 'premium')) {
+          setGiftCode(code)
+          setGiftPlan(res.plan as PlanCode)
+        } else {
+          setGiftCode(null)
+          setGiftPlan(null)
+          setGiftError('El código de regalo no es válido o está vencido.')
+        }
+      } catch {
+        if (!cancelled) setGiftError('No pudimos validar el código de regalo.')
+      } finally {
+        if (!cancelled) setGiftValidating(false)
+      }
+    })()
+    return null
+  }, [searchParams])
 
   const visiblePlans = useMemo(() => {
     const enriched = plans
@@ -214,6 +247,14 @@ export default function Plans() {
       return
     }
 
+    // Bonificado por gift: saltar checkout y pasar el gift al form
+    if (giftCode && giftPlan && giftPlan === planCode) {
+      clearPaymentParams()
+      const next = new URLSearchParams({ type: listingType, plan: planCode, gift: giftCode })
+      navigate(`/publicar/nueva?${next.toString()}`)
+      return
+    }
+
     if (plan.price === 0) {
       clearPaymentParams()
       navigate(`/publicar/nueva?type=${listingType}&plan=${encodeURIComponent(planCode)}`)
@@ -273,7 +314,7 @@ export default function Plans() {
       if (timeoutId) window.clearTimeout(timeoutId)
       setProcessingPlan(null)
     }
-  }, [user, navigate, clearPaymentParams, listingType])
+  }, [user, navigate, clearPaymentParams, listingType, giftCode, giftPlan])
 
   const planFromQuery = useMemo(() => {
     if (!paymentPlanParam) return null
@@ -291,6 +332,10 @@ export default function Plans() {
             <h1 className="text-3xl font-bold sm:text-4xl">Elegí el tipo de aviso</h1>
             <p className="text-sm text-white/75">
               Organizamos la información según lo que vendas para que compradores encuentren rápido tu publicación.
+            </p>
+            <p className="text-xs text-white/60">
+              Nota del plan Gratis: 15 días online, hasta 1 publicación activa, contacto por email (sin WhatsApp). Podés
+              mejorar visibilidad con los planes Básico o Premium.
             </p>
             <div className="mx-auto grid w-full max-w-[80vw] gap-6 md:grid-cols-3">
               {TYPE_OPTIONS.map((option) => (
@@ -420,15 +465,15 @@ export default function Plans() {
           {visiblePlans.map((plan) => {
             const planCode = plan._code
             const listingDuration = plan.listingDurationDays ?? plan.periodDays
-            const priceLabel = formatPrice(plan.price, plan.currency)
+            const priceLabel = giftPlan === planCode && giftCode ? 'Bonificado' : formatPrice(plan.price, plan.currency)
             const displayName = PLAN_LABEL[planCode] ?? plan.name ?? planCode
 
             const accent =
               planCode === 'premium'
-                ? '#d97706'
+                ? '#d97706' // naranja (Premium)
                 : planCode === 'basic'
-                ? '#2563eb'
-                : '#1b2f3f'
+                ? '#2563eb' // azul (Básica)
+                : '#0f766e' // verde-teal (Gratis)
 
             const features: string[] = []
 
@@ -438,8 +483,15 @@ export default function Plans() {
                 ? `Destacada ${plan.featuredDays} ${plan.featuredDays === 1 ? 'día' : 'días'} en portada`
                 : 'Sin destaque en portada'
             )
-            features.push('Botón de WhatsApp habilitado')
+            features.push(plan.whatsappEnabled ? 'WhatsApp directo habilitado' : 'Sin WhatsApp (contacto por email)')
             features.push(`Duración ${listingDuration} días`)
+            if (typeof plan.maxListings === 'number') {
+              if (plan.maxListings > 0) {
+                features.push(`Hasta ${plan.maxListings} publicación${plan.maxListings === 1 ? '' : 'es'} activas`)
+              } else {
+                features.push('Publicaciones ilimitadas')
+              }
+            }
             if (plan.socialBoost) features.push('Publicación en Instagram y Facebook')
             if (plan.description) features.push(plan.description)
 
@@ -466,9 +518,11 @@ export default function Plans() {
                     </p>
                   </div>
 
-                  <div>
-                    <span className="text-3xl font-bold">{priceLabel}</span>
-                  </div>
+                  {planCode !== 'free' && (
+                    <div>
+                      <span className="text-3xl font-bold">{priceLabel}</span>
+                    </div>
+                  )}
 
                   {plan.description && (
                     <p className="text-sm text-white/70">{plan.description}</p>

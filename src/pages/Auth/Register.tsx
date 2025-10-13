@@ -239,7 +239,7 @@ export default function Register() {
               </div>
 
               <div className="space-y-5">
-                <label className="label text-white">
+                <label className="label !text-white">
                   Nombre completo
                   <input
                     className={fieldClass}
@@ -249,7 +249,7 @@ export default function Register() {
                   />
                 </label>
 
-                <label className="label text-white">
+                <label className="label !text-white">
                   Email
                   <input
                     className={fieldClass}
@@ -261,7 +261,7 @@ export default function Register() {
                 </label>
 
                 <div>
-                  <label className="label text-white">Contraseña</label>
+                  <label className="label !text-white">Contraseña</label>
                   <input
                     className={fieldClass}
                     type="password"
@@ -277,7 +277,7 @@ export default function Register() {
                   </div>
                 </div>
 
-                <label className="label text-white">
+                <label className="label !text-white">
                   Repetí la contraseña
                   <input
                     className={fieldClass}
@@ -289,7 +289,7 @@ export default function Register() {
                 </label>
 
                 <div className="grid gap-4 md:grid-cols-2">
-                  <label className="label text-white">
+                  <label className="label !text-white">
                     Provincia
                     <select
                       className={selectClass}
@@ -304,7 +304,7 @@ export default function Register() {
                       ))}
                     </select>
                   </label>
-                  <label className="label text-white">
+                  <label className="label !text-white">
                     Ciudad
                     <select
                       className={selectClass}
@@ -323,7 +323,7 @@ export default function Register() {
                   </label>
                 </div>
                 {city === OTHER_CITY_OPTION && (
-                  <label className="label text-white">
+                  <label className="label !text-white">
                     Ciudad (especificar)
                     <input
                       className={fieldClass}
@@ -335,7 +335,7 @@ export default function Register() {
                 )}
 
                 <div>
-                  <div className="label text-white">¿Qué bici te interesa?</div>
+                  <div className="label !text-white">¿Qué bici te interesa?</div>
                   <div className="mt-2 grid gap-2 sm:grid-cols-2">
                     {BIKE_CATEGORIES.map((cat) => {
                       const checked = bikePrefs.includes(cat)

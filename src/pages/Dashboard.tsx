@@ -593,7 +593,7 @@ export default function Dashboard() {
             ) : (
               <div className="mt-4 space-y-3">
                 {modItems.map((item) => (
-                  <div key={item.id} className="rounded-2xl border border-[#14212e]/10 bg-white p-4">
+                  <div key={item.id} className="rounded-2xl border border-[#14212e]/10 bg-white p-5">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-[#14212e]">Listing: {item.listing_id}</p>
@@ -837,7 +837,7 @@ function ProfileView({
         />
       </div>
 
-      <div className="rounded-2xl border border-[#14212e]/10 bg-white p-5 shadow">
+      <div className="rounded-2xl border border-[#14212e]/10 bg-white p-6 shadow">
         <h3 className="text-sm font-semibold text-[#14212e] uppercase tracking-wide">Tu perfil público</h3>
         <dl className="mt-3 grid gap-3 sm:grid-cols-2">
           {preferredBike && (
@@ -934,7 +934,7 @@ function ProfileView({
             </div>
           </dl>
         </div>
-        <div className="rounded-2xl border border-[#14212e]/10 bg-white p-5">
+        <div className="rounded-2xl border border-[#14212e]/10 bg-white p-6">
           <h3 className="text-sm font-semibold text-[#14212e] uppercase tracking-wide">Potenciá tus ventas</h3>
           <ul className="mt-3 space-y-3 text-sm text-[#14212e]/80">
             {[
@@ -1808,7 +1808,7 @@ function ProfileStat({ label, value, trend }: { label: string; value: ReactNode;
   const isPrimitiveTrend = typeof trend === 'string' || typeof trend === 'number'
 
   return (
-    <div className="rounded-2xl border border-[#14212e]/10 bg-white p-4 shadow">
+    <div className="rounded-2xl border border-[#14212e]/10 bg-white p-5 shadow">
       <p className="text-xs uppercase tracking-wide text-[#14212e]/50">{label}</p>
       {isPrimitiveValue ? (
         <div className="mt-2 text-2xl font-bold text-[#14212e]">{value}</div>

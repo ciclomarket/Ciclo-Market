@@ -148,7 +148,7 @@ export default function NewListingForm() {
   const maxPhotos = selectedPlan?.maxPhotos ?? 4
   const planName = selectedPlan?.name ?? 'Plan'
   const listingDuration = selectedPlan?.listingDurationDays ?? selectedPlan?.periodDays ?? 30
-  const whatsappEnabled = true
+  const whatsappEnabled = selectedPlan?.whatsappEnabled ?? false
 
   const listingExpiresLabel = useMemo(() => {
     if (editingListing?.expiresAt) {
@@ -658,15 +658,15 @@ export default function NewListingForm() {
     // (Opcional) límite de publicaciones activas por usuario según plan visible en UI
     const client = getSupabaseClient()
 
-    // Límite de publicaciones activas por plan (free=1)
-    if (!editingListing && supabaseEnabled && (selectedPlan as any)?.maxListings && (selectedPlan as any).maxListings >= 1) {
+    // Límite de publicaciones activas por plan: solo aplica a Gratis (1 activa)
+    if (!editingListing && supabaseEnabled && planCode === 'free') {
       const { count } = await client
         .from('listings')
         .select('id', { count: 'exact', head: true })
         .eq('seller_id', user.id)
-        .neq('status', 'expired')
-      if (typeof count === 'number' && count >= (selectedPlan as any).maxListings) {
-        alert(`Tu plan ${selectedPlan?.name} permite hasta ${(selectedPlan as any).maxListings} publicaciones activas.`)
+        .eq('status', 'active')
+      if (typeof count === 'number' && count >= 1) {
+        alert('El plan Gratis permite una publicación activa a la vez.')
         return
       }
     }
@@ -895,13 +895,13 @@ export default function NewListingForm() {
                 ? `Destacada ${selectedPlan.featuredDays} ${selectedPlan.featuredDays === 1 ? 'día' : 'días'} en portada`
                 : 'Sin destaque en portada'}
             </div>
-            <div>Botón de WhatsApp habilitado en todos los planes</div>
+            <div>{selectedPlan?.whatsappEnabled ? 'Botón de WhatsApp habilitado' : 'Sin WhatsApp (contacto por email)'}</div>
             {selectedPlan?.socialBoost && <div>Difusión en Instagram y Facebook</div>}
           </div>
         </div>
       </div>
 
-      <div className="grid w-full gap-6 md:grid-cols-2">
+      <div className="grid w-full gap-6 md:grid-cols-2 lg:grid-cols-[65%_35%]">
         <div className="card w-full max-w-full min-w-0 overflow-hidden p-6 space-y-6 text-[#14212e]">
           <section>
             <h2 className="text-lg font-semibold text-mb-ink">
@@ -1290,7 +1290,7 @@ export default function NewListingForm() {
           <Button onClick={submit} className="w-full">Publicar</Button>
         </div>
 
-        <aside className="card w-full max-w-full min-w-0 overflow-hidden p-6 space-y-5 md:sticky md:top-6 md:max-w-sm h-fit text-[#14212e]">
+        <aside className="card w-full max-w-full min-w-0 overflow-hidden p-6 space-y-5 md:sticky md:top-6 h-fit text-[#14212e]">
           <h2 className="text-lg font-semibold text-mb-ink">Ficha técnica</h2>
           <div className="rounded-lg border border-black/10 overflow-hidden">
             {images[0] ? (

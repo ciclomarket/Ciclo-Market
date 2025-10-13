@@ -16,6 +16,7 @@ type FiltersState = {
   cat?: Cat
   brand?: string
   deal?: '1'
+  q?: string
 }
 
 const CAT_VALUES: Cat[] = ['Todos','Ruta','MTB','Gravel','Urbana','Accesorios','Indumentaria','E-Bike','Niños','Pista','Triatlón']
@@ -33,6 +34,9 @@ function paramsToFilters(params: URLSearchParams): FiltersState {
 
   const deal = params.get('deal')
   if (deal === '1' || deal === 'true') filters.deal = '1'
+
+  const q = params.get('q')
+  if (q) filters.q = q
 
   return filters
 }
@@ -101,6 +105,14 @@ export default function Marketplace() {
       if (filters.deal) {
         const hasDeal = typeof l.originalPrice === 'number' && l.originalPrice > l.price
         if (!hasDeal) return false
+      }
+      if (filters.q) {
+        const q = filters.q.toLowerCase()
+        const haystack = [l.title, l.brand, l.model, l.description]
+          .filter(Boolean)
+          .join(' ') 
+          .toLowerCase()
+        if (!haystack.includes(q)) return false
       }
       return true
     })

@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom'
 import { KEYWORDS } from '../data/keywords'
 import { useAuth } from '../context/AuthContext'
 import { getSupabaseClient, supabaseEnabled } from '../services/supabase'
+import { SocialAuthButtons } from './SocialAuthButtons'
 
 type MegaCol = { title: string; links: Array<{ label: string; to: string }> }
 type MegaItem = { label: string; cols: MegaCol[] }
@@ -476,55 +477,67 @@ export default function Header() {
                 Ingresar
               </button>
               {loginOpen && !isMobileViewport && (
-                <div className="absolute right-0 mt-2 w-80 rounded-xl border border-black/10 bg-white shadow-xl p-5 z-50">
-                  <form className="space-y-3" onSubmit={handleLogin}>
-                    <div>
-                      <label htmlFor="header-login-email" className="text-xs font-semibold text-black/60">Email</label>
-                      <input
-                        className="input mt-1"
-                        type="email"
-                        id="header-login-email"
-                        name="email"
-                        value={loginEmail}
-                        onChange={(e) => setLoginEmail(e.target.value)}
-                      />
+                <div className="absolute right-0 mt-2 w-80 rounded-2xl border border-white/10 bg-[#0c1723] text-white shadow-2xl p-5 z-50">
+                  <div className="space-y-4">
+                    <div className="text-center">
+                      <h2 className="text-lg font-semibold text-white">Ingresar</h2>
+                      <p className="mt-1 text-xs text-white/70">Elegí tu método preferido.</p>
                     </div>
-                    <div>
-                      <label htmlFor="header-login-password" className="text-xs font-semibold text-black/60">Contraseña</label>
-                      <input
-                        className="input mt-1"
-                        type="password"
-                        id="header-login-password"
-                        name="password"
-                        value={loginPassword}
-                        onChange={(e) => setLoginPassword(e.target.value)}
-                      />
+                    <SocialAuthButtons
+                      buttons={[{
+                        id: 'google',
+                        label: 'Continuar con Google',
+                        loading: loginLoading,
+                        onClick: handleGoogleLogin,
+                      }]}
+                    />
+                    <div className="relative flex items-center gap-3 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/40">
+                      <span className="h-px flex-1 bg-white/10" />
+                      <span>o con email</span>
+                      <span className="h-px flex-1 bg-white/10" />
                     </div>
-                    <label htmlFor="header-login-remember" className="flex items-center gap-2 text-xs text-black/70">
-                      <input
-                        type="checkbox"
-                        className="accent-mb-primary"
-                        id="header-login-remember"
-                        name="remember"
-                        checked={rememberMe}
-                        onChange={(e) => setRememberMe(e.target.checked)}
-                      />
-                      Mantenerme conectado
-                    </label>
-                    {loginError && <p className="text-xs text-red-600">{loginError}</p>}
-                    <button type="submit" className="btn btn-primary w-full" disabled={loginLoading}>
-                      {loginLoading ? 'Ingresando…' : 'Ingresar'}
-                    </button>
-                    <button type="button" className="btn btn-ghost w-full" disabled={loginLoading} onClick={handleGoogleLogin}>
-                      Ingresar con Google
-                    </button>
-                    <p className="text-xs text-black/60 text-center">
-                      ¿Aún no tenés cuenta?{' '}
-                      <Link to="/register" className="underline" onClick={() => setLoginOpen(false)}>
-                        Registrate
-                      </Link>
-                    </p>
-                  </form>
+                    <form className="space-y-3" onSubmit={handleLogin}>
+                      <label className="text-[11px] font-semibold uppercase tracking-[0.28em] text-white/60">
+                        Email
+                        <input
+                          className="input mt-1 w-full border border-white/20 bg-white text-[#14212e] placeholder:text-black/60 focus:border-white/60"
+                          type="email"
+                          value={loginEmail}
+                          onChange={(e) => setLoginEmail(e.target.value)}
+                          placeholder="tu@email.com"
+                        />
+                      </label>
+                      <label className="text-[11px] font-semibold uppercase tracking-[0.28em] text-white/60">
+                        Contraseña
+                        <input
+                          className="input mt-1 w-full border border-white/20 bg-white text-[#14212e] placeholder:text-black/60 focus:border-white/60"
+                          type="password"
+                          value={loginPassword}
+                          onChange={(e) => setLoginPassword(e.target.value)}
+                          placeholder="••••••••"
+                        />
+                      </label>
+                      <label className="flex items-center gap-2 text-[11px] text-white/70">
+                        <input
+                          type="checkbox"
+                          className="accent-mb-primary"
+                          checked={rememberMe}
+                          onChange={(e) => setRememberMe(e.target.checked)}
+                        />
+                        Mantenerme conectado
+                      </label>
+                      {loginError && <p className="text-xs text-red-300">{loginError}</p>}
+                      <button type="submit" className="w-full rounded-2xl bg-white py-2 text-sm font-semibold text-[#14212e] hover:bg-white/90" disabled={loginLoading}>
+                        {loginLoading ? 'Ingresando…' : 'Ingresar con email'}
+                      </button>
+                      <p className="text-center text-[11px] text-white/50">
+                        ¿Aún no tenés cuenta?{' '}
+                        <Link to="/register" className="underline" onClick={() => setLoginOpen(false)}>
+                          Registrate
+                        </Link>
+                      </p>
+                    </form>
+                  </div>
                 </div>
               )}
             </div>

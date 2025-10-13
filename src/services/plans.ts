@@ -1,4 +1,5 @@
 import { getSupabaseClient, supabaseEnabled } from './supabase'
+import { canonicalPlanCode, normalisePlanText } from '../utils/planCodes'
 import type { Plan } from '../types'
 
 type PlanRow = {
@@ -20,12 +21,35 @@ type PlanRow = {
   created_at?: string | null
 }
 
+function sanitizeDescription(desc?: string | null, code?: string | null): string | undefined {
+  if (!desc) return undefined
+  const plan = canonicalPlanCode(code) || canonicalPlanCode(desc) || null
+  let out = desc
+  if (plan === 'basic' || plan === 'premium') {
+    // Quitar frases de "destaque X días" para evitar duplicado con features
+    out = out.replace(/desta(?:cado|cada|que|queado)?[^\.!?\n,;]*\d+\s*d[ií]as?/gi, '')
+    out = out.replace(/desta(?:cado|cada|que|queado)?[^\.!?\n,;]*/gi, '')
+  }
+  // Limpieza general: espacios dobles, puntuación sobrante al final
+  out = out.replace(/\s{2,}/g, ' ').replace(/[\s,;.-]+$/g, '').trim()
+  // Quitar puntuación y espacios al inicio (p.ej. ", difusión …")
+  out = out.replace(/^[,;\.\s]+/, '')
+  // Capitalizar primera letra si es minúscula
+  if (out) out = out.charAt(0).toUpperCase() + out.slice(1)
+  return out || undefined
+}
+
 const normalizePlan = (row: PlanRow): Plan => {
   const periodDays = row.period_days ?? 30
   const listingDuration = row.listing_duration_days ?? periodDays
   const featuredDays = row.featured_days ?? row.featured_slots ?? 0
+  const code =
+    canonicalPlanCode(row.code ?? undefined) ||
+    canonicalPlanCode(row.id ?? undefined) ||
+    canonicalPlanCode(row.name ?? undefined)
 
-  return {
+  // Base mapping
+  let mapped: Plan = {
     id: row.id,
     code: row.code ?? row.id,
     name: row.name,
@@ -38,10 +62,26 @@ const normalizePlan = (row: PlanRow): Plan => {
     featuredDays,
     whatsappEnabled: Boolean(row.whatsapp_enabled),
     socialBoost: Boolean(row.social_boost ?? false),
-    description: row.description ?? undefined,
+    description: sanitizeDescription(row.description ?? undefined, row.code ?? row.id ?? row.name),
     accentColor: row.accent_color ?? undefined,
     createdAt: row.created_at ? Date.parse(row.created_at) : undefined
   }
+
+  // Overrides por reglas de negocio
+  if (code === 'free') {
+    mapped.periodDays = 15
+    mapped.listingDurationDays = 15
+    mapped.maxListings = 1
+    mapped.whatsappEnabled = false
+    if (!mapped.description) {
+      mapped.description = 'Publicá gratis por 15 días. Hasta 4 fotos, consultas públicas y contacto por email.'
+    }
+  }
+  if (code === 'basic' || code === 'premium') {
+    // 0 = ilimitadas
+    mapped.maxListings = 0
+  }
+  return mapped
 }
 
 export const FALLBACK_PLANS: Plan[] = [
@@ -51,7 +91,7 @@ export const FALLBACK_PLANS: Plan[] = [
     name: 'Gratis',
     price: 0,
     currency: 'ARS',
-    periodDays: 30,
+    periodDays: 15,
     listingDurationDays: 15,
     maxListings: 1,
     maxPhotos: 4,
@@ -68,12 +108,12 @@ export const FALLBACK_PLANS: Plan[] = [
     currency: 'ARS',
     periodDays: 60,
     listingDurationDays: 60,
-    maxListings: 1,
+    maxListings: 0,
     maxPhotos: 6,
     featuredDays: 7,
     whatsappEnabled: true,
     socialBoost: false,
-    description: '60 días online, destaque 7 días, consultas públicas y contacto directo por WhatsApp.'
+    description: '60 días online, consultas públicas y contacto directo por WhatsApp.'
   },
   {
     id: 'premium',
@@ -83,12 +123,12 @@ export const FALLBACK_PLANS: Plan[] = [
     currency: 'ARS',
     periodDays: 60,
     listingDurationDays: 60,
-    maxListings: 1,
+    maxListings: 0,
     maxPhotos: 8,
     featuredDays: 14,
     whatsappEnabled: true,
     socialBoost: true,
-    description: 'Destaque 14 días, publicación en Instagram y Facebook, consultas públicas y contacto por WhatsApp.'
+    description: 'Publicación en Instagram y Facebook, consultas públicas y contacto por WhatsApp.'
   }
 ]
 
