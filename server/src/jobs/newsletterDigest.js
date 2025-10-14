@@ -83,13 +83,19 @@ async function runDigestOnce() {
 
   const cardTd = (c) => `
     <td style="padding:8px;vertical-align:top;width:50%">
-      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #e1e5eb;border-radius:14px;overflow:hidden">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #e1e5eb;border-radius:16px;overflow:hidden;background:#ffffff">
         ${c.image ? `<tr><td><img src="${c.image}" alt="${(c.title || '').replace(/"/g,'&quot;')}" style="width:100%;height:180px;object-fit:cover;display:block" /></td></tr>` : ''}
         <tr>
           <td style="padding:12px">
-            <div style="font-weight:600;color:#0c1723;line-height:1.3">${(c.title || '').replace(/</g,'&lt;')}</div>
-            <div style="color:#475569;margin:6px 0 12px">${c.priceLabel}</div>
-            <a href="${c.link}" style="display:inline-block;padding:10px 16px;border-radius:10px;background:#14212e;color:#ffffff;text-decoration:none">Ver publicación</a>
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+              <tr>
+                <td style="font-weight:600;color:#0c1723;line-height:1.3;padding-right:6px">${(c.title || '').replace(/</g,'&lt;')}</td>
+                <td style="text-align:right;white-space:nowrap;font-weight:600;color:#0c1723">${c.priceLabel}</td>
+              </tr>
+            </table>
+            <div style="margin:10px 0 0">
+              <a href="${c.link}" style="display:inline-block;padding:10px 16px;border-radius:12px;background:#14212e;color:#ffffff;text-decoration:none">Ver publicación</a>
+            </div>
           </td>
         </tr>
       </table>
@@ -121,6 +127,14 @@ async function runDigestOnce() {
               <tr>${row1.map(cardTd).join('')}</tr>
               <tr>${row2.map(cardTd).join('')}</tr>
             </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:14px 24px">
+            <div style="border-radius:14px;background:#f6f8fb;border:1px solid #e1e5eb;padding:12px;text-align:center;color:#475569;font-size:12px">
+              ¿No querés recibir más correos? Respondé este email con el asunto "BAJA" o escribinos a
+              <a href="mailto:admin@ciclomarket.ar" style="color:#0c72ff;text-decoration:underline"> admin@ciclomarket.ar</a> para desuscribirte.
+            </div>
           </td>
         </tr>
         <tr>
