@@ -115,7 +115,7 @@ export default function ListingCard({ l }: { l: Listing }) {
             className={`pointer-events-none absolute inset-0 bg-gradient-to-br from-white/40 via-white/10 to-white/40 transition-opacity duration-500 ${imageLoaded ? 'opacity-0' : 'opacity-100 animate-pulse'}`}
           />
         </div>
-        <div className="flex flex-1 flex-col p-4">
+        <div className="flex flex-1 flex-col px-5 py-4">
           <div className="flex items-start justify-between gap-3">
             <h3 className={titleClass}>{l.title}</h3>
             <div className="text-right leading-none">

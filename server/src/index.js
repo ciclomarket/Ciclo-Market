@@ -1185,3 +1185,80 @@ app.listen(PORT, '0.0.0.0', () => {
     console.info('[renewalNotifier] disabled (RENEWAL_NOTIFIER_ENABLED != "true")')
   }
 })
+/* ----------------------------- Auth helper -------------------------------- */
+async function getAuthUser(req, supabase) {
+  const authHeader = String(req.headers.authorization || '')
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null
+  if (!token) return null
+  try {
+    const { data, error } = await supabase.auth.getUser(token)
+    if (error || !data?.user) return null
+    return data.user
+  } catch {
+    return null
+  }
+}
+
+/* ----------------------------- Listings ops -------------------------------- */
+// Renovar publicación: suma días a expires_at (15 si free, 60 si basic/premium)
+app.post('/api/listings/:id/renew', async (req, res) => {
+  try {
+    const { id } = req.params
+    const supabase = getServerSupabaseClient()
+    const user = await getAuthUser(req, supabase)
+    if (!user) return res.status(401).json({ error: 'unauthorized' })
+    const { data: listing, error } = await supabase
+      .from('listings')
+      .select('*')
+      .eq('id', id)
+      .single()
+    if (error || !listing) return res.status(404).json({ error: 'not_found' })
+    if (listing.seller_id !== user.id) return res.status(403).json({ error: 'forbidden' })
+    const planRaw = String(listing.plan || listing.seller_plan || '').toLowerCase()
+    const days = (planRaw === 'basic' || planRaw === 'premium') ? 60 : 15
+    const now = Date.now()
+    const current = listing.expires_at ? new Date(listing.expires_at).getTime() : now
+    const base = Math.max(current, now)
+    const next = new Date(base + days * 24 * 60 * 60 * 1000).toISOString()
+    const { error: upd } = await supabase
+      .from('listings')
+      .update({ expires_at: next })
+      .eq('id', id)
+    if (upd) return res.status(500).json({ error: 'update_failed' })
+    return res.json({ ok: true, expiresAt: next })
+  } catch (err) {
+    console.error('[renew] failed', err)
+    return res.status(500).json({ error: 'unexpected_error' })
+  }
+})
+
+// Destacar publicación: aplica destaque sin cambiar el plan base
+app.post('/api/listings/:id/highlight', async (req, res) => {
+  try {
+    const { id } = req.params
+    const days = Number(req.body?.days || 7)
+    if (!Number.isFinite(days) || days <= 0) return res.status(400).json({ error: 'invalid_days' })
+    const supabase = getServerSupabaseClient()
+    const user = await getAuthUser(req, supabase)
+    if (!user) return res.status(401).json({ error: 'unauthorized' })
+    const { data: listing, error } = await supabase
+      .from('listings')
+      .select('id,seller_id,seller_plan_expires')
+      .eq('id', id)
+      .single()
+    if (error || !listing) return res.status(404).json({ error: 'not_found' })
+    if (listing.seller_id !== user.id) return res.status(403).json({ error: 'forbidden' })
+    const now = Date.now()
+    const base = listing.seller_plan_expires ? Math.max(new Date(listing.seller_plan_expires).getTime(), now) : now
+    const next = new Date(base + days * 24 * 60 * 60 * 1000).toISOString()
+    const { error: upd } = await supabase
+      .from('listings')
+      .update({ seller_plan: 'featured', seller_plan_expires: next })
+      .eq('id', id)
+    if (upd) return res.status(500).json({ error: 'update_failed' })
+    return res.json({ ok: true, sellerPlan: 'featured', sellerPlanExpires: next })
+  } catch (err) {
+    console.error('[highlight] failed', err)
+    return res.status(500).json({ error: 'unexpected_error' })
+  }
+})

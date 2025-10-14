@@ -175,6 +175,7 @@ export default function ListingDetail() {
   const effectivePlan = (listing.sellerPlan ?? (listing.plan as any))
   const planLabel = getPlanLabel(effectivePlan, listing.sellerPlanExpires)
   const paidPlanActive = hasPaidPlan(effectivePlan, listing.sellerPlanExpires)
+  const hadBasicOrPremium = effectivePlan === 'basic' || effectivePlan === 'premium'
   const verifiedVendor = sellerVerified
   const inCompare = compareIds.includes(listing.id)
   const isFav = hasFav(listing.id)
@@ -188,6 +189,24 @@ export default function ListingDetail() {
   const shareDescription = listing.description?.slice(0, 120) ?? 'Encontrá esta bicicleta en Ciclo Market.'
   const shareImage = listing.images?.[0]
   const shareText = `${shareTitle} - ${shareDescription}`
+
+  // Extraer specs desde description/extras (tokens "Clave: Valor")
+  const extractToken = (label: string): string | null => {
+    const sources = [listing.description || '', listing.extras || '']
+    const pattern = new RegExp(`${label}\s*:\s*([^•\n]+)`, 'i')
+    for (const src of sources) {
+      const m = src.match(pattern)
+      if (m && m[1]) return m[1].trim()
+    }
+    return null
+  }
+  const specCondition = extractToken('Condici[óo]n')
+  const specBrake = extractToken('Tipo de freno') || extractToken('Freno')
+  const specFork = extractToken('Horquilla')
+  const specFixieRatio = extractToken('Relaci[óo]n')
+  const specMotor = extractToken('Motor')
+  const specCharge = extractToken('Carga')
+  const isBikeCategory = listing.category !== 'Accesorios' && listing.category !== 'Indumentaria'
 
   const openShareWindow = (url: string) => {
     if (typeof window === 'undefined') return
@@ -417,8 +436,8 @@ export default function ListingDetail() {
     const items: Array<{ id: string; label: string; onClick?: () => void; href?: string; icon: ReactNode; disabled?: boolean; className?: string }> = []
     const emailRecipient = sellerAuthEmail || sellerProfile?.email || listing.sellerEmail || null
 
-    // WhatsApp sólo para planes pagos activos
-    if (waLink && !isOwner && !listingUnavailable && paidPlanActive) {
+    // WhatsApp habilitado para publicaciones Básica o Premium (aunque el destaque haya vencido)
+    if (waLink && !isOwner && !listingUnavailable && hadBasicOrPremium) {
       items.push({
         id: 'whatsapp',
         label: 'Abrir WhatsApp',
@@ -475,8 +494,8 @@ export default function ListingDetail() {
             )
           )}
         </div>
-        {!paidPlanActive && (
-          <p className="mt-2 text-xs text-[#14212e]/60">El contacto por WhatsApp está disponible con publicaciones destacadas.</p>
+        {!hadBasicOrPremium && (
+          <p className="mt-2 text-xs text-[#14212e]/60">El contacto por WhatsApp está disponible con planes Básica o Premium.</p>
         )}
       </div>
     )
@@ -585,6 +604,16 @@ export default function ListingDetail() {
                     </button>
                   )}
                   <ContactIcons />
+                  {isOwner && (
+                    <div className="pt-2 border-t border-[#14212e]/10">
+                      <Link
+                        to={`/listing/${listingSlugOrId}/destacar`}
+                        className="inline-flex items-center gap-2 rounded-full bg-[#14212e] px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-[#1b2f3f]"
+                      >
+                        Destacar publicación
+                      </Link>
+                    </div>
+                  )}
                   {!canSubmitOffer && listingSold && (
                     <p className="text-xs font-semibold text-[#0f766e]">Esta publicación está marcada como vendida.</p>
                   )}
@@ -652,6 +681,24 @@ export default function ListingDetail() {
                 {isModerator && (
                   <div className="mt-4 space-y-2 border-t border-[#14212e]/10 pt-3">
                     <p className="text-xs uppercase tracking-wide text-[#14212e]/60">Acciones de moderador</p>
+                    {/* Info de vigencias */}
+                    <div className="text-xs text-[#14212e]/70">
+                      {(() => {
+                        const now = Date.now()
+                        const expiresAt = listing.expiresAt || null
+                        const planExpires = listing.sellerPlanExpires || null
+                        const fmt = (ms: number) => {
+                          const days = Math.ceil((ms - now) / (24*60*60*1000))
+                          return days <= 0 ? 'vencido' : `${days} día${days===1?'':'s'}`
+                        }
+                        return (
+                          <>
+                            <div>Publicación activa: {expiresAt ? fmt(expiresAt) : 'sin fecha'}</div>
+                            <div>Destaque: {planExpires ? fmt(planExpires) : 'sin destaque'}</div>
+                          </>
+                        )
+                      })()}
+                    </div>
                     <div className="flex flex-wrap gap-2">
                       <Button
                         variant="ghost"
@@ -718,14 +765,27 @@ export default function ListingDetail() {
               <div className="mt-4 grid grid-cols-2 gap-3">
                 <Spec label="Marca" value={listing.brand} />
                 <Spec label="Modelo" value={listing.model} />
-                <Spec label="Año" value={listing.year ? String(listing.year) : '—'} />
+                {listing.year ? <Spec label="Año" value={String(listing.year)} /> : null}
                 <Spec label="Categoría" value={listing.category} />
-                <Spec label="Material" value={listing.material || '—'} />
-                <Spec label="Talle / Medida" value={listing.frameSize || '—'} />
-                <Spec label="Grupo" value={listing.drivetrain || listing.drivetrainDetail || '—'} />
-                <Spec label="Ruedas" value={listing.wheelset || '—'} />
-                <Spec label="Rodado" value={listing.wheelSize || '—'} />
-                <Spec label="Extras" value={listing.extras || '—'} fullWidth />
+                {/* Orden: Material + Horquilla (si existe) + Talle */}
+                {listing.material ? <Spec label="Material" value={listing.material} /> : null}
+                {listing.category === 'MTB' && specFork ? <Spec label="Horquilla" value={specFork} /> : null}
+                {listing.frameSize ? <Spec label="Talle / Medida" value={listing.frameSize} /> : null}
+                {/* Luego Ruedas + Rodado */}
+                {listing.wheelset ? <Spec label="Ruedas" value={listing.wheelset} /> : null}
+                {listing.wheelSize ? <Spec label="Rodado" value={listing.wheelSize} /> : null}
+                {/* Grupo de transmisión */}
+                {(listing.drivetrain || listing.drivetrainDetail) ? (
+                  <Spec label="Grupo" value={(listing.drivetrain || listing.drivetrainDetail) as string} />
+                ) : null}
+                {/* Tipo de freno */}
+                {isBikeCategory && specBrake ? <Spec label="Freno" value={specBrake} /> : null}
+                {/* Opcionales según categoría */}
+                {listing.category === 'Fixie' && specFixieRatio ? <Spec label="Relación" value={specFixieRatio} /> : null}
+                {listing.category === 'E-Bike' && specMotor ? <Spec label="Motor" value={specMotor} /> : null}
+                {listing.category === 'E-Bike' && specCharge ? <Spec label="Batería / Carga" value={specCharge} /> : null}
+                {isBikeCategory && specCondition ? <Spec label="Condición" value={specCondition} /> : null}
+                {listing.extras ? <Spec label="Extras" value={listing.extras} fullWidth /> : null}
               </div>
             </section>
           </div>

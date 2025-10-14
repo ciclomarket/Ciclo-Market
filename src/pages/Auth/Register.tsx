@@ -336,7 +336,31 @@ export default function Register() {
 
                 <div>
                   <div className="label !text-white">¿Qué bici te interesa?</div>
-                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  {/* Mobile: selector para agregar preferencias de a una */}
+                  <div className="sm:hidden">
+                    <select
+                      className="select"
+                      value=""
+                      onChange={(e) => { const v = e.target.value as (typeof BIKE_CATEGORIES)[number] | ''; if (v) toggleBikePref(v) }}
+                    >
+                      <option value="">Agregar categoría…</option>
+                      {BIKE_CATEGORIES.map((cat) => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                    {bikePrefs.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {bikePrefs.map((cat) => (
+                          <span key={cat} className="badge">
+                            {cat}
+                            <button type="button" className="ml-1" onClick={() => toggleBikePref(cat)}>✕</button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {/* Desktop/Tablet: grilla de checkboxes */}
+                  <div className="mt-2 hidden gap-2 sm:grid sm:grid-cols-2">
                     {BIKE_CATEGORIES.map((cat) => {
                       const checked = bikePrefs.includes(cat)
                       return (
@@ -359,9 +383,7 @@ export default function Register() {
                       )
                     })}
                   </div>
-                  <p className="mt-1 text-xs text-white/70">
-                    Usamos esta info para enviarte novedades que realmente te interesen.
-                  </p>
+                  <p className="mt-1 text-xs text-white/70">Podés elegir varias categorías.</p>
                 </div>
 
                 <label className="flex items-start gap-2 rounded-xl border border-white/15 bg-white/5 px-3 py-3 text-sm text-white">

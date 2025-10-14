@@ -196,6 +196,20 @@ export default function NewListingForm() {
   const [wheelset, setWheelset] = useState('')
   const [wheelSize, setWheelSize] = useState('')
   const [extras, setExtras] = useState('')
+  // Más información opcional para bicis
+  const [moreOpen, setMoreOpen] = useState(false)
+  const [seatInfo, setSeatInfo] = useState('')
+  const [handlebarInfo, setHandlebarInfo] = useState('')
+  const [pedalsInfo, setPedalsInfo] = useState('')
+  const [chainInfo, setChainInfo] = useState('')
+  const [forkInfo, setForkInfo] = useState('')
+  const [brakeType, setBrakeType] = useState<'Disco'|'Herradura'|''>('')
+  const [bikeCondition, setBikeCondition] = useState<(typeof CONDITION_OPTIONS)[number] | ''>('')
+  // Específicos por categoría
+  const [mtbForkModel, setMtbForkModel] = useState('')
+  const [fixieRatio, setFixieRatio] = useState('')
+  const [ebikeMotor, setEbikeMotor] = useState('')
+  const [ebikeCharge, setEbikeCharge] = useState('')
   const [priceCurrency, setPriceCurrency] = useState<'USD'|'ARS'>('USD')
   const [priceInput, setPriceInput] = useState('')
   const [year, setYear] = useState('')
@@ -205,6 +219,19 @@ export default function NewListingForm() {
   const [description, setDescription] = useState('')
   const [images, setImages] = useState<string[]>([])
   const [sellerWhatsappLocal, setSellerWhatsappLocal] = useState('')
+  const [whatsappUserEdited, setWhatsappUserEdited] = useState(false)
+  // País para WhatsApp (prefijo)
+  const COUNTRY_CODES = [
+    { cc: 'AR', dial: '54', label: 'Argentina', flag: '🇦🇷' },
+    { cc: 'PY', dial: '595', label: 'Paraguay', flag: '🇵🇾' },
+    { cc: 'BR', dial: '55', label: 'Brasil', flag: '🇧🇷' },
+    { cc: 'CL', dial: '56', label: 'Chile', flag: '🇨🇱' },
+    { cc: 'UY', dial: '598', label: 'Uruguay', flag: '🇺🇾' },
+    { cc: 'PE', dial: '51', label: 'Perú', flag: '🇵🇪' },
+    { cc: 'VE', dial: '58', label: 'Venezuela', flag: '🇻🇪' },
+    { cc: 'US', dial: '1', label: 'Estados Unidos', flag: '🇺🇸' },
+  ] as const
+  const [whatsappDial, setWhatsappDial] = useState<string>(COUNTRY_CODES[0].dial)
   const [profile, setProfile] = useState<UserProfileRecord | null>(null)
   const [draftRestored, setDraftRestored] = useState(false)
   const [accessoryType, setAccessoryType] = useState<(typeof ACCESSORY_TYPES)[number]>(ACCESSORY_TYPES[0])
@@ -217,6 +244,8 @@ export default function NewListingForm() {
   const [apparelCondition, setApparelCondition] = useState<(typeof CONDITION_OPTIONS)[number]>(CONDITION_OPTIONS[1])
 
   const isEditing = Boolean(editingListing)
+
+  // (Wizard desactivado por ahora)
 
   const materialValue = isAccessory || isApparel ? '' : (material === 'Otro' ? customMaterial.trim() : material)
   const drivetrainValue = drivetrain === 'Otro' ? drivetrainOther.trim() : drivetrain
@@ -425,7 +454,7 @@ export default function NewListingForm() {
       const data = await fetchUserProfile(user.id)
       if (!active) return
       setProfile(data)
-      if (whatsappEnabled && !sellerWhatsappLocal && data?.whatsapp_number) {
+      if (whatsappEnabled && !sellerWhatsappLocal && !whatsappUserEdited && data?.whatsapp_number) {
         const localValue = sanitizeLocalWhatsappInput(extractLocalWhatsapp(data.whatsapp_number))
         if (localValue) setSellerWhatsappLocal(localValue)
       }
@@ -434,7 +463,7 @@ export default function NewListingForm() {
     return () => {
       active = false
     }
-  }, [user?.id, whatsappEnabled, sellerWhatsappLocal])
+  }, [user?.id, whatsappEnabled, sellerWhatsappLocal, whatsappUserEdited])
 
   const autoTitle = useMemo(() => {
     const composed = `${brand.trim()} ${model.trim()}`.trim()
@@ -599,6 +628,7 @@ export default function NewListingForm() {
   useEffect(() => {
     if (listingId || !whatsappEnabled) return
     if (sellerWhatsappLocal) return
+    if (whatsappUserEdited) return
     const metaWhatsapp = (user?.user_metadata?.whatsapp as string | undefined) ?? (user?.user_metadata?.phone as string | undefined) ?? ''
     const profileWhatsapp = profile?.whatsapp_number ?? ''
     const defaultWhatsapp = profileWhatsapp || metaWhatsapp
@@ -606,15 +636,16 @@ export default function NewListingForm() {
       const localValue = sanitizeLocalWhatsappInput(extractLocalWhatsapp(defaultWhatsapp) || defaultWhatsapp)
       if (localValue) setSellerWhatsappLocal(localValue)
     }
-  }, [listingId, whatsappEnabled, profile?.whatsapp_number, sellerWhatsappLocal, user?.user_metadata?.phone, user?.user_metadata?.whatsapp])
+  }, [listingId, whatsappEnabled, profile?.whatsapp_number, sellerWhatsappLocal, user?.user_metadata?.phone, user?.user_metadata?.whatsapp, whatsappUserEdited])
 
   useEffect(() => {
     if (!listingId || !whatsappEnabled) return
     if (!profile?.whatsapp_number) return
     if (sellerWhatsappLocal) return
+    if (whatsappUserEdited) return
     const localValue = sanitizeLocalWhatsappInput(extractLocalWhatsapp(profile.whatsapp_number))
     if (localValue) setSellerWhatsappLocal(localValue)
-  }, [listingId, whatsappEnabled, profile?.whatsapp_number, sellerWhatsappLocal])
+  }, [listingId, whatsappEnabled, profile?.whatsapp_number, sellerWhatsappLocal, whatsappUserEdited])
 
   /** 2) Subida de fotos (usa hook existente) */
   const handleFiles = async (files: FileList | null) => {
@@ -690,7 +721,7 @@ export default function NewListingForm() {
     const metadataPhone = typeof metadata.phone === 'string' ? metadata.phone : null
 
     // Defaults exigidos por el negocio
-    const safeDescription = (() => {
+    let safeDescription = (() => {
       const base = description.trim()
       if (base) return base
       if (isAccessory || isApparel) return 'Sin descripción adicional'
@@ -708,10 +739,31 @@ export default function NewListingForm() {
         if (extras.trim()) parts.push(`Notas: ${extras.trim()}`)
         return parts.join(' • ')
       }
+      const parts: string[] = []
+      // Extras (sin condición/freno/horquilla principal)
+      if (seatInfo.trim()) parts.push(`Asiento: ${seatInfo.trim()}`)
+      if (handlebarInfo.trim()) parts.push(`Manillar: ${handlebarInfo.trim()}`)
+      if (pedalsInfo.trim()) parts.push(`Pedales: ${pedalsInfo.trim()}`)
+      if (chainInfo.trim()) parts.push(`Cadena: ${chainInfo.trim()}`)
+      if (forkInfo.trim()) parts.push(`Horquilla: ${forkInfo.trim()}`)
+      if (category === 'Fixie' && fixieRatio.trim()) parts.push(`Relación: ${fixieRatio.trim()}`)
+      if (category === 'E-Bike') {
+        if (ebikeMotor.trim()) parts.push(`Motor: ${ebikeMotor.trim()}`)
+        if (ebikeCharge.trim()) parts.push(`Carga: ${ebikeCharge.trim()}`)
+      }
       const base = extras.trim()
-      if (base) return base
-      return 'No tiene agregados extras, se encuentra original'
+      if (base) parts.push(`Detalle: ${base}`)
+      return parts.length ? parts.join(' • ') : 'No tiene agregados extras, se encuentra original'
     })()
+
+    // Condición / freno / horquilla principal pasan a descripción (solo bicis)
+    if (!isAccessory && !isApparel) {
+      const add: string[] = []
+      if (bikeCondition) add.push(`Condición: ${bikeCondition}`)
+      if (brakeType) add.push(`Tipo de freno: ${brakeType}`)
+      if (category === 'MTB' && mtbForkModel.trim()) add.push(`Horquilla: ${mtbForkModel.trim()}`)
+      if (add.length) safeDescription = `${safeDescription}\n${add.join(' • ')}`
+    }
 
     const candidateSources: Array<string | null> = [
       sellerWhatsappLocal,
@@ -722,12 +774,14 @@ export default function NewListingForm() {
     ]
     let formattedWhatsapp: string | null = null
     if (whatsappEnabled) {
-      for (const source of candidateSources) {
-        if (!source) continue
-        const normalized = normaliseWhatsapp(source)
-        if (normalized) {
-          formattedWhatsapp = normalized
-          break
+      const local = sanitizeLocalWhatsappInput(sellerWhatsappLocal)
+      if (local) {
+        formattedWhatsapp = `${whatsappDial}${local}`
+      } else {
+        for (const source of candidateSources) {
+          if (!source) continue
+          const normalized = normaliseWhatsapp(source)
+          if (normalized) { formattedWhatsapp = normalized; break }
         }
       }
     } else {
@@ -825,6 +879,8 @@ export default function NewListingForm() {
     const formatted = new Intl.NumberFormat(locale, { style: 'currency', currency: code, maximumFractionDigits: 0 }).format(priceNumber)
     return `${formatted} ${code}`
   }
+
+  // (Preview de extras: se muestra el campo extras tal cual)
 
   useEffect(() => {
     setCity('')
@@ -990,21 +1046,39 @@ export default function NewListingForm() {
               </div>
             )}
             {!isAccessory && !isApparel && (
-              <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {BIKE_CATEGORIES.map((option) => {
-                  const active = category === option
-                  return (
-                    <button
-                      key={option}
-                      type="button"
-                      onClick={() => setCategory(option)}
-                      className={`rounded-lg border px-3 py-2 text-sm text-left transition ${active ? 'border-mb-primary bg-mb-primary/10 font-semibold' : 'border-black/10 hover:border-black/20'}`}
+              <>
+                {/* Mobile: selector desplegable */}
+                <div className="mt-4 sm:hidden">
+                  <Field label="Elegí una categoría">
+                    <select
+                      className="select"
+                      value={category ?? ''}
+                      onChange={(e) => setCategory((e.target.value || null) as Category | null)}
                     >
-                      {option}
-                    </button>
-                  )
-                })}
-              </div>
+                      <option value="">Seleccionar…</option>
+                      {BIKE_CATEGORIES.map((option) => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
+                    </select>
+                  </Field>
+                </div>
+                {/* Desktop/Tablet: botones rápidos */}
+                <div className="mt-4 hidden sm:grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {BIKE_CATEGORIES.map((option) => {
+                    const active = category === option
+                    return (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() => setCategory(option)}
+                        className={`rounded-lg border px-3 py-2 text-sm text-left transition ${active ? 'border-mb-primary bg-mb-primary/10 font-semibold' : 'border-black/10 hover:border-black/20'}`}
+                      >
+                        {option}
+                      </button>
+                    )
+                  })}
+                </div>
+              </>
             )}
           </section>
 
@@ -1016,28 +1090,28 @@ export default function NewListingForm() {
               <p className="text-sm text-black/50">Seleccioná una categoría para continuar.</p>
             )}
 
-            <div className="grid sm:grid-cols-2 gap-4">
-              <Field label="Marca">
-                <input
-                  className="input"
-                  value={brand}
-                  onChange={(e) => setBrand(e.target.value)}
-                  placeholder={
-                    isAccessory ? 'Ej.: Garmin' : isApparel ? 'Ej.: Rapha' : 'Ej.: Specialized'
-                  }
-                />
-              </Field>
-              <Field label={isAccessory || isApparel ? 'Producto / Modelo' : 'Modelo'}>
-                <input
-                  className="input"
-                  value={model}
-                  onChange={(e) => setModel(e.target.value)}
-                  placeholder={
-                    isAccessory ? 'Ej.: Edge 540' : isApparel ? 'Ej.: Jersey Pro Team' : 'Ej.: Tarmac SL7'
-                  }
-                />
-              </Field>
-            </div>
+            {isAccessory || isApparel ? (
+              <div className="grid sm:grid-cols-2 gap-4">
+                <Field label="Marca">
+                  <input className="input" value={brand} onChange={(e) => setBrand(e.target.value)} placeholder={isAccessory ? 'Ej.: Garmin' : 'Ej.: Rapha'} />
+                </Field>
+                <Field label="Producto / Modelo">
+                  <input className="input" value={model} onChange={(e) => setModel(e.target.value)} placeholder={isAccessory ? 'Ej.: Edge 540' : 'Ej.: Jersey Pro Team'} />
+                </Field>
+              </div>
+            ) : (
+              <div className="grid sm:grid-cols-3 gap-4">
+                <Field label="Marca">
+                  <input className="input" value={brand} onChange={(e) => setBrand(e.target.value)} placeholder="Ej.: Specialized" />
+                </Field>
+                <Field label="Modelo">
+                  <input className="input" value={model} onChange={(e) => setModel(e.target.value)} placeholder="Ej.: Tarmac SL7" />
+                </Field>
+                <Field label="Año (opcional)">
+                  <input className="input" type="number" value={year} onChange={(e) => setYear(e.target.value)} placeholder="2023" />
+                </Field>
+              </div>
+            )}
 
             {isAccessory && (
               <>
@@ -1155,68 +1229,75 @@ export default function NewListingForm() {
                   <p className="text-xs text-black/50 mt-1">Si las ruedas son las originales, indicá “Originales”.</p>
                 </Field>
 
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <Field label="Tipo de freno">
+                    <select className="select" value={brakeType} onChange={(e) => setBrakeType(e.target.value as any)}>
+                      <option value="">Seleccionar…</option>
+                      <option value="Disco">Disco</option>
+                      <option value="Herradura">Herradura</option>
+                    </select>
+                  </Field>
+                  <Field label="Condición general">
+                    <select className="select" value={bikeCondition} onChange={(e) => setBikeCondition(e.target.value as any)}>
+                      {CONDITION_OPTIONS.map((opt) => (
+                        <option key={opt} value={opt}>{opt}</option>
+                      ))}
+                    </select>
+                  </Field>
+                </div>
+
+                {category === 'MTB' && (
+                  <Field label="Horquilla (modelo)">
+                    <input className="input" value={mtbForkModel} onChange={(e) => setMtbForkModel(e.target.value)} placeholder="Ej.: RockShox SID 120mm" />
+                  </Field>
+                )}
+                {category === 'Fixie' && (
+                  <Field label="Relación plato/piñón">
+                    <input className="input" value={fixieRatio} onChange={(e) => setFixieRatio(e.target.value)} placeholder="Ej.: 49:16" />
+                  </Field>
+                )}
+                {category === 'E-Bike' && (
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <Field label="Motor (marca/modelo)">
+                      <input className="input" value={ebikeMotor} onChange={(e) => setEbikeMotor(e.target.value)} placeholder="Ej.: Bosch Performance CX" />
+                    </Field>
+                    <Field label="Tipo de carga / batería">
+                      <input className="input" value={ebikeCharge} onChange={(e) => setEbikeCharge(e.target.value)} placeholder="Ej.: 500Wh, carga rápida" />
+                    </Field>
+                  </div>
+                )}
+
+                <button type="button" className="btn btn-ghost" onClick={() => setMoreOpen((v) => !v)}>
+                  {moreOpen ? 'Ocultar información adicional' : 'Agregar más información'}
+                </button>
+                {moreOpen && (
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <Field label="Asiento (modelo)">
+                      <input className="input" value={seatInfo} onChange={(e) => setSeatInfo(e.target.value)} placeholder="Ej.: Prologo Scratch M5" />
+                    </Field>
+                    <Field label="Manillar (modelo)">
+                      <input className="input" value={handlebarInfo} onChange={(e) => setHandlebarInfo(e.target.value)} placeholder="Ej.: Zipp Service Course" />
+                    </Field>
+                    <Field label="Pedales (modelo)">
+                      <input className="input" value={pedalsInfo} onChange={(e) => setPedalsInfo(e.target.value)} placeholder="Ej.: Shimano PD-R7000" />
+                    </Field>
+                    <Field label="Cadena (modelo)">
+                      <input className="input" value={chainInfo} onChange={(e) => setChainInfo(e.target.value)} placeholder="Ej.: KMC X11" />
+                    </Field>
+                    <Field label="Horquilla (upgrade)">
+                      <input className="input" value={forkInfo} onChange={(e) => setForkInfo(e.target.value)} placeholder="Ej.: Fox 34 Performance" />
+                    </Field>
+                  </div>
+                )}
+
                 <Field label="Agregados extras (opcional)">
                   <textarea className="textarea" value={extras} onChange={(e) => setExtras(e.target.value)} placeholder="Cambios, upgrades, mantenimiento, accesorios incluidos..." />
                 </Field>
               </>
             )}
 
-            <div className="grid sm:grid-cols-2 gap-4">
-              <div className="sm:col-span-2">
-                <Field label="Precio">
-                  <div className="grid grid-cols-[auto,1fr] items-center gap-2 w-full">
-                    <select className="select min-w-[5.5rem]" value={priceCurrency} onChange={(e) => setPriceCurrency(e.target.value as 'USD'|'ARS')}>
-                      <option value="USD">USD</option>
-                      <option value="ARS">ARS</option>
-                    </select>
-                    <input
-                      className="input w-full max-w-none text-right"
-                      type="number" min={0} value={priceInput} onChange={(e) => setPriceInput(e.target.value)} placeholder="0"
-                    />
-                  </div>
-                </Field>
-              </div>
-            </div>
-
-            <div className="grid sm:grid-cols-2 gap-4">
-              <Field label="Provincia">
-                <select className="select" value={province} onChange={(e) => setProvince(e.target.value)}>
-                  <option value="">Seleccionar provincia</option>
-                  {PROVINCES.map((prov) => (<option key={prov.name} value={prov.name}>{prov.name}</option>))}
-                </select>
-              </Field>
-              <Field label="Ciudad">
-                <select className="select" value={city} onChange={(e) => setCity(e.target.value)} disabled={!province}>
-                  <option value="">{province ? 'Seleccioná ciudad' : 'Elegí una provincia primero'}</option>
-                  {PROVINCES.find((p) => p.name === province)?.cities.map((c) => (<option key={c} value={c}>{c}</option>))}
-                  <option value={OTHER_CITY_OPTION}>{OTHER_CITY_OPTION}</option>
-                </select>
-              </Field>
-            </div>
-
-            {city === OTHER_CITY_OPTION && (
-              <Field label="Ciudad (especificar)">
-                <input className="input" value={cityOther} onChange={(e) => setCityOther(e.target.value)} placeholder="Ingresá el nombre de la ciudad" />
-              </Field>
-            )}
-            {whatsappEnabled && (
-              <Field label="WhatsApp de contacto">
-                <div className="flex items-stretch">
-                  <span className="inline-flex items-center rounded-l-lg border border-black/10 border-r-0 bg-black/5 px-3 text-sm text-black/70">
-                    +54
-                  </span>
-                  <input
-                    className="input rounded-l-none"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    value={sellerWhatsappLocal}
-                    onChange={(e) => setSellerWhatsappLocal(sanitizeLocalWhatsappInput(e.target.value))}
-                    placeholder="91122334455"
-                  />
-                </div>
-                <p className="mt-1 text-xs text-black/50">Ingresá tu número local sin el +54. Lo agregamos automáticamente en la publicación.</p>
-              </Field>
-            )}
+            {/* Precio, Provincia y Ciudad se muestran al final */}
+            {whatsappEnabled && null}
 
             {(!isAccessory && !isApparel) && (
               <div className="grid sm:grid-cols-2 gap-4">
@@ -1247,6 +1328,8 @@ export default function NewListingForm() {
                     : 'Si la dejás vacía: “No declara descripción específica”.'}
               </p>
             </Field>
+            
+            
           </section>
 
           <section className="space-y-3">
@@ -1285,6 +1368,71 @@ export default function NewListingForm() {
                 </div>
               ))}
             </div>
+          </section>
+
+          {/* Precio y ubicación al final */}
+          <section className="space-y-4">
+            <h2 className="text-lg font-semibold text-mb-ink">4. Precio y ubicación</h2>
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div className="sm:col-span-2">
+                <Field label="Precio">
+                  <div className="grid grid-cols-[auto,1fr] items-center gap-2 w-full">
+                    <select className="select min-w-[5.5rem]" value={priceCurrency} onChange={(e) => setPriceCurrency(e.target.value as 'USD'|'ARS')}>
+                      <option value="USD">USD</option>
+                      <option value="ARS">ARS</option>
+                    </select>
+                    <input
+                      className="input w-full max-w-none text-right"
+                      type="number" min={0} value={priceInput} onChange={(e) => setPriceInput(e.target.value)} placeholder="0"
+                    />
+                  </div>
+                </Field>
+              </div>
+            </div>
+            <div className="grid sm:grid-cols-2 gap-4">
+              <Field label="Provincia">
+                <select className="select" value={province} onChange={(e) => setProvince(e.target.value)}>
+                  <option value="">Seleccionar provincia</option>
+                  {PROVINCES.map((prov) => (<option key={prov.name} value={prov.name}>{prov.name}</option>))}
+                </select>
+              </Field>
+              <Field label="Ciudad">
+                <select className="select" value={city} onChange={(e) => setCity(e.target.value)} disabled={!province}>
+                  <option value="">{province ? 'Seleccioná ciudad' : 'Elegí una provincia primero'}</option>
+                  {PROVINCES.find((p) => p.name === province)?.cities.map((c) => (<option key={c} value={c}>{c}</option>))}
+                  <option value={OTHER_CITY_OPTION}>{OTHER_CITY_OPTION}</option>
+                </select>
+              </Field>
+            </div>
+            {city === OTHER_CITY_OPTION && (
+              <Field label="Ciudad (especificar)">
+                <input className="input" value={cityOther} onChange={(e) => setCityOther(e.target.value)} placeholder="Ingresá el nombre de la ciudad" />
+              </Field>
+            )}
+            {whatsappEnabled && (
+              <Field label="WhatsApp de contacto">
+                <div className="flex items-stretch gap-2">
+                  <select
+                    className="select basis-1/4 sm:w-[8.5rem]"
+                    value={whatsappDial}
+                    onChange={(e) => { setWhatsappDial(e.target.value); /* no marca como editado */ }}
+                  >
+                    {COUNTRY_CODES.map((c) => (
+                      <option key={c.cc} value={c.dial}>{`${c.flag} +${c.dial}`}</option>
+                    ))}
+                  </select>
+                  <input
+                    className="input basis-3/4 sm:flex-1 min-w-[16ch]"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={sellerWhatsappLocal}
+                    onChange={(e) => { setSellerWhatsappLocal(sanitizeLocalWhatsappInput(e.target.value)); setWhatsappUserEdited(true) }}
+                    placeholder="11 1234 5678"
+                  />
+                </div>
+                <p className="mt-1 text-xs text-black/50">Elegí el prefijo de país y escribí tu número sin el signo + ni ceros iniciales.</p>
+              </Field>
+            )}
           </section>
 
           <Button onClick={submit} className="w-full">Publicar</Button>
@@ -1352,26 +1500,81 @@ export default function NewListingForm() {
               </>
             ) : (
               <>
-                <div className="flex justify-between gap-4">
-                  <dt className="font-medium text-black/80">Material</dt>
-                  <dd>{materialValue || '—'}</dd>
-                </div>
-                <div className="flex justify-between gap-4">
-                  <dt className="font-medium text-black/80">Rodado</dt>
-                  <dd>{wheelSize || '—'}</dd>
-                </div>
-                <div className="flex justify-between gap-4">
-                  <dt className="font-medium text-black/80">Talle</dt>
-                  <dd>{frameSize || '—'}</dd>
-                </div>
-                <div className="flex justify-between gap-4">
-                  <dt className="font-medium text-black/80">Grupo</dt>
-                  <dd>{drivetrainValue || '—'}</dd>
-                </div>
-                <div className="flex justify-between gap-4">
-                  <dt className="font-medium text-black/80">Ruedas</dt>
-                  <dd className="text-right">{wheelset || '—'}</dd>
-                </div>
+                {/* Orden: Material + Horquilla + Talle */}
+                {materialValue && (
+                  <div className="flex justify-between gap-4">
+                    <dt className="font-medium text-black/80">Material</dt>
+                    <dd>{materialValue}</dd>
+                  </div>
+                )}
+                {category === 'MTB' && mtbForkModel && (
+                  <div className="flex justify-between gap-4">
+                    <dt className="font-medium text-black/80">Horquilla</dt>
+                    <dd className="text-right">{mtbForkModel}</dd>
+                  </div>
+                )}
+                {frameSize && (
+                  <div className="flex justify-between gap-4">
+                    <dt className="font-medium text-black/80">Talle</dt>
+                    <dd>{frameSize}</dd>
+                  </div>
+                )}
+                {/* Ruedas + Rodado */}
+                {wheelset && (
+                  <div className="flex justify-between gap-4">
+                    <dt className="font-medium text-black/80">Ruedas</dt>
+                    <dd className="text-right">{wheelset}</dd>
+                  </div>
+                )}
+                {wheelSize && (
+                  <div className="flex justify-between gap-4">
+                    <dt className="font-medium text-black/80">Rodado</dt>
+                    <dd>{wheelSize}</dd>
+                  </div>
+                )}
+                {/* Grupo */}
+                {drivetrainValue && (
+                  <div className="flex justify-between gap-4">
+                    <dt className="font-medium text-black/80">Grupo</dt>
+                    <dd>{drivetrainValue}</dd>
+                  </div>
+                )}
+                {/* Freno y Condición */}
+                {brakeType && (
+                  <div className="flex justify-between gap-4">
+                    <dt className="font-medium text-black/80">Freno</dt>
+                    <dd className="text-right">{brakeType}</dd>
+                  </div>
+                )}
+                {bikeCondition && (
+                  <div className="flex justify-between gap-4">
+                    <dt className="font-medium text-black/80">Condición</dt>
+                    <dd className="text-right">{bikeCondition}</dd>
+                  </div>
+                )}
+                {/* Opcionales por categoría */}
+                {category === 'Fixie' && fixieRatio && (
+                  <div className="flex justify-between gap-4">
+                    <dt className="font-medium text-black/80">Relación</dt>
+                    <dd className="text-right">{fixieRatio}</dd>
+                  </div>
+                )}
+                {category === 'E-Bike' && (ebikeMotor || ebikeCharge) && (
+                  <>
+                    {ebikeMotor && (
+                      <div className="flex justify-between gap-4">
+                        <dt className="font-medium text-black/80">Motor</dt>
+                        <dd className="text-right">{ebikeMotor}</dd>
+                      </div>
+                    )}
+                    {ebikeCharge && (
+                      <div className="flex justify-between gap-4">
+                        <dt className="font-medium text-black/80">Batería / Carga</dt>
+                        <dd className="text-right">{ebikeCharge}</dd>
+                      </div>
+                    )}
+                  </>
+                )}
               </>
             )}
           </dl>

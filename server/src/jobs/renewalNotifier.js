@@ -2,7 +2,7 @@ const cron = require('node-cron')
 const { getServerSupabaseClient } = require('../lib/supabaseClient')
 const { sendMail, isMailConfigured } = require('../lib/mail')
 
-const DEFAULT_WINDOW_HOURS = 48
+const DEFAULT_WINDOW_HOURS = 72
 const DEFAULT_COOLDOWN_HOURS = 24
 const DEFAULT_CRON_SCHEDULE = '0 * * * *' // cada hora
 
@@ -62,16 +62,26 @@ async function sendReminder({ listing, profile }) {
     ? expiresDate.toLocaleString('es-AR', { dateStyle: 'long', timeStyle: 'short' })
     : 'los próximos días'
 
+  const baseFront = (process.env.FRONTEND_URL || '').split(',')[0]?.trim() || ''
+  const highlightUrl = `${baseFront}/listing/${listing.id}/destacar`
+  const renewApiHint = `${baseFront}/dashboard` // Podrías enlazar a un flujo directo de renovación
+
   const mailOptions = {
     from: process.env.SMTP_FROM || `Ciclo Market <${process.env.SMTP_USER}>`,
     to: profile.email,
     subject: `Tu publicación "${listing.title}" está por vencer`,
     html: `
-      <p>Hola ${profile.full_name || ''},</p>
-      <p>Te avisamos que tu publicación <strong>${listing.title}</strong> vence el ${expiresLabel}.</p>
-      <p>Podés renovarla o actualizarla entrando a tu panel de vendedor:</p>
-      <p><a href="${process.env.FRONTEND_URL?.split(',')[0] || ''}/dashboard">Ir al dashboard</a></p>
-      <p>Gracias por usar Ciclo Market.</p>
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; color:#14212e;">
+        <h2>Tu publicación está por vencer</h2>
+        <p>Hola ${profile.full_name || 'vendedor'},</p>
+        <p>Tu aviso <strong>${listing.title}</strong> vence el <strong>${expiresLabel}</strong>.</p>
+        <p>Podés mantenerla activa y ganar visibilidad con estas opciones:</p>
+        <div style="margin:16px 0;">
+          <a href="${renewApiHint}" style="display:inline-block;padding:10px 16px;background:#14212e;color:#fff;text-decoration:none;border-radius:8px;margin-right:8px;">Renovar publicación</a>
+          <a href="${highlightUrl}" style="display:inline-block;padding:10px 16px;background:#2563eb;color:#fff;text-decoration:none;border-radius:8px;">Destacar ahora</a>
+        </div>
+        <p>Gracias por usar Ciclo Market.</p>
+      </div>
     `
   }
 

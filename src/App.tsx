@@ -6,6 +6,7 @@ import Home from './pages/Home'
 import Plans from './pages/Publish/Plans'
 import NewListingForm from './pages/Publish/NewListingForm'
 import ListingDetail from './pages/ListingDetail'
+import HighlightListing from './pages/HighlightListing'
 import Dashboard from './pages/Dashboard'
 import Profile from './pages/Profile'
 import Login from './pages/Auth/Login'
@@ -310,6 +311,7 @@ export default function App() {
 
                       {/* Detalle */}
                       <Route path="/listing/:slug" element={<ListingDetail />} />
+                      <Route path="/listing/:slug/destacar" element={<HighlightListing />} />
 
                       {/* Cuenta / Dashboard */}
                       <Route

@@ -77,6 +77,27 @@ const MEGA: MegaItem[] = [
     ],
   },
   {
+    label: 'Urbana & Fixie',
+    cols: [
+      {
+        title: 'Categorías',
+        links: [
+          { label: 'Urbana', to: '/marketplace?cat=Urbana' },
+          { label: 'Fixie', to: '/marketplace?cat=Fixie' },
+          { label: 'Single Speed', to: '/marketplace?cat=Fixie&sub=SingleSpeed' },
+        ],
+      },
+      {
+        title: 'Rango de precio',
+        links: [
+          { label: 'Ofertas', to: '/marketplace?deal=1&cat=Urbana' },
+          { label: 'Hasta USD 800', to: '/marketplace?cat=Urbana&max=800' },
+          { label: 'USD 800–1.500', to: '/marketplace?cat=Urbana&min=800&max=1500' },
+        ],
+      },
+    ],
+  },
+  {
     label: 'Partes',
     cols: [
       {
@@ -420,23 +441,12 @@ export default function Header() {
 
   const header = (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/70">
-      <div className="max-w-6xl mx-auto px-4 py-4 flex items-center gap-3">
-        <button
-          type="button"
-          aria-label="Abrir menú"
-          className="md:hidden h-10 w-10 grid place-content-center rounded-full border border-black/10 hover:border-black/20"
-          onClick={toggleMobileMenu}
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-6 w-6" stroke="currentColor" fill="none" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5" />
-          </svg>
-        </button>
-
+      <div className="max-w-6xl mx-auto px-4 py-4 flex items-center gap-3 md:gap-6">
         <Link to="/" className="flex items-center gap-2 shrink-0" aria-label="Ir al inicio">
           <img
             src="/site-logo.png"
             alt="Ciclo Market"
-            className="h-16 w-auto block"
+            className="h-12 md:h-16 w-auto block transform md:scale-[1.2] origin-left"
             width={200}
             height={80}
             loading="eager"
@@ -444,11 +454,12 @@ export default function Header() {
           />
         </Link>
 
-        <div className="hidden md:flex flex-1 justify-center">
+        {/* Search también visible en mobile */}
+        <div className="flex-1 px-1 md:flex md:justify-center">
           <SearchBar />
         </div>
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto hidden md:flex items-center gap-2">
           {user ? (
             <Link
               to="/dashboard"
@@ -546,12 +557,18 @@ export default function Header() {
             Vender
           </Link>
         </div>
-      </div>
 
-      <div className="md:hidden">
-        <div className="max-w-6xl mx-auto px-4 py-3">
-          <SearchBar />
-        </div>
+        {/* Hamburguesa a la derecha (solo mobile) */}
+        <button
+          type="button"
+          aria-label="Abrir menú"
+          className="md:hidden h-10 w-10 grid place-content-center rounded-full border border-black/10 hover:border-black/20"
+          onClick={toggleMobileMenu}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-6 w-6" stroke="currentColor" fill="none" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5" />
+          </svg>
+        </button>
       </div>
 
       <div className="hidden md:block relative">
@@ -609,7 +626,7 @@ export default function Header() {
   const mobileMenuOverlay = mounted && isMobileViewport && mobileMenuOpen
     ? createPortal(
         <div className="md:hidden fixed inset-0 z-50 bg-black/60" onClick={closeMobileMenu}>
-          <div className="absolute inset-y-0 left-0 w-[85%] max-w-sm bg-white shadow-xl overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div className="absolute inset-y-0 right-0 w-[85%] max-w-sm bg-white shadow-xl overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="px-4 py-4 flex items-center justify-between border-b border-black/10">
               <span className="font-semibold">Menú</span>
               <button type="button" aria-label="Cerrar" onClick={closeMobileMenu}>
@@ -620,39 +637,24 @@ export default function Header() {
             </div>
 
             <div className="px-4 py-3 space-y-4">
-              {user ? (
-                <div className="rounded-xl border border-black/10 bg-black/5 px-3 py-3 text-sm">
-                  <div className="font-semibold">Hola, {user.user_metadata?.full_name || user.email}</div>
-                  <div className="mt-2 grid gap-2">
-                    <Link to="/dashboard" className="underline" onClick={closeMobileMenu}>
-                      Ir a mi cuenta
-                    </Link>
-                    <Link
-                      to={`/dashboard?tab=${encodeURIComponent('Cerrar sesión')}`}
-                      className="text-left underline"
-                      onClick={closeMobileMenu}
-                    >
-                      Cerrar sesión desde el panel
-                    </Link>
+              {/* Bloque destacado (primeras filas) */}
+              <div className="rounded-2xl bg-[#0c1723] text-white p-4">
+                {user ? (
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <Link to="/dashboard" className="btn bg-white text-[#14212e] hover:bg-white/90" onClick={closeMobileMenu}>Mi cuenta</Link>
+                    <Link to="/publicar" className="btn bg-gradient-to-r from-[#0ea5e9] via-[#2563eb] to-[#1d4ed8] text-white hover:brightness-110" onClick={closeMobileMenu}>Vender</Link>
+                    <Link to="/marketplace" className="btn border border-white/30 bg-transparent text-white hover:bg-white/10" onClick={closeMobileMenu}>Marketplace</Link>
+                    <Link to={`/dashboard?tab=${encodeURIComponent('Cerrar sesión')}`} className="btn border border-white/30 bg-transparent text-white hover:bg-white/10" onClick={closeMobileMenu}>Cerrar sesión</Link>
                   </div>
-                </div>
-              ) : (
-                <div className="grid gap-2 text-sm">
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={() => {
-                      setLoginOpen(true)
-                      closeMobileMenu()
-                    }}
-                  >
-                    Ingresar
-                  </button>
-                  <Link to="/register" className="btn btn-ghost" onClick={closeMobileMenu}>
-                    Crear cuenta
-                  </Link>
-                </div>
-              )}
+                ) : (
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <button type="button" className="btn bg-white text-[#14212e] hover:bg-white/90" onClick={() => { setLoginOpen(true); closeMobileMenu() }}>Ingresar</button>
+                    <Link to="/register" className="btn border border-white/30 bg-transparent text-white hover:bg-white/10" onClick={closeMobileMenu}>Crear cuenta</Link>
+                    <Link to="/marketplace" className="btn border border-white/30 bg-transparent text-white hover:bg-white/10" onClick={closeMobileMenu}>Marketplace</Link>
+                    <Link to="/publicar" className="btn bg-gradient-to-r from-[#0ea5e9] via-[#2563eb] to-[#1d4ed8] text-white hover:brightness-110" onClick={closeMobileMenu}>Vender</Link>
+                  </div>
+                )}
+              </div>
 
               <div className="grid gap-2">
                 {MEGA.map((item, idx) => {
@@ -696,9 +698,6 @@ export default function Header() {
               </div>
 
               <div className="grid gap-2 text-sm">
-                <Link to="/marketplace" className="underline" onClick={closeMobileMenu}>
-                  Marketplace
-                </Link>
                 <Link to="/como-publicar" className="underline" onClick={closeMobileMenu}>
                   Cómo publicar
                 </Link>
@@ -717,60 +716,68 @@ export default function Header() {
     ? createPortal(
         <div className="md:hidden fixed inset-0 z-[60] bg-black/70" onClick={() => setLoginOpen(false)}>
           <div
-            className="absolute inset-x-0 bottom-0 top-24 rounded-t-3xl bg-white p-6 overflow-y-auto"
+            className="absolute inset-x-0 bottom-0 top-24 rounded-t-3xl border border-white/10 bg-[#0c1723] p-5 text-white shadow-2xl overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mx-auto max-w-sm">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-[#14212e]">Ingresar</h2>
+            <div className="space-y-4">
+              <div className="mx-auto mt-1 h-1.5 w-12 rounded-full bg-white/20" aria-hidden="true" />
+              <div className="flex items-start justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-white">Ingresar</h2>
+                  <p className="text-xs text-white/70">Elegí tu método preferido.</p>
+                </div>
                 <button type="button" aria-label="Cerrar" onClick={() => setLoginOpen(false)}>
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-6 w-6" stroke="currentColor" fill="none" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="m6 6 12 12M6 18 18 6" />
                   </svg>
                 </button>
               </div>
-              <form className="mt-4 space-y-4" onSubmit={handleLogin}>
-                <div>
-                  <label htmlFor="header-login-email-mobile" className="text-xs font-semibold text-black/60">Email</label>
+
+              <SocialAuthButtons
+                buttons={[{
+                  id: 'google',
+                  label: 'Continuar con Google',
+                  loading: loginLoading,
+                  onClick: handleGoogleLogin,
+                }]}
+              />
+
+              <div className="relative flex items-center gap-3 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/40">
+                <span className="h-px flex-1 bg-white/10" />
+                <span>o con email</span>
+                <span className="h-px flex-1 bg-white/10" />
+              </div>
+
+              <form className="space-y-3" onSubmit={handleLogin}>
+                <label className="text-[11px] font-semibold uppercase tracking-[0.28em] text-white/60">
+                  Email
                   <input
-                    className="input mt-1"
+                    className="input mt-1 w-full border border-white/20 bg-white text-[#14212e] placeholder:text-black/60 focus:border-white/60"
                     type="email"
-                    id="header-login-email-mobile"
-                    name="email"
                     value={loginEmail}
                     onChange={(e) => setLoginEmail(e.target.value)}
+                    placeholder="tu@email.com"
                   />
-                </div>
-                <div>
-                  <label htmlFor="header-login-password-mobile" className="text-xs font-semibold text-black/60">Contraseña</label>
+                </label>
+                <label className="text-[11px] font-semibold uppercase tracking-[0.28em] text-white/60">
+                  Contraseña
                   <input
-                    className="input mt-1"
+                    className="input mt-1 w-full border border-white/20 bg-white text-[#14212e] placeholder:text-black/60 focus:border-white/60"
                     type="password"
-                    id="header-login-password-mobile"
-                    name="password"
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
+                    placeholder="••••••••"
                   />
-                </div>
-                <label htmlFor="header-login-remember-mobile" className="flex items-center gap-2 text-xs text-black/70">
-                  <input
-                    type="checkbox"
-                    className="accent-mb-primary"
-                    id="header-login-remember-mobile"
-                    name="remember"
-                    checked={rememberMe}
-                    onChange={(e) => setRememberMe(e.target.checked)}
-                  />
+                </label>
+                <label className="flex items-center gap-2 text-[11px] text-white/70">
+                  <input type="checkbox" className="accent-mb-primary" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} />
                   Mantenerme conectado
                 </label>
-                {loginError && <p className="text-xs text-red-600">{loginError}</p>}
+                {loginError && <p className="text-xs text-red-300">{loginError}</p>}
                 <button type="submit" className="btn btn-primary w-full" disabled={loginLoading}>
                   {loginLoading ? 'Ingresando…' : 'Ingresar'}
                 </button>
-                <button type="button" className="btn btn-ghost w-full" disabled={loginLoading} onClick={handleGoogleLogin}>
-                  Ingresar con Google
-                </button>
-                <p className="text-xs text-black/60 text-center">
+                <p className="text-xs text-white/60 text-center">
                   ¿Aún no tenés cuenta?{' '}
                   <Link to="/register" className="underline" onClick={() => setLoginOpen(false)}>
                     Registrate

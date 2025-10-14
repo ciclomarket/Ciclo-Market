@@ -4,7 +4,7 @@ import Button from '../components/Button'
 import ListingCard from '../components/ListingCard'
 import EmptyState from '../components/EmptyState'
 import { mockListings } from '../mock/mockData'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import SkeletonCard from '../components/SkeletonCard'
 import { Link, useNavigate } from 'react-router-dom'
 import { useCurrency } from '../context/CurrencyContext'
@@ -164,18 +164,15 @@ function Stat({ n, t }: { n: string; t: string }) {
   )
 }
 
-function Step({ n, t, d }: { n: number; t: string; d: string }) {
+function Step({ icon, t, d }: { icon: ReactNode; t: string; d: string }) {
   return (
-    <div
-      className="flex h-full flex-col rounded-2xl border border-white/15 bg-white/10 p-5 transition hover:bg-white/16 backdrop-blur"
-      style={{
-        backgroundImage:
-          'radial-gradient(120px 40px at 20% 0%, rgba(20,33,46,.12), transparent), radial-gradient(120px 40px at 80% 0%, rgba(20,33,46,.18), transparent)'
-      }}
-    >
-      <div className="grid size-10 place-content-center rounded-xl2 bg-white/90 font-bold text-[#14212e]">{n}</div>
+    <div className="group relative rounded-2xl border border-white/10 bg-white/5 p-6 text-center backdrop-blur transition hover:border-white/20 hover:bg-white/10">
+      <div className="mx-auto grid size-12 place-content-center rounded-xl bg-gradient-to-br from-[#0ea5e9] via-[#2563eb] to-[#1d4ed8] text-white shadow-[0_8px_20px_rgba(37,99,235,0.35)]">
+        {icon}
+      </div>
       <h4 className="mt-3 font-semibold text-white">{t}</h4>
-      <p className="mt-2 text-sm text-white/70">{d}</p>
+      <p className="mt-2 text-sm text-white/75">{d}</p>
+      <div className="pointer-events-none absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 ring-1 ring-inset ring-white/10 transition" />
     </div>
   )
 }
@@ -263,51 +260,44 @@ export default function Home() {
         <div className="absolute inset-0 -z-10 bg-[radial-gradient(1200px_600px_at_-20%_-10%,rgba(255,255,255,0.18),transparent_70%)]" />
         <div className="absolute inset-0 -z-10 bg-[radial-gradient(900px_520px_at_110%_10%,rgba(20,33,46,0.28),transparent_78%)]" />
         <Container>
-          <div className="relative grid items-center gap-10 py-16 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.75fr)]">
-            <div className="order-2 lg:order-1">
-              <span className="inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs uppercase tracking-[0.4em] text-white/70">
-                Comunidad Ciclista
-              </span>
-              <h1 className="mt-6 text-3xl font-extrabold leading-tight tracking-tight text-white sm:text-4xl md:text-5xl">
-                El marketplace de bicicletas en Argentina
-              </h1>
-              <p className="mt-4 max-w-prose text-lg leading-relaxed text-white/75">
-                Publicá tu bici, conectá con compradores y vendé fácil. Planes simples, sin comisiones por venta.
-              </p>
-              <div className="mt-6 flex flex-wrap gap-3">
-                <Button
-                  to="/publicar"
-                  className="bg-white text-[#14212e] shadow-xl ring-white/30 hover:bg-white/90 hover:text-[#14212e]"
+          <div className="relative mx-auto max-w-4xl py-10 md:py-14 text-center">
+            <span className="inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.4em] text-white/70">
+              Comunidad ciclista
+            </span>
+            <h1 className="mt-5 text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl md:text-5xl">
+              Tu marketplace de bicicletas, simple y eficiente
+            </h1>
+            <p className="mt-3 mx-auto max-w-2xl text-base md:text-lg text-white/80">
+              Publicá en minutos, destacá tu aviso y conectá directo con compradores. Sin comisiones por venta.
+            </p>
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+              <Button
+                to="/publicar"
+                className="bg-gradient-to-r from-[#0ea5e9] via-[#2563eb] to-[#1d4ed8] text-white shadow-[0_14px_40px_rgba(37,99,235,0.45)] hover:brightness-110"
+              >
+                <span>Publicar bicicleta</span>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14m-6-6 6 6-6 6" />
+                </svg>
+              </Button>
+              <Link
+                to="/marketplace"
+                className="btn bg-[#14212e] text-white shadow-[0_14px_40px_rgba(20,33,46,0.35)] hover:bg-[#1b2f3f]"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  className="h-4 w-4 text-white"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.8}
                 >
-                  Publicar bicicleta
-                </Button>
-                <Link
-                  to="/marketplace"
-                  className="btn border border-white/30 bg-transparent text-white ring-white/30 hover:bg-white/10 hover:text-white"
-                >
-                  Explorar bicicletas
-                </Link>
-              </div>
-              <div className="mt-10 grid grid-cols-3 gap-4 text-center">
-                <Stat n="2k+" t="Publicaciones" />
-                <Stat n="1.2k" t="Vendedores" />
-                <Stat n="18" t="Provincias" />
-              </div>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m17.5 17.5-4-4m1-3.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0Z" />
+                </svg>
+                <span>Explorar bicicletas</span>
+              </Link>
             </div>
-            <div className="order-1 hidden justify-center lg:order-2 lg:flex">
-              <div className="relative aspect-[4/5] w-full max-w-xs overflow-hidden rounded-[32px] border border-white/20 bg-white/5 shadow-[0_25px_60px_rgba(12,20,28,0.45)] backdrop-blur">
-                <img
-                  src="/bicicletas-home-card.jpg"
-                  srcSet="/bicicletas-home-card-small.jpg 360w, /bicicletas-home-card.jpg 720w"
-                  sizes="(min-width: 1024px) 320px, 70vw"
-                  alt="Detalle de bicicleta"
-                  className="h-full w-full object-cover"
-                  loading="lazy"
-                  decoding="async"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#14212e]/70 via-[#14212e]/10 to-transparent" />
-              </div>
-            </div>
+            <div className="pointer-events-none absolute inset-x-0 -bottom-6 mx-auto h-px max-w-3xl bg-gradient-to-r from-transparent via-white/40 to-transparent" />
           </div>
         </Container>
       </section>
@@ -410,18 +400,50 @@ export default function Home() {
       {/* ¿CÓMO FUNCIONA? */}
       <section className="section-ribbon py-14 text-white">
         <Container className="text-white">
-          <div
-            className="rounded-3xl border border-white/10 bg-white/5 p-6 md:p-10 backdrop-blur"
-            style={{
-              backgroundImage:
-                'radial-gradient(400px 160px at 10% 0%, rgba(255,255,255,.16), transparent 70%), radial-gradient(400px 160px at 90% 0%, rgba(20,33,46,.24), transparent 70%)'
-            }}
-          >
-            <div className="grid md:grid-cols-4 gap-6 items-stretch">
-              <Step n={1} t="Registrate" d="Creá tu cuenta en minutos." />
-              <Step n={2} t="Publicá" d="Elegí un plan y subí tu bici." />
-              <Step n={3} t="Contactá" d="Respondé consultas y coordiná la venta." />
-              <Step n={4} t="Vende" d="Concretá la operación de forma segura." />
+          <div className="text-center mb-8">
+            <h2 className="text-2xl font-semibold">Cómo funciona</h2>
+            <p className="text-sm text-white/70">Publicá en 4 pasos, sin vueltas.</p>
+          </div>
+          <div className="relative">
+            <div className="pointer-events-none absolute left-0 right-0 top-1/2 hidden h-px -translate-y-1/2 bg-gradient-to-r from-transparent via-white/20 to-transparent md:block" />
+            <div className="grid gap-4 md:grid-cols-4 items-stretch">
+              <Step
+                icon={(
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5Zm0 2c-4 0-7 2-7 4v1h14v-1c0-2-3-4-7-4Z" />
+                  </svg>
+                )}
+                t="Registrate"
+                d="Creá tu cuenta en minutos. Es gratis."
+              />
+              <Step
+                icon={(
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M4 12h16M4 17h10" />
+                  </svg>
+                )}
+                t="Publicá"
+                d="Elegí un plan y subí tu bici con fotos claras."
+              />
+              <Step
+                icon={(
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 8a2 2 0 0 0-2-2H7L3 9v9a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8Z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M7 8V5a2 2 0 0 1 2-2h8" />
+                  </svg>
+                )}
+                t="Contactá"
+                d="Respondé consultas por chat o WhatsApp."
+              />
+              <Step
+                icon={(
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m5 13 4 4L19 7" />
+                  </svg>
+                )}
+                t="Vendé"
+                d="Coordiná entrega y cerrá la operación con confianza."
+              />
             </div>
           </div>
         </Container>

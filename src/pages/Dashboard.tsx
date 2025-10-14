@@ -20,7 +20,6 @@ import { normaliseWhatsapp, extractLocalWhatsapp, sanitizeLocalWhatsappInput } f
 import { useNotifications } from '../context/NotificationContext'
 import { useToast } from '../context/ToastContext'
 import useFaves from '../hooks/useFaves'
-import { fetchPendingShareBoosts } from '../services/shareBoost'
 import { createGift } from '../services/gifts'
 
 const TABS = ['Perfil', 'Publicaciones', 'Favoritos', 'Notificaciones', 'Editar perfil', 'Suscripción', 'Cerrar sesión'] as const
@@ -333,11 +332,20 @@ export default function Dashboard() {
               <h1 className="mt-2 text-2xl font-semibold">Hola, {displayName}</h1>
               <p className="mt-1 text-sm text-white/70">Gestioná tu tienda y mantené al día tus publicaciones.</p>
               <div className="mt-4 flex flex-wrap gap-2">
-                <Button to="/publicar" className="bg-white text-[#14212e] hover:bg-white/90">
-                  Nueva publicación
+                <Button
+                  to="/publicar"
+                  className="bg-gradient-to-r from-[#0ea5e9] via-[#2563eb] to-[#1d4ed8] text-white shadow-[0_14px_40px_rgba(37,99,235,0.45)] hover:brightness-110"
+                >
+                  <span>Nueva publicación</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14m-6-6 6 6-6 6" />
+                  </svg>
                 </Button>
-                <Button to="/marketplace" variant="ghost" className="text-white/80">
-                  Ver marketplace
+                <Button to="/marketplace" className="bg-[#14212e] text-white shadow-[0_14px_40px_rgba(20,33,46,0.35)] hover:bg-[#1b2f3f]">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m17.5 17.5-4-4m1-3.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0Z" />
+                  </svg>
+                  <span>Ver marketplace</span>
                 </Button>
               </div>
             </header>
@@ -367,7 +375,7 @@ export default function Dashboard() {
                     <h2 className="text-lg font-semibold">{activeMetadata?.title ?? mobileTab}</h2>
                   </div>
                 </div>
-                <div className="rounded-3xl border border-white/15 bg-white text-[#14212e] shadow-[0_18px_40px_rgba(6,12,24,0.25)]">
+                <div className="rounded-3xl border border-white/15 bg-white px-3 py-3 text-[#14212e] shadow-[0_18px_40px_rgba(6,12,24,0.25)]">
                   {renderSection(mobileTab)}
                 </div>
               </div>
@@ -492,8 +500,11 @@ export default function Dashboard() {
                     Crear regalo
                   </button>
                 )}
-                <Button to="/publicar" className="bg-white text-[#14212e] hover:bg-white/90">
-                  Nueva publicación
+                <Button to="/publicar" className="bg-gradient-to-r from-[#0ea5e9] via-[#2563eb] to-[#1d4ed8] text-white shadow-[0_14px_40px_rgba(37,99,235,0.45)] hover:brightness-110">
+                  <span>Nueva publicación</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14m-6-6 6 6-6 6" />
+                  </svg>
                 </Button>
               </div>
             </div>
@@ -520,7 +531,7 @@ export default function Dashboard() {
               </ul>
             </nav>
 
-            <section className="rounded-3xl border border-white/10 bg-white p-6 shadow-[0_25px_60px_rgba(12,20,28,0.25)]">
+            <section className="rounded-3xl border border-white/10 bg-white px-7 py-6 md:p-6 shadow-[0_25px_60px_rgba(12,20,28,0.25)]">
               {renderSection(activeTab)}
             </section>
           </div>
@@ -741,15 +752,6 @@ function ProfileView({
   const websiteLink = profile?.website_url ? normaliseUrl(profile?.website_url) : null
   const { ids: favouriteIds } = useFaves()
   const favouritesCount = favouriteIds.length
-  const stravaProfileUrl = profile?.website_url && profile.website_url.toLowerCase().includes('strava.com')
-    ? normaliseUrl(profile.website_url)
-    : null
-  const stravaConnected = Boolean(stravaProfileUrl)
-  const handleConnectStrava = useCallback(() => {
-    if (typeof window !== 'undefined') {
-      window.open('https://www.strava.com/', '_blank', 'noopener')
-    }
-  }, [])
 
   const lastActivityDate = latestListingAt ? new Date(latestListingAt) : null
   const activityLabel = lastActivityDate && !Number.isNaN(lastActivityDate.getTime())
@@ -774,6 +776,19 @@ function ProfileView({
     : reputationScore >= 4
       ? 'Muy buena reputación. Seguí respondiendo a tiempo para llegar al máximo.'
       : 'Construí tu reputación completando tu perfil y respondiendo rápido.'
+
+  const createdAtDate = profile?.created_at ? new Date(profile.created_at) : null
+  const accountAge = createdAtDate && !Number.isNaN(createdAtDate.getTime())
+    ? (() => {
+        const now = new Date()
+        const months = (now.getFullYear() - createdAtDate.getFullYear()) * 12 + (now.getMonth() - createdAtDate.getMonth())
+        if (months >= 24) return `${Math.floor(months / 12)} años`
+        if (months >= 12) return '1 año'
+        if (months > 1) return `${months} meses`
+        return '1 mes'
+      })()
+    : '—'
+  const trustTrend = `Antigüedad: ${accountAge} • ${profile?.whatsapp_number ? 'WhatsApp cargado' : 'Sin WhatsApp'}`
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
@@ -811,33 +826,13 @@ function ProfileView({
           trend={favouritesCount > 0 ? 'En tu lista de seguimiento' : 'Guardá bicicletas para compararlas más tarde'}
         />
         <ProfileStat
-          label="Perfil de Strava"
-          value={stravaConnected ? 'Conectado' : 'No conectado'}
-          trend={
-            stravaConnected ? (
-              <a
-                href={stravaProfileUrl ?? '#'}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex text-xs font-semibold text-[#14212e] underline"
-              >
-                Ver mi Strava
-              </a>
-            ) : (
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={handleConnectStrava}
-                className="w-full border border-dashed border-[#14212e]/30 text-[#14212e]"
-              >
-                Conectar Strava
-              </Button>
-            )
-          }
+          label="Señales de confianza"
+          value={profile?.verified ? 'Vendedor verificado' : 'Perfil en construcción'}
+          trend={trustTrend}
         />
       </div>
 
-      <div className="rounded-2xl border border-[#14212e]/10 bg-white p-6 shadow">
+      <div className="rounded-2xl border border-[#14212e]/10 bg-white px-7 py-6 md:p-6 shadow">
         <h3 className="text-sm font-semibold text-[#14212e] uppercase tracking-wide">Tu perfil público</h3>
         <dl className="mt-3 grid gap-3 sm:grid-cols-2">
           {preferredBike && (
@@ -934,7 +929,7 @@ function ProfileView({
             </div>
           </dl>
         </div>
-        <div className="rounded-2xl border border-[#14212e]/10 bg-white p-6">
+        <div className="rounded-2xl border border-[#14212e]/10 bg-white px-7 py-6 md:p-6">
           <h3 className="text-sm font-semibold text-[#14212e] uppercase tracking-wide">Potenciá tus ventas</h3>
           <ul className="mt-3 space-y-3 text-sm text-[#14212e]/80">
             {[
@@ -1441,6 +1436,18 @@ function EditProfileView({
   const [instagram, setInstagram] = useState(profile?.instagram_handle ?? '')
   const [facebook, setFacebook] = useState(profile?.facebook_handle ?? '')
   const [website, setWebsite] = useState(profile?.website_url ?? '')
+  const COUNTRY_CODES = [
+    { cc: 'AR', dial: '54', label: 'Argentina', flag: '🇦🇷' },
+    { cc: 'PY', dial: '595', label: 'Paraguay', flag: '🇵🇾' },
+    { cc: 'BR', dial: '55', label: 'Brasil', flag: '🇧🇷' },
+    { cc: 'CL', dial: '56', label: 'Chile', flag: '🇨🇱' },
+    { cc: 'UY', dial: '598', label: 'Uruguay', flag: '🇺🇾' },
+    { cc: 'PE', dial: '51', label: 'Perú', flag: '🇵🇪' },
+    { cc: 'VE', dial: '58', label: 'Venezuela', flag: '🇻🇪' },
+    { cc: 'US', dial: '1', label: 'Estados Unidos', flag: '🇺🇸' },
+  ] as const
+  const [whatsappDial, setWhatsappDial] = useState<string>('54')
+  const [whatsappEdited, setWhatsappEdited] = useState(false)
   const [whatsappLocal, setWhatsappLocal] = useState(() => sanitizeLocalWhatsappInput(extractLocalWhatsapp(profile?.whatsapp_number ?? '')))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -1461,7 +1468,22 @@ function EditProfileView({
     setInstagram(profile?.instagram_handle ?? '')
     setFacebook(profile?.facebook_handle ?? '')
     setWebsite(profile?.website_url ?? '')
-    setWhatsappLocal(sanitizeLocalWhatsappInput(extractLocalWhatsapp(profile?.whatsapp_number ?? '')))
+    // Detectar prefijo y número local desde el perfil
+    const digits = String(profile?.whatsapp_number || '').replace(/[^0-9]/g, '')
+    if (digits) {
+      const sorted = [...COUNTRY_CODES].sort((a, b) => b.dial.length - a.dial.length)
+      const match = sorted.find((c) => digits.startsWith(c.dial))
+      if (match) {
+        setWhatsappDial(match.dial)
+        setWhatsappLocal(sanitizeLocalWhatsappInput(digits.slice(match.dial.length)))
+      } else {
+        setWhatsappDial('54')
+        setWhatsappLocal(sanitizeLocalWhatsappInput(extractLocalWhatsapp(digits)))
+      }
+    } else {
+      setWhatsappDial('54')
+      setWhatsappLocal('')
+    }
     setAvatarUrl(initialAvatar)
   }, [profile, initialAvatar])
 
@@ -1516,7 +1538,7 @@ function EditProfileView({
     setSaving(true)
     setError(null)
     try {
-      const formattedWhatsapp = whatsappLocal ? normaliseWhatsapp(whatsappLocal) : null
+      const formattedWhatsapp = whatsappLocal ? `${whatsappDial}${sanitizeLocalWhatsappInput(whatsappLocal)}` : null
       const result = await upsertUserProfile({
         id: userId,
         email: effectiveEmail,
@@ -1648,22 +1670,22 @@ function EditProfileView({
         {/* WhatsApp — único input */}
         <label className="text-sm font-medium text-[#14212e]">
           WhatsApp (privado)
-          <div className="mt-1 flex items-stretch">
-            <span className="inline-flex items-center rounded-l-lg border border-[#14212e]/10 border-r-0 bg-[#14212e]/5 px-3 text-sm text-[#14212e]/80">
-              +54
-            </span>
+          <div className="mt-1 flex items-stretch gap-2">
+            <select className="select basis-1/4 sm:w-[8.5rem]" value={whatsappDial} onChange={(e) => setWhatsappDial(e.target.value)}>
+              {COUNTRY_CODES.map((c) => (
+                <option key={c.cc} value={c.dial}>{`${c.flag} +${c.dial}`}</option>
+              ))}
+            </select>
             <input
-              className="input mt-0 rounded-l-none"
+              className="input basis-3/4 sm:flex-1"
               inputMode="numeric"
               pattern="[0-9]*"
               value={whatsappLocal}
-              onChange={(e) => setWhatsappLocal(sanitizeLocalWhatsappInput(e.target.value))}
-              placeholder="91122334455"
+              onChange={(e) => { setWhatsappLocal(sanitizeLocalWhatsappInput(e.target.value)); setWhatsappEdited(true) }}
+              placeholder="11 1234 5678"
             />
           </div>
-          <span className="text-xs text-[#14212e]/60">
-            Ingresá tu número local sin el +54. Lo usamos para autocompletar tus publicaciones con botón de WhatsApp.
-          </span>
+          <span className="text-xs text-[#14212e]/60">Elegí el prefijo y escribí tu número sin el signo +.</span>
         </label>
 
         {error && <p className="text-sm text-red-600">{error}</p>}

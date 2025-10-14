@@ -1,4 +1,4 @@
-export type Category = 'Ruta'|'MTB'|'Gravel'|'Urbana'|'Accesorios'|'E-Bike'|'Niños'|'Pista'|'Triatlón'|'Indumentaria'
+export type Category = 'Ruta'|'MTB'|'Gravel'|'Urbana'|'Fixie'|'Accesorios'|'E-Bike'|'Niños'|'Pista'|'Triatlón'|'Indumentaria'
 
 export type SellerPlan = 'basic' | 'premium' | 'featured' | 'pro'
 

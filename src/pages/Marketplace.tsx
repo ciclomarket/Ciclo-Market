@@ -11,7 +11,7 @@ import type { Listing } from '../types'
 import { hasPaidPlan } from '../utils/plans'
 import AnalyticsTag from '../components/AnalyticsTag'
 
-type Cat = 'Todos' | 'Ruta' | 'MTB' | 'Gravel' | 'Urbana' | 'Accesorios' | 'Indumentaria' | 'E-Bike' | 'Niños' | 'Pista' | 'Triatlón'
+type Cat = 'Todos' | 'Ruta' | 'MTB' | 'Gravel' | 'Urbana' | 'Fixie' | 'Accesorios' | 'Indumentaria' | 'E-Bike' | 'Niños' | 'Pista' | 'Triatlón'
 type FiltersState = {
   cat?: Cat
   brand?: string
@@ -19,7 +19,7 @@ type FiltersState = {
   q?: string
 }
 
-const CAT_VALUES: Cat[] = ['Todos','Ruta','MTB','Gravel','Urbana','Accesorios','Indumentaria','E-Bike','Niños','Pista','Triatlón']
+const CAT_VALUES: Cat[] = ['Todos','Ruta','MTB','Gravel','Urbana','Fixie','Accesorios','Indumentaria','E-Bike','Niños','Pista','Triatlón']
 
 const FILTER_PARAM_KEYS: Array<keyof FiltersState> = ['cat','brand','deal']
 
@@ -177,32 +177,34 @@ export default function Marketplace() {
         <div className="absolute inset-0 bg-[radial-gradient(980px_540px_at_120%_0%,rgba(20,33,46,0.26),transparent_78%)] opacity-80" />
         <div className="relative">
           <Container>
-            <div className="grid items-center gap-12 py-16 lg:grid-cols-[3fr,2fr] lg:py-20">
-              <div className="space-y-6">
-                <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs uppercase tracking-[0.4em] text-white/70">
-                  Marketplace vivo
-                </span>
-                <h1 className="text-3xl font-extrabold leading-tight md:text-4xl">
-                  Las bicicletas se reinventan, y vos también.
-                </h1>
-                <p className="max-w-2xl text-lg text-white/85">
-                  Vendé tu bici, sumá a alguien más a la ruta y aprovechá ese valor para ir por tu próximo sueño. Acá encontrás modelos inspeccionados, soporte en logística y pagos asegurados para que el cambio sea fácil.
-                </p>
-                <div className="flex flex-wrap gap-3">
-                  <Link
-                    to="/publicar"
-                    className="btn bg-white text-[#14212e] shadow-lg ring-white/30 hover:bg-white/90"
-                  >
-                    Publicar mi bicicleta
-                  </Link>
-                  <a
-                    href="#listings"
-                    className="btn border border-white/30 bg-transparent text-white hover:bg-white/10"
-                  >
-                    Ver bicicletas disponibles
-                  </a>
-                </div>
+            <div className="relative mx-auto max-w-4xl py-10 md:py-14 text-center">
+              <span className="inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.4em] text-white/70">
+                Marketplace vivo
+              </span>
+              <h1 className="mt-5 text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl md:text-5xl">
+                Las bicicletas se reinventan, vos también.
+              </h1>
+              <p className="mt-3 mx-auto max-w-2xl text-base md:text-lg text-white/80">
+                Filtrá por disciplina, marca o presupuesto. Vendé en minutos y conectá directo con compradores verificados.
+              </p>
+              <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+                <Link
+                  to="/publicar"
+                  className="btn bg-gradient-to-r from-[#0ea5e9] via-[#2563eb] to-[#1d4ed8] text-white shadow-[0_14px_40px_rgba(37,99,235,0.45)] hover:brightness-110"
+                >
+                  <span>Publicar bicicleta</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14m-6-6 6 6-6 6" />
+                  </svg>
+                </Link>
+                <a href="#listings" className="btn bg-[#14212e] text-white shadow-[0_14px_40px_rgba(20,33,46,0.35)] hover:bg-[#1b2f3f]">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m17.5 17.5-4-4m1-3.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0Z" />
+                  </svg>
+                  <span>Explorar bicicletas</span>
+                </a>
               </div>
+              <div className="pointer-events-none absolute inset-x-0 -bottom-6 mx-auto h-px max-w-3xl bg-gradient-to-r from-transparent via-white/40 to-transparent" />
             </div>
           </Container>
         </div>
@@ -218,7 +220,7 @@ export default function Marketplace() {
               </div>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
                 <div className="flex flex-wrap gap-2">
-                  {['Todos','Ruta','MTB','Gravel','Urbana','Accesorios','Indumentaria','E-Bike','Niños','Pista','Triatlón'].map((cat) => (
+                  {['Todos','Ruta','MTB','Gravel','Urbana','Fixie','Accesorios','Indumentaria','E-Bike','Niños','Pista','Triatlón'].map((cat) => (
                     <button
                       key={cat}
                       onClick={() => handleCategory(cat as Cat)}

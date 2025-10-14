@@ -1,4 +1,4 @@
-export const BIKE_CATEGORIES = ['Ruta','MTB','Gravel','Urbana','E-Bike','Niños','Pista','Triatlón'] as const
+export const BIKE_CATEGORIES = ['Ruta','MTB','Gravel','Urbana','Fixie','E-Bike','Niños','Pista','Triatlón'] as const
 
 export const FRAME_SIZES = ['','XS','S','M','L','XL','XXL','48','50','52','54','56','58','Niños','Talle único'] as const
 

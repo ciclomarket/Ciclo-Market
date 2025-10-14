@@ -73,13 +73,17 @@ const normalizePlan = (row: PlanRow): Plan => {
     mapped.listingDurationDays = 15
     mapped.maxListings = 1
     mapped.whatsappEnabled = false
-    if (!mapped.description) {
-      mapped.description = 'Publicá gratis por 15 días. Hasta 4 fotos, consultas públicas y contacto por email.'
-    }
+    mapped.description = 'Excelente opción para comenzar a vender de forma rápida y segura.'
   }
   if (code === 'basic' || code === 'premium') {
     // 0 = ilimitadas
     mapped.maxListings = 0
+  }
+  if (code === 'basic') {
+    mapped.description = 'Aprovechá nuestros servicios de destaque y contacto directo.'
+  }
+  if (code === 'premium') {
+    mapped.description = 'Llegá a más clientes apareciendo en redes y anuncios.'
   }
   return mapped
 }
@@ -98,7 +102,7 @@ export const FALLBACK_PLANS: Plan[] = [
     featuredDays: 0,
     whatsappEnabled: false,
     socialBoost: false,
-    description: 'Publicá gratis por 15 días. Hasta 4 fotos, consultas públicas y contacto por email.'
+    description: 'Excelente opción para comenzar a vender de forma rápida y segura.'
   },
   {
     id: 'basic',
@@ -113,7 +117,7 @@ export const FALLBACK_PLANS: Plan[] = [
     featuredDays: 7,
     whatsappEnabled: true,
     socialBoost: false,
-    description: '60 días online, consultas públicas y contacto directo por WhatsApp.'
+    description: 'Aprovechá nuestros servicios de destaque y contacto directo.'
   },
   {
     id: 'premium',
@@ -128,7 +132,7 @@ export const FALLBACK_PLANS: Plan[] = [
     featuredDays: 14,
     whatsappEnabled: true,
     socialBoost: true,
-    description: 'Publicación en Instagram y Facebook, consultas públicas y contacto por WhatsApp.'
+    description: 'Llegá a más clientes apareciendo en redes y anuncios.'
   }
 ]
 

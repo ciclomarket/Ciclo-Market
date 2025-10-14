@@ -484,16 +484,23 @@ export default function Plans() {
                 : 'Sin destaque en portada'
             )
             features.push(plan.whatsappEnabled ? 'WhatsApp directo habilitado' : 'Sin WhatsApp (contacto por email)')
-            features.push(`Duración ${listingDuration} días`)
+            if (planCode !== 'free') {
+              features.push(`Duración ${listingDuration} días`)
+            }
             if (typeof plan.maxListings === 'number') {
               if (plan.maxListings > 0) {
-                features.push(`Hasta ${plan.maxListings} publicación${plan.maxListings === 1 ? '' : 'es'} activas`)
+                const plural = plan.maxListings === 1 ? '' : 'es'
+                const activPlural = plan.maxListings === 1 ? 'a' : 'as'
+                features.push(`Hasta ${plan.maxListings} publicación${plural} activ${activPlural}`)
               } else {
                 features.push('Publicaciones ilimitadas')
               }
             }
             if (plan.socialBoost) features.push('Publicación en Instagram y Facebook')
-            if (plan.description) features.push(plan.description)
+            // Cierre descriptivo por plan
+            if (planCode === 'free') features.push('Publicá gratis por 15 días. Hasta 4 fotos, contacto por email')
+            if (planCode === 'basic') features.push('60 días online, y contacto directo por WhatsApp')
+            if (planCode === 'premium') features.push('Difusión en redes y contacto por WhatsApp')
 
             const isRecommended = planCode === 'basic'
 
@@ -518,11 +525,9 @@ export default function Plans() {
                     </p>
                   </div>
 
-                  {planCode !== 'free' && (
-                    <div>
-                      <span className="text-3xl font-bold">{priceLabel}</span>
-                    </div>
-                  )}
+                  <div>
+                    <span className="text-3xl font-bold">{priceLabel}</span>
+                  </div>
 
                   {plan.description && (
                     <p className="text-sm text-white/70">{plan.description}</p>

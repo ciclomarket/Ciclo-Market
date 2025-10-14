@@ -28,10 +28,8 @@ export default function HorizontalSlider({
   const maxToShow = Math.min(maxItems, items?.length || 0);
   const [count, setCount] = useState(Math.min(initialLoad, maxToShow));
   const viewportRef = useRef<HTMLDivElement>(null);
-  const titleClass =
-    tone === "dark" ? "text-white" : "text-[#14212e]";
-  const subtitleClass =
-    tone === "dark" ? "text-white/70" : "text-[#14212e]/70";
+  const titleClass = tone === "dark" ? "text-white" : "text-[#14212e]";
+  const subtitleClass = tone === "dark" ? "text-white/70" : "text-[#14212e]/70";
   const arrowClass =
     tone === "dark"
       ? "border-white/30 bg-white/10 text-white hover:bg-white/20"
@@ -83,9 +81,10 @@ export default function HorizontalSlider({
   if (!items || items.length === 0) {
     return (
       <div>
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className={`text-xl font-semibold ${titleClass}`}>{title}</h2>
-          {subtitle && <span className={`text-sm ${subtitleClass}`}>{subtitle}</span>}
+        <div className="mb-6">
+          <h2 className={`text-2xl font-extrabold tracking-tight ${titleClass}`}>{title}</h2>
+          {subtitle && <p className={`mt-1 text-sm ${subtitleClass}`}>{subtitle}</p>}
+          <div className="mt-2 h-px max-w-[160px] bg-gradient-to-r from-transparent via-white/40 to-transparent" />
         </div>
         <div className={`text-sm ${subtitleClass}`}>No hay elementos.</div>
       </div>
@@ -94,9 +93,10 @@ export default function HorizontalSlider({
 
   return (
     <div className="relative">
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className={`text-xl font-semibold ${titleClass}`}>{title}</h2>
-        {subtitle && <span className={`text-sm ${subtitleClass}`}>{subtitle}</span>}
+      <div className="mb-6">
+        <h2 className={`text-2xl font-extrabold tracking-tight ${titleClass}`}>{title}</h2>
+        {subtitle && <p className={`mt-1 text-sm ${subtitleClass}`}>{subtitle}</p>}
+        <div className="mt-2 h-px max-w-[160px] bg-gradient-to-r from-transparent via-white/40 to-transparent" />
       </div>
 
       {/* viewport */}

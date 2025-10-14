@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 
-const CATS = ['Todos','Ruta','MTB','Gravel','Urbana','Accesorios','E-Bike','Niños','Pista','Triatlón'] as const
+const CATS = ['Todos','Ruta','MTB','Gravel','Urbana','Fixie','Accesorios','E-Bike','Niños','Pista','Triatlón'] as const
 type Cat = typeof CATS[number]
 
 export interface FiltersState { q: string; cat: Cat; maxPrice?: number; location?: string }

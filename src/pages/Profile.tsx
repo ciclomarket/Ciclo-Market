@@ -329,9 +329,9 @@ export default function Profile() {
                     <ProfileStat label="Publicaciones activas" value={activeListings.length} trend="Visibles en el marketplace" />
                     <ProfileStat label="Todas las publicaciones" value={totalListings} trend="Historial desde que se unió" />
                     <ProfileStat
-                      label="Perfil de Strava"
-                      value={stravaProfileUrl ? 'Conectado' : 'No conectado'}
-                      trend={stravaProfileUrl ? 'Comparte sus rutas con la comunidad.' : 'Todavía no vinculó su actividad.'}
+                      label="Señales de confianza"
+                      value={profile?.verified ? 'Vendedor verificado' : 'Perfil en construcción'}
+                      trend={`Antigüedad: ${profile?.created_at ? new Intl.DateTimeFormat('es-AR', { year: 'numeric', month: 'short' }).format(new Date(profile.created_at)) : '—'} • ${profile?.whatsapp_number ? 'WhatsApp cargado' : 'Sin WhatsApp'}`}
                     />
                   </div>
 
