@@ -134,16 +134,18 @@ app.get(['/share/listing/:id', '/listing/:id'], async (req, res) => {
       const trimmed = String(ogImage)
       ogImage = `${baseFront}${trimmed.startsWith('/') ? '' : '/'}${trimmed}`
     }
-    // Forzar formato JPG y tamaño estándar si es posible (ej. Supabase Storage transformations)
+    // Si es una URL pública de Supabase Storage, usar el endpoint de render para imagen transformada (ancho 1200, jpg)
     try {
       const u = new URL(ogImage)
-      // Si es Supabase storage (o ruta de storage pública), agregamos transform
-      if (/supabase\.co\/storage\/v1\/object\/public/i.test(u.href) || /\/storage\/v1\/object\/public\//i.test(u.pathname)) {
-        // Evitar duplicar parámetros si ya existen
-        if (!u.searchParams.has('format')) u.searchParams.set('format', 'jpg')
-        if (!u.searchParams.has('width')) u.searchParams.set('width', '1200')
-        if (!u.searchParams.has('quality')) u.searchParams.set('quality', '85')
-        ogImage = u.toString()
+      const isSupabaseObject = /\/storage\/v1\/object\/public\//i.test(u.pathname)
+      if (isSupabaseObject) {
+        // Construir la ruta equivalente en render/image/public
+        const renderPath = u.pathname.replace('/storage/v1/object/public/', '/storage/v1/render/image/public/')
+        const renderUrl = new URL(u.origin + renderPath)
+        renderUrl.searchParams.set('width', '1200')
+        renderUrl.searchParams.set('format', 'jpg')
+        renderUrl.searchParams.set('quality', '85')
+        ogImage = renderUrl.toString()
       }
     } catch {}
 

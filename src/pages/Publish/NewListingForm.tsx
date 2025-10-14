@@ -1337,6 +1337,9 @@ export default function NewListingForm() {
               onChange={(e) => handleFiles(e.target.files)}
               className={!photosEnabled ? 'opacity-50 cursor-not-allowed' : ''}
             />
+            <p className="text-xs text-black/50">
+              Recomendamos subir imágenes JPG o PNG. Convertimos automáticamente fotos HEIC/HEIF a JPG para asegurar compatibilidad en las previsualizaciones (WhatsApp/Facebook). La primera foto será la imagen principal al compartir.
+            </p>
             {!photosEnabled && (
               <p className="text-xs text-black/50">
                 {isAccessory
