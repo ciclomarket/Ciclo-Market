@@ -40,7 +40,7 @@ services:
       - key: NEWSLETTER_DIGEST_TZ
         value: America/Argentina/Buenos_Aires
       - key: NEWSLETTER_DIGEST_CRON
-        value: "33 20 * * 2" # martes 20:33
+        value: "0 21 * * 2" # martes 21:00
 
       # Optional
       - key: SHARE_FALLBACK_IMAGE
