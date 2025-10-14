@@ -166,6 +166,8 @@ app.get(['/share/listing/:id', '/listing/:id'], async (req, res) => {
 <meta property="og:description" content="${escapeHtml(desc)}" />
 <meta property="og:image" content="${ogImage}" />
 <meta property="og:image:secure_url" content="${ogImage}" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
 <meta property="og:url" content="${canonicalUrl}" />
 <meta property="og:type" content="product" />
 <meta property="product:price:amount" content="${listing.price || ''}" />

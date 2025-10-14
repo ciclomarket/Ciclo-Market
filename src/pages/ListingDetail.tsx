@@ -177,7 +177,10 @@ export default function ListingDetail() {
   const resolvedShareOrigin = (shareBase || frontendOrigin || '').replace(/\/$/, '')
   // Para previews OG en WhatsApp/Facebook, usamos siempre el ID en el endpoint del backend
   const shareId = listing.id
-  const shareUrl = resolvedShareOrigin ? `${resolvedShareOrigin}/share/listing/${shareId}` : canonicalUrl
+  const cacheBust = listing.createdAt ? String(listing.createdAt) : String(Date.now())
+  const shareUrl = resolvedShareOrigin
+    ? `${resolvedShareOrigin}/share/listing/${shareId}?v=${encodeURIComponent(cacheBust)}`
+    : `${canonicalUrl}?v=${encodeURIComponent(cacheBust)}`
   const sellerPreferredLink =
     sellerProfile?.website_url ??
     (listing as any)?.sellerLink ??
