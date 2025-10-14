@@ -34,6 +34,13 @@ services:
         value: "72"         # buscar publicaciones que vencen en 72h
       - key: RENEWAL_REMINDER_COOLDOWN_HOURS
         value: "24"         # no reenviar dentro de 24h
+      # Newsletter digest (últimos ingresos)
+      - key: NEWSLETTER_DIGEST_ENABLED
+        value: "true"
+      - key: NEWSLETTER_DIGEST_TZ
+        value: America/Argentina/Buenos_Aires
+      - key: NEWSLETTER_DIGEST_CRON
+        value: "33 20 * * 2" # martes 20:33
 
       # Optional
       - key: SHARE_FALLBACK_IMAGE

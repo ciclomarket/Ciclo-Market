@@ -15,6 +15,9 @@ const { getServerSupabaseClient } = require('./lib/supabaseClient')
 const { startRenewalNotificationJob } = (() => {
   try { return require('./jobs/renewalNotifier') } catch { return {} }
 })()
+const { startNewsletterDigestJob } = (() => {
+  try { return require('./jobs/newsletterDigest') } catch { return {} }
+})()
 const path = require('path')
 
 const app = express()
@@ -1230,6 +1233,114 @@ app.post('/api/newsletter/subscribe', async (req, res) => {
   }
 })
 
+/* ----------------------------- Newsletter: send latest -------------------- */
+// Admin-triggered endpoint: env CRON_SECRET as simple auth (header: x-cron-secret)
+// Sends an email to the configured Resend audience with the latest 3 listings
+app.post('/api/newsletter/send-latest', async (req, res) => {
+  try {
+    const secret = String(req.headers['x-cron-secret'] || '')
+    if (!secret || secret !== String(process.env.CRON_SECRET || '')) {
+      return res.status(401).json({ ok: false, error: 'unauthorized' })
+    }
+
+    const apiKey = process.env.RESEND_API_KEY
+    const audienceId = process.env.RESEND_AUDIENCE_GENERAL_ID
+    if (!apiKey || !audienceId) {
+      return res.status(503).json({ ok: false, error: 'newsletter_not_configured' })
+    }
+
+    const supabase = getServerSupabaseClient()
+    const { data: items, error } = await supabase
+      .from('listings')
+      .select('id,title,slug,price,price_currency,images,category,created_at')
+      .eq('status', 'active')
+      .order('created_at', { ascending: false })
+      .limit(3)
+    if (error) return res.status(500).json({ ok: false, error: 'fetch_failed' })
+
+    const baseFront = (process.env.FRONTEND_URL || '').split(',')[0]?.trim() || 'https://ciclomarket.ar'
+    const cards = (items || []).map((l) => {
+      const image = Array.isArray(l.images) && l.images[0] ? (typeof l.images[0] === 'string' ? l.images[0] : l.images[0]?.url) : null
+      const link = `${baseFront}/listing/${encodeURIComponent(l.slug || l.id)}`
+      const priceLabel = (() => {
+        try {
+          return new Intl.NumberFormat(l.price_currency === 'ARS' ? 'es-AR' : 'en-US', {
+            style: 'currency',
+            currency: l.price_currency || 'USD',
+            maximumFractionDigits: 0,
+          }).format(l.price)
+        } catch { return `${l.price_currency || 'USD'} ${l.price}` }
+      })()
+      return { title: l.title, image, link, priceLabel }
+    })
+
+    // Build minimal HTML email
+    const style = `
+      .card{border:1px solid #e5e7eb;border-radius:14px;overflow:hidden}
+      .btn{display:inline-block;padding:10px 16px;border-radius:10px;background:#14212e;color:#fff;text-decoration:none}
+      .grid{display:grid;gap:12px}
+      @media(min-width:640px){.grid{grid-template-columns:repeat(3,1fr)}}
+    `
+    const cardHtml = cards.map(c => `
+      <div class="card">
+        ${c.image ? `<img src="${c.image}" alt="${escapeHtml(c.title)}" style="width:100%;height:180px;object-fit:cover" />` : ''}
+        <div style="padding:12px">
+          <div style="font-weight:600;color:#0c1723;">${escapeHtml(c.title)}</div>
+          <div style="color:#475569;margin:6px 0 10px">${c.priceLabel}</div>
+          <a class="btn" href="${c.link}">Ver publicación</a>
+        </div>
+      </div>
+    `).join('')
+
+    const html = `
+      <div style="font-family:Inter,Arial,sans-serif;line-height:1.5;color:#14212e">
+        <h2 style="margin:0 0 6px">Nuevos ingresos en Ciclo Market</h2>
+        <p style="margin:0 0 16px;color:#475569">Te compartimos las últimas publicaciones destacadas.</p>
+        <div class="grid">${cardHtml}</div>
+        <p style="margin:18px 0 0;color:#6b7280;font-size:12px">Recibís este correo por estar suscripto a nuestras novedades.</p>
+      </div>
+      <style>${style}</style>
+    `
+    const text = [
+      'Nuevos ingresos en Ciclo Market',
+      ...cards.map(c => `- ${c.title} · ${c.priceLabel}: ${c.link}`)
+    ].join('\n')
+
+    // Fetch audience contacts
+    const listRes = await fetch(`https://api.resend.com/audiences/${encodeURIComponent(audienceId)}/contacts`, {
+      headers: { Authorization: `Bearer ${apiKey}` }
+    })
+    const listData = await listRes.json().catch(() => ({}))
+    if (!listRes.ok) {
+      return res.status(502).json({ ok: false, error: listData?.error?.message || 'audience_fetch_failed' })
+    }
+    const contacts = Array.isArray(listData.data || listData.contacts) ? (listData.data || listData.contacts) : []
+    const recipients = contacts.filter((c) => c && c.email && !c.unsubscribed).map((c) => c.email)
+    if (recipients.length === 0) return res.json({ ok: true, sent: 0 })
+
+    const from = process.env.SMTP_FROM || `Ciclo Market <${process.env.SMTP_USER || 'no-reply@ciclomarket.ar'}>`
+    const subject = 'Nuevos ingresos de la semana · Ciclo Market'
+
+    // Chunk send to avoid long "to" lists (e.g. 50 per chunk)
+    const size = 50
+    let sent = 0
+    for (let i = 0; i < recipients.length; i += size) {
+      const toChunk = recipients.slice(i, i + size)
+      const resp = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from, to: toChunk, subject, html, text })
+      })
+      if (resp.ok) sent += toChunk.length
+    }
+
+    return res.json({ ok: true, sent })
+  } catch (err) {
+    console.error('[newsletter] send-latest failed', err)
+    return res.status(500).json({ ok: false, error: 'unexpected_error' })
+  }
+})
+
 /* ----------------------------- Mercado Pago -------------------------------- */
 const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN
 if (!accessToken) {
@@ -1385,6 +1496,15 @@ app.listen(PORT, '0.0.0.0', () => {
     }
   } else {
     console.info('[renewalNotifier] disabled (RENEWAL_NOTIFIER_ENABLED != "true")')
+  }
+  if (process.env.NEWSLETTER_DIGEST_ENABLED === 'true') {
+    try {
+      startNewsletterDigestJob()
+    } catch (err) {
+      console.warn('[newsletterDigest] not started:', err?.message || err)
+    }
+  } else {
+    console.info('[newsletterDigest] disabled (NEWSLETTER_DIGEST_ENABLED != "true")')
   }
 })
 /* ----------------------------- Auth helper -------------------------------- */
