@@ -1299,13 +1299,7 @@ export default function NewListingForm() {
             {/* Precio, Provincia y Ciudad se muestran al final */}
             {whatsappEnabled && null}
 
-            {(!isAccessory && !isApparel) && (
-              <div className="grid sm:grid-cols-2 gap-4">
-                <Field label="Año (opcional)">
-                  <input className="input" type="number" value={year} onChange={(e) => setYear(e.target.value)} placeholder="2023" />
-                </Field>
-              </div>
-            )}
+            {(!isAccessory && !isApparel) && null}
 
             <Field label="Descripción">
               <textarea

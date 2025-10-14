@@ -265,7 +265,7 @@ export default function Home() {
               Comunidad ciclista
             </span>
             <h1 className="mt-5 text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl md:text-5xl">
-              Tu marketplace de bicicletas, simple y eficiente
+              El nuevo lugar para comprar y vender bicicletas en Argentina.
             </h1>
             <p className="mt-3 mx-auto max-w-2xl text-base md:text-lg text-white/80">
               Publicá en minutos, destacá tu aviso y conectá directo con compradores. Sin comisiones por venta.

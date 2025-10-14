@@ -2,22 +2,24 @@ import { useMemo, useEffect, Suspense, lazy } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import Header from './components/Header'
 import Footer from './components/Footer'
+import ErrorBoundary from './components/ErrorBoundary'
 import Home from './pages/Home'
-const Plans = lazy(() => import('./pages/Publish/Plans'))
-const NewListingForm = lazy(() => import('./pages/Publish/NewListingForm'))
-const ListingDetail = lazy(() => import('./pages/ListingDetail'))
-const HighlightListing = lazy(() => import('./pages/HighlightListing'))
-const Dashboard = lazy(() => import('./pages/Dashboard'))
-const Profile = lazy(() => import('./pages/Profile'))
-const Login = lazy(() => import('./pages/Auth/Login'))
-const Register = lazy(() => import('./pages/Auth/Register'))
-const VerifyEmail = lazy(() => import('./pages/Auth/VerifyEmail'))
-const Help = lazy(() => import('./pages/Help'))
-const HowToPublish = lazy(() => import('./pages/HowToPublish'))
-const OfficialStore = lazy(() => import('./pages/OfficialStore'))
-const FAQ = lazy(() => import('./pages/FAQ'))
-const Terms = lazy(() => import('./pages/Terms'))
-const Privacy = lazy(() => import('./pages/Privacy'))
+import { lazyWithRetry } from './utils/lazyWithRetry'
+const Plans = lazyWithRetry(() => import('./pages/Publish/Plans'))
+const NewListingForm = lazyWithRetry(() => import('./pages/Publish/NewListingForm'))
+const ListingDetail = lazyWithRetry(() => import('./pages/ListingDetail'))
+const HighlightListing = lazyWithRetry(() => import('./pages/HighlightListing'))
+const Dashboard = lazyWithRetry(() => import('./pages/Dashboard'))
+const Profile = lazyWithRetry(() => import('./pages/Profile'))
+const Login = lazyWithRetry(() => import('./pages/Auth/Login'))
+const Register = lazyWithRetry(() => import('./pages/Auth/Register'))
+const VerifyEmail = lazyWithRetry(() => import('./pages/Auth/VerifyEmail'))
+const Help = lazyWithRetry(() => import('./pages/Help'))
+const HowToPublish = lazyWithRetry(() => import('./pages/HowToPublish'))
+const OfficialStore = lazyWithRetry(() => import('./pages/OfficialStore'))
+const FAQ = lazyWithRetry(() => import('./pages/FAQ'))
+const Terms = lazyWithRetry(() => import('./pages/Terms'))
+const Privacy = lazyWithRetry(() => import('./pages/Privacy'))
 import { AuthProvider } from './context/AuthContext'
 import { CurrencyProvider } from './context/CurrencyContext'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -280,8 +282,9 @@ export default function App() {
                   <ScrollToTop />
 
                   <main className="flex-1">
-                    <Suspense fallback={<div className="py-10 text-center text-[#14212e]/70">Cargando…</div>}>
-                    <Routes>
+                    <ErrorBoundary>
+                      <Suspense fallback={<div className="py-10 text-center text-[#14212e]/70">Cargando…</div>}>
+                        <Routes>
                       {/* Home */}
                       <Route path="/" element={<Home />} />
 
@@ -347,8 +350,9 @@ export default function App() {
 
                       {/* Fallback */}
                       <Route path="*" element={<Navigate to="/" replace />} />
-                    </Routes>
-                    </Suspense>
+                        </Routes>
+                      </Suspense>
+                    </ErrorBoundary>
                   </main>
 
                   <CompareTray />

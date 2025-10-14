@@ -98,7 +98,7 @@ app.get(['/share/listing/:id', '/listing/:id'], async (req, res) => {
     const supabase = getServerSupabaseClient()
     const { data: listing, error } = await supabase
       .from('listings')
-      .select('id, title, price, price_currency, description, images, status')
+      .select('id, title, price, price_currency, description, images, status, frame_size, material, year, drivetrain, drivetrain_detail')
       .eq('id', id)
       .single()
 
@@ -129,6 +129,11 @@ app.get(['/share/listing/:id', '/listing/:id'], async (req, res) => {
       ogImage = typeof first === 'string' ? first : (first && first.url) || null
     }
     if (!ogImage) ogImage = fallbackImg
+    // Asegurar URL absoluta para OG
+    if (ogImage && !/^https?:\/\//i.test(ogImage)) {
+      const trimmed = String(ogImage)
+      ogImage = `${baseFront}${trimmed.startsWith('/') ? '' : '/'}${trimmed}`
+    }
 
     // Título + precio
     let priceFmt = null
@@ -144,9 +149,14 @@ app.get(['/share/listing/:id', '/listing/:id'], async (req, res) => {
       }
     }
     const title = [listing.title, priceFmt].filter(Boolean).join(' · ')
-    const desc =
-      (listing.description || '').replace(/\s+/g, ' ').slice(0, 180) ||
-      'Mirá los detalles en Ciclo Market.'
+    // Descripción OG enfocada en specs clave
+    const specParts = []
+    if (listing.frame_size) specParts.push(`Talle: ${listing.frame_size}`)
+    if (listing.material) specParts.push(`Material: ${listing.material}`)
+    if (listing.year) specParts.push(`Año: ${listing.year}`)
+    const group = listing.drivetrain_detail || listing.drivetrain
+    if (group) specParts.push(`Grupo: ${group}`)
+    const desc = specParts.join(' · ') || 'Mirá los detalles en Ciclo Market.'
 
     const html = `<!doctype html><html lang="es"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -155,6 +165,7 @@ app.get(['/share/listing/:id', '/listing/:id'], async (req, res) => {
 <meta property="og:title" content="${escapeHtml(title)}" />
 <meta property="og:description" content="${escapeHtml(desc)}" />
 <meta property="og:image" content="${ogImage}" />
+<meta property="og:image:secure_url" content="${ogImage}" />
 <meta property="og:url" content="${canonicalUrl}" />
 <meta property="og:type" content="product" />
 <meta property="product:price:amount" content="${listing.price || ''}" />

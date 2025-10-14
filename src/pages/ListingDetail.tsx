@@ -13,10 +13,9 @@ import { fetchListing, updateListingPlan, deleteListing } from '../services/list
 import { supabaseEnabled, getSupabaseClient } from '../services/supabase'
 import type { Listing } from '../types'
 import { formatNameWithInitial } from '../utils/user'
-import { normaliseWhatsapp, extractLocalWhatsapp, sanitizeLocalWhatsappInput, buildWhatsappUrl } from '../utils/whatsapp'
+import { normaliseWhatsapp, buildWhatsappUrl } from '../utils/whatsapp'
 import { useAuth } from '../context/AuthContext'
 import { fetchUserProfile, fetchUserContactEmail, setUserVerificationStatus, type UserProfileRecord } from '../services/users'
-import { sendOfferEmail } from '../services/offers'
 import { logContactEvent, fetchSellerReviews } from '../services/reviews'
 import SEO from '../components/SEO'
 import { useToast } from '../context/ToastContext'
@@ -33,11 +32,7 @@ export default function ListingDetail() {
   const { show: showToast } = useToast()
   const [listing, setListing] = useState<Listing | null>(null)
   const [loading, setLoading] = useState(true)
-  const [showOfferModal, setShowOfferModal] = useState(false)
-  const [offerAmount, setOfferAmount] = useState('')
-  const [offerWhatsappLocal, setOfferWhatsappLocal] = useState('')
-  const [offerSubmitting, setOfferSubmitting] = useState(false)
-  const [offerError, setOfferError] = useState<string | null>(null)
+  // Oferta deshabilitada
   const [shareModalOpen, setShareModalOpen] = useState(false)
   const [moderatorUpdating, setModeratorUpdating] = useState(false)
   const [sellerVerified, setSellerVerified] = useState(false)
@@ -164,19 +159,7 @@ export default function ListingDetail() {
     }
   }, [listing?.sellerId])
 
-  useEffect(() => {
-    if (!showOfferModal) return
-    if (offerWhatsappLocal) return
-    const meta = user?.user_metadata ?? {}
-    const candidate =
-      (typeof meta.whatsapp === 'string' && meta.whatsapp.trim()) ||
-      (typeof meta.phone === 'string' && meta.phone.trim()) ||
-      ''
-    if (candidate) {
-      const local = sanitizeLocalWhatsappInput(extractLocalWhatsapp(candidate))
-      if (local) setOfferWhatsappLocal(local)
-    }
-  }, [showOfferModal, offerWhatsappLocal, user?.user_metadata])
+  // Oferta deshabilitada
 
   if (loading) return <Container>Cargando publicación…</Container>
   if (!listing) return <Container>Publicación no encontrada.</Container>
@@ -314,99 +297,7 @@ export default function ListingDetail() {
     }
   }
 
-  const handleOfferSubmit = async () => {
-    if (!listing?.sellerId) return
-    if (!user) {
-      navigate('/login', {
-        state: { from: { pathname: `/listing/${listing.slug ?? listing.id}` } }
-      })
-      return
-    }
-    if (!offerAmount.trim()) {
-      setOfferError('Ingresá un monto válido.')
-      return
-    }
-    const numericAmount = Number(offerAmount)
-    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
-      setOfferError('El monto debe ser mayor a cero.')
-      return
-    }
-    const sanitizedWhatsapp = sanitizeLocalWhatsappInput(offerWhatsappLocal)
-    if (!sanitizedWhatsapp) {
-      setOfferError('Ingresá un número de WhatsApp para que el vendedor pueda contactarte.')
-      return
-    }
-    const buyerWhatsappDigits = normaliseWhatsapp(sanitizedWhatsapp)
-    if (!buyerWhatsappDigits) {
-      setOfferError('Ingresá un número de WhatsApp válido.')
-      return
-    }
-    const buyerWhatsappLink = `https://wa.me/${buyerWhatsappDigits}`
-    setOfferSubmitting(true)
-    setOfferError(null)
-    try {
-      const currency = listing.priceCurrency ?? 'USD'
-      const amountLabel = new Intl.NumberFormat(currency === 'USD' ? 'en-US' : 'es-AR', {
-        style: 'currency',
-        currency,
-        maximumFractionDigits: 0
-      }).format(numericAmount)
-
-      const sellerEmail = sellerAuthEmail || sellerProfile?.email || listing.sellerEmail || null
-      const notices: string[] = []
-
-      if (sellerEmail) {
-        const buyerMetadata = user.user_metadata ?? {}
-        const buyerName =
-          (typeof buyerMetadata.full_name === 'string' && buyerMetadata.full_name.trim()) ||
-          (typeof buyerMetadata.name === 'string' && buyerMetadata.name.trim()) ||
-          user.email ||
-          null
-        const listingUrl = canonicalUrl
-        try {
-          await sendOfferEmail({
-            sellerEmail,
-            sellerName: listing.sellerName ?? sellerProfile?.full_name ?? null,
-            listingTitle: listing.title,
-            listingUrl,
-            amountLabel,
-            buyerName,
-            buyerEmail: user.email ?? null,
-            buyerWhatsapp: `+${buyerWhatsappDigits}`
-          })
-          notices.push('Avisamos al vendedor por correo electrónico.')
-        } catch (notifyError) {
-          console.warn('[listing-detail] offer email failed', notifyError)
-          notices.push('No pudimos enviar el correo al vendedor. Intentá nuevamente más tarde.')
-        }
-      }
-
-      if (sellerWhatsappNumber) {
-        const whatsappMessage = `Hola ${formatNameWithInitial(listing.sellerName, undefined)}. Quisiera ofrecerte ${amountLabel} por tu bicicleta ${listing.title}. Podés escribirme por WhatsApp acá: ${buyerWhatsappLink}`
-        const whatsappUrl = buildWhatsappUrl(sellerWhatsappNumber, whatsappMessage)
-        if (whatsappUrl) {
-          window.open(whatsappUrl, '_blank', 'noopener,noreferrer')
-          notices.push('Abrimos WhatsApp para que puedas enviar tu oferta.')
-        } else {
-          notices.push('No pudimos abrir WhatsApp automáticamente. Verificá el número del vendedor.')
-        }
-      } else {
-        notices.push('El vendedor no tiene WhatsApp configurado, pero recibirá tu oferta por correo.')
-      }
-
-      setShowOfferModal(false)
-      setOfferAmount('')
-      setOfferError(null)
-      setOfferWhatsappLocal(sanitizedWhatsapp)
-      // Aviso de éxito
-      showToast('Oferta enviada al vendedor')
-    } catch (error: any) {
-      console.error('[listing-detail] offer failed', error)
-      setOfferError(error?.message ?? 'No pudimos enviar la oferta. Intentá nuevamente.')
-    } finally {
-      setOfferSubmitting(false)
-    }
-  }
+  // Oferta deshabilitada
 
   const handleModeratorHighlight = async (plan: Listing['sellerPlan'] | null, durationDays: number | null) => {
     if (!listing) return
@@ -634,15 +525,7 @@ export default function ListingDetail() {
                   {isFeaturedListing && <p className="mt-1 text-[11px] text-[#14212e]/60">Publicación destacada en el marketplace.</p>}
                 </div>
                 <div className="space-y-3">
-                  {canSubmitOffer && (
-                    <button
-                      type="button"
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#14212e] px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-[#1b2f3f]"
-                      onClick={() => setShowOfferModal(true)}
-                    >
-                      Hacer oferta
-                    </button>
-                  )}
+                  {/* Botón de oferta removido */}
                   <ContactIcons />
                   {isOwner && (
                     <div className="pt-2 border-t border-[#14212e]/10">
@@ -657,9 +540,7 @@ export default function ListingDetail() {
                   {!canSubmitOffer && listingSold && (
                     <p className="text-xs font-semibold text-[#0f766e]">Esta publicación está marcada como vendida.</p>
                   )}
-                  {!canSubmitOffer && !listingSold && !isOwner && (
-                    <p className="text-xs text-[#14212e]/60">La publicación no está disponible para recibir ofertas en este momento.</p>
-                  )}
+                  {/* Mensaje de ofertas removido */}
                 </div>
                 <div className="mt-3 pt-3 border-t border-[#14212e]/10">
                   <p className="text-xs text-[#14212e]/60 uppercase tracking-wide">Compartir publicación</p>
@@ -705,11 +586,7 @@ export default function ListingDetail() {
                     </div>
                   )}
                 </div>
-                <p className="text-xs text-[#14212e]/60 lg:hidden">
-                  {verifiedVendor
-                    ? 'Vendedor verificado: tus ofertas generan alertas prioritarias por correo y notificaciones.'
-                    : 'Las ofertas se notifican por correo y en el panel del vendedor.'}
-                </p>
+                {/* Texto relacionado a ofertas removido en mobile */}
                 {isFeaturedListing && (
                   <p className="text-xs font-semibold text-[#14212e] lg:hidden">
                     Esta publicación está destacada con prioridad en la sección de destacados.
@@ -847,27 +724,7 @@ export default function ListingDetail() {
         </div>
         </Container>
       </div>
-      {showOfferModal && (
-        <OfferModal
-          amount={offerAmount}
-          onChange={(value) => {
-            setOfferAmount(value)
-            if (offerError) setOfferError(null)
-          }}
-          whatsapp={offerWhatsappLocal}
-          onWhatsappChange={(value) => {
-            setOfferWhatsappLocal(value)
-            if (offerError) setOfferError(null)
-          }}
-          onSubmit={handleOfferSubmit}
-          onClose={() => {
-            setShowOfferModal(false)
-            setOfferError(null)
-          }}
-          loading={offerSubmitting}
-          error={offerError}
-        />
-      )}
+      {/* Modal de oferta removido */}
       {shareModalOpen && listing && isOwner && (
         <ShareBoostModal
           listingId={listing.id}
@@ -879,78 +736,7 @@ export default function ListingDetail() {
   )
 }
 
-function OfferModal({
-  amount,
-  onChange,
-  whatsapp,
-  onWhatsappChange,
-  onSubmit,
-  onClose,
-  loading,
-  error
-}: {
-  amount: string
-  onChange: (value: string) => void
-  whatsapp: string
-  onWhatsappChange: (value: string) => void
-  onSubmit: () => Promise<void> | void
-  onClose: () => void
-  loading: boolean
-  error: string | null
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
-      <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-xl">
-        <div className="flex items-start justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-[#14212e]">Enviar oferta</h2>
-            <p className="text-sm text-[#14212e]/70">Indicá el monto que querés ofrecer al vendedor.</p>
-          </div>
-          <button type="button" onClick={onClose} aria-label="Cerrar">
-            ✕
-          </button>
-        </div>
-        <div className="mt-4 space-y-3">
-          <div>
-            <label className="text-sm font-medium text-[#14212e]">Monto ofertado</label>
-            <input
-              className="input mt-1"
-              type="number"
-              min={0}
-              value={amount}
-              onChange={(event) => onChange(event.target.value)}
-              placeholder="Ej.: 1200000"
-            />
-          </div>
-          <div>
-            <label className="text-sm font-medium text-[#14212e]">Tu WhatsApp</label>
-            <div className="mt-1 flex items-stretch">
-              <span className="inline-flex items-center rounded-l-lg border border-[#14212e]/10 border-r-0 bg-[#14212e]/5 px-3 text-sm text-[#14212e]/80">
-                +54
-              </span>
-              <input
-                className="input mt-0 rounded-l-none"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                value={whatsapp}
-                onChange={(event) => onWhatsappChange(sanitizeLocalWhatsappInput(event.target.value))}
-                placeholder="91122334455"
-              />
-            </div>
-            <p className="mt-1 text-xs text-[#14212e]/60">Compartiremos este número en el mensaje automático de WhatsApp.</p>
-          </div>
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={onClose} disabled={loading}>Cancelar</Button>
-            <Button onClick={() => void onSubmit()} disabled={loading || !amount.trim() || !whatsapp.trim()} className="bg-[#14212e] text-white hover:bg-[#1b2f3f]">
-              {loading ? 'Enviando…' : 'Enviar oferta'}
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
+// Modal de oferta eliminado
 
 function IconCircleButton({ label, icon, onClick, className, size = 'md' }: { label: string; icon: ReactNode; onClick: () => void; className?: string; size?: 'sm' | 'md' }) {
   const sizeClass = size === 'sm' ? 'h-8 w-8' : 'h-10 w-10'
