@@ -3,7 +3,7 @@ services:
     name: mundobike-api
     env: node
     plan: free
-    buildCommand: npm install
+    buildCommand: npm ci --omit=dev
     startCommand: npm run server
     autoDeploy: true
     envVars:
