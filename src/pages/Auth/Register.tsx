@@ -24,6 +24,7 @@ export default function Register() {
   const [cityOther, setCityOther] = useState('')
   const [bikePrefs, setBikePrefs] = useState<string[]>([])
   const [acceptedTerms, setAcceptedTerms] = useState(false)
+  const [newsletterOptIn, setNewsletterOptIn] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -96,6 +97,13 @@ export default function Register() {
           bikePreferences: bikePrefs,
           profileSlug,
         })
+        // Newsletter opt-in (Resend audience)
+        if (newsletterOptIn) {
+          try {
+            const { subscribeNewsletter } = await import('../../services/newsletter')
+            await subscribeNewsletter({ email: email.trim(), name: fullName.trim(), audienceId: 'e38e76f3-6904-443f-a1de-77a1e142440a' })
+          } catch {}
+        }
       }
 
       setSuccess(true)
@@ -399,6 +407,18 @@ export default function Register() {
                       términos y condiciones
                     </Link>
                     .
+                  </span>
+                </label>
+
+                <label className="flex items-start gap-2 rounded-xl border border-white/15 bg-white/5 px-3 py-3 text-sm text-white">
+                  <input
+                    type="checkbox"
+                    className="mt-1 accent-mb-primary"
+                    checked={newsletterOptIn}
+                    onChange={(e) => setNewsletterOptIn(e.target.checked)}
+                  />
+                  <span>
+                    Quiero recibir novedades por mail (ofertas y lanzamientos).
                   </span>
                 </label>
 

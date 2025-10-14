@@ -2,6 +2,7 @@ import { useMemo, useEffect, Suspense, lazy } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import Header from './components/Header'
 import Footer from './components/Footer'
+import Newsletter from './components/Newsletter'
 import ErrorBoundary from './components/ErrorBoundary'
 import Home from './pages/Home'
 import { lazyWithRetry } from './utils/lazyWithRetry'
@@ -49,7 +50,7 @@ function resolveSeoForPath(pathname: string): SEOProps {
       title: 'Marketplace de bicicletas en Argentina',
       description:
         'Comprá, vendé y compará bicicletas nuevas y usadas en Ciclo Market. Encontrá gravel, ruta, MTB y accesorios verificados con contacto directo al vendedor.',
-      image: '/bicicletas-home.jpg',
+      image: '/OG-Marketplace.png',
       keywords: [
         'marketplace bicicletas',
         'comprar bicicleta usada argentina',
@@ -70,7 +71,7 @@ function resolveSeoForPath(pathname: string): SEOProps {
       title: 'Comprar bicicletas nuevas y usadas',
       description:
         'Explorá cientos de bicicletas verificadas por tipo, talle, ubicación y rango de precio. Filtrá por gravel, ruta, MTB, e-bikes y accesorios para encontrar tu próxima bici.',
-      image: '/hero-market.jpg',
+      image: '/OG-Marketplace.png',
       keywords: [
         'comprar bicicletas argentina',
         'bicicletas usadas certificadas',
@@ -356,6 +357,7 @@ export default function App() {
                   </main>
 
                   <CompareTray />
+                  <Newsletter />
                   <Footer />
                 </div>
             </CompareProvider>

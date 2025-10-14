@@ -206,18 +206,44 @@ app.get(['/share/listing/:id', '/listing/:id'], async (req, res) => {
 
 /* ----------------------------- Users / Mail -------------------------------- */
 app.get('/api/users/:id/contact-email', async (req, res) => {
-  const userId = req.params.id
+  const userId = String(req.params.id || '')
   if (!userId) return res.status(400).json({ error: 'missing_user_id' })
+
+  const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)
+
   try {
     const supabase = getServerSupabaseClient()
-    const { data, error } = await supabase.auth.admin.getUserById(userId)
-    if (error) {
-      console.warn('[users] admin getUser failed', error)
-      return res.status(500).json({ error: 'lookup_failed' })
+
+    // 1) Si es UUID, usamos admin.getUserById (Auth)
+    if (isUUID) {
+      const { data, error } = await supabase.auth.admin.getUserById(userId)
+      if (error) {
+        console.warn('[users] admin getUser failed', error)
+      } else {
+        const email = data?.user?.email ?? null
+        if (email) return res.json({ email })
+      }
     }
-    const email = data?.user?.email ?? null
-    if (!email) return res.status(404).json({ error: 'email_not_found' })
-    return res.json({ email })
+
+    // 2) Fallback: buscar en la tabla de perfiles 'users'
+    // Permitimos buscar por id exacto o por profile_slug
+    {
+      const { data, error } = await supabase
+        .from('users')
+        .select('email')
+        .or(`id.eq.${userId},profile_slug.eq.${userId}`)
+        .maybeSingle()
+      if (!error && data?.email) {
+        return res.json({ email: data.email })
+      }
+    }
+
+    // 3) Si el parámetro ya es un email, lo devolvemos validado
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userId)) {
+      return res.json({ email: userId })
+    }
+
+    return res.status(404).json({ error: 'email_not_found' })
   } catch (err) {
     console.warn('[users] contact email lookup error', err)
     return res.status(500).json({ error: 'unexpected_error' })
@@ -1153,6 +1179,54 @@ app.post('/api/verification/request', async (req, res) => {
   } catch (err) {
     console.error('[verification] request failed', err)
     return res.status(500).json({ error: 'unexpected_error' })
+  }
+})
+
+/* ----------------------------- Newsletter (Resend Audience) --------------- */
+// Env required: RESEND_API_KEY, RESEND_AUDIENCE_GENERAL_ID
+app.post('/api/newsletter/subscribe', async (req, res) => {
+  try {
+    const apiKey = process.env.RESEND_API_KEY
+    const audienceId = process.env.RESEND_AUDIENCE_GENERAL_ID
+    if (!apiKey || !audienceId) {
+      return res.status(503).json({ ok: false, error: 'newsletter_not_configured' })
+    }
+    const { email, name, audienceId: overrideAudience, hp } = req.body || {}
+    // Honeypot: si viene relleno, ignorar silenciosamente
+    if (typeof hp === 'string' && hp.trim()) {
+      return res.json({ ok: true })
+    }
+    const trimmedEmail = typeof email === 'string' ? email.trim() : ''
+    if (!trimmedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      return res.status(400).json({ ok: false, error: 'invalid_email' })
+    }
+    const firstName = typeof name === 'string' ? name.trim() : ''
+    const audience = (typeof overrideAudience === 'string' && /[0-9a-fA-F-]{36}/.test(overrideAudience))
+      ? overrideAudience
+      : audienceId
+
+    const resp = await fetch(`https://api.resend.com/audiences/${encodeURIComponent(audience)}/contacts`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email: trimmedEmail,
+        first_name: firstName || undefined,
+        unsubscribed: false,
+      }),
+    })
+    const data = await resp.json().catch(() => ({}))
+    if (!resp.ok) {
+      const code = data?.error?.code || data?.name
+      const message = data?.error?.message || data?.message || 'resend_error'
+      return res.status(502).json({ ok: false, error: message, code })
+    }
+    return res.json({ ok: true })
+  } catch (err) {
+    console.error('[newsletter] subscribe failed', err)
+    return res.status(500).json({ ok: false, error: 'unexpected_error' })
   }
 })
 

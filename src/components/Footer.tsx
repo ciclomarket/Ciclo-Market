@@ -24,6 +24,7 @@ export default function Footer() {
               >
                 Publicar mi bici
               </Link>
+              {/* Newsletter destacado vive antes del footer */}
             </div>
 
             <div className="text-sm text-white/75">
