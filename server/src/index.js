@@ -134,6 +134,18 @@ app.get(['/share/listing/:id', '/listing/:id'], async (req, res) => {
       const trimmed = String(ogImage)
       ogImage = `${baseFront}${trimmed.startsWith('/') ? '' : '/'}${trimmed}`
     }
+    // Forzar formato JPG y tamaño estándar si es posible (ej. Supabase Storage transformations)
+    try {
+      const u = new URL(ogImage)
+      // Si es Supabase storage (o ruta de storage pública), agregamos transform
+      if (/supabase\.co\/storage\/v1\/object\/public/i.test(u.href) || /\/storage\/v1\/object\/public\//i.test(u.pathname)) {
+        // Evitar duplicar parámetros si ya existen
+        if (!u.searchParams.has('format')) u.searchParams.set('format', 'jpg')
+        if (!u.searchParams.has('width')) u.searchParams.set('width', '1200')
+        if (!u.searchParams.has('quality')) u.searchParams.set('quality', '85')
+        ogImage = u.toString()
+      }
+    } catch {}
 
     // Título + precio
     let priceFmt = null

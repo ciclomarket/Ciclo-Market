@@ -22,6 +22,20 @@ async function compressImage(file: File, opts: CompressOptions = {}): Promise<Fi
   const options = { ...DEFAULT_COMPRESS_OPTIONS, ...opts }
   if (file.size <= options.minSizeBytes) return file
 
+  // If HEIC/HEIF: attempt real conversion to JPEG using heic2any (loaded on demand)
+  if (/image\/(heic|heif)/i.test(file.type)) {
+    try {
+      const mod = await import('heic2any')
+      const heic2any = (mod as any).default || mod
+      const converted = (await heic2any({ blob: file, toType: 'image/jpeg', quality: options.quality })) as Blob
+      const name = file.name.replace(/\.(heic|heif)$/i, '.jpg')
+      return new File([converted], name, { type: 'image/jpeg' })
+    } catch (err) {
+      console.warn('[upload] HEIC→JPG conversion failed, using original file', err)
+      // continue with generic path (likely will fail to decode in <img>)
+    }
+  }
+
   const imageUrl = URL.createObjectURL(file)
   try {
     const image = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -50,7 +64,9 @@ async function compressImage(file: File, opts: CompressOptions = {}): Promise<Fi
 
     ctx.drawImage(image, 0, 0, targetWidth, targetHeight)
 
-    const mimeType = file.type === 'image/heic' ? 'image/jpeg' : file.type
+    // For better OG compatibility, convert HEIC/HEIF/WEBP to JPEG
+    const needsJpeg = /image\/(heic|heif|webp)/i.test(file.type)
+    const mimeType = needsJpeg ? 'image/jpeg' : file.type
 
     const blob = await new Promise<Blob | null>((resolve) =>
       canvas.toBlob(resolve, mimeType, options.quality)
@@ -61,7 +77,11 @@ async function compressImage(file: File, opts: CompressOptions = {}): Promise<Fi
     // If compression results in bigger file, keep original
     if (blob.size >= file.size) return file
 
-    const compressedFile = new File([blob], file.name, { type: blob.type })
+    const outName = /image\/(heic|heif|webp)/i.test(file.type)
+      ? file.name.replace(/\.(heic|heif|webp)$/i, '.jpg')
+      : file.name
+    const outType = /image\/(heic|heif|webp)/i.test(file.type) ? 'image/jpeg' : blob.type
+    const compressedFile = new File([blob], outName, { type: outType })
     return compressedFile
   } catch (err) {
     console.warn('Error compressing image, uploading original file instead', err)
