@@ -150,6 +150,7 @@ async function runDigestOnce() {
 
   const sent = await sendEmailToAudience({ apiKey, audienceId, from, subject, html, text })
   console.info('[newsletterDigest] sent to contacts:', sent)
+  return sent
 }
 
 function startNewsletterDigestJob() {
