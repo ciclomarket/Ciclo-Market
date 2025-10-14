@@ -9,7 +9,7 @@ services:
     envVars:
       # CORS: allowed frontends (comma-separated)
       - key: FRONTEND_URL
-        value: https://your-frontend.web.app,https://your-domain.com
+        value: https://ciclomarket.ar
 
       # Supabase server credentials
       - key: SUPABASE_URL
@@ -23,6 +23,17 @@ services:
         sync: false
       - key: SMTP_FROM
         value: Ciclo Market <notificaciones@your-domain.com>
+      # Renewal notifier (cron job to email sellers before expiry)
+      - key: RENEWAL_NOTIFIER_ENABLED
+        value: "true"
+      - key: RENEWAL_REMINDER_TZ
+        value: America/Argentina/Buenos_Aires
+      - key: RENEWAL_REMINDER_CRON
+        value: "0 * * * *"  # cada hora
+      - key: RENEWAL_REMINDER_WINDOW_HOURS
+        value: "72"         # buscar publicaciones que vencen en 72h
+      - key: RENEWAL_REMINDER_COOLDOWN_HOURS
+        value: "24"         # no reenviar dentro de 24h
 
       # Optional
       - key: SHARE_FALLBACK_IMAGE

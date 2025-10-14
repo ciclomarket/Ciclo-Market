@@ -56,12 +56,14 @@ export default function ListingCard({ l }: { l: Listing }) {
     metaParts = [sizeLabel, drivetrainLabel, city]
   }
   const metaDisplay = metaParts.filter(Boolean) as string[]
+  const now = Date.now()
+  const isExpired = (l.status === 'expired') || (typeof l.expiresAt === 'number' && l.expiresAt > 0 && l.expiresAt < now)
   const isSold = l.status === 'sold'
   const isArchived = l.status === 'archived'
-  const statusLabel = isSold ? 'Vendida' : isArchived ? 'Archivada' : null
-  const imageStatusClass = isArchived ? 'opacity-60 grayscale' : isSold ? 'opacity-85' : ''
-  const titleClass = isArchived ? 'line-clamp-1 font-semibold text-[#14212e]/50' : 'line-clamp-1 font-semibold text-[#14212e]'
-  const metaClass = isArchived ? 'mt-1 text-sm text-[#14212e]/50' : 'mt-1 text-sm text-[#14212e]/70'
+  const statusLabel = isSold ? 'Vendida' : isArchived ? 'Archivada' : isExpired ? 'Vencida' : null
+  const imageStatusClass = (isArchived || isExpired) ? 'opacity-60 grayscale' : isSold ? 'opacity-85' : ''
+  const titleClass = (isArchived || isExpired) ? 'line-clamp-1 font-semibold text-[#14212e]/50' : 'line-clamp-1 font-semibold text-[#14212e]'
+  const metaClass = (isArchived || isExpired) ? 'mt-1 text-sm text-[#14212e]/50' : 'mt-1 text-sm text-[#14212e]/70'
   return (
     <div className="relative h-full">
       <div className="absolute top-2 left-2 right-2 z-10 flex items-center justify-between gap-2">
@@ -83,7 +85,11 @@ export default function ListingCard({ l }: { l: Listing }) {
         </div>
         <div className="flex items-center gap-2">
           {statusLabel && (
-            <span className={`rounded-full px-3 py-1 text-xs font-semibold text-white shadow ${isSold ? 'bg-[#0f766e]' : 'bg-[#6b7280]'}`}>
+            <span
+              className={`rounded-full px-3 py-1 text-xs font-semibold text-white shadow ${
+                isSold ? 'bg-[#0f766e]' : isArchived ? 'bg-[#6b7280]' : 'bg-[#9ca3af]'
+              }`}
+            >
               {statusLabel}
             </span>
           )}

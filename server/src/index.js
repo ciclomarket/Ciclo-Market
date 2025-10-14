@@ -568,7 +568,7 @@ app.post('/api/dev/renewal-test/:id', async (req, res) => {
         <p>Hola ${profile.full_name || 'vendedor'},</p>
         <p>Tu aviso <strong>${listing.title}</strong> vence el <strong>${expiresLabel}</strong>.</p>
         <div style="margin:16px 0;">
-          <a href="${baseFront}/dashboard" style="display:inline-block;padding:10px 16px;background:#14212e;color:#fff;text-decoration:none;border-radius:8px;margin-right:8px;">Renovar publicación</a>
+          <a href="${baseFront}/dashboard?tab=Publicaciones" style="display:inline-block;padding:10px 16px;background:#14212e;color:#fff;text-decoration:none;border-radius:8px;margin-right:8px;">Renovar publicación</a>
           <a href="${highlightUrl}" style="display:inline-block;padding:10px 16px;background:#2563eb;color:#fff;text-decoration:none;border-radius:8px;">Destacar ahora</a>
         </div>
         <p>(Este es un correo de prueba enviado bajo ENABLE_DEV_ENDPOINTS=true)</p>

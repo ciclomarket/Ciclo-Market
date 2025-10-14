@@ -954,6 +954,10 @@ function ListingsView({ listings, onRefresh }: { listings: Listing[]; onRefresh?
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const { show: showToast } = useToast()
   const [openMenuFor, setOpenMenuFor] = useState<string | null>(null)
+  const now = Date.now()
+  const expiredList = useMemo(() =>
+    listings.filter((l) => l.status === 'expired' || (typeof l.expiresAt === 'number' && l.expiresAt > 0 && l.expiresAt < now)),
+  [listings, now])
 
   useEffect(() => {
     if (!successMessage || typeof window === 'undefined') return
@@ -1067,6 +1071,24 @@ function ListingsView({ listings, onRefresh }: { listings: Listing[]; onRefresh?
     showToast(msg)
   }
 
+  const handleRenew = async (listing: Listing) => {
+    try {
+      const { renewListingViaApi } = await import('../services/renew')
+      const ok = await renewListingViaApi(listing.id)
+      if (!ok) {
+        alert('No pudimos renovar la publicación. Verificá tu sesión e intentá nuevamente.')
+        return
+      }
+      if (onRefresh) await onRefresh()
+      const msg = 'La publicación fue renovada exitosamente.'
+      setSuccessMessage(msg)
+      showToast(msg)
+    } catch (err) {
+      console.warn('[dashboard] renew failed', err)
+      alert('No pudimos renovar la publicación. Intentá más tarde.')
+    }
+  }
+
   // Cerrar menú con Escape
   useEffect(() => {
     if (!openMenuFor) return
@@ -1091,6 +1113,11 @@ function ListingsView({ listings, onRefresh }: { listings: Listing[]; onRefresh?
           Publicar nuevo aviso
         </Button>
       </header>
+      {expiredList.length > 0 && (
+        <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800" role="status" aria-live="polite">
+          Tenés {expiredList.length} publicación{expiredList.length === 1 ? '' : 'es'} vencida{expiredList.length === 1 ? '' : 's'}. Abrí “Opciones” en cada tarjeta y elegí “Renovar publicación”.
+        </div>
+      )}
       {successMessage && (
         <div className="rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700" role="status" aria-live="polite">
           {successMessage}
@@ -1120,6 +1147,16 @@ function ListingsView({ listings, onRefresh }: { listings: Listing[]; onRefresh?
 
               {openMenuFor === listing.id && (
                 <div className="absolute left-0 bottom-full z-50 mb-2 w-full min-w-[220px] rounded-xl border border-[#14212e]/10 bg-white p-2 text-sm text-[#14212e] shadow-xl">
+                  {/* Renovar publicación solo si está vencida */}
+                  {(listing.status === 'expired' || (typeof listing.expiresAt === 'number' && listing.expiresAt > 0 && listing.expiresAt < now)) && (
+                    <button
+                      type="button"
+                      className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-[#14212e]/5"
+                      onClick={() => { void handleRenew(listing); setOpenMenuFor(null) }}
+                    >
+                      Renovar publicación
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-[#14212e]/5"

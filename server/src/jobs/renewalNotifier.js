@@ -64,7 +64,7 @@ async function sendReminder({ listing, profile }) {
 
   const baseFront = (process.env.FRONTEND_URL || '').split(',')[0]?.trim() || ''
   const highlightUrl = `${baseFront}/listing/${listing.id}/destacar`
-  const renewApiHint = `${baseFront}/dashboard` // Podrías enlazar a un flujo directo de renovación
+  const renewApiHint = `${baseFront}/dashboard?tab=Publicaciones` // Llevar directo a Publicaciones en el panel
 
   const mailOptions = {
     from: process.env.SMTP_FROM || `Ciclo Market <${process.env.SMTP_USER}>`,
