@@ -1074,6 +1074,61 @@ app.post('/api/questions/notify', async (req, res) => {
   return res.status(400).json({ error: 'unsupported_event' })
 })
 
+/* ----------------------------- Verification requests ---------------------- */
+app.post('/api/verification/request', async (req, res) => {
+  try {
+    const { name, instagram, phone, email, message, attachments } = req.body || {}
+    if (!name || !email || !message) {
+      return res.status(400).json({ error: 'missing_fields' })
+    }
+    if (!isMailConfigured()) {
+      return res.status(503).json({ error: 'mail_not_configured' })
+    }
+    const adminTo = process.env.VERIFICATION_INBOX || 'admin@ciclomarket.ar'
+    const safeMsg = String(message || '').slice(0, 4000)
+    const attachList = Array.isArray(attachments) ? attachments.filter((u) => typeof u === 'string' && /^https?:\/\//i.test(u)) : []
+    const listItems = attachList.map((u) => `<li><a href="${u}" style="color:#0c72ff">${u}</a></li>`).join('')
+    const html = `
+      <div style="font-family:Arial,sans-serif;line-height:1.6;color:#14212e">
+        <h2>Solicitud de verificación</h2>
+        <p><b>Nombre:</b> ${escapeHtml(name)}</p>
+        ${instagram ? `<p><b>Instagram:</b> ${escapeHtml(instagram)}</p>` : ''}
+        ${phone ? `<p><b>Teléfono:</b> ${escapeHtml(phone)}</p>` : ''}
+        <p><b>Email:</b> ${escapeHtml(email)}</p>
+        <p><b>Mensaje:</b><br />${escapeHtml(safeMsg).replace(/\n/g,'<br />')}</p>
+        ${attachList.length ? `<p><b>Adjuntos (${attachList.length}):</b><ul>${listItems}</ul></p>` : ''}
+        <hr style="margin:16px 0;border:none;border-top:1px solid #e1e5eb" />
+        <p style="font-size:12px;color:#6b7280">Este correo fue generado desde el panel del vendedor.</p>
+      </div>
+    `
+    const text = [
+      'Solicitud de verificación',
+      `Nombre: ${name}`,
+      instagram ? `Instagram: ${instagram}` : null,
+      phone ? `Teléfono: ${phone}` : null,
+      `Email: ${email}`,
+      '',
+      'Mensaje:',
+      safeMsg,
+      '',
+      attachList.length ? `Adjuntos:\n${attachList.join('\n')}` : null,
+    ].filter(Boolean).join('\n')
+
+    await sendMail({
+      from: process.env.SMTP_FROM || `Ciclo Market <${process.env.SMTP_USER || 'no-reply@ciclomarket.ar'}>`,
+      to: adminTo,
+      subject: 'Solicitud de verificación de vendedor',
+      text,
+      html,
+      headers: email ? { 'Reply-To': email } : undefined,
+    })
+    return res.json({ ok: true })
+  } catch (err) {
+    console.error('[verification] request failed', err)
+    return res.status(500).json({ error: 'unexpected_error' })
+  }
+})
+
 /* ----------------------------- Mercado Pago -------------------------------- */
 const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN
 if (!accessToken) {

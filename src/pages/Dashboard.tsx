@@ -20,9 +20,10 @@ import { normaliseWhatsapp, extractLocalWhatsapp, sanitizeLocalWhatsappInput } f
 import { useNotifications } from '../context/NotificationContext'
 import { useToast } from '../context/ToastContext'
 import useFaves from '../hooks/useFaves'
+import useUpload from '../hooks/useUpload'
 import { createGift } from '../services/gifts'
 
-const TABS = ['Perfil', 'Publicaciones', 'Favoritos', 'Notificaciones', 'Editar perfil', 'Suscripción', 'Cerrar sesión'] as const
+const TABS = ['Perfil', 'Publicaciones', 'Favoritos', 'Notificaciones', 'Editar perfil', 'Verificá tu perfil', 'Cerrar sesión'] as const
 type SellerTab = (typeof TABS)[number]
 
 const TAB_METADATA: Record<SellerTab, { title: string; description: string }> = {
@@ -46,9 +47,9 @@ const TAB_METADATA: Record<SellerTab, { title: string; description: string }> = 
     title: 'Editar perfil',
     description: 'Actualizá tus datos, redes y WhatsApp',
   },
-  Suscripción: {
-    title: 'Plan y beneficios',
-    description: 'Controlá tu plan y próximas renovaciones',
+  'Verificá tu perfil': {
+    title: 'Verificá tu perfil',
+    description: 'Confirmá identidad para mejorar la confianza',
   },
   'Cerrar sesión': {
     title: 'Cerrar sesión',
@@ -286,8 +287,8 @@ export default function Dashboard() {
             onProfileUpdated={loadData}
           />
         )
-      case 'Suscripción':
-        return <SubscriptionView listings={sellerListings} />
+      case 'Verificá tu perfil':
+        return <VerifyProfileView profile={profile} userEmail={user?.email} />
       case 'Cerrar sesión':
         return <SignOutView onSignOut={logout} />
       default:
@@ -1831,6 +1832,131 @@ function SubscriptionView({ listings }: { listings: Listing[] }) {
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+function VerifyProfileView({ profile, userEmail }: { profile: UserProfileRecord | null; userEmail?: string | null }) {
+  const { user } = useAuth()
+  const [name, setName] = useState(profile?.full_name ?? '')
+  const [instagram, setInstagram] = useState(profile?.instagram_handle ?? '')
+  const defaultPhone = profile?.whatsapp_number || (typeof user?.user_metadata?.whatsapp === 'string' ? user?.user_metadata?.whatsapp : '') || (typeof user?.user_metadata?.phone === 'string' ? user?.user_metadata?.phone : '') || ''
+  const [phone, setPhone] = useState(defaultPhone)
+  const [email, setEmail] = useState(userEmail || profile?.email || '')
+  const [message, setMessage] = useState('Hola! Quiero verificar mi perfil. Adjunto fotos de mi DNI o carnet de conducir para validar mi identidad.')
+  const [files, setFiles] = useState<File[]>([])
+  const { uploadFiles, uploading, progress } = useUpload()
+  const [submitting, setSubmitting] = useState(false)
+  const [success, setSuccess] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const alreadyVerified = Boolean(profile?.verified)
+
+  const onFileChange = (list: FileList | null) => {
+    if (!list || list.length === 0) return
+    const arr = Array.from(list).slice(0, 6)
+    setFiles(arr)
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    setSuccess(null)
+    if (!name.trim() || !email.trim() || !message.trim()) {
+      setError('Completá nombre, email y mensaje.')
+      return
+    }
+    setSubmitting(true)
+    try {
+      let attachmentUrls: string[] = []
+      if (files.length > 0) {
+        attachmentUrls = await uploadFiles(files)
+      }
+      const ok = await (await import('../services/verification')).submitVerificationRequest({
+        name: name.trim(),
+        instagram: instagram.trim() || undefined,
+        phone: phone.trim() || undefined,
+        email: email.trim(),
+        message: message.trim(),
+        attachments: attachmentUrls,
+      })
+      if (!ok) {
+        setError('No pudimos enviar tu solicitud. Intentá nuevamente en unos minutos.')
+        return
+      }
+      setSuccess('¡Enviado! Nuestro equipo revisará tu solicitud y te contactará a la brevedad.')
+      setFiles([])
+    } catch (err) {
+      setError('Ocurrió un problema al enviar la solicitud.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (alreadyVerified) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 py-10 text-center">
+        <h2 className="text-xl font-semibold text-[#14212e]">Ustedes ya es verificado, ¡comenzá a vender ahora mismo!</h2>
+        <Button to="/publicar" className="bg-[#14212e] text-white hover:bg-[#1b2f3f]">Publicar nuevo aviso</Button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-xl font-semibold text-[#14212e]">Verificá tu perfil</h2>
+        <p className="text-sm text-[#14212e]/70">Completá tus datos y adjuntá fotos de tu DNI o carnet de conducir para validar tu identidad.</p>
+      </div>
+      {success && (
+        <div className="rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700" role="status">{success}</div>
+      )}
+      {error && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="status">{error}</div>
+      )}
+      <form className="grid gap-4" onSubmit={handleSubmit}>
+        <label className="text-sm font-medium text-[#14212e]">
+          Nombre
+          <input className="input mt-1" value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre y apellido" required />
+        </label>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="text-sm font-medium text-[#14212e]">
+            Instagram (opcional)
+            <input className="input mt-1" value={instagram} onChange={(e) => setInstagram(e.target.value)} placeholder="@tuusuario" />
+          </label>
+          <label className="text-sm font-medium text-[#14212e]">
+            Teléfono (opcional)
+            <input className="input mt-1" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Tu número de contacto" />
+          </label>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="text-sm font-medium text-[#14212e]">
+            Email
+            <input className="input mt-1" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="tu@email.com" required />
+          </label>
+          <div>
+            <p className="text-sm font-medium text-[#14212e]">Adjuntar fotos</p>
+            <input className="mt-1 block w-full text-sm" type="file" accept="image/*" multiple onChange={(e) => onFileChange(e.target.files)} />
+            {files.length > 0 && (
+              <p className="mt-1 text-xs text-[#14212e]/60">{files.length} archivo{files.length===1?'':'s'} seleccionado{files.length===1?'':'s'}</p>
+            )}
+            {uploading && (
+              <p className="mt-1 text-xs text-[#14212e]/60">Subiendo adjuntos… {progress}%</p>
+            )}
+            <p className="mt-1 text-xs text-[#14212e]/60">Adjuntá fotos de tu DNI o carnet de conducir para validar tu identidad.</p>
+          </div>
+        </div>
+        <label className="text-sm font-medium text-[#14212e]">
+          Mensaje
+          <textarea className="textarea mt-1" rows={5} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Contanos por qué querés verificar tu cuenta" required />
+        </label>
+        <div className="flex items-center gap-3">
+          <Button type="submit" className="bg-[#14212e] text-white hover:bg-[#1b2f3f]" disabled={submitting || uploading}>
+            {submitting ? 'Enviando…' : 'Enviar solicitud'}
+          </Button>
+          <span className="text-xs text-[#14212e]/60">Tu solicitud se enviará a admin@ciclomarket.ar</span>
+        </div>
+      </form>
     </div>
   )
 }
