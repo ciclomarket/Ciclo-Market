@@ -10,7 +10,7 @@ import { getPlanLabel, hasPaidPlan, isPlanVerified } from '../utils/plans'
 import { useCompare } from '../context/CompareContext'
 import useFaves from '../hooks/useFaves'
 import { fetchListing, updateListingPlan, deleteListing } from '../services/listings'
-import { supabaseEnabled } from '../services/supabase'
+import { supabaseEnabled, getSupabaseClient } from '../services/supabase'
 import type { Listing } from '../types'
 import { formatNameWithInitial } from '../utils/user'
 import { normaliseWhatsapp, extractLocalWhatsapp, sanitizeLocalWhatsappInput, buildWhatsappUrl } from '../utils/whatsapp'
@@ -48,6 +48,8 @@ export default function ListingDetail() {
   const { ids: compareIds, toggle: toggleCompare } = useCompare()
   const { has: hasFav, toggle: toggleFav } = useFaves()
   const listingKey = params.slug ?? params.id ?? ''
+  // Necesario antes de efectos que lo usan
+  const isOwner = Boolean(user?.id && listing?.sellerId && user.id === listing.sellerId)
 
   useEffect(() => {
     let active = true
@@ -104,10 +106,9 @@ export default function ListingDetail() {
         setApplyingHighlight(true)
         // Obtener token de supabase
         if (supabaseEnabled) {
-          const supabase = (await import('../services/supabase')).supabase
-          const client = (await import('../services/supabase')).getSupabaseClient
-          const token = (await client()).auth.getSession().then(r => r.data.session?.access_token).catch(() => null)
-          const t = await token
+          const client = getSupabaseClient()
+          const { data } = await client.auth.getSession()
+          const t = data.session?.access_token || null
           const res = await fetch(`/api/listings/${listing.id}/highlight`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...(t ? { Authorization: `Bearer ${t}` } : {}) },
@@ -219,7 +220,6 @@ export default function ListingDetail() {
   const verifiedVendor = sellerVerified
   const inCompare = compareIds.includes(listing.id)
   const isFav = hasFav(listing.id)
-  const isOwner = user?.id === listing.sellerId
   const isFeaturedListing = hasPaidPlan(effectivePlan, listing.sellerPlanExpires)
   const listingSold = listing.status === 'sold'
   const listingUnavailable = listingSold || listing.status === 'archived' || listing.status === 'paused' || listing.status === 'expired'

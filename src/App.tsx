@@ -1,36 +1,36 @@
-import { useMemo, useEffect } from 'react'
+import { useMemo, useEffect, Suspense, lazy } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import Header from './components/Header'
 import Footer from './components/Footer'
 import Home from './pages/Home'
-import Plans from './pages/Publish/Plans'
-import NewListingForm from './pages/Publish/NewListingForm'
-import ListingDetail from './pages/ListingDetail'
-import HighlightListing from './pages/HighlightListing'
-import Dashboard from './pages/Dashboard'
-import Profile from './pages/Profile'
-import Login from './pages/Auth/Login'
-import Register from './pages/Auth/Register'
-import VerifyEmail from './pages/Auth/VerifyEmail'
-import Help from './pages/Help'
-import HowToPublish from './pages/HowToPublish'
-import OfficialStore from './pages/OfficialStore'
-import FAQ from './pages/FAQ'
-import Terms from './pages/Terms'
-import Privacy from './pages/Privacy'
+const Plans = lazy(() => import('./pages/Publish/Plans'))
+const NewListingForm = lazy(() => import('./pages/Publish/NewListingForm'))
+const ListingDetail = lazy(() => import('./pages/ListingDetail'))
+const HighlightListing = lazy(() => import('./pages/HighlightListing'))
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const Profile = lazy(() => import('./pages/Profile'))
+const Login = lazy(() => import('./pages/Auth/Login'))
+const Register = lazy(() => import('./pages/Auth/Register'))
+const VerifyEmail = lazy(() => import('./pages/Auth/VerifyEmail'))
+const Help = lazy(() => import('./pages/Help'))
+const HowToPublish = lazy(() => import('./pages/HowToPublish'))
+const OfficialStore = lazy(() => import('./pages/OfficialStore'))
+const FAQ = lazy(() => import('./pages/FAQ'))
+const Terms = lazy(() => import('./pages/Terms'))
+const Privacy = lazy(() => import('./pages/Privacy'))
 import { AuthProvider } from './context/AuthContext'
 import { CurrencyProvider } from './context/CurrencyContext'
 import ProtectedRoute from './components/ProtectedRoute'
-import Marketplace from './pages/Marketplace'
-import Compare from './pages/Compare'
+const Marketplace = lazy(() => import('./pages/Marketplace'))
+const Compare = lazy(() => import('./pages/Compare'))
 import { CompareProvider } from './context/CompareContext'
 import CompareTray from './components/CompareTray'
 import { PlanProvider } from './context/PlanContext'
 import { NotificationsProvider } from './context/NotificationContext'
 import { ToastProvider } from './context/ToastContext'
-import CheckoutSuccess from './pages/Checkout/Success'
-import CheckoutFailure from './pages/Checkout/Failure'
-import CheckoutPending from './pages/Checkout/Pending'
+const CheckoutSuccess = lazy(() => import('./pages/Checkout/Success'))
+const CheckoutFailure = lazy(() => import('./pages/Checkout/Failure'))
+const CheckoutPending = lazy(() => import('./pages/Checkout/Pending'))
 import SEO, { type SEOProps } from './components/SEO'
 
 // Helper opcional por si quisieras redirigir preservando query-string
@@ -280,6 +280,7 @@ export default function App() {
                   <ScrollToTop />
 
                   <main className="flex-1">
+                    <Suspense fallback={<div className="py-10 text-center text-[#14212e]/70">Cargando…</div>}>
                     <Routes>
                       {/* Home */}
                       <Route path="/" element={<Home />} />
@@ -347,6 +348,7 @@ export default function App() {
                       {/* Fallback */}
                       <Route path="*" element={<Navigate to="/" replace />} />
                     </Routes>
+                    </Suspense>
                   </main>
 
                   <CompareTray />

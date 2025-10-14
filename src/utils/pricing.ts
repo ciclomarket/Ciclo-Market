@@ -8,11 +8,11 @@ export function formatListingPrice(
 ) {
   if (Number.isNaN(value)) return ''
   if (!currency) return format(value)
-  const amount = value
   const locale = currency === 'ARS' ? 'es-AR' : 'en-US'
-  return new Intl.NumberFormat(locale, {
-    style: 'currency',
-    currency,
+  const amount = value
+  const grouped = new Intl.NumberFormat(locale, {
     maximumFractionDigits: 0,
+    useGrouping: true,
   }).format(amount)
+  return `${currency} $ ${grouped}`
 }

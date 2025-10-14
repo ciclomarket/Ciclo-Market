@@ -119,4 +119,7 @@ module.exports = {
   getMailTransport,
   sendMail,
   isMailConfigured,
+  // Export for diagnostics (no secrets exposed)
+  isSMTPConfigured,
+  isResendConfigured,
 }

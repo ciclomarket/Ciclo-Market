@@ -1,6 +1,6 @@
 const cron = require('node-cron')
 const { getServerSupabaseClient } = require('../lib/supabaseClient')
-const { sendMail, isMailConfigured } = require('../lib/mail')
+const { sendMail, isMailConfigured, isSMTPConfigured, isResendConfigured } = require('../lib/mail')
 
 const DEFAULT_WINDOW_HOURS = 72
 const DEFAULT_COOLDOWN_HOURS = 24
@@ -120,7 +120,9 @@ function startRenewalNotificationJob() {
   }
 
   if (!isMailConfigured()) {
-    console.warn('[renewalNotifier] mail no configurado (SMTP o Resend), el job no se iniciará')
+    const smtpOk = isSMTPConfigured()
+    const resendOk = isResendConfigured()
+    console.warn('[renewalNotifier] mail no configurado (SMTP o Resend), el job no se iniciará', { smtpOk, resendOk, smtpEnabled: process.env.SMTP_ENABLED === 'true' })
     return
   }
 
