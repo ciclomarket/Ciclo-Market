@@ -34,9 +34,9 @@ export default function HighlightListing() {
           amount: opt.price,
           metadata: { listingSlug: slug, highlightDays: opt.days },
           redirectUrls: {
-            success: `${window.location.origin}/listing/${slug}`,
-            failure: `${window.location.origin}/listing/${slug}`,
-            pending: `${window.location.origin}/listing/${slug}`,
+            success: `${window.location.origin}/listing/${slug}?payment=success&highlightDays=${opt.days}`,
+            failure: `${window.location.origin}/listing/${slug}?payment=failure`,
+            pending: `${window.location.origin}/listing/${slug}?payment=pending`,
           }
         })
       })
@@ -80,4 +80,3 @@ export default function HighlightListing() {
     </div>
   )
 }
-

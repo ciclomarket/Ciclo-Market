@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import Container from '../components/Container'
 import ImageCarousel from '../components/ImageCarousel'
 import Button from '../components/Button'
@@ -26,6 +26,7 @@ import useUpload from '../hooks/useUpload'
 
 export default function ListingDetail() {
   const params = useParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const { user, isModerator } = useAuth()
   const { format, fx } = useCurrency()
@@ -40,6 +41,7 @@ export default function ListingDetail() {
   const [shareModalOpen, setShareModalOpen] = useState(false)
   const [moderatorUpdating, setModeratorUpdating] = useState(false)
   const [sellerVerified, setSellerVerified] = useState(false)
+  const [applyingHighlight, setApplyingHighlight] = useState(false)
   const [sellerProfile, setSellerProfile] = useState<UserProfileRecord | null>(null)
   const [sellerAuthEmail, setSellerAuthEmail] = useState<string | null>(null)
   const [sellerRating, setSellerRating] = useState<{ avg: number; count: number } | null>(null)
@@ -90,6 +92,44 @@ export default function ListingDetail() {
     }
     void loadSellerProfile()
   }, [listing?.sellerId])
+
+  // Aplicar destaque automáticamente tras volver de checkout (Option A)
+  useEffect(() => {
+    const doApply = async () => {
+      if (!listing || !isOwner) return
+      const payment = searchParams.get('payment')
+      const hd = Number(searchParams.get('highlightDays') || '')
+      if (payment !== 'success' || !hd || applyingHighlight) return
+      try {
+        setApplyingHighlight(true)
+        // Obtener token de supabase
+        if (supabaseEnabled) {
+          const supabase = (await import('../services/supabase')).supabase
+          const client = (await import('../services/supabase')).getSupabaseClient
+          const token = (await client()).auth.getSession().then(r => r.data.session?.access_token).catch(() => null)
+          const t = await token
+          const res = await fetch(`/api/listings/${listing.id}/highlight`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(t ? { Authorization: `Bearer ${t}` } : {}) },
+            body: JSON.stringify({ days: hd })
+          })
+          if (!res.ok) throw new Error('No pudimos aplicar el destaque')
+          showToast('Destaque aplicado')
+          // Limpiar params
+          searchParams.delete('payment'); searchParams.delete('highlightDays')
+          setSearchParams(searchParams, { replace: true })
+          // refrescar datos
+          setListing((prev) => prev ? { ...prev, sellerPlan: 'featured' as any } : prev)
+        }
+      } catch (e) {
+        console.warn('[listing-detail] auto-highlight failed', e)
+        showToast('No pudimos aplicar el destaque automáticamente', { variant: 'error' } as any)
+      } finally {
+        setApplyingHighlight(false)
+      }
+    }
+    void doApply()
+  }, [listing?.id, isOwner, applyingHighlight, searchParams, setSearchParams])
 
   useEffect(() => {
     let active = true

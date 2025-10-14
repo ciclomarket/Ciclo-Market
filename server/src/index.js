@@ -12,6 +12,9 @@ const cors = require('cors')
 const { MercadoPagoConfig, Preference } = require('mercadopago')
 const { sendMail, isMailConfigured } = require('./lib/mail')
 const { getServerSupabaseClient } = require('./lib/supabaseClient')
+const { startRenewalNotificationJob } = (() => {
+  try { return require('./jobs/renewalNotifier') } catch { return {} }
+})()
 const path = require('path')
 
 const app = express()
@@ -532,6 +535,49 @@ app.post('/api/reviews/submit', async (req, res) => {
   } catch (err) {
     console.warn('[reviews] submit failed', err)
     return res.status(500).send('unexpected_error')
+  }
+})
+
+/* ----------------------------- Dev / Test endpoints ---------------------- */
+app.post('/api/dev/renewal-test/:id', async (req, res) => {
+  try {
+    if (process.env.ENABLE_DEV_ENDPOINTS !== 'true') return res.status(403).json({ error: 'forbidden' })
+    const { id } = req.params
+    const supabase = getServerSupabaseClient()
+    const { data: listing } = await supabase
+      .from('listings')
+      .select('id,title,seller_id,expires_at')
+      .eq('id', id)
+      .maybeSingle()
+    if (!listing) return res.status(404).json({ error: 'not_found' })
+    const { data: profile } = await supabase
+      .from('users')
+      .select('id,email,full_name')
+      .eq('id', listing.seller_id)
+      .maybeSingle()
+    if (!profile?.email) return res.status(400).json({ error: 'missing_email' })
+    const baseFront = (process.env.FRONTEND_URL || '').split(',')[0]?.trim() || ''
+    const highlightUrl = `${baseFront}/listing/${listing.id}/destacar`
+    const expiresLabel = listing.expires_at ? new Date(listing.expires_at).toLocaleString('es-AR', { dateStyle: 'long', timeStyle: 'short' }) : 'pronto'
+    await sendMail({
+      from: process.env.SMTP_FROM || `Ciclo Market <${process.env.SMTP_USER}>`,
+      to: profile.email,
+      subject: `Tu publicación "${listing.title}" está por vencer (prueba)`,
+      html: `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#14212e;">
+        <h2>Tu publicación está por vencer</h2>
+        <p>Hola ${profile.full_name || 'vendedor'},</p>
+        <p>Tu aviso <strong>${listing.title}</strong> vence el <strong>${expiresLabel}</strong>.</p>
+        <div style="margin:16px 0;">
+          <a href="${baseFront}/dashboard" style="display:inline-block;padding:10px 16px;background:#14212e;color:#fff;text-decoration:none;border-radius:8px;margin-right:8px;">Renovar publicación</a>
+          <a href="${highlightUrl}" style="display:inline-block;padding:10px 16px;background:#2563eb;color:#fff;text-decoration:none;border-radius:8px;">Destacar ahora</a>
+        </div>
+        <p>(Este es un correo de prueba enviado bajo ENABLE_DEV_ENDPOINTS=true)</p>
+      </div>`
+    })
+    return res.json({ ok: true })
+  } catch (e) {
+    console.error('[dev] renewal-test failed', e)
+    return res.status(500).json({ error: 'unexpected_error' })
   }
 })
 
