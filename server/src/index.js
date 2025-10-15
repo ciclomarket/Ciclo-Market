@@ -79,9 +79,75 @@ app.get('/', (_req, res) => {
   res.send('Ciclo Market API ready')
 })
 
-app.get('/sitemap.xml', (_req, res) => {
-  res.type('application/xml')
-  res.sendFile(path.join(publicDir, 'sitemap.xml'))
+app.get('/sitemap.xml', async (_req, res) => {
+  try {
+    res.type('application/xml')
+    const baseOrigin = (process.env.FRONTEND_URL || '').split(',')[0]?.trim() || 'https://ciclomarket.ar'
+    const staticPaths = [
+      '/',
+      '/marketplace',
+      '/ofertas',
+      '/publicar',
+      '/como-publicar',
+      '/ayuda',
+      '/tienda-oficial',
+      '/faq',
+      '/terminos',
+      '/privacidad',
+    ]
+
+    const nowIso = new Date().toISOString().slice(0, 10)
+    const staticUrls = staticPaths
+      .map((p) => `
+  <url>
+    <loc>${baseOrigin}${p}</loc>
+    <lastmod>${nowIso}</lastmod>
+  </url>`)
+      .join('')
+
+    // Dynamic listings
+    let listingUrls = ''
+    try {
+      const supabase = getServerSupabaseClient()
+      const { data, error } = await supabase
+        .from('listings')
+        .select('id, slug, created_at, status')
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(2000)
+      if (!error && Array.isArray(data)) {
+        listingUrls = data
+          .map((l) => {
+            const slugOrId = l.slug || l.id
+            const lastmod = l.created_at ? new Date(l.created_at).toISOString().slice(0, 10) : nowIso
+            return `
+  <url>
+    <loc>${baseOrigin}/listing/${encodeURIComponent(slugOrId)}</loc>
+    <lastmod>${lastmod}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>`
+          })
+          .join('')
+      }
+    } catch (e) {
+      // fallback to only static
+    }
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${staticUrls}${listingUrls}
+</urlset>`
+    res.set('Cache-Control', 'public, max-age=1800') // 30 minutos
+    return res.send(xml)
+  } catch (e) {
+    // fallback a archivo estático si algo falla
+    try {
+      return res.sendFile(path.join(publicDir, 'sitemap.xml'))
+    } catch {
+      return res.status(500).send('')
+    }
+  }
 })
 
 app.get('/robots.txt', (_req, res) => {
