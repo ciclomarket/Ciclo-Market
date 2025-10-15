@@ -10,6 +10,8 @@ export interface Listing {
   model: string
   year?: number
   category: Category
+  /** Subcategoría opcional (p.ej. Triatlón/TT, Vintage, Jersey, Rodillo, etc.) */
+  subcategory?: string
   price: number
   priceCurrency?: 'USD' | 'ARS'
   /** Precio anterior (para mostrar rebaja en "Ofertas únicas") */

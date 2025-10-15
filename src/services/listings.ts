@@ -12,6 +12,7 @@ type ListingRow = {
   model: string
   year?: number | null
   category: string
+  subcategory?: string | null
   price: number
   price_currency?: 'USD' | 'ARS' | null
   original_price?: number | null
@@ -55,6 +56,7 @@ const normalizeListing = (row: ListingRow): Listing => {
     model: row.model,
     year: row.year ?? undefined,
     category: row.category as Listing['category'],
+    subcategory: row.subcategory ?? undefined,
     price: row.price,
     priceCurrency: (row.price_currency ?? undefined) as Listing['priceCurrency'],
     originalPrice: row.original_price ?? undefined,
@@ -243,6 +245,15 @@ export async function deleteListing(id: string): Promise<boolean> {
     if (error) {
       console.warn('[listings] delete error', error)
       return false
+    }
+    // Intentar limpiar imágenes en el backend (best-effort)
+    try {
+      const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+      const endpoint = API_BASE ? `${API_BASE}/api/listings/${id}/cleanup-images` : `/api/listings/${id}/cleanup-images`
+      await fetch(endpoint, { method: 'POST' })
+    } catch (e) {
+      // no bloquea el borrado
+      console.warn('[listings] cleanup images call failed', (e as any)?.message)
     }
     return true
   } catch (err) {

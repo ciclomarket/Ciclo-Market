@@ -19,6 +19,7 @@ const VerifyEmail = lazyWithRetry(() => import('./pages/Auth/VerifyEmail'))
 const Help = lazyWithRetry(() => import('./pages/Help'))
 const HowToPublish = lazyWithRetry(() => import('./pages/HowToPublish'))
 const OfficialStore = lazyWithRetry(() => import('./pages/OfficialStore'))
+const Store = lazyWithRetry(() => import('./pages/Store'))
 const FAQ = lazyWithRetry(() => import('./pages/FAQ'))
 const Terms = lazyWithRetry(() => import('./pages/Terms'))
 const Privacy = lazyWithRetry(() => import('./pages/Privacy'))
@@ -156,6 +157,16 @@ function resolveSeoForPath(pathname: string): SEOProps {
         'bicicletas certificadas',
         'ciclomarket tienda oficial'
       ]
+    }
+  }
+
+  if (normalized.startsWith('/tienda/')) {
+    return {
+      title: 'Tienda oficial del vendedor',
+      description:
+        'Conocé información del local, contacto y todos los productos publicados por esta tienda en Ciclo Market.',
+      image: '/og-preview.png',
+      keywords: ['tienda oficial', 'vendedor verificado', 'productos del vendedor']
     }
   }
 
@@ -369,6 +380,7 @@ export default function App() {
                       <Route path="/ayuda" element={<Help />} />
                       <Route path="/como-publicar" element={<HowToPublish />} />
                       <Route path="/tienda-oficial" element={<OfficialStore />} />
+                      <Route path="/tienda/:slug" element={<Store />} />
 
                       {/* Checkout status */}
                       <Route path="/checkout/success" element={<CheckoutSuccess />} />

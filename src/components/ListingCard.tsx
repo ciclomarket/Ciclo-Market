@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Listing } from '../types'
+import { transformSupabasePublicUrl } from '../utils/supabaseImage'
 import useFaves from '../hooks/useFaves'
 import { useCurrency } from '../context/CurrencyContext'
 import { formatListingPrice } from '../utils/pricing'
@@ -100,7 +101,7 @@ export default function ListingCard({ l }: { l: Listing }) {
           )}
           {highlighted && (
             <span className="rounded-full bg-[#14212e] px-3 py-1 text-xs font-semibold text-white shadow-lg">
-              Destacada 🔥
+              🔥
             </span>
           )}
         </div>
@@ -108,7 +109,7 @@ export default function ListingCard({ l }: { l: Listing }) {
       <Link to={`/listing/${slug}`} className="card-flat group flex h-full flex-col overflow-hidden">
         <div className="aspect-video relative overflow-hidden bg-black/10">
           <img
-            src={l.images[0]}
+            src={transformSupabasePublicUrl(l.images[0], { width: 800, quality: 75, format: 'webp' })}
             alt={l.title}
             loading="lazy"
             decoding="async"

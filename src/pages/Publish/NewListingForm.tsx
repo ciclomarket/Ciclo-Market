@@ -83,6 +83,7 @@ export default function NewListingForm() {
   const [giftPlan, setGiftPlan] = useState<PlanCode | null>(null)
   const [giftValidating, setGiftValidating] = useState(false)
   const [giftError, setGiftError] = useState<string | null>(null)
+  const [profile, setProfile] = useState<UserProfileRecord | null>(null)
 
   /** 1) Plan seleccionado por query (?plan=free|basic|premium) */
   const selectedPlan = useMemo(() => {
@@ -141,32 +142,35 @@ export default function NewListingForm() {
 
   // Canonizamos el código de plan (lo usa la DB y el backend)
   const resolvedPlanCode = selectedPlan ? resolvePlanCode(selectedPlan) : null
+  const isStore = Boolean(profile?.store_enabled)
   const planCode = (planOverride ?? resolvedPlanCode)
     ?? (selectedPlan?.code ? normalisePlanText(selectedPlan.code) : undefined)
     ?? (selectedPlan?.id ? normalisePlanText(selectedPlan.id) : undefined)
   const planPrice = selectedPlan?.price ?? 0
   const maxPhotos = selectedPlan?.maxPhotos ?? 4
   const planName = selectedPlan?.name ?? 'Plan'
-  const listingDuration = selectedPlan?.listingDurationDays ?? selectedPlan?.periodDays ?? 30
+  const listingDuration = isStore ? 3650 : (selectedPlan?.listingDurationDays ?? selectedPlan?.periodDays ?? 30)
   const whatsappEnabled = selectedPlan?.whatsappEnabled ?? false
 
   const listingExpiresLabel = useMemo(() => {
+    if (isStore) return 'No vence'
     if (editingListing?.expiresAt) {
       return new Intl.DateTimeFormat('es-AR', { dateStyle: 'long' }).format(new Date(editingListing.expiresAt))
     }
     const base = new Date()
     base.setDate(base.getDate() + listingDuration)
     return new Intl.DateTimeFormat('es-AR', { dateStyle: 'long' }).format(base)
-  }, [editingListing?.expiresAt, listingDuration])
+  }, [editingListing?.expiresAt, listingDuration, isStore])
 
   const expiresAtIso = useMemo(() => {
+    if (isStore) return null
     if (editingListing?.expiresAt) {
       return new Date(editingListing.expiresAt).toISOString()
     }
     const base = new Date()
     base.setDate(base.getDate() + listingDuration)
     return base.toISOString()
-  }, [editingListing?.expiresAt, listingDuration])
+  }, [editingListing?.expiresAt, listingDuration, isStore])
 
   const planPriceLabel = useMemo(() => {
     if (!selectedPlan) return null
@@ -232,7 +236,6 @@ export default function NewListingForm() {
     { cc: 'US', dial: '1', label: 'Estados Unidos', flag: '🇺🇸' },
   ] as const
   const [whatsappDial, setWhatsappDial] = useState<string>(COUNTRY_CODES[0].dial)
-  const [profile, setProfile] = useState<UserProfileRecord | null>(null)
   const [draftRestored, setDraftRestored] = useState(false)
   const [accessoryType, setAccessoryType] = useState<(typeof ACCESSORY_TYPES)[number]>(ACCESSORY_TYPES[0])
   const [accessoryCondition, setAccessoryCondition] = useState<(typeof CONDITION_OPTIONS)[number]>(CONDITION_OPTIONS[1])
@@ -706,9 +709,13 @@ export default function NewListingForm() {
     const priceForStorage = priceNumber
     const location = finalCity ? `${finalCity}, ${province}` : province
 
-    const expiresAtDate = new Date()
-    expiresAtDate.setDate(expiresAtDate.getDate() + listingDuration)
-    const expiresAtIso = expiresAtDate.toISOString()
+    // Para tiendas oficiales, la publicación no vence (null)
+    const computedExpiresAtIso = (() => {
+      if (isStore) return null
+      const d = new Date()
+      d.setDate(d.getDate() + listingDuration)
+      return d.toISOString()
+    })()
 
     const metadata = user.user_metadata ?? {}
     const rawSellerName = metadata.full_name ?? metadata.name ?? user.email ?? 'Vendedor'
@@ -788,12 +795,17 @@ export default function NewListingForm() {
       formattedWhatsapp = editingListing?.sellerWhatsapp ?? null
     }
 
+    const effectivePlanCode = isStore ? 'pro' : planCode
+    // Derivar subcategoría cuando aplique
+    const subcategory = isAccessory ? accessoryType : (isApparel ? apparelType : undefined)
+
     const payload = {
       title: autoTitle,
       brand: brand.trim(),
       model: model.trim(),
       year: (isAccessory || isApparel) ? undefined : year ? Number(year) : undefined,
       category: finalCategory,
+      subcategory,
       price: priceForStorage,
       price_currency: priceCurrency,
       location,
@@ -803,7 +815,7 @@ export default function NewListingForm() {
       seller_location: sellerLocation,
       seller_whatsapp: formattedWhatsapp,
       seller_email: user.email,
-      seller_plan: planCode,
+      seller_plan: effectivePlanCode,
       material: (isAccessory || isApparel) ? undefined : (materialValue || undefined),
       frame_size: (isAccessory || isApparel) ? undefined : (frameSize || undefined),
       drivetrain: (isAccessory || isApparel) ? undefined : (drivetrain === 'Otro' ? undefined : drivetrain),
@@ -811,10 +823,10 @@ export default function NewListingForm() {
       wheelset: (isAccessory || isApparel) ? undefined : (wheelset.trim() || undefined),
       wheel_size: (isAccessory || isApparel) ? undefined : (wheelSize || undefined),
       extras: safeExtras,
-      plan_code: planCode,
-      plan: planCode,
+      plan_code: effectivePlanCode,
+      plan: effectivePlanCode,
       status: 'active',
-      expires_at: expiresAtIso,
+      expires_at: computedExpiresAtIso,
       renewal_notified_at: null
     }
 
@@ -926,7 +938,7 @@ export default function NewListingForm() {
         <div className="min-w-0 rounded-xl border border-white/30 bg-white/10 px-4 py-3 text-sm text-white max-w-full md:max-w-sm">
           <div className="font-semibold text-white">{isEditing ? `Plan en uso: ${planName}` : `Plan seleccionado: ${planName}`}</div>
           <div className="text-xs font-semibold text-white/90">
-            {isEditing ? 'Podés cambiar de plan desde tu panel de vendedor.' : effectivePlanLabel}
+            {isStore ? 'Tienda verificada (sin costo)' : (isEditing ? 'Podés cambiar de plan desde tu panel de vendedor.' : effectivePlanLabel)}
           </div>
           {giftValidating && (
             <div className="mt-2 text-xs text-white/80">Verificando código de regalo…</div>
@@ -943,7 +955,7 @@ export default function NewListingForm() {
             <div className="mt-2 text-xs text-white/80">{selectedPlan.description}</div>
           )}
           <div className="mt-2 space-y-1 text-xs text-white/70">
-            <div>Duración de la publicación: {listingDuration} días</div>
+            <div>Duración de la publicación: {isStore ? 'Ilimitada' : `${listingDuration} días`}</div>
             <div>Expira aprox.: {listingExpiresLabel}</div>
             <div>Fotos permitidas: {maxPhotos}</div>
             <div>

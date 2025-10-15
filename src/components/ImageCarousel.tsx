@@ -1,5 +1,6 @@
 
 import { useEffect, useMemo, useState } from 'react'
+import { transformSupabasePublicUrl } from '../utils/supabaseImage'
 
 export default function ImageCarousel({ images }: { images: string[] }) {
   // Filtrar URLs inválidas o no soportadas (ej.: HEIC no renderiza en navegadores)
@@ -13,6 +14,9 @@ export default function ImageCarousel({ images }: { images: string[] }) {
   const [i, setI] = useState(0)
   const safeIndex = displayImages.length ? Math.min(i, displayImages.length - 1) : 0
   const currentImage = displayImages[safeIndex]
+  const currentTransformed = currentImage
+    ? transformSupabasePublicUrl(currentImage, { width: 1600, quality: 78, format: 'webp' })
+    : undefined
   const [lightbox, setLightbox] = useState(false)
 
   useEffect(() => {
@@ -32,7 +36,7 @@ export default function ImageCarousel({ images }: { images: string[] }) {
         {currentImage ? (
           <button type="button" className="h-full w-full" onClick={() => setLightbox(true)} aria-label="Ampliar imagen">
             <img
-              src={currentImage}
+              src={currentTransformed}
               alt="Vista de la publicación"
               className="h-full w-full max-w-full object-cover"
               loading="lazy"
@@ -61,7 +65,7 @@ export default function ImageCarousel({ images }: { images: string[] }) {
             aria-label={`Ver imagen ${idx + 1}`}
           >
             <img
-              src={src}
+              src={transformSupabasePublicUrl(src, { width: 300, quality: 70, format: 'webp' })}
               alt="Miniatura de la publicación"
               className="h-full w-full object-cover"
               loading="lazy"
@@ -100,7 +104,7 @@ export default function ImageCarousel({ images }: { images: string[] }) {
             </button>
           </div>
           <img
-            src={currentImage}
+            src={currentTransformed}
             alt="Imagen ampliada"
             className="max-h-[90vh] max-w-[95vw] object-contain"
             onError={(e) => {

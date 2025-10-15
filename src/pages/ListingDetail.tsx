@@ -215,7 +215,7 @@ export default function ListingDetail() {
   const sellerWhatsappRaw = listing.sellerWhatsapp ?? sellerProfile?.whatsapp_number ?? ''
   const sellerWhatsappNumber = normaliseWhatsapp(sellerWhatsappRaw)
   const waLink = buildWhatsappUrl(sellerWhatsappNumber ?? sellerWhatsappRaw, waMessage.trim())
-  const sellerAvatarUrl = listing.sellerAvatar || sellerProfile?.avatar_url || null
+  const sellerAvatarUrl = sellerProfile?.store_avatar_url || listing.sellerAvatar || sellerProfile?.avatar_url || null
 
   const formattedPrice = formatListingPrice(listing.price, listing.priceCurrency, format, fx)
   const originalPriceLabel = listing.originalPrice
@@ -474,6 +474,12 @@ export default function ListingDetail() {
   const priceCurrency = (listing.priceCurrency ?? 'ARS').toUpperCase()
   const productAvailability = listing.status === 'sold' ? 'oos' : 'instock'
 
+  const isStore = Boolean(sellerProfile?.store_enabled)
+  const storeLink = isStore ? (sellerProfile?.store_slug ? `/tienda/${sellerProfile.store_slug}` : `/tienda/${listing.sellerId}`) : null
+  const sellerDisplayName = isStore
+    ? (sellerProfile?.store_name || 'Tienda')
+    : formatNameWithInitial(listing.sellerName, undefined)
+
   return (
     <>
       <SEO title={listing.title} description={metaDescription} image={firstImage} url={canonicalUrl} type="product">
@@ -517,6 +523,7 @@ export default function ListingDetail() {
                 <span className="text-3xl lg:text-2xl font-extrabold text-mb-primary">{formattedPrice}</span>
                 {originalPriceLabel && <span className="text-sm text-[#14212e]/60 line-through">{originalPriceLabel}</span>}
               </div>
+              {/* Sección de información de la tienda (teléfono/dirección) removida a pedido */}
               <p className="mt-4 text-xs text-[#14212e]/60 lg:hidden">
                 Guardá o compará esta bici para decidir más tarde.
               </p>
@@ -536,28 +543,49 @@ export default function ListingDetail() {
                     <div className="min-w-0">
                       <p className="text-sm text-[#14212e]/70">Publicado por</p>
                       <h3 className="text-lg font-semibold text-[#14212e]">
-                        <Link
-                          to={`/vendedor/${listing.sellerId}`}
-                          className="inline-flex items-center gap-2 transition hover:text-mb-primary"
-                        >
-                          {formatNameWithInitial(listing.sellerName, undefined)}
-                          {sellerVerified && <VerifiedCheck />}
-                        </Link>
+                        {isStore ? (
+                          <Link to={storeLink!} className="inline-flex items-center gap-2 transition hover:text-mb-primary">
+                            <span className="truncate">{sellerDisplayName}</span>
+                            <span className="text-[#14212e]/40">|</span>
+                            <VerifiedCheck />
+                            <span className="text-sm text-[#14212e]/80">Tienda oficial</span>
+                          </Link>
+                        ) : (
+                          <Link to={`/vendedor/${listing.sellerId}`} className="inline-flex items-center gap-2 transition hover:text-mb-primary">
+                            {sellerDisplayName}
+                            {sellerVerified && <VerifiedCheck />}
+                          </Link>
+                        )}
                       </h3>
-                      <p className="text-xs text-[#14212e]/60">{listing.sellerLocation || 'Ubicación reservada'}</p>
+                      {!isStore && (
+                        <p className="text-xs text-[#14212e]/60">{listing.sellerLocation || 'Ubicación reservada'}</p>
+                      )}
                       {sellerRating && sellerRating.count > 0 && (
                         <div className="mt-1 flex items-center gap-2 text-xs text-[#14212e]/70">
                           <StarRating value={sellerRating.avg} />
                           <span>({sellerRating.count})</span>
                         </div>
                       )}
+                      {isStore && (
+                        <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-[#14212e]/70">
+                          {sellerProfile?.store_website && (
+                            <a href={sellerProfile.store_website} target="_blank" rel="noreferrer" className="underline">Sitio web</a>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
                 <div className="text-xs text-[#14212e]/60">
-                  <Link to={`/vendedor/${listing.sellerId}`} className="inline-flex items-center gap-1 text-[#14212e] underline">
-                    Ver perfil del vendedor
-                  </Link>
+                  {isStore ? (
+                    <Link to={storeLink!} className="inline-flex items-center gap-1 text-[#14212e] underline">
+                      Ver tienda oficial
+                    </Link>
+                  ) : (
+                    <Link to={`/vendedor/${listing.sellerId}`} className="inline-flex items-center gap-1 text-[#14212e] underline">
+                      Ver perfil del vendedor
+                    </Link>
+                  )}
                   {isFeaturedListing && <p className="mt-1 text-[11px] text-[#14212e]/60">Publicación destacada en el marketplace.</p>}
                 </div>
                 <div className="space-y-3">
@@ -791,10 +819,7 @@ function IconCircleButton({ label, icon, onClick, className, size = 'md' }: { la
 }
 
 const WhatsappIcon = () => (
-  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M16.7 14.2c-.3-.2-1.8-.9-2.1-1-.3-.1-.5-.2-.7.2-.2.3-.8 1-.9 1.1-.2.1-.3.2-.6.1-.3-.1-1.2-.4-2.3-1.4-.9-.8-1.4-1.7-1.6-2-.2-.3 0-.4.1-.6l.5-.6c.1-.2.2-.3.3-.5.1-.2 0-.3-.1-.5-.2-.2-.7-1.6-.9-2.2-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.7.3-.3.3-1 1-1 2.5s1 2.9 1.1 3.1c.1.2 2 3 4.8 4.2 1.8.8 2.5.9 2.9.8.5 0 1.5-.6 1.7-1.1.2-.5.2-1 .1-1.1-.1-.1-.3-.2-.6-.4Z" />
-    <path d="M12 21a9 9 0 1 0-3.9-.9L6 21l1.9-5.4" />
-  </svg>
+  <img src="/whatsapp.png" alt="" className="h-5 w-5" loading="lazy" decoding="async" aria-hidden="true" />
 )
 
 const FacebookIcon = () => (
@@ -822,9 +847,9 @@ const InstagramIcon = () => (
 )
 
 const LinkIcon = () => (
-  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M10 13a5 5 0 0 0 7.07 0l2.12-2.12a5 5 0 1 0-7.07-7.07L10.6 5.33" />
-    <path d="M14 11a5 5 0 0 0-7.07 0L4.81 13.1a5 5 0 0 0 7.07 7.07L13.4 18.67" />
+  <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path vectorEffect="non-scaling-stroke" d="M10 13a5 5 0 0 0 7.07 0l2.12-2.12a5 5 0 1 0-7.07-7.07L10.6 5.33" />
+    <path vectorEffect="non-scaling-stroke" d="M14 11a5 5 0 0 0-7.07 0L4.81 13.1a5 5 0 0 0 7.07 7.07L13.4 18.67" />
   </svg>
 )
 

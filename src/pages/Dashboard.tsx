@@ -10,9 +10,9 @@ import { archiveListing, fetchListingsBySeller, reduceListingPrice, fetchListing
 import { fetchUserProfile, type UserProfileRecord, upsertUserProfile } from '../services/users'
 import type { Listing } from '../types'
 import { usePlans } from '../context/PlanContext'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { fetchPendingShareBoosts, reviewShareBoost } from '../services/shareBoost'
-import { uploadAvatar } from '../services/storage'
+import { uploadAvatar, uploadStoreBanner, uploadStoreAvatar } from '../services/storage'
 import { PROVINCES, OTHER_CITY_OPTION } from '../constants/locations'
 import { BIKE_CATEGORIES } from '../constants/catalog'
 import { deriveProfileSlug, pickDiscipline } from '../utils/user'
@@ -23,7 +23,7 @@ import useFaves from '../hooks/useFaves'
 import useUpload from '../hooks/useUpload'
 import { createGift } from '../services/gifts'
 
-const TABS = ['Perfil', 'Publicaciones', 'Favoritos', 'Notificaciones', 'Editar perfil', 'Verificá tu perfil', 'Cerrar sesión'] as const
+const TABS = ['Perfil', 'Publicaciones', 'Favoritos', 'Notificaciones', 'Editar perfil', 'Editar tienda', 'Verificá tu perfil', 'Cerrar sesión'] as const
 type SellerTab = (typeof TABS)[number]
 
 const TAB_METADATA: Record<SellerTab, { title: string; description: string }> = {
@@ -46,6 +46,10 @@ const TAB_METADATA: Record<SellerTab, { title: string; description: string }> = 
   'Editar perfil': {
     title: 'Editar perfil',
     description: 'Actualizá tus datos, redes y WhatsApp',
+  },
+  'Editar tienda': {
+    title: 'Editar tienda',
+    description: 'Actualizá el banner, nombre, dirección y redes de tu tienda',
   },
   'Verificá tu perfil': {
     title: 'Verificá tu perfil',
@@ -287,6 +291,14 @@ export default function Dashboard() {
             onProfileUpdated={loadData}
           />
         )
+      case 'Editar tienda':
+        return (
+          <EditStoreView
+            profile={profile}
+            userId={user?.id}
+            onStoreUpdated={loadData}
+          />
+        )
       case 'Verificá tu perfil':
         return <VerifyProfileView profile={profile} userEmail={user?.email} />
       case 'Cerrar sesión':
@@ -332,11 +344,16 @@ export default function Dashboard() {
               <p className="text-[11px] uppercase tracking-[0.35em] text-white/60">Panel de vendedor</p>
               <h1 className="mt-2 text-2xl font-semibold">Hola, {displayName}</h1>
               <p className="mt-1 text-sm text-white/70">Gestioná tu tienda y mantené al día tus publicaciones.</p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <Button
-                  to="/publicar"
-                  className="bg-gradient-to-r from-[#0ea5e9] via-[#2563eb] to-[#1d4ed8] text-white shadow-[0_14px_40px_rgba(37,99,235,0.45)] hover:brightness-110"
-                >
+          <div className="mt-4 flex flex-wrap gap-2">
+            {profile?.store_enabled && profile?.store_slug && (
+              <Button to={`/tienda/${profile.store_slug}`} variant="ghost" className="border-white/30 text-white hover:bg-white/10">
+                Tu tienda
+              </Button>
+            )}
+            <Button
+              to="/publicar"
+              className="bg-gradient-to-r from-[#0ea5e9] via-[#2563eb] to-[#1d4ed8] text-white shadow-[0_14px_40px_rgba(37,99,235,0.45)] hover:brightness-110"
+            >
                   <span>Nueva publicación</span>
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14m-6-6 6 6-6 6" />
@@ -501,6 +518,11 @@ export default function Dashboard() {
                     Crear regalo
                   </button>
                 )}
+                {profile?.store_enabled && profile?.store_slug && (
+                  <Button to={`/tienda/${profile.store_slug}`} variant="ghost" className="border-white/30 text-white hover:bg-white/10">
+                    Tu tienda
+                  </Button>
+                )}
                 <Button to="/publicar" className="bg-gradient-to-r from-[#0ea5e9] via-[#2563eb] to-[#1d4ed8] text-white shadow-[0_14px_40px_rgba(37,99,235,0.45)] hover:brightness-110">
                   <span>Nueva publicación</span>
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
@@ -514,7 +536,7 @@ export default function Dashboard() {
           <div className="grid gap-6 p-6 lg:grid-cols-[260px_1fr]">
             <nav className="hidden rounded-3xl border border-white/10 bg-white/[0.08] p-3 text-sm text-white/80 md:block">
               <ul className="grid gap-1">
-                {TABS.map((tab) => (
+                {TABS.filter((tab) => tab !== 'Editar tienda' || Boolean(profile?.store_enabled)).map((tab) => (
                   <li key={tab}>
                     <button
                       type="button"
@@ -569,7 +591,7 @@ export default function Dashboard() {
                 </button>
               </div>
               <ul className="mt-4 grid gap-2">
-                {TABS.map((tab) => (
+                {TABS.filter((tab) => tab !== 'Editar tienda' || Boolean(profile?.store_enabled)).map((tab) => (
                   <li key={`mobile-${tab}`}>
                     <button
                       type="button"
@@ -1474,6 +1496,19 @@ function EditProfileView({
   const [instagram, setInstagram] = useState(profile?.instagram_handle ?? '')
   const [facebook, setFacebook] = useState(profile?.facebook_handle ?? '')
   const [website, setWebsite] = useState(profile?.website_url ?? '')
+  // Tienda oficial
+  const [storeEnabled, setStoreEnabled] = useState<boolean>(Boolean(profile?.store_enabled))
+  const [storeName, setStoreName] = useState(profile?.store_name ?? '')
+  const [storeSlug, setStoreSlug] = useState(profile?.store_slug ?? '')
+  const [storeAddress, setStoreAddress] = useState(profile?.store_address ?? '')
+  const [storePhone, setStorePhone] = useState(profile?.store_phone ?? '')
+  const [storeInstagram, setStoreInstagram] = useState(profile?.store_instagram ?? '')
+  const [storeFacebook, setStoreFacebook] = useState(profile?.store_facebook ?? '')
+  const [storeWebsite, setStoreWebsite] = useState(profile?.store_website ?? '')
+  const [storeBannerUrl, setStoreBannerUrl] = useState(profile?.store_banner_url ?? '')
+  const [storeAvatarUrl, setStoreAvatarUrl] = useState(profile?.store_avatar_url ?? '')
+
+  
   const COUNTRY_CODES = [
     { cc: 'AR', dial: '54', label: 'Argentina', flag: '🇦🇷' },
     { cc: 'PY', dial: '595', label: 'Paraguay', flag: '🇵🇾' },
@@ -1506,6 +1541,15 @@ function EditProfileView({
     setInstagram(profile?.instagram_handle ?? '')
     setFacebook(profile?.facebook_handle ?? '')
     setWebsite(profile?.website_url ?? '')
+    setStoreEnabled(Boolean(profile?.store_enabled))
+    setStoreName(profile?.store_name ?? '')
+    setStoreSlug(profile?.store_slug ?? '')
+    setStoreAddress(profile?.store_address ?? '')
+    setStorePhone(profile?.store_phone ?? '')
+    setStoreInstagram(profile?.store_instagram ?? '')
+    setStoreFacebook(profile?.store_facebook ?? '')
+    setStoreWebsite(profile?.store_website ?? '')
+    setStoreBannerUrl(profile?.store_banner_url ?? '')
     // Detectar prefijo y número local desde el perfil
     const digits = String(profile?.whatsapp_number || '').replace(/[^0-9]/g, '')
     if (digits) {
@@ -1577,6 +1621,7 @@ function EditProfileView({
     setError(null)
     try {
       const formattedWhatsapp = whatsappLocal ? `${whatsappDial}${sanitizeLocalWhatsappInput(whatsappLocal)}` : null
+      const slugSanitized = (storeSlug || storeName || fullName || '').toLowerCase().trim().replace(/[^a-z0-9-_]+/g, '-').replace(/^-+|-+$/g, '') || null
       const result = await upsertUserProfile({
         id: userId,
         email: effectiveEmail,
@@ -1592,7 +1637,17 @@ function EditProfileView({
         instagramHandle: instagram ? normaliseHandle(instagram) : null,
         facebookHandle: facebook ? normaliseUrl(facebook) : null,
         websiteUrl: website ? normaliseUrl(website) : null,
-        whatsapp: formattedWhatsapp
+        whatsapp: formattedWhatsapp,
+        // store
+        storeEnabled,
+        storeName: storeName.trim() || null,
+        storeSlug: slugSanitized,
+        storeAddress: storeAddress.trim() || null,
+        storePhone: storePhone.trim() || null,
+        storeInstagram: storeInstagram ? normaliseHandle(storeInstagram) : null,
+        storeFacebook: storeFacebook ? normaliseUrl(storeFacebook) : null,
+        storeWebsite: storeWebsite ? normaliseUrl(storeWebsite) : null,
+        storeBannerUrl: storeBannerUrl ? normaliseUrl(storeBannerUrl) : null,
       })
       if (!result.success) {
         throw new Error(result.error ?? 'No pudimos guardar tu perfil. Intentá nuevamente.')
@@ -1705,6 +1760,51 @@ function EditProfileView({
           <input className="input mt-1" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://tusitio.com" />
         </label>
 
+        {Boolean(profile?.store_enabled) && (
+        <div className="mt-2 rounded-2xl border border-[#14212e]/10 bg-white p-4">
+          <h3 className="text-base font-semibold text-[#14212e]">Tienda oficial</h3>
+          <div className="mt-3 grid gap-4 sm:grid-cols-2">
+            <label className="inline-flex items-center gap-2 text-sm text-[#14212e]">
+              <input type="checkbox" className="accent-mb-primary" checked={storeEnabled} onChange={(e) => setStoreEnabled(e.target.checked)} />
+              Habilitar tienda oficial
+            </label>
+            <div>
+              <label className="text-sm font-medium text-[#14212e]">Nombre de la tienda</label>
+              <input className="input mt-1" value={storeName} onChange={(e) => setStoreName(e.target.value)} placeholder="Mi Bici Shop" />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-[#14212e]">Slug</label>
+              <input className="input mt-1" value={storeSlug} onChange={(e) => setStoreSlug(e.target.value)} placeholder="mi-bici-shop" />
+              <p className="mt-1 text-xs text-[#14212e]/60">URL: ciclomarket.ar/tienda/{(storeSlug || storeName || 'mi-bici-shop').toLowerCase().replace(/[^a-z0-9-_]+/g, '-')}</p>
+            </div>
+            <div className="sm:col-span-2">
+              <label className="text-sm font-medium text-[#14212e]">Dirección del local</label>
+              <input className="input mt-1" value={storeAddress} onChange={(e) => setStoreAddress(e.target.value)} placeholder="Calle 123, Ciudad, Provincia" />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-[#14212e]">Teléfono del local</label>
+              <input className="input mt-1" value={storePhone} onChange={(e) => setStorePhone(e.target.value)} placeholder="+54 11 5555-5555" />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-[#14212e]">Banner (URL)</label>
+              <input className="input mt-1" value={storeBannerUrl} onChange={(e) => setStoreBannerUrl(e.target.value)} placeholder="https://.../banner.jpg" />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-[#14212e]">Instagram</label>
+              <input className="input mt-1" value={storeInstagram} onChange={(e) => setStoreInstagram(e.target.value)} placeholder="@tutienda" />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-[#14212e]">Facebook</label>
+              <input className="input mt-1" value={storeFacebook} onChange={(e) => setStoreFacebook(e.target.value)} placeholder="facebook.com/tutienda" />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-[#14212e]">Sitio web</label>
+              <input className="input mt-1" value={storeWebsite} onChange={(e) => setStoreWebsite(e.target.value)} placeholder="https://tutienda.com" />
+            </div>
+          </div>
+        </div>
+        )}
+
         {/* WhatsApp — único input */}
         <label className="text-sm font-medium text-[#14212e]">
           WhatsApp (privado)
@@ -1739,14 +1839,238 @@ function EditProfileView({
   )
 }
 
+function EditStoreView({ profile, userId, onStoreUpdated }: { profile: UserProfileRecord | null; userId?: string; onStoreUpdated?: () => Promise<void> | void }) {
+  const [storeName, setStoreName] = useState(profile?.store_name ?? '')
+  const [storeSlug, setStoreSlug] = useState(profile?.store_slug ?? '')
+  const [storeAddress, setStoreAddress] = useState(profile?.store_address ?? '')
+  const [storePhone, setStorePhone] = useState(profile?.store_phone ?? '')
+  const [storeInstagram, setStoreInstagram] = useState(profile?.store_instagram ?? '')
+  const [storeFacebook, setStoreFacebook] = useState(profile?.store_facebook ?? '')
+  const [storeWebsite, setStoreWebsite] = useState(profile?.store_website ?? '')
+  const [storeBannerUrl, setStoreBannerUrl] = useState(profile?.store_banner_url ?? '')
+  const [storeAvatarUrl, setStoreAvatarUrl] = useState(profile?.store_avatar_url ?? '')
+  const [storeBannerPosY, setStoreBannerPosY] = useState<number>(typeof profile?.store_banner_position_y === 'number' ? (profile?.store_banner_position_y as number) : 50)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
+  const { show: showToast } = useToast()
+  const logoFileRef = useRef<HTMLInputElement | null>(null)
+  const bannerFileRef = useRef<HTMLInputElement | null>(null)
+
+  useEffect(() => {
+    setStoreName(profile?.store_name ?? '')
+    setStoreSlug(profile?.store_slug ?? '')
+    setStoreAddress(profile?.store_address ?? '')
+    setStorePhone(profile?.store_phone ?? '')
+    setStoreInstagram(profile?.store_instagram ?? '')
+    setStoreFacebook(profile?.store_facebook ?? '')
+    setStoreWebsite(profile?.store_website ?? '')
+    setStoreBannerUrl(profile?.store_banner_url ?? '')
+    setStoreAvatarUrl(profile?.store_avatar_url ?? '')
+    setStoreBannerPosY(typeof profile?.store_banner_position_y === 'number' ? profile!.store_banner_position_y! : 50)
+  }, [profile])
+
+  if (!profile?.store_enabled) {
+    return (
+      <div className="space-y-3">
+        <h2 className="text-xl font-semibold text-[#14212e]">Tienda oficial</h2>
+        <p className="text-sm text-[#14212e]/70">Tu cuenta aún no está habilitada como tienda oficial. Escribinos a <a href="mailto:admin@ciclomarket.ar" className="underline">admin@ciclomarket.ar</a> para solicitarla.</p>
+      </div>
+    )
+  }
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!userId) { setError('Sesión inválida'); return }
+    setSaving(true)
+    setError(null)
+    try {
+      const slugSanitized = (storeSlug || storeName || '').toLowerCase().trim().replace(/[^a-z0-9-_]+/g, '-').replace(/^-+|-+$/g, '') || null
+      const { success: ok, error: err } = await upsertUserProfile({
+        id: userId,
+        storeName: storeName.trim() || null,
+        storeSlug: slugSanitized,
+        storeAddress: storeAddress.trim() || null,
+        storePhone: storePhone.trim() || null,
+        storeInstagram: storeInstagram ? normaliseHandle(storeInstagram) : null,
+        storeFacebook: storeFacebook ? normaliseUrl(storeFacebook) : null,
+        storeWebsite: storeWebsite ? normaliseUrl(storeWebsite) : null,
+        storeBannerUrl: storeBannerUrl ? normaliseUrl(storeBannerUrl) : null,
+        storeAvatarUrl: storeAvatarUrl ? normaliseUrl(storeAvatarUrl) : null,
+        storeBannerPositionY: Number.isFinite(storeBannerPosY) ? storeBannerPosY : 50,
+      })
+      if (!ok) throw new Error(err || 'No pudimos guardar los cambios')
+      if (onStoreUpdated) await onStoreUpdated()
+      setSuccess('Se actualizó la tienda correctamente.')
+      showToast('Se actualizó la tienda correctamente.')
+    } catch (e: any) {
+      setError(e?.message || 'No pudimos guardar los cambios')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <form className="grid gap-4" onSubmit={onSubmit}>
+      <h2 className="text-xl font-semibold text-[#14212e]">Editar tienda</h2>
+      {success && <div className="rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">{success}</div>}
+      {error && <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+
+      <label className="text-sm font-medium text-[#14212e]">
+        Nombre de la tienda
+        <input className="input mt-1" value={storeName} onChange={(e) => setStoreName(e.target.value)} placeholder="Mi Bici Shop" />
+      </label>
+      <label className="text-sm font-medium text-[#14212e]">
+        Slug
+        <input className="input mt-1" value={storeSlug} onChange={(e) => setStoreSlug(e.target.value)} placeholder="mi-bici-shop" />
+        <span className="text-xs text-[#14212e]/60">URL: ciclomarket.ar/tienda/{(storeSlug || storeName || 'mi-bici-shop').toLowerCase().replace(/[^a-z0-9-_]+/g, '-')}</span>
+      </label>
+      <label className="text-sm font-medium text-[#14212e]">
+        Dirección del local
+        <input className="input mt-1" value={storeAddress} onChange={(e) => setStoreAddress(e.target.value)} placeholder="Calle 123, Ciudad, Provincia" />
+      </label>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="text-sm font-medium text-[#14212e]">
+          Teléfono del local
+          <input className="input mt-1" value={storePhone} onChange={(e) => setStorePhone(e.target.value)} placeholder="+54 11 5555-5555" />
+        </label>
+        <label className="text-sm font-medium text-[#14212e]">
+          Logo / Avatar (URL)
+          <input className="input mt-1" value={storeAvatarUrl} onChange={(e) => setStoreAvatarUrl(e.target.value)} placeholder="https://.../logo.png" />
+          <div className="mt-2 flex items-center gap-2">
+            <button
+              type="button"
+              className="rounded-xl border border-[#14212e]/20 px-3 py-2 text-sm text-[#14212e] hover:bg-[#14212e]/5"
+              onClick={() => logoFileRef.current?.click()}
+            >
+              Subir logo
+            </button>
+            <input ref={logoFileRef} type="file" accept="image/*" className="hidden" onChange={async (e) => {
+              const f = e.target.files?.[0]
+              if (!f || !userId) return
+              try {
+                setSaving(true)
+                const url = await uploadStoreAvatar(f, userId)
+                if (url) setStoreAvatarUrl(url)
+                showToast('Logo subido correctamente')
+              } catch (err: any) {
+                setError(err?.message || 'No pudimos subir el logo')
+              } finally {
+                setSaving(false)
+                if (logoFileRef.current) logoFileRef.current.value = ''
+              }
+            }} />
+            {storeAvatarUrl && (
+              <img src={storeAvatarUrl} alt="Logo" className="h-12 w-12 rounded-full object-cover border border-[#14212e]/10" />
+            )}
+          </div>
+        </label>
+        <label className="text-sm font-medium text-[#14212e]">
+          Banner (URL)
+          <input className="input mt-1" value={storeBannerUrl} onChange={(e) => setStoreBannerUrl(e.target.value)} placeholder="https://.../banner.jpg" />
+          <div className="mt-2 flex items-center gap-2">
+            <button
+              type="button"
+              className="rounded-xl border border-[#14212e]/20 px-3 py-2 text-sm text-[#14212e] hover:bg-[#14212e]/5"
+              onClick={() => bannerFileRef.current?.click()}
+            >
+              Subir imagen
+            </button>
+            <input ref={bannerFileRef} type="file" accept="image/*" className="hidden" onChange={async (e) => {
+              const f = e.target.files?.[0]
+              if (!f || !userId) return
+              try {
+                setSaving(true)
+                const url = await uploadStoreBanner(f, userId)
+                if (url) setStoreBannerUrl(url)
+                showToast('Banner subido correctamente')
+              } catch (err: any) {
+                setError(err?.message || 'No pudimos subir el banner')
+              } finally {
+                setSaving(false)
+                if (bannerFileRef.current) bannerFileRef.current.value = ''
+              }
+            }} />
+            {storeBannerUrl && (
+              <img src={storeBannerUrl} alt="Banner" className="h-10 w-20 rounded object-cover border border-[#14212e]/10" />
+            )}
+          </div>
+          <div className="mt-3">
+            <label className="text-xs font-medium text-[#14212e]">Posición vertical del banner (0–100)</label>
+            <input type="range" min={0} max={100} value={storeBannerPosY}
+              onChange={(e) => setStoreBannerPosY(Number(e.target.value))}
+              className="mt-1 w-full" />
+            <div className="mt-1 text-xs text-[#14212e]/60">Actual: {Math.round(storeBannerPosY)}%</div>
+          </div>
+        </label>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-3">
+        <label className="text-sm font-medium text-[#14212e]">
+          Instagram
+          <input className="input mt-1" value={storeInstagram} onChange={(e) => setStoreInstagram(e.target.value)} placeholder="@tutienda" />
+        </label>
+        <label className="text-sm font-medium text-[#14212e]">
+          Facebook
+          <input className="input mt-1" value={storeFacebook} onChange={(e) => setStoreFacebook(e.target.value)} placeholder="facebook.com/tutienda" />
+        </label>
+        <label className="text-sm font-medium text-[#14212e]">
+          Sitio web
+          <input className="input mt-1" value={storeWebsite} onChange={(e) => setStoreWebsite(e.target.value)} placeholder="https://tutienda.com" />
+        </label>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <Button type="submit" className="bg-[#14212e] text-white hover:bg-[#1b2f3f]" disabled={saving}>
+          {saving ? 'Guardando…' : 'Guardar cambios'}
+        </Button>
+        {profile?.store_slug && (
+          <Link to={`/tienda/${profile.store_slug}`} className="text-sm text-mb-primary underline">Ver mi tienda</Link>
+        )}
+      </div>
+    </form>
+  )
+}
+
 function SubscriptionView({ listings }: { listings: Listing[] }) {
   const navigate = useNavigate()
   const { plans, activeSubscription, loading, cancelSubscription, updateAutoRenew } = usePlans()
+  const { user } = useAuth()
+  const [isStore, setIsStore] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      try {
+        if (!user?.id) { setIsStore(false); return }
+        const profile = await fetchUserProfile(user.id)
+        if (!active) return
+        setIsStore(Boolean(profile?.store_enabled))
+      } catch {
+        if (active) setIsStore(false)
+      }
+    })()
+    return () => { active = false }
+  }, [user?.id])
   const [updatingAuto, setUpdatingAuto] = useState(false)
   const [cancelling, setCancelling] = useState(false)
 
   if (loading) {
     return <div className="py-10 text-center text-[#14212e]/60">Cargando información de tu plan…</div>
+  }
+
+  if (isStore) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 py-10 text-center">
+        <h2 className="text-xl font-semibold text-[#14212e]">Tienda oficial habilitada</h2>
+        <p className="max-w-md text-sm text-[#14212e]/70">Tu cuenta de tienda tiene publicaciones ilimitadas y sin vencimiento. No necesitás planes pagos.</p>
+        <div className="flex gap-3">
+          <Button className="bg-[#14212e] text-white hover:bg-[#1b2f3f]" onClick={() => navigate('/publicar')}>
+            Crear nueva publicación
+          </Button>
+          <Button variant="ghost" onClick={() => navigate('/dashboard?tab=Editar%20tienda')}>Editar tienda</Button>
+        </div>
+      </div>
+    )
   }
 
   const plan = activeSubscription?.plan || plans.find((p) => p.id === activeSubscription?.planId)

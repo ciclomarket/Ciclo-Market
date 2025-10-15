@@ -218,7 +218,8 @@ export default function Home() {
     [listings]
   )
 
-  const featuredListings = featuredListingsRaw.length ? featuredListingsRaw : listings.slice(0, 8)
+  const onlyBikes = (arr: Listing[]) => arr.filter((l) => l.category !== 'Accesorios' && l.category !== 'Indumentaria')
+  const featuredListings = featuredListingsRaw.length ? onlyBikes(featuredListingsRaw) : onlyBikes(listings).slice(0, 8)
 
   // Filtrado general
   const filtered = useMemo(

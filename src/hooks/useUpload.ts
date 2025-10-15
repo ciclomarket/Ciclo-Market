@@ -1,6 +1,7 @@
 
 import { useState } from 'react'
 import { getSupabaseClient, supabaseEnabled, supabaseStorageBucket } from '../services/supabase'
+import { compressToWebp } from '../utils/image'
 
 type CompressOptions = {
   quality?: number
@@ -17,78 +18,14 @@ const DEFAULT_COMPRESS_OPTIONS: Required<CompressOptions> = {
 }
 
 async function compressImage(file: File, opts: CompressOptions = {}): Promise<File> {
-  if (!file.type.startsWith('image/')) return file
-
-  const options = { ...DEFAULT_COMPRESS_OPTIONS, ...opts }
-  if (file.size <= options.minSizeBytes) return file
-
-  // If HEIC/HEIF: attempt real conversion to JPEG using heic2any (loaded on demand)
-  if (/image\/(heic|heif)/i.test(file.type)) {
-    try {
-      const mod = await import('heic2any')
-      const heic2any = (mod as any).default || mod
-      const converted = (await heic2any({ blob: file, toType: 'image/jpeg', quality: options.quality })) as Blob
-      const name = file.name.replace(/\.(heic|heif)$/i, '.jpg')
-      return new File([converted], name, { type: 'image/jpeg' })
-    } catch (err) {
-      console.warn('[upload] HEIC→JPG conversion failed, using original file', err)
-      // continue with generic path (likely will fail to decode in <img>)
-    }
-  }
-
-  const imageUrl = URL.createObjectURL(file)
-  try {
-    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const img = new Image()
-      img.onload = () => resolve(img)
-      img.onerror = reject
-      img.src = imageUrl
-    })
-
-    const { naturalWidth: width, naturalHeight: height } = image
-    if (!width || !height) return file
-
-    const widthRatio = options.maxWidth / width
-    const heightRatio = options.maxHeight / height
-    const scale = Math.min(1, widthRatio, heightRatio)
-
-    const targetWidth = Math.max(1, Math.round(width * scale))
-    const targetHeight = Math.max(1, Math.round(height * scale))
-
-    const canvas = document.createElement('canvas')
-    canvas.width = targetWidth
-    canvas.height = targetHeight
-
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return file
-
-    ctx.drawImage(image, 0, 0, targetWidth, targetHeight)
-
-    // For better OG compatibility, convert HEIC/HEIF/WEBP to JPEG
-    const needsJpeg = /image\/(heic|heif|webp)/i.test(file.type)
-    const mimeType = needsJpeg ? 'image/jpeg' : file.type
-
-    const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, mimeType, options.quality)
-    )
-
-    if (!blob || blob.size === 0) return file
-
-    // If compression results in bigger file, keep original
-    if (blob.size >= file.size) return file
-
-    const outName = /image\/(heic|heif|webp)/i.test(file.type)
-      ? file.name.replace(/\.(heic|heif|webp)$/i, '.jpg')
-      : file.name
-    const outType = /image\/(heic|heif|webp)/i.test(file.type) ? 'image/jpeg' : blob.type
-    const compressedFile = new File([blob], outName, { type: outType })
-    return compressedFile
-  } catch (err) {
-    console.warn('Error compressing image, uploading original file instead', err)
-    return file
-  } finally {
-    URL.revokeObjectURL(imageUrl)
-  }
+  // Delegate to WebP-oriented compressor (falls back to JPEG if WebP fails)
+  const result = await compressToWebp(file, {
+    quality: opts.quality ?? DEFAULT_COMPRESS_OPTIONS.quality,
+    maxWidth: opts.maxWidth ?? DEFAULT_COMPRESS_OPTIONS.maxWidth,
+    maxHeight: opts.maxHeight ?? DEFAULT_COMPRESS_OPTIONS.maxHeight,
+    minSizeBytes: opts.minSizeBytes ?? DEFAULT_COMPRESS_OPTIONS.minSizeBytes,
+  })
+  return result
 }
 
 export default function useUpload() {
@@ -120,5 +57,61 @@ export default function useUpload() {
       return urls
     } finally { setUploading(false); setProgress(0) }
   }
-  return { uploadFiles, uploading, progress }
+  /**
+   * Sube dos tamaños por imagen: detalle (p.ej. 1600px) y miniatura (p.ej. 800px).
+   * No impacta a los consumidores existentes de uploadFiles.
+   */
+  const uploadFilesAndThumbs = async (
+    files: File[],
+    options?: { detailMax?: number; thumbMax?: number; quality?: number }
+  ): Promise<{ full: string[]; thumb: string[] }> => {
+    if (!supabaseEnabled || files.length === 0) return { full: [], thumb: [] }
+    const supabase = getSupabaseClient()
+    const storage = supabase.storage.from(supabaseStorageBucket)
+    setUploading(true)
+    const full: string[] = []
+    const thumb: string[] = []
+    const detailMax = options?.detailMax ?? 1600
+    const thumbMax = options?.thumbMax ?? 800
+    const quality = options?.quality ?? DEFAULT_COMPRESS_OPTIONS.quality
+    try {
+      let idx = 0
+      for (const f of files) {
+        // Detalle
+        const fileDetail = await compressImage(f, { quality, maxWidth: detailMax, maxHeight: detailMax })
+        const safeNameDetail = fileDetail.name.replace(/[^a-zA-Z0-9_.-]/g, '_')
+        const keyDetail = `${new Date().getFullYear()}/${Date.now()}_${typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)}_${safeNameDetail}`
+        const { error: upDetail } = await storage.upload(keyDetail, fileDetail, {
+          cacheControl: '31536000',
+          contentType: fileDetail.type || f.type,
+          upsert: false
+        })
+        if (upDetail) throw upDetail
+        const { data: pubDetail } = storage.getPublicUrl(keyDetail)
+        if (pubDetail?.publicUrl) full.push(pubDetail.publicUrl)
+
+        // Miniatura
+        const fileThumb = await compressImage(f, { quality, maxWidth: thumbMax, maxHeight: thumbMax })
+        const safeNameThumb = fileThumb.name.replace(/[^a-zA-Z0-9_.-]/g, '_')
+        const keyThumb = `${new Date().getFullYear()}/${Date.now()}_${typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)}_${safeNameThumb}`
+        const { error: upThumb } = await storage.upload(keyThumb, fileThumb, {
+          cacheControl: '31536000',
+          contentType: fileThumb.type || f.type,
+          upsert: false
+        })
+        if (upThumb) throw upThumb
+        const { data: pubThumb } = storage.getPublicUrl(keyThumb)
+        if (pubThumb?.publicUrl) thumb.push(pubThumb.publicUrl)
+
+        idx += 1
+        setProgress(Math.round((idx / files.length) * 100))
+      }
+      return { full, thumb }
+    } finally {
+      setUploading(false)
+      setProgress(0)
+    }
+  }
+
+  return { uploadFiles, uploadFilesAndThumbs, uploading, progress }
 }

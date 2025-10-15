@@ -15,6 +15,18 @@ export interface UserProfileInput {
   websiteUrl?: string | null
   verified?: boolean
   whatsapp?: string | null
+  // Store (official shop) optional fields
+  storeEnabled?: boolean
+  storeName?: string | null
+  storeSlug?: string | null
+  storeAddress?: string | null
+  storePhone?: string | null
+  storeInstagram?: string | null
+  storeFacebook?: string | null
+  storeWebsite?: string | null
+  storeBannerUrl?: string | null
+  storeAvatarUrl?: string | null
+  storeBannerPositionY?: number | null
 }
 
 export interface UserProfileRecord {
@@ -33,6 +45,18 @@ export interface UserProfileRecord {
   website_url?: string | null
   verified?: boolean | null
   whatsapp_number?: string | null
+  // Store fields (nullable if not enabled)
+  store_enabled?: boolean | null
+  store_name?: string | null
+  store_slug?: string | null
+  store_address?: string | null
+  store_phone?: string | null
+  store_instagram?: string | null
+  store_facebook?: string | null
+  store_website?: string | null
+  store_banner_url?: string | null
+  store_avatar_url?: string | null
+  store_banner_position_y?: number | null
 }
 
 export async function createUserProfile(payload: UserProfileInput): Promise<boolean> {
@@ -55,6 +79,17 @@ export async function createUserProfile(payload: UserProfileInput): Promise<bool
       verified: payload.verified ?? false,
       // Renombrá a whatsapp si tu tabla no tiene whatsapp_number
       whatsapp_number: payload.whatsapp ?? null,
+      store_enabled: payload.storeEnabled ?? null,
+      store_name: payload.storeName ?? null,
+      store_slug: payload.storeSlug ?? null,
+      store_address: payload.storeAddress ?? null,
+      store_phone: payload.storePhone ?? null,
+      store_instagram: payload.storeInstagram ?? null,
+      store_facebook: payload.storeFacebook ?? null,
+      store_website: payload.storeWebsite ?? null,
+      store_banner_url: payload.storeBannerUrl ?? null,
+      store_banner_position_y: payload.storeBannerPositionY ?? null,
+      store_avatar_url: payload.storeAvatarUrl ?? null,
       created_at: new Date().toISOString()
     })
     return !error
@@ -86,6 +121,17 @@ export async function upsertUserProfile(payload: Partial<UserProfileInput> & { i
     if (payload.websiteUrl !== undefined) updates.website_url = payload.websiteUrl
     if (payload.verified !== undefined) updates.verified = payload.verified
     if (payload.whatsapp !== undefined) updates.whatsapp_number = payload.whatsapp
+    if (payload.storeEnabled !== undefined) updates.store_enabled = payload.storeEnabled
+    if (payload.storeName !== undefined) updates.store_name = payload.storeName
+    if (payload.storeSlug !== undefined) updates.store_slug = payload.storeSlug
+    if (payload.storeAddress !== undefined) updates.store_address = payload.storeAddress
+    if (payload.storePhone !== undefined) updates.store_phone = payload.storePhone
+    if (payload.storeInstagram !== undefined) updates.store_instagram = payload.storeInstagram
+    if (payload.storeFacebook !== undefined) updates.store_facebook = payload.storeFacebook
+    if (payload.storeWebsite !== undefined) updates.store_website = payload.storeWebsite
+    if (payload.storeBannerUrl !== undefined) updates.store_banner_url = payload.storeBannerUrl
+    if (payload.storeBannerPositionY !== undefined) updates.store_banner_position_y = payload.storeBannerPositionY
+    if (payload.storeAvatarUrl !== undefined) updates.store_avatar_url = payload.storeAvatarUrl
 
     const { data, error } = await supabase
       .from('users')
@@ -116,6 +162,17 @@ export async function upsertUserProfile(payload: Partial<UserProfileInput> & { i
       website_url: payload.websiteUrl ?? null,
       verified: payload.verified ?? false,
       whatsapp_number: payload.whatsapp ?? null,
+      store_enabled: payload.storeEnabled ?? null,
+      store_name: payload.storeName ?? null,
+      store_slug: payload.storeSlug ?? null,
+      store_address: payload.storeAddress ?? null,
+      store_phone: payload.storePhone ?? null,
+      store_instagram: payload.storeInstagram ?? null,
+      store_facebook: payload.storeFacebook ?? null,
+      store_website: payload.storeWebsite ?? null,
+      store_banner_url: payload.storeBannerUrl ?? null,
+      store_banner_position_y: payload.storeBannerPositionY ?? null,
+      store_avatar_url: payload.storeAvatarUrl ?? null,
       created_at: new Date().toISOString()
     }
     const { error: insertError } = await supabase.from('users').insert(insertPayload)
@@ -131,6 +188,23 @@ export async function fetchUserProfile(id: string): Promise<UserProfileRecord | 
   try {
     const supabase = getSupabaseClient()
     const { data, error } = await supabase.from('users').select('*').eq('id', id).maybeSingle()
+    if (error || !data) return null
+    return data as UserProfileRecord
+  } catch {
+    return null
+  }
+}
+
+export async function fetchStoreProfileBySlug(slug: string): Promise<UserProfileRecord | null> {
+  if (!supabaseEnabled) return null
+  try {
+    const supabase = getSupabaseClient()
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('store_slug', slug.toLowerCase())
+      .eq('store_enabled', true)
+      .maybeSingle()
     if (error || !data) return null
     return data as UserProfileRecord
   } catch {

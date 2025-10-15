@@ -386,13 +386,34 @@ app.post('/api/share-boost/review', async (req, res) => {
     if (error || !data) return res.status(500).send('update_failed')
 
     if (approve && data.reward === 'boost7') {
-      // Aplicar destaque 7 días: setear seller_plan básico por 7 días desde hoy
-      const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-      const { error: upd } = await supabase
-        .from('listings')
-        .update({ seller_plan: 'basic', seller_plan_expires: expires })
-        .eq('id', data.listing_id)
-      if (upd) console.warn('[share-boost] apply boost failed', upd)
+      // Si el vendedor es tienda oficial, no sobrescribimos su plan 'pro'
+      let isStore = false
+      try {
+        const { data: listingRow } = await supabase
+          .from('listings')
+          .select('seller_id')
+          .eq('id', data.listing_id)
+          .maybeSingle()
+        if (listingRow?.seller_id) {
+          const { data: profile } = await supabase
+            .from('users')
+            .select('store_enabled')
+            .eq('id', listingRow.seller_id)
+            .maybeSingle()
+          isStore = Boolean(profile?.store_enabled)
+        }
+      } catch (e) {
+        // noop
+      }
+      if (!isStore) {
+        // Aplicar destaque 7 días: setear seller_plan básico por 7 días desde hoy
+        const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+        const { error: upd } = await supabase
+          .from('listings')
+          .update({ seller_plan: 'basic', seller_plan_expires: expires })
+          .eq('id', data.listing_id)
+        if (upd) console.warn('[share-boost] apply boost failed', upd)
+      }
     }
     // Nota: para reward 'photos2' requeriría un campo adicional por listing; pendiente
     return res.json({ ok: true })
@@ -558,6 +579,68 @@ app.post('/api/offers/notify', async (req, res) => {
   } catch (error) {
     console.error('[offers] email send failed', error)
     return res.status(500).json({ error: 'email_failed' })
+  }
+})
+
+/* ----------------------------- Listings cleanup --------------------------- */
+// Convierte una URL pública de Supabase a { bucket, path } para Storage.remove
+function parseSupabasePublicUrl(publicUrl) {
+  try {
+    const u = new URL(publicUrl)
+    const marker = '/storage/v1/object/public/'
+    const idx = u.pathname.indexOf(marker)
+    if (idx === -1) return null
+    const remainder = u.pathname.slice(idx + marker.length) // <bucket>/<path>
+    const firstSlash = remainder.indexOf('/')
+    if (firstSlash === -1) return null
+    const bucket = remainder.slice(0, firstSlash)
+    const path = decodeURIComponent(remainder.slice(firstSlash + 1))
+    return { bucket, path }
+  } catch {
+    return null
+  }
+}
+
+// Borra del storage las imágenes asociadas a una publicación
+app.post('/api/listings/:id/cleanup-images', async (req, res) => {
+  try {
+    const listingId = String(req.params.id || '')
+    if (!listingId) return res.status(400).json({ error: 'missing_id' })
+    const supabase = getServerSupabaseClient()
+    const { data: row, error } = await supabase
+      .from('listings')
+      .select('images')
+      .eq('id', listingId)
+      .maybeSingle()
+    if (error) return res.status(500).json({ error: 'fetch_failed' })
+    if (!row) return res.status(404).json({ error: 'not_found' })
+
+    const urls = Array.isArray(row.images) ? row.images : []
+    // Agrupar por bucket
+    const byBucket = new Map()
+    for (const url of urls) {
+      const parsed = parseSupabasePublicUrl(String(url))
+      if (!parsed) continue
+      if (!byBucket.has(parsed.bucket)) byBucket.set(parsed.bucket, [])
+      byBucket.get(parsed.bucket).push(parsed.path)
+    }
+
+    let removed = 0
+    for (const [bucket, paths] of byBucket.entries()) {
+      if (!paths.length) continue
+      const { error: rmErr } = await supabase.storage.from(bucket).remove(paths)
+      if (rmErr) {
+        // seguimos con otros buckets pero reportamos el error
+        console.warn('[cleanup-images] remove failed', bucket, rmErr.message)
+        continue
+      }
+      removed += paths.length
+    }
+
+    return res.json({ ok: true, removed })
+  } catch (err) {
+    console.warn('[cleanup-images] failed', err)
+    return res.status(500).json({ error: 'unexpected_error' })
   }
 })
 

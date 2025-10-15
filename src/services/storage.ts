@@ -18,3 +18,33 @@ export async function uploadAvatar(file: File, userId: string): Promise<string |
   const { data } = storage.getPublicUrl(key)
   return data?.publicUrl ?? null
 }
+
+export async function uploadStoreBanner(file: File, userId: string): Promise<string | null> {
+  if (!supabaseEnabled || !supabase) return null
+  const safeName = sanitizeFileName(file.name)
+  const key = `banners/${userId}/${Date.now()}_${safeName}`
+  const storage = supabase.storage.from(supabaseAvatarBucket)
+  const { error: uploadError } = await storage.upload(key, file, {
+    cacheControl: '3600',
+    contentType: file.type || 'image/jpeg',
+    upsert: true
+  })
+  if (uploadError) throw uploadError
+  const { data } = storage.getPublicUrl(key)
+  return data?.publicUrl ?? null
+}
+
+export async function uploadStoreAvatar(file: File, userId: string): Promise<string | null> {
+  if (!supabaseEnabled || !supabase) return null
+  const safeName = sanitizeFileName(file.name)
+  const key = `stores/${userId}/avatar_${Date.now()}_${safeName}`
+  const storage = supabase.storage.from(supabaseAvatarBucket)
+  const { error: uploadError } = await storage.upload(key, file, {
+    cacheControl: '3600',
+    contentType: file.type || 'image/jpeg',
+    upsert: true
+  })
+  if (uploadError) throw uploadError
+  const { data } = storage.getPublicUrl(key)
+  return data?.publicUrl ?? null
+}

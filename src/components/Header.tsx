@@ -439,6 +439,32 @@ export default function Header() {
     }
   }
 
+  const handleFacebookLogin = async () => {
+    if (!enabled || !supabaseEnabled) {
+      setLoginError('Login con Facebook deshabilitado: configurá Supabase en .env')
+      return
+    }
+    try {
+      setLoginLoading(true)
+      setLoginError(null)
+      const supabase = getSupabaseClient()
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'facebook',
+        options: {
+          redirectTo: `${window.location.origin}/dashboard`,
+          scopes: 'public_profile,email'
+        }
+      })
+      if (error) throw error
+      if (data?.url) window.location.href = data.url
+    } catch (err: any) {
+      const msg = err?.message ?? 'No pudimos iniciar sesión con Facebook. Intentá nuevamente.'
+      setLoginError(msg)
+    } finally {
+      setLoginLoading(false)
+    }
+  }
+
   const header = (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/70">
       <div className="max-w-6xl mx-auto px-4 py-4 flex items-center gap-3 md:gap-6">
@@ -495,12 +521,20 @@ export default function Header() {
                       <p className="mt-1 text-xs text-white/70">Elegí tu método preferido.</p>
                     </div>
                     <SocialAuthButtons
-                      buttons={[{
-                        id: 'google',
-                        label: 'Continuar con Google',
-                        loading: loginLoading,
-                        onClick: handleGoogleLogin,
-                      }]}
+                      buttons={[
+                        {
+                          id: 'google',
+                          label: 'Continuar con Google',
+                          loading: loginLoading,
+                          onClick: handleGoogleLogin,
+                        },
+                        {
+                          id: 'facebook',
+                          label: 'Continuar con Facebook',
+                          loading: loginLoading,
+                          onClick: handleFacebookLogin,
+                        },
+                      ]}
                     />
                     <div className="relative flex items-center gap-3 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/40">
                       <span className="h-px flex-1 bg-white/10" />
@@ -734,12 +768,20 @@ export default function Header() {
               </div>
 
               <SocialAuthButtons
-                buttons={[{
-                  id: 'google',
-                  label: 'Continuar con Google',
-                  loading: loginLoading,
-                  onClick: handleGoogleLogin,
-                }]}
+                buttons={[
+                  {
+                    id: 'google',
+                    label: 'Continuar con Google',
+                    loading: loginLoading,
+                    onClick: handleGoogleLogin,
+                  },
+                  {
+                    id: 'facebook',
+                    label: 'Continuar con Facebook',
+                    loading: loginLoading,
+                    onClick: handleFacebookLogin,
+                  },
+                ]}
               />
 
               <div className="relative flex items-center gap-3 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/40">

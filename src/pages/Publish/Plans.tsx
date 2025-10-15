@@ -5,6 +5,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import Button from '../../components/Button'
 import Container from '../../components/Container'
 import { useAuth } from '../../context/AuthContext'
+import { useEffect } from 'react'
+import { fetchUserProfile } from '../../services/users'
 import { usePlans } from '../../context/PlanContext'
 import { validateGift } from '../../services/gifts'
 import type { Plan } from '../../types'
@@ -140,6 +142,7 @@ export default function Plans() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
+  const [isStore, setIsStore] = useState<boolean>(false)
   const [processingPlan, setProcessingPlan] = useState<PlanCode | null>(null)
   const [giftCode, setGiftCode] = useState<string | null>(null)
   const [giftPlan, setGiftPlan] = useState<PlanCode | null>(null)
@@ -151,6 +154,28 @@ export default function Plans() {
     if (typeParam === 'bike' || typeParam === 'accessory' || typeParam === 'apparel') return typeParam
     return null
   })()
+
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      try {
+        if (!user?.id) { setIsStore(false); return }
+        const profile = await fetchUserProfile(user.id)
+        if (!active) return
+        setIsStore(Boolean(profile?.store_enabled))
+      } catch {
+        if (active) setIsStore(false)
+      }
+    })()
+    return () => { active = false }
+  }, [user?.id])
+
+  // Si es tienda oficial y ya eligió tipo, saltamos la pantalla de planes
+  useEffect(() => {
+    if (isStore && listingType) {
+      navigate(`/publicar/nueva?type=${listingType}&plan=pro`, { replace: true })
+    }
+  }, [isStore, listingType, navigate])
 
   const paymentStatus = searchParams.get('payment') ?? undefined
   const paymentPlanParam = canonicalPlanCode(searchParams.get('plan'))
@@ -413,6 +438,28 @@ export default function Plans() {
   }
 
   const copy = LISTING_TYPE_COPY[listingType]
+
+  if (isStore) {
+    // Para tiendas, mostrar un CTA único y simple
+    return (
+      <div className="min-h-[calc(100vh-120px)] bg-[#0c1723] py-12">
+        <Container>
+          <div className="mx-auto max-w-3xl text-center space-y-6 text-white">
+            <span className="inline-flex items-center justify-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs uppercase tracking-[0.3em] text-white/70">Tienda oficial</span>
+            <h1 className="text-3xl font-bold">Publicaciones ilimitadas sin costo</h1>
+            <p className="text-sm text-white/75">Tu cuenta de tienda oficial tiene publicaciones ilimitadas y no vence. Elegí qué querés publicar y continuá.</p>
+            <div className="flex flex-wrap justify-center gap-3">
+              {(['bike','accessory','apparel'] as ListingType[]).map((t) => (
+                <Button key={t} onClick={() => navigate(`/publicar/nueva?type=${t}&plan=pro`)} className="bg-white text-[#14212e] hover:bg-white/90">
+                  {LISTING_TYPE_COPY[t].cta}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </Container>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-[calc(100vh-120px)] bg-[#0c1723] py-12">

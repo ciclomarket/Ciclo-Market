@@ -146,6 +146,44 @@ begin
   end if;
 end$$;
 
+-- Users (profiles + tiendas) -----------------------------------------------
+do $$
+begin
+  -- Asegurar RLS habilitado
+  execute 'alter table public.users enable row level security';
+  execute 'alter table public.users force row level security';
+
+  -- Lectura pública de perfiles/tiendas (exponer campos públicos)
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'users' and policyname = 'users_select_public'
+  ) then
+    create policy users_select_public
+      on public.users
+      for select
+      to anon, authenticated
+      using (true);
+  end if;
+
+  -- Actualización: sólo el dueño puede actualizar su propio perfil
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'users' and policyname = 'users_update_own'
+  ) then
+    create policy users_update_own
+      on public.users
+      for update
+      to authenticated
+      using (id = auth.uid())
+      with check (id = auth.uid());
+  end if;
+
+  -- Grants necesarios para PostgREST (idempotentes)
+  execute 'grant usage on schema public to anon, authenticated';
+  execute 'grant select on table public.users to anon, authenticated';
+  execute 'grant update on table public.users to authenticated';
+end$$;
+
 -- Gift Codes -----------------------------------------------------------------
 do $$
 begin

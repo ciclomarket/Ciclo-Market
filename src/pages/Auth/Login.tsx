@@ -45,7 +45,7 @@ export default function Login() {
       setProviderLoading(provider, true)
       const supabase = getSupabaseClient()
       const scopes = provider === 'facebook'
-        ? 'public_profile,email,user_photos,user_hometown'
+        ? 'public_profile,email'
         : undefined
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider,
