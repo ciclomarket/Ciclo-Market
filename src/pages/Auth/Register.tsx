@@ -10,7 +10,6 @@ import { BIKE_CATEGORIES } from '../../constants/catalog'
 import { getSupabaseClient, supabaseEnabled } from '../../services/supabase'
 import { createUserProfile } from '../../services/users'
 import { deriveProfileSlug, pickDiscipline } from '../../utils/user'
-import AnalyticsTag from '../../components/AnalyticsTag'
 import { useToast } from '../../context/ToastContext'
 
 type OAuthProvider = 'google'
@@ -170,7 +169,6 @@ export default function Register() {
   const selectClass = 'select mt-1 bg-white text-[#14212e] border border-white/20 focus:border-white/60'
   return (
     <div className="relative isolate min-h-[calc(100vh-140px)] overflow-hidden bg-[#09121b] py-14 text-white">
-      <AnalyticsTag />
       <div className="absolute inset-0 -z-10 bg-[radial-gradient(1100px_520px_at_-10%_0%,rgba(255,255,255,0.14),transparent_70%)] opacity-70" />
       <div className="absolute inset-0 -z-20 bg-[radial-gradient(960px_540px_at_120%_15%,rgba(17,30,44,0.3),transparent_75%)]" />
       <Container>

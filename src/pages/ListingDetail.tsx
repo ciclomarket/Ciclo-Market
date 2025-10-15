@@ -18,6 +18,7 @@ import { useAuth } from '../context/AuthContext'
 import { fetchUserProfile, fetchUserContactEmail, setUserVerificationStatus, type UserProfileRecord } from '../services/users'
 import { logContactEvent, fetchSellerReviews } from '../services/reviews'
 import SEO from '../components/SEO'
+import { trackMetaPixel } from '../lib/metaPixel'
 import { useToast } from '../context/ToastContext'
 import ListingQuestionsSection from '../components/ListingQuestionsSection'
 import { submitShareBoost } from '../services/shareBoost'
@@ -61,12 +62,33 @@ export default function ListingDetail() {
         if (result) {
           setListing(result)
           setLoading(false)
+          try {
+            // Track ViewContent when a listing is loaded
+            trackMetaPixel('ViewContent', {
+              content_ids: [result.id],
+              content_type: 'product',
+              content_category: result.category,
+              value: Number(result.price) || 0,
+              currency: (result.priceCurrency || 'ARS').toUpperCase()
+            })
+          } catch { /* noop */ }
           return
         }
       }
       if (!active) return
       const fallback = mockListings.find((l) => l.slug === listingKey || l.id === listingKey) ?? null
       setListing(fallback)
+      if (fallback) {
+        try {
+          trackMetaPixel('ViewContent', {
+            content_ids: [fallback.id],
+            content_type: 'product',
+            content_category: fallback.category,
+            value: Number(fallback.price) || 0,
+            currency: (fallback.priceCurrency || 'ARS').toUpperCase()
+          })
+        } catch { /* noop */ }
+      }
       setLoading(false)
     }
     load()
@@ -408,6 +430,17 @@ export default function ListingDetail() {
                 className={`inline-flex h-10 w-10 items-center justify-center rounded-full text-white shadow transition hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70 ${item.className}`}
                 aria-label={item.label}
                 title={item.label}
+                onClick={() => {
+                  try {
+                    if (item.id === 'whatsapp') {
+                      trackMetaPixel('Contact', { method: 'whatsapp', content_ids: [listing.id], content_type: 'product' })
+                      logContactEvent({ sellerId: listing.sellerId, listingId: listing.id, buyerId: user?.id || null, type: 'whatsapp' })
+                    } else if (item.id === 'email') {
+                      trackMetaPixel('Contact', { method: 'email', content_ids: [listing.id], content_type: 'product' })
+                      logContactEvent({ sellerId: listing.sellerId, listingId: listing.id, buyerId: user?.id || null, type: 'email' })
+                    }
+                  } catch { /* noop */ }
+                }}
               >
                 <span className="sr-only">{item.label}</span>
                 <span className="text-white">{item.icon}</span>

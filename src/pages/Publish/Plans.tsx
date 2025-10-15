@@ -8,6 +8,7 @@ import { useAuth } from '../../context/AuthContext'
 import { usePlans } from '../../context/PlanContext'
 import { validateGift } from '../../services/gifts'
 import type { Plan } from '../../types'
+import { trackMetaPixel } from '../../lib/metaPixel'
 import { PLAN_ORDER, type PlanCode, canonicalPlanCode, resolvePlanCode } from '../../utils/planCodes'
 
 const PLAN_LABEL: Record<PlanCode, string> = {
@@ -275,6 +276,16 @@ export default function Plans() {
 
     try {
       setProcessingPlan(planCode)
+      // Pixel: iniciar checkout (solo planes pagos)
+      try {
+        trackMetaPixel('InitiateCheckout', {
+          content_ids: [plan.id || planCode],
+          content_name: plan.name,
+          content_type: 'product',
+          value: typeof plan.price === 'number' ? plan.price : 0,
+          currency: plan.currency || 'ARS'
+        })
+      } catch { /* noop */ }
       const response = await fetch(`${BASE}/api/checkout`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -320,6 +331,37 @@ export default function Plans() {
     if (!paymentPlanParam) return null
     return visiblePlans.find((plan) => plan._code === paymentPlanParam) ?? null
   }, [paymentPlanParam, visiblePlans])
+
+  // Pixel: track resultado del checkout y limpiar query para evitar duplicados
+  useMemo(() => {
+    if (!paymentStatus || !planFromQuery) return null
+    try {
+      if (paymentStatus === 'success') {
+        trackMetaPixel('Purchase', {
+          content_ids: [planFromQuery.id || planFromQuery._code],
+          content_name: planFromQuery.name,
+          content_type: 'product',
+          value: typeof planFromQuery.price === 'number' ? planFromQuery.price : 0,
+          currency: planFromQuery.currency || 'ARS'
+        })
+      } else if (paymentStatus === 'failure') {
+        trackMetaPixel('CheckoutFailure', {
+          content_ids: [planFromQuery.id || planFromQuery._code],
+          content_name: planFromQuery.name,
+          content_type: 'product'
+        })
+      } else if (paymentStatus === 'pending') {
+        trackMetaPixel('CheckoutPending', {
+          content_ids: [planFromQuery.id || planFromQuery._code],
+          content_name: planFromQuery.name,
+          content_type: 'product'
+        })
+      }
+    } catch { /* noop */ }
+    // limpiar parámetros para no recontar
+    clearPaymentParams()
+    return null
+  }, [paymentStatus, planFromQuery, clearPaymentParams])
 
   if (!listingType) {
     return (

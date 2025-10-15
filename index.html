@@ -36,3 +36,21 @@
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
+    <!-- Google tag (gtag.js) -->
+    <!-- Consent Mode default (antes de cargar GA) -->
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){window.dataLayer.push(arguments);}
+      gtag('consent','default',{
+        analytics_storage:'denied',
+        wait_for_update: 500
+      });
+    </script>
+    <script id="ga-gtag" async src="https://www.googletagmanager.com/gtag/js?id=G-9PZQB9FK57"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){window.dataLayer.push(arguments);} 
+      gtag('js', new Date());
+      // SPA + Consent Mode: no enviamos page_view automático
+      gtag('config', 'G-9PZQB9FK57', { send_page_view: false });
+    </script>

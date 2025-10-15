@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import Header from './components/Header'
 import Footer from './components/Footer'
 import Newsletter from './components/Newsletter'
+import CookieConsent from './components/CookieConsent'
 import ErrorBoundary from './components/ErrorBoundary'
 import Home from './pages/Home'
 import { lazyWithRetry } from './utils/lazyWithRetry'
@@ -35,7 +36,8 @@ const CheckoutSuccess = lazy(() => import('./pages/Checkout/Success'))
 const CheckoutFailure = lazy(() => import('./pages/Checkout/Failure'))
 const CheckoutPending = lazy(() => import('./pages/Checkout/Pending'))
 import SEO, { type SEOProps } from './components/SEO'
-import { initAnalytics, trackPageView } from './analytics'
+import { useRef } from 'react'
+import { initMetaPixel, trackMetaPixel } from './lib/metaPixel'
 
 // Helper opcional por si quisieras redirigir preservando query-string
 function RedirectWithSearch({ to }: { to: string }) {
@@ -270,11 +272,22 @@ function ScrollToTop() {
 export default function App() {
   const location = useLocation()
   const seoConfig = useMemo(() => resolveSeoForPath(location.pathname), [location.pathname])
+  const first = useRef(true)
+  // Init Meta Pixel once
   useEffect(() => {
-    initAnalytics()
+    const pixelId = (import.meta.env.VITE_META_PIXEL_ID || '').trim()
+    if (pixelId) initMetaPixel(pixelId)
   }, [])
   useEffect(() => {
-    trackPageView(location.pathname + location.search)
+    // Tras la carga inicial, GA ya envió page_view automáticamente desde index.html
+    if (first.current) { first.current = false; return }
+    const gtag = (window as any).gtag as ((...args: any[]) => void) | undefined
+    if (typeof gtag === 'function') {
+      const pagePath = location.pathname + location.search
+      gtag('event', 'page_view', { page_path: pagePath, page_location: `${window.location.origin}${pagePath}` })
+    }
+    // Meta Pixel PageView
+    trackMetaPixel('PageView')
   }, [location.pathname, location.search])
 
   return (
@@ -365,6 +378,7 @@ export default function App() {
 
                   <CompareTray />
                   <Newsletter />
+                  <CookieConsent />
                   <Footer />
                 </div>
             </CompareProvider>
