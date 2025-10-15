@@ -22,6 +22,7 @@ const OfficialStore = lazyWithRetry(() => import('./pages/OfficialStore'))
 const FAQ = lazyWithRetry(() => import('./pages/FAQ'))
 const Terms = lazyWithRetry(() => import('./pages/Terms'))
 const Privacy = lazyWithRetry(() => import('./pages/Privacy'))
+const DataDeletion = lazyWithRetry(() => import('./pages/DataDeletion'))
 import { AuthProvider } from './context/AuthContext'
 import { CurrencyProvider } from './context/CurrencyContext'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -37,7 +38,7 @@ const CheckoutFailure = lazy(() => import('./pages/Checkout/Failure'))
 const CheckoutPending = lazy(() => import('./pages/Checkout/Pending'))
 import SEO, { type SEOProps } from './components/SEO'
 import { useRef } from 'react'
-import { initMetaPixel, trackMetaPixel } from './lib/metaPixel'
+import { trackMetaPixel } from './lib/metaPixel'
 
 // Helper opcional por si quisieras redirigir preservando query-string
 function RedirectWithSearch({ to }: { to: string }) {
@@ -200,6 +201,21 @@ function resolveSeoForPath(pathname: string): SEOProps {
     }
   }
 
+  if (normalized.startsWith('/eliminar-datos')) {
+    return {
+      title: 'Eliminar datos de tu cuenta',
+      description:
+        'Aprendé cómo solicitar la eliminación de tu cuenta y datos personales en Ciclo Market por cuenta propia o por correo.',
+      image: '/og-preview.png',
+      keywords: [
+        'eliminar datos',
+        'borrar cuenta',
+        'data deletion',
+        'ciclomarket privacidad'
+      ]
+    }
+  }
+
   if (normalized.startsWith('/profile') || normalized.startsWith('/vendedor')) {
     return {
       title: 'Perfil de vendedor',
@@ -273,11 +289,7 @@ export default function App() {
   const location = useLocation()
   const seoConfig = useMemo(() => resolveSeoForPath(location.pathname), [location.pathname])
   const first = useRef(true)
-  // Init Meta Pixel once
-  useEffect(() => {
-    const pixelId = (import.meta.env.VITE_META_PIXEL_ID || '').trim()
-    if (pixelId) initMetaPixel(pixelId)
-  }, [])
+  // Pixel se inicializa desde CookieConsent tras consentimiento
   useEffect(() => {
     // Tras la carga inicial, GA ya envió page_view automáticamente desde index.html
     if (first.current) { first.current = false; return }
@@ -367,6 +379,7 @@ export default function App() {
                       <Route path="/faq" element={<FAQ />} />
                       <Route path="/terminos" element={<Terms />} />
                       <Route path="/privacidad" element={<Privacy />} />
+                      <Route path="/eliminar-datos" element={<DataDeletion />} />
                       <Route path="/comparar" element={<Compare />} />
 
                       {/* Fallback */}

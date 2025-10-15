@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react'
+import { initMetaPixel, setMetaPixelConsent, trackMetaPixel } from '../lib/metaPixel'
+
+declare global { interface Window { __cm_pixel_pv_sent?: boolean } }
 
 const STORAGE_KEY = 'cm_consent'
 
@@ -16,6 +19,21 @@ export default function CookieConsent() {
         const gtag = (window as any).gtag as ((...args: any[]) => void) | undefined
         if (typeof gtag === 'function') {
           gtag('consent', 'update', { analytics_storage: choice })
+        }
+        // Meta Pixel: inicializar y aplicar consentimiento si está concedido
+        const pixelId = (import.meta.env.VITE_META_PIXEL_ID || '').trim()
+        if (choice === 'granted' && pixelId) {
+          if (initMetaPixel(pixelId)) {
+            setMetaPixelConsent(true)
+            // enviar un PageView inicial al restablecer (una sola vez)
+            if (!window.__cm_pixel_pv_sent) {
+              trackMetaPixel('PageView')
+              window.__cm_pixel_pv_sent = true
+            }
+          }
+        } else {
+          // si hay fbq cargado por una navegación anterior, revocar
+          setMetaPixelConsent(false)
         }
       }
     } catch {
@@ -35,6 +53,19 @@ export default function CookieConsent() {
         const pagePath = window.location.pathname + window.location.search
         gtag('event', 'page_view', { page_path: pagePath, page_location: `${window.location.origin}${pagePath}` })
       }
+    }
+    // Meta Pixel: inicializar y aplicar consentimiento sólo si fue concedido
+    const pixelId = (import.meta.env.VITE_META_PIXEL_ID || '').trim()
+    if (granted && pixelId) {
+      if (initMetaPixel(pixelId)) {
+        setMetaPixelConsent(true)
+        if (!window.__cm_pixel_pv_sent) {
+          trackMetaPixel('PageView')
+          window.__cm_pixel_pv_sent = true
+        }
+      }
+    } else {
+      setMetaPixelConsent(false)
     }
     setVisible(false)
   }
@@ -68,4 +99,3 @@ export default function CookieConsent() {
     </div>
   )
 }
-

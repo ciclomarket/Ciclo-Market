@@ -6,7 +6,7 @@ import { SocialAuthButtons } from '../../components/SocialAuthButtons'
 import { useAuth } from '../../context/AuthContext'
 import { getSupabaseClient, supabaseEnabled } from '../../services/supabase'
 
-type OAuthProvider = 'google'
+type OAuthProvider = 'google' | 'facebook'
 
 export default function Login() {
   const [email, setEmail] = useState('')
@@ -36,7 +36,7 @@ export default function Login() {
   }
 
   const buildOAuthHandler = (provider: OAuthProvider) => async () => {
-    const providerName = 'Google'
+    const providerName = provider === 'google' ? 'Google' : 'Facebook'
     if (!enabled || !supabaseEnabled) {
       alert(`Login con ${providerName} deshabilitado: configurá Supabase en .env`)
       return
@@ -44,11 +44,14 @@ export default function Login() {
     try {
       setProviderLoading(provider, true)
       const supabase = getSupabaseClient()
+      const scopes = provider === 'facebook'
+        ? 'public_profile,email,user_photos,user_hometown'
+        : undefined
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
           redirectTo: `${window.location.origin}/dashboard`,
-          scopes: undefined
+          scopes
         }
       })
       if (error) throw error
@@ -109,7 +112,13 @@ export default function Login() {
                     label: 'Continuar con Google',
                     loading: Boolean(loadingProvider.google),
                     onClick: buildOAuthHandler('google')
-                  }
+                  },
+                  {
+                    id: 'facebook',
+                    label: 'Continuar con Facebook',
+                    loading: Boolean(loadingProvider.facebook),
+                    onClick: buildOAuthHandler('facebook')
+                  },
                 ]}
               />
               <div className="relative flex items-center gap-4 text-[11px] font-semibold uppercase tracking-[0.35em] text-white/40">

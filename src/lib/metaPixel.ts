@@ -29,7 +29,6 @@ export function initMetaPixel(pixelId?: string | null): boolean {
 
   try {
     window.fbq?.('init', id)
-    window.fbq?.('consent', 'grant') // assume consent given; gate this if you wire CookieConsent
     initialized = true
   } catch {
     initialized = false
@@ -47,3 +46,9 @@ export function trackMetaPixelCustom(event: string, params?: Record<string, any>
   try { window.fbq?.('trackCustom', event, params || {}) } catch { /* noop */ }
 }
 
+export function setMetaPixelConsent(granted: boolean) {
+  if (typeof window === 'undefined') return
+  try { window.fbq?.('consent', granted ? 'grant' : 'revoke') } catch { /* noop */ }
+}
+
+export function isMetaPixelInitialized(): boolean { return initialized }

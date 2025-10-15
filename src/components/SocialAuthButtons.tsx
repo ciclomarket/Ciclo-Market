@@ -1,6 +1,6 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
 
-type Provider = 'google'
+type Provider = 'google' | 'facebook'
 
 export type SocialAuthButtonConfig = {
   id: Provider
@@ -20,10 +20,17 @@ const PROVIDER_ICON: Record<Provider, ReactNode> = {
       <path fill="#FBBC05" d="M6.69 13.59A5.63 5.63 0 016.38 12c0-.55.09-1.09.26-1.59V7.36H2.76A9.97 9.97 0 002 12c0 1.59.36 3.1 1.03 4.43l3.66-2.84z" />
     </svg>
   ),
+  facebook: (
+    <svg className="h-5 w-5" viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="#1877F2" d="M24 12.073C24 5.405 18.627 0 12 0S0 5.405 0 12.073C0 18.1 4.388 23.094 10.125 24v-8.437H7.078v-3.49h3.047V9.356c0-3.007 1.792-4.668 4.533-4.668 1.312 0 2.686.235 2.686.235v2.97h-1.513c-1.49 0-1.954.928-1.954 1.88v2.26h3.328l-.532 3.49h-2.796V24C19.612 23.094 24 18.1 24 12.073z"/>
+      <path fill="#FFF" d="M16.671 15.563l.532-3.49h-3.328v-2.26c0-.952.465-1.88 1.954-1.88h1.513v-2.97s-1.374-.235-2.686-.235c-2.741 0-4.533 1.661-4.533 4.668v2.717H7.078v3.49h3.047V24h3.75v-8.437h2.796z"/>
+    </svg>
+  ),
 }
 
 const PROVIDER_STYLE: Record<Provider, string> = {
   google: 'bg-white text-[#14212e] border-white/60 hover:border-[#14212e]/30 shadow-[0_12px_30px_rgba(12,20,28,0.12)]',
+  facebook: 'bg-[#1877F2] text-white border-[#1877F2] hover:brightness-110 shadow-[0_12px_30px_rgba(24,119,242,0.35)]',
 }
 
 export function SocialAuthButton({

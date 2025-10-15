@@ -12,7 +12,7 @@ import { createUserProfile } from '../../services/users'
 import { deriveProfileSlug, pickDiscipline } from '../../utils/user'
 import { useToast } from '../../context/ToastContext'
 
-type OAuthProvider = 'google'
+type OAuthProvider = 'google' | 'facebook'
 export default function Register() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -135,7 +135,7 @@ export default function Register() {
 
   const loginWithProvider = async (provider: OAuthProvider) => {
     setError(null)
-    const providerName = 'Google'
+    const providerName = provider === 'google' ? 'Google' : 'Facebook'
     if (!enabled || !supabaseEnabled) {
       setError(`Login con ${providerName} deshabilitado: configurá Supabase en .env`)
       return
@@ -143,11 +143,14 @@ export default function Register() {
     try {
       setProviderLoading(provider, true)
       const supabase = getSupabaseClient()
+      const scopes = provider === 'facebook'
+        ? 'public_profile,email,user_photos,user_hometown'
+        : undefined
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
           redirectTo: `${window.location.origin}/dashboard`,
-          scopes: undefined
+          scopes
         }
       })
       if (error) throw error
@@ -234,7 +237,13 @@ export default function Register() {
                     label: 'Registrarme con Google',
                     loading: Boolean(socialLoading.google),
                     onClick: () => void loginWithProvider('google')
-                  }
+                  },
+                  {
+                    id: 'facebook',
+                    label: 'Registrarme con Facebook',
+                    loading: Boolean(socialLoading.facebook),
+                    onClick: () => void loginWithProvider('facebook')
+                  },
                 ]}
               />
 
