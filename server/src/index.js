@@ -1250,6 +1250,56 @@ app.post('/api/newsletter/send-latest', async (req, res) => {
   }
 })
 
+/* ----------------------------- Newsletter: unsubscribe -------------------- */
+app.get('/api/newsletter/unsubscribe', async (req, res) => {
+  try {
+    const apiKey = process.env.RESEND_API_KEY
+    const audienceId = process.env.RESEND_AUDIENCE_GENERAL_ID
+    if (!apiKey || !audienceId) {
+      res.status(503)
+      return res.send('<!doctype html><title>No disponible</title><p>Newsletter no configurado.</p>')
+    }
+    const email = String(req.query.e || '').trim()
+    const token = String(req.query.t || '').trim()
+    if (!email || !token) {
+      res.status(400)
+      return res.send('<!doctype html><title>Solicitud inválida</title><p>Faltan parámetros.</p>')
+    }
+    const secret = String(process.env.NEWSLETTER_UNSUB_SECRET || process.env.CRON_SECRET || '')
+    const expected = require('crypto').createHmac('sha256', secret).update(email).digest('base64url')
+    if (token !== expected) {
+      res.status(401)
+      return res.send('<!doctype html><title>No autorizado</title><p>Token inválido.</p>')
+    }
+
+    // Buscar contacto por email para obtener su ID
+    const listRes = await fetch(`https://api.resend.com/audiences/${encodeURIComponent(audienceId)}/contacts`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    })
+    const listData = await listRes.json().catch(() => ({}))
+    const contacts = Array.isArray(listData.data || listData.contacts) ? (listData.data || listData.contacts) : []
+    const match = contacts.find((c) => String(c.email).toLowerCase() === email.toLowerCase())
+    if (!match) {
+      // Ya no está o nunca estuvo: mostrar estado ok
+      return res.send('<!doctype html><title>Desuscripción</title><p>Tu correo ya no recibe nuestras novedades. Gracias.</p>')
+    }
+    // Eliminar el contacto (o podríamos marcar unsubscribed si hubiera endpoint de update)
+    const delRes = await fetch(`https://api.resend.com/audiences/${encodeURIComponent(audienceId)}/contacts/${encodeURIComponent(match.id)}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${apiKey}` },
+    })
+    if (!delRes.ok) {
+      const data = await delRes.json().catch(() => ({}))
+      console.warn('[newsletter] unsubscribe delete failed', data)
+    }
+    return res.send('<!doctype html><title>Desuscripción</title><p>Listo, te desuscribimos correctamente. ¡Gracias!</p>')
+  } catch (err) {
+    console.error('[newsletter] unsubscribe failed', err)
+    res.status(500)
+    return res.send('<!doctype html><title>Error</title><p>No pudimos procesar la desuscripción. Intentá más tarde.</p>')
+  }
+})
+
 /* ----------------------------- Mercado Pago -------------------------------- */
 const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN
 if (!accessToken) {

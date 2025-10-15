@@ -25,7 +25,14 @@ function toPrice(amount, currency) {
   }
 }
 
-async function sendEmailToAudience({ apiKey, audienceId, from, subject, html, text }) {
+const crypto = require('crypto')
+
+function signUnsub(email) {
+  const secret = String(process.env.NEWSLETTER_UNSUB_SECRET || process.env.CRON_SECRET || '')
+  return crypto.createHmac('sha256', secret).update(email).digest('base64url')
+}
+
+async function sendEmailToAudience({ apiKey, audienceId, from, subject, buildHtml, buildText }) {
   // Fetch contacts in audience (Resend)
   const listRes = await fetch(`https://api.resend.com/audiences/${encodeURIComponent(audienceId)}/contacts`, {
     headers: { Authorization: `Bearer ${apiKey}` },
@@ -41,17 +48,34 @@ async function sendEmailToAudience({ apiKey, audienceId, from, subject, html, te
   const recipients = contacts.filter((c) => c && c.email && !c.unsubscribed).map((c) => c.email)
   if (recipients.length === 0) return 0
 
-  // Send in chunks to avoid huge payloads
-  const size = 50
+  // Send one-by-one to personalize unsubscribe link
   let sent = 0
-  for (let i = 0; i < recipients.length; i += size) {
-    const toChunk = recipients.slice(i, i + size)
+  for (const email of recipients) {
+    const token = signUnsub(email)
+    const unsubBase = String(process.env.SERVER_BASE_URL || '') || String(process.env.API_BASE_URL || '')
+    const backendBase = unsubBase || (process.env.RENDER_EXTERNAL_URL || '')
+    const unsubLink = backendBase
+      ? `${backendBase.replace(/\/$/, '')}/api/newsletter/unsubscribe?e=${encodeURIComponent(email)}&t=${encodeURIComponent(token)}`
+      : `https://ciclomarket.ar/ayuda` // fallback
+
+    const html = buildHtml(unsubLink)
+    const text = buildText(unsubLink)
+
+    const payload = {
+      from,
+      to: [email],
+      subject,
+      html,
+      text,
+      headers: { 'List-Unsubscribe': `<${unsubLink}>` }
+    }
+
     const resp = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from, to: toChunk, subject, html, text }),
+      body: JSON.stringify(payload),
     })
-    if (resp.ok) sent += toChunk.length
+    if (resp.ok) sent += 1
   }
   return sent
 }
@@ -104,7 +128,7 @@ async function runDigestOnce() {
   const row1 = cards.slice(0, 2)
   const row2 = cards.slice(2, 4)
 
-  const html = `
+  const htmlTemplate = (unsub) => `
     <div style="background:#ffffff;margin:0 auto;max-width:640px;font-family:Inter,Arial,sans-serif;color:#14212e">
       <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="width:100%">
         <tr>
@@ -132,8 +156,7 @@ async function runDigestOnce() {
         <tr>
           <td style="padding:14px 24px">
             <div style="border-radius:14px;background:#f6f8fb;border:1px solid #e1e5eb;padding:12px;text-align:center;color:#475569;font-size:12px">
-              ¿No querés recibir más correos? Respondé este email con el asunto "BAJA" o escribinos a
-              <a href="mailto:admin@ciclomarket.ar" style="color:#0c72ff;text-decoration:underline"> admin@ciclomarket.ar</a> para desuscribirte.
+              ¿No querés recibir más correos? <a href="${unsub}" style="color:#0c72ff;text-decoration:underline">Desuscribirme automáticamente</a>.
             </div>
           </td>
         </tr>
@@ -154,15 +177,24 @@ async function runDigestOnce() {
       </table>
     </div>
   `
-  const text = [
+  const textTemplate = (unsub) => [
     'Nuevos ingresos en Ciclo Market',
-    ...cards.map(c => `- ${c.title} · ${c.priceLabel}: ${c.link}`)
+    ...cards.map(c => `- ${c.title} · ${c.priceLabel}: ${c.link}`),
+    '',
+    `Desuscribirme: ${unsub}`
   ].join('\n')
 
   const from = process.env.SMTP_FROM || `Ciclo Market <${process.env.SMTP_USER || 'no-reply@ciclomarket.ar'}>`
   const subject = 'Nuevos ingresos de la semana · Ciclo Market'
 
-  const sent = await sendEmailToAudience({ apiKey, audienceId, from, subject, html, text })
+  const sent = await sendEmailToAudience({
+    apiKey,
+    audienceId,
+    from,
+    subject,
+    buildHtml: (unsub) => htmlTemplate(unsub),
+    buildText: (unsub) => textTemplate(unsub),
+  })
   console.info('[newsletterDigest] sent to contacts:', sent)
   return sent
 }
