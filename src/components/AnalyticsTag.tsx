@@ -14,7 +14,7 @@ export default function AnalyticsTag() {
             window.dataLayer = window.dataLayer || [];
             function gtag(){dataLayer.push(arguments);}
             gtag('js', new Date());
-            gtag('config', '${MEASUREMENT_ID}');
+            gtag('config', '${MEASUREMENT_ID}', { send_page_view: false });
           `.trim()
         }}
       />

@@ -35,6 +35,7 @@ const CheckoutSuccess = lazy(() => import('./pages/Checkout/Success'))
 const CheckoutFailure = lazy(() => import('./pages/Checkout/Failure'))
 const CheckoutPending = lazy(() => import('./pages/Checkout/Pending'))
 import SEO, { type SEOProps } from './components/SEO'
+import { initAnalytics, trackPageView } from './analytics'
 
 // Helper opcional por si quisieras redirigir preservando query-string
 function RedirectWithSearch({ to }: { to: string }) {
@@ -269,6 +270,12 @@ function ScrollToTop() {
 export default function App() {
   const location = useLocation()
   const seoConfig = useMemo(() => resolveSeoForPath(location.pathname), [location.pathname])
+  useEffect(() => {
+    initAnalytics()
+  }, [])
+  useEffect(() => {
+    trackPageView(location.pathname + location.search)
+  }, [location.pathname, location.search])
 
   return (
     <AuthProvider>
