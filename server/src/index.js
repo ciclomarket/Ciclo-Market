@@ -651,10 +651,31 @@ app.post('/api/contacts/log', async (req, res) => {
     const { sellerId, listingId, buyerId, type } = req.body || {}
     if (!sellerId || !type) return res.status(400).json({ error: 'missing_fields' })
     const supabase = getServerSupabaseClient()
+    // Normalizar listingId: si viene un slug (texto) intentamos resolver el UUID
+    let listingUuid = null
+    try {
+      const raw = typeof listingId === 'string' ? listingId.trim() : ''
+      const isUuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(raw)
+      if (raw) {
+        if (isUuid) {
+          listingUuid = raw
+        } else {
+          const { data: bySlug } = await supabase
+            .from('listings')
+            .select('id')
+            .eq('slug', raw)
+            .maybeSingle()
+          if (bySlug?.id) listingUuid = bySlug.id
+        }
+      }
+    } catch (_) {
+      // ignore, fallback to null
+      listingUuid = null
+    }
     const payload = {
       seller_id: sellerId,
       buyer_id: buyerId || null,
-      listing_id: listingId || null,
+      listing_id: listingUuid,
       type,
     }
     const { error } = await supabase.from('contact_events').insert([payload])
@@ -670,7 +691,7 @@ app.post('/api/contacts/log', async (req, res) => {
           .upsert({
             seller_id: sellerId,
             buyer_id: buyerId,
-            listing_id: listingId || null,
+            listing_id: listingUuid,
             contact_event_id: null,
             ready_at: new Date().toISOString(),
           }, { onConflict: 'seller_id,buyer_id' })
