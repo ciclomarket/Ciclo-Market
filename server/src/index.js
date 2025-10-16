@@ -761,13 +761,32 @@ app.get('/api/reviews/:sellerId', async (req, res) => {
   try {
     const { sellerId } = req.params
     const supabase = getServerSupabaseClient()
-    const { data: reviews, error } = await supabase
-      .from('reviews')
-      .select('id,seller_id,buyer_id,listing_id,rating,tags,comment,created_at,status')
-      .eq('seller_id', sellerId)
-      .eq('status', 'published')
-      .order('created_at', { ascending: false })
-    if (error) return res.status(500).json({ error: 'fetch_failed' })
+    // Intento 1: con columna status (nueva)
+    let reviews = null
+    let error = null
+    try {
+      const r1 = await supabase
+        .from('reviews')
+        .select('id,seller_id,buyer_id,listing_id,rating,tags,comment,created_at,status')
+        .eq('seller_id', sellerId)
+        .eq('status', 'published')
+        .order('created_at', { ascending: false })
+      reviews = r1.data
+      error = r1.error
+    } catch (e) {
+      error = e
+    }
+    // Fallback: sin columna status (schema viejo)
+    if (error) {
+      console.warn('[reviews] fetch with status failed, falling back without status', error?.message || error)
+      const r2 = await supabase
+        .from('reviews')
+        .select('id,seller_id,buyer_id,listing_id,rating,tags,comment,created_at')
+        .eq('seller_id', sellerId)
+        .order('created_at', { ascending: false })
+      if (r2.error) return res.status(500).json({ error: 'fetch_failed' })
+      reviews = r2.data
+    }
     const list = Array.isArray(reviews) ? reviews : []
     const count = list.length
     const avgRating = count ? (list.reduce((acc, r) => acc + (r.rating || 0), 0) / count) : 0
@@ -791,33 +810,49 @@ app.get('/api/reviews/:sellerId', async (req, res) => {
   }
 })
 
-// ¿Puede buyer reseñar a seller? Requiere evento de contacto > 24h y no haber reseñado antes
-app.get('/api/reviews/can-review', async (req, res) => {
-  try {
-    const buyerId = String(req.query.buyerId || '')
-    const sellerId = String(req.query.sellerId || '')
-    if (!buyerId || !sellerId) return res.status(400).json({ allowed: false })
-    const supabase = getServerSupabaseClient()
+  // ¿Puede buyer reseñar a seller? Requiere haber contactado (contact_events o review_reminders) y no haber reseñado antes
+  app.get('/api/reviews/can-review', async (req, res) => {
+    try {
+      const buyerId = String(req.query.buyerId || '')
+      const sellerId = String(req.query.sellerId || '')
+      if (!buyerId || !sellerId) return res.status(400).json({ allowed: false })
+      const supabase = getServerSupabaseClient()
+    // Existe contacto previo o recordatorio creado (por emisión inmediata)
     const { data: contacts } = await supabase
       .from('contact_events')
-      .select('id,created_at')
-      .eq('seller_id', sellerId)
-      .eq('buyer_id', buyerId)
-      .limit(1)
-    if (!contacts || contacts.length === 0) return res.json({ allowed: false, reason: 'Primero contactá al vendedor (WhatsApp o email).' })
-    const { data: existing } = await supabase
-      .from('reviews')
       .select('id')
       .eq('seller_id', sellerId)
       .eq('buyer_id', buyerId)
       .limit(1)
-    if (existing && existing.length > 0) return res.json({ allowed: false, reason: 'Ya publicaste una reseña.' })
-    return res.json({ allowed: true })
-  } catch (err) {
-    console.warn('[reviews] can-review failed', err)
-    return res.status(500).json({ allowed: false })
-  }
-})
+    let hasContact = Array.isArray(contacts) && contacts.length > 0
+    if (!hasContact) {
+      try {
+        const { data: rems } = await supabase
+          .from('review_reminders')
+          .select('id')
+          .eq('seller_id', sellerId)
+          .eq('buyer_id', buyerId)
+          .limit(1)
+        hasContact = Array.isArray(rems) && rems.length > 0
+      } catch (e) {
+        // Si la tabla aún no existe, ignorar y seguir con contact_events
+        hasContact = false
+      }
+    }
+    if (!hasContact) return res.json({ allowed: false, reason: 'Primero contactá al vendedor (WhatsApp o email).' })
+      const { data: existing } = await supabase
+        .from('reviews')
+        .select('id')
+        .eq('seller_id', sellerId)
+        .eq('buyer_id', buyerId)
+        .limit(1)
+      if (existing && existing.length > 0) return res.json({ allowed: false, reason: 'Ya publicaste una reseña.' })
+      return res.json({ allowed: true })
+    } catch (err) {
+      console.warn('[reviews] can-review failed', err)
+      return res.status(500).json({ allowed: false })
+    }
+  })
 
 // Publica reseña
 app.post('/api/reviews/submit', async (req, res) => {
