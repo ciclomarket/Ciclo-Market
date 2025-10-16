@@ -78,26 +78,37 @@ as $$
 declare
   v_exists boolean;
   v_first_contact timestamptz;
+  v_seller uuid;
+  v_buyer uuid;
 begin
   -- Sólo si hay buyer_id (anon no genera recordatorio personalizable)
   if new.buyer_id is null then
     return new;
   end if;
 
+  -- Compatibilidad: castear seller_id/buyer_id a uuid si la tabla contact_events los guarda como text
+  begin
+    v_seller := new.seller_id::uuid;
+    v_buyer := new.buyer_id::uuid;
+  exception when others then
+    -- Si no podemos castear, evitamos romper la inserción de contact_events
+    return new;
+  end;
+
   -- Si ya existe recordatorio para el par seller-buyer, no hacer nada
   select exists(
     select 1 from public.review_reminders
-    where seller_id = new.seller_id and buyer_id = new.buyer_id
+    where seller_id = v_seller and buyer_id = v_buyer
   ) into v_exists;
   if v_exists then
     return new;
   end if;
 
-  -- Buscar el primer contacto histórico (por compatibilidad)
+  -- Buscar el primer contacto histórico (por compatibilidad de tipos)
   select min(created_at) into v_first_contact
   from public.contact_events
-  where seller_id = new.seller_id
-    and buyer_id = new.buyer_id;
+  where seller_id::text = new.seller_id::text
+    and buyer_id::text = new.buyer_id::text;
 
   if v_first_contact is null then
     v_first_contact := coalesce(new.created_at, now());
@@ -106,7 +117,7 @@ begin
   insert into public.review_reminders (
     seller_id, buyer_id, listing_id, contact_event_id, ready_at
   ) values (
-    new.seller_id, new.buyer_id, new.listing_id, new.id, now()
+    v_seller, v_buyer, new.listing_id, new.id, now()
   )
   on conflict (seller_id, buyer_id) do nothing;
 

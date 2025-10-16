@@ -693,6 +693,7 @@ app.post('/api/contacts/log', async (req, res) => {
             body: 'Tu reseña para este vendedor ya está disponible. ¡Contá tu experiencia y ayudá a otros!',
             cta_url: cta,
             metadata: { seller_id: sellerId },
+            actor_id: sellerId,
           }
           const { error: notifErr } = await supabase.from('notifications').insert([insertPayload])
           if (notifErr) {
