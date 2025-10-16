@@ -115,7 +115,13 @@ export default function Profile() {
           setListings(listingsData)
           if (reviewsData) {
             setReviews(reviewsData.reviews)
-            setReviewsSummary({ count: reviewsData.summary.count, avgRating: reviewsData.summary.avgRating })
+            setReviewsSummary({
+              count: reviewsData.summary.count,
+              avgRating: reviewsData.summary.avgRating,
+              // pasar dist y tagsCount para que funcionen los gráficos
+              ...(reviewsData.summary.dist ? { dist: reviewsData.summary.dist } : {}),
+              ...(reviewsData.summary.tagsCount ? { tagsCount: reviewsData.summary.tagsCount } : {}),
+            })
           }
         } else {
           const sellerListings = mockListings.filter((item) => item.sellerId === sellerId)
@@ -258,9 +264,9 @@ export default function Profile() {
     : null
 
   return (
-    <div className="min-h-[calc(100vh-120px)] bg-[#f6f8fb] py-10">
+    <div className="min-h-[calc(100vh-120px)] bg-[#14212e] py-10">
       <Container>
-        <div className="overflow-hidden rounded-[28px] border border-[#14212e]/10 bg-white shadow-[0_35px_80px_rgba(12,20,28,0.15)]">
+        <div className="overflow-hidden rounded-[28px] border border-white/10 bg-white shadow-[0_35px_80px_rgba(12,20,28,0.35)]">
           <header className="border-b border-[#14212e]/10 bg-[#14212e] px-6 py-6 text-white">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="flex items-start justify-between gap-3 md:block">
@@ -326,7 +332,7 @@ export default function Profile() {
               </ul>
             </nav>
 
-            <section className="rounded-3xl border border-[#14212e]/10 bg-white p-6 shadow-[0_25px_60px_rgba(12,20,28,0.12)]">
+            <section className="rounded-3xl border border-[#14212e]/10 bg-white p-6 shadow-[0_25px_60px_rgba(12,20,28,0.25)]">
               {activeTab === 'Perfil' && (
                 <div className="space-y-6">
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
@@ -444,8 +450,8 @@ export default function Profile() {
                         <p className="mb-2 text-sm font-semibold text-[#14212e]">Distribución</p>
                         <div className="space-y-1">
                           {([5,4,3,2,1] as const).map((star) => {
-                            const dist = (reviewsSummary as any).dist || {}
-                            const count = Number(dist[star] || 0)
+                            const dist = (reviewsSummary?.dist as any) || {}
+                            const count = Number((dist as any)[star] || 0)
                             const pct = reviewsSummary.count ? Math.round((count / reviewsSummary.count) * 100) : 0
                             return (
                               <div key={star} className="flex items-center gap-2 text-xs text-[#14212e]/80">
@@ -463,7 +469,7 @@ export default function Profile() {
                       <div className="rounded-2xl border border-[#14212e]/10 bg-white p-4">
                         <p className="mb-2 text-sm font-semibold text-[#14212e]">Lo más mencionado</p>
                         <div className="flex flex-wrap gap-2">
-                          {Object.entries(((reviewsSummary as any).tagsCount || {}) as Record<string, number>)
+                          {Object.entries(((reviewsSummary?.tagsCount || {}) as Record<string, number>))
                             .sort((a, b) => b[1] - a[1])
                             .slice(0, 6)
                             .map(([tag, count]) => (
@@ -471,7 +477,7 @@ export default function Profile() {
                                 {tag.replace(/_/g, ' ')} · {count}
                               </span>
                             ))}
-                          {Object.keys(((reviewsSummary as any).tagsCount || {})).length === 0 && (
+                          {Object.keys((reviewsSummary?.tagsCount || {})).length === 0 && (
                             <span className="text-xs text-[#14212e]/60">Sin etiquetas destacadas.</span>
                           )}
                         </div>
@@ -481,8 +487,13 @@ export default function Profile() {
                   <div className="space-y-3">
                     {reviews.map((r) => (
                       <div key={r.id} className="rounded-2xl border border-[#14212e]/10 bg-white p-4">
-                        <div className="flex items-center justify-between">
-                          <StarRating value={r.rating} />
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2">
+                            <StarRating value={r.rating} />
+                            {r.buyer_name && (
+                              <span className="text-xs font-semibold text-[#14212e]/80">{r.buyer_name}</span>
+                            )}
+                          </div>
                           <span className="text-xs text-[#14212e]/60">{new Date(r.created_at).toLocaleDateString('es-AR')}</span>
                         </div>
                         {r.tags && r.tags.length > 0 && (
@@ -606,7 +617,15 @@ export default function Profile() {
               setReviewTags([])
               setReviewComment('')
               const data = await fetchSellerReviews(sellerId)
-              if (data) { setReviews(data.reviews); setReviewsSummary({ count: data.summary.count, avgRating: data.summary.avgRating }) }
+              if (data) {
+                setReviews(data.reviews)
+                setReviewsSummary({
+                  count: data.summary.count,
+                  avgRating: data.summary.avgRating,
+                  ...(data.summary.dist ? { dist: data.summary.dist } : {}),
+                  ...(data.summary.tagsCount ? { tagsCount: data.summary.tagsCount } : {}),
+                })
+              }
             } catch (err: any) {
               showToast(err?.message || 'No pudimos guardar la reseña', { variant: 'error' })
             } finally {
@@ -673,48 +692,83 @@ function ReviewModal({ onClose, rating, setRating, tags, setTags, comment, setCo
     { id: 'respetuoso', label: 'Respetuoso' },
     { id: 'buen_vendedor', label: 'Buen vendedor' },
     { id: 'compre', label: 'Concreté compra' },
+    { id: 'puntual', label: 'Puntual' },
+    { id: 'buena_comunicacion', label: 'Buena comunicación' },
+    { id: 'recomendado', label: 'Recomendado' },
   ]
   const toggle = (id: string) => {
     setTags(tags.includes(id) ? tags.filter((t) => t !== id) : [...tags, id])
   }
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
-      <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-xl">
-        <div className="flex items-start justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-[#14212e]">Escribir reseña</h2>
-            <p className="text-sm text-[#14212e]/70">Contanos cómo fue tu interacción con el vendedor.</p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
+      <div className="w-full max-w-lg overflow-hidden rounded-3xl border border-[#14212e]/10 bg-white shadow-[0_25px_80px_rgba(12,20,28,0.3)]">
+        <div className="flex items-center justify-between bg-[#14212e] px-6 py-4 text-white">
+          <div className="flex items-center gap-3">
+            <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-white">
+              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor"><path d="M12 17.3 6.5 20.2l1-5.8L3 10.2l5.8-.9L12 4l3.2 5.3 5.8.9-4.5 4.2 1 5.8Z"/></svg>
+            </span>
+            <div>
+              <h2 className="text-base font-semibold leading-none">Dejá tu reseña</h2>
+              <p className="mt-1 text-xs text-white/80">Contanos cómo fue tu experiencia con el vendedor.</p>
+            </div>
           </div>
-          <button type="button" onClick={onClose} aria-label="Cerrar">✕</button>
+          <button type="button" onClick={onClose} aria-label="Cerrar" className="rounded-full p-1 text-white/80 hover:bg-white/10">✕</button>
         </div>
-        <div className="mt-4 space-y-3">
+        <div className="p-6">
           <div>
             <p className="text-sm font-medium text-[#14212e]">Calificación</p>
-            <div className="mt-1 flex items-center gap-2">
+            <div className="mt-2 flex items-center gap-3">
               {Array.from({ length: 5 }).map((_, i) => (
-                <button key={i} type="button" onClick={() => setRating(i + 1)} aria-label={`Calificar ${i+1}`}>
-                  <svg viewBox="0 0 24 24" className={`h-7 w-7 ${i < rating ? 'text-amber-400' : 'text-[#14212e]/30'}`} fill="currentColor">
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => setRating(i + 1)}
+                  aria-label={`Calificar ${i + 1}`}
+                  className="transition-transform hover:scale-110"
+                >
+                  <svg viewBox="0 0 24 24" className={`h-8 w-8 ${i < rating ? 'text-amber-400' : 'text-[#14212e]/20'}`} fill="currentColor">
                     <path d="M12 17.3 6.5 20.2l1-5.8L3 10.2l5.8-.9L12 4l3.2 5.3 5.8.9-4.5 4.2 1 5.8Z" />
                   </svg>
                 </button>
               ))}
             </div>
           </div>
-          <div>
+          <div className="mt-4">
             <p className="text-sm font-medium text-[#14212e]">Etiquetas</p>
-            <div className="mt-1 flex flex-wrap gap-2">
+            <div className="mt-2 flex flex-wrap gap-2">
               {OPTIONS.map((opt) => (
-                <button key={opt.id} type="button" onClick={() => toggle(opt.id)} className={`rounded-full border px-3 py-1 text-xs ${tags.includes(opt.id) ? 'border-[#14212e] bg-[#14212e]/10 text-[#14212e]' : 'border-[#14212e]/20 text-[#14212e]/80 hover:bg-[#14212e]/5'}`}>{opt.label}</button>
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => toggle(opt.id)}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                    tags.includes(opt.id)
+                      ? 'border-[#14212e] bg-[#14212e]/10 text-[#14212e]'
+                      : 'border-[#14212e]/20 text-[#14212e]/80 hover:bg-[#14212e]/5'
+                  }`}
+                >
+                  {opt.label}
+                </button>
               ))}
             </div>
           </div>
-          <div>
+          <div className="mt-4">
             <p className="text-sm font-medium text-[#14212e]">Comentario (opcional)</p>
-            <textarea className="textarea mt-1" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Dejá detalles útiles para otros compradores" />
+            <textarea
+              className="textarea mt-2"
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              placeholder="Dejá detalles útiles para otros compradores"
+              rows={4}
+            />
           </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={onClose} disabled={loading}>Cancelar</Button>
-            <Button onClick={() => void onSubmit()} disabled={loading || rating < 1} className="bg-[#14212e] text-white hover:bg-[#1b2f3f]">{loading ? 'Enviando…' : 'Enviar reseña'}</Button>
+          <div className="mt-6 flex items-center justify-end gap-2">
+            <Button variant="ghost" onClick={onClose} disabled={loading}>
+              Cancelar
+            </Button>
+            <Button onClick={() => void onSubmit()} disabled={loading || rating < 1} className="bg-[#14212e] text-white hover:bg-[#1b2f3f]">
+              {loading ? 'Enviando…' : 'Enviar reseña'}
+            </Button>
           </div>
         </div>
       </div>

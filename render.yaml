@@ -48,7 +48,7 @@ services:
       - key: REVIEW_REMINDER_TZ
         value: America/Argentina/Buenos_Aires
       - key: REVIEW_REMINDER_CRON
-        value: "*/10 * * * *"  # cada 10 minutos (no reenvía, sólo chequea)
+        value: "0 10 * * *"  # diario 10:00 (no reenvía)
       - key: REVIEW_REMINDER_BATCH_LIMIT
         value: "200"
 

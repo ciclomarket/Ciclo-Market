@@ -11,6 +11,7 @@ export type ReviewRecord = {
   tags?: string[] | null // ['atencion','respetuoso','buen_vendedor','compro']
   comment?: string | null
   created_at: string
+  buyer_name?: string
 }
 
 export type ReviewsSummary = {

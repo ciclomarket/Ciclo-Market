@@ -2,7 +2,7 @@ const cron = require('node-cron')
 const { getServerSupabaseClient } = require('../lib/supabaseClient')
 const { sendMail, isMailConfigured, isSMTPConfigured, isResendConfigured } = require('../lib/mail')
 
-const DEFAULT_CRON_SCHEDULE = '*/10 * * * *' // cada 10 minutos
+const DEFAULT_CRON_SCHEDULE = '0 10 * * *' // una vez al día 10:00
 const DEFAULT_BATCH_LIMIT = 200
 
 async function emitInAppNotifications(supabase, limit) {

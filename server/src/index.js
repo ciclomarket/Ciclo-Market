@@ -729,7 +729,7 @@ app.post('/api/contacts/log', async (req, res) => {
         }
 
         // Email (si hay configuración y aún no se envió)
-        if (rem && rem.sent_email === false) {
+        if (false && rem && rem.sent_email === false) {
           const canSendMail = (() => {
             try { return require('./lib/mail').isMailConfigured() } catch { return false }
           })()
@@ -854,12 +854,34 @@ app.get('/api/reviews/:sellerId', async (req, res) => {
       reviews = r2.data
     }
     const list = Array.isArray(reviews) ? reviews : []
-    const count = list.length
-    const avgRating = count ? (list.reduce((acc, r) => acc + (r.rating || 0), 0) / count) : 0
+    // Enriquecer con nombre del comprador (Nombre + inicial del apellido)
+    let byName = list
+    try {
+      const buyerIds = Array.from(new Set(list.map((r) => r.buyer_id).filter(Boolean)))
+      if (buyerIds.length) {
+        const { data: usersData } = await supabase
+          .from('users')
+          .select('id, full_name')
+          .in('id', buyerIds)
+        const nameMap = new Map((usersData || []).map((u) => [u.id, u.full_name || null]))
+        byName = list.map((r) => {
+          const full = String(nameMap.get(r.buyer_id) || '').trim()
+          let label = 'Comprador verificado'
+          if (full) {
+            const parts = full.split(/\s+/).filter(Boolean)
+            if (parts.length === 1) label = parts[0]
+            else if (parts.length > 1) label = `${parts[0]} ${parts[1].charAt(0).toUpperCase()}.`
+          }
+          return { ...r, buyer_name: label }
+        })
+      }
+    } catch {}
+    const count = byName.length
+    const avgRating = count ? (byName.reduce((acc, r) => acc + (r.rating || 0), 0) / count) : 0
     // Distribución de calificaciones y conteo de etiquetas
     const dist = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
     const tagsCount = {}
-    for (const r of list) {
+    for (const r of byName) {
       const rr = Number(r.rating || 0)
       if (rr >= 1 && rr <= 5) dist[rr] = (dist[rr] || 0) + 1
       if (Array.isArray(r.tags)) {
@@ -869,7 +891,7 @@ app.get('/api/reviews/:sellerId', async (req, res) => {
         }
       }
     }
-    return res.json({ reviews: list, summary: { sellerId, count, avgRating, dist, tagsCount } })
+    return res.json({ reviews: byName, summary: { sellerId, count, avgRating, dist, tagsCount } })
   } catch (err) {
     console.warn('[reviews] fetch failed', err)
     return res.status(500).json({ error: 'unexpected_error' })
@@ -950,7 +972,16 @@ app.post('/api/reviews/submit', async (req, res) => {
       return res.status(400).send('not_allowed')
     }
     // Sanitizar etiquetas a un set permitido
-    const ALLOWED_TAGS = new Set(['atencion', 'respetuoso', 'buen_vendedor', 'compre'])
+    const ALLOWED_TAGS = new Set([
+      'atencion',
+      'respetuoso',
+      'buen_vendedor',
+      'compre',
+      // nuevas etiquetas
+      'puntual',
+      'buena_comunicacion',
+      'recomendado',
+    ])
     let safeTags = null
     if (Array.isArray(tags)) {
       const uniq = Array.from(new Set(tags.map((t) => String(t))))
