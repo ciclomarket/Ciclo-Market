@@ -779,6 +779,49 @@ app.post('/api/contacts/log', async (req, res) => {
   }
 })
 
+// ¿Puede buyer reseñar a seller? Definir ANTES de la ruta paramétrica para evitar colisión
+app.get('/api/reviews/can-review', async (req, res) => {
+  try {
+    const buyerId = String(req.query.buyerId || '')
+    const sellerId = String(req.query.sellerId || '')
+    if (!buyerId || !sellerId) return res.status(400).json({ allowed: false })
+    const supabase = getServerSupabaseClient()
+    // Existe contacto previo o recordatorio creado (por emisión inmediata)
+    const { data: contacts } = await supabase
+      .from('contact_events')
+      .select('id')
+      .eq('seller_id', sellerId)
+      .eq('buyer_id', buyerId)
+      .limit(1)
+    let hasContact = Array.isArray(contacts) && contacts.length > 0
+    if (!hasContact) {
+      try {
+        const { data: rems } = await supabase
+          .from('review_reminders')
+          .select('id')
+          .eq('seller_id', sellerId)
+          .eq('buyer_id', buyerId)
+          .limit(1)
+        hasContact = Array.isArray(rems) && rems.length > 0
+      } catch (e) {
+        hasContact = false
+      }
+    }
+    if (!hasContact) return res.json({ allowed: false, reason: 'Primero contactá al vendedor (WhatsApp o email).' })
+    const { data: existing } = await supabase
+      .from('reviews')
+      .select('id')
+      .eq('seller_id', sellerId)
+      .eq('buyer_id', buyerId)
+      .limit(1)
+    if (existing && existing.length > 0) return res.json({ allowed: false, reason: 'Ya publicaste una reseña.' })
+    return res.json({ allowed: true })
+  } catch (err) {
+    console.warn('[reviews] can-review failed', err)
+    return res.status(500).json({ allowed: false })
+  }
+})
+
 // Devuelve reseñas + resumen por vendedor
 app.get('/api/reviews/:sellerId', async (req, res) => {
   try {
