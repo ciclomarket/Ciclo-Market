@@ -675,8 +675,9 @@ app.post('/api/contacts/log', async (req, res) => {
     const payload = {
       seller_id: sellerId,
       buyer_id: buyerId || null,
-      listing_id: listingUuid,
       type,
+      // Sólo incluimos listing_id si es un UUID válido
+      ...(listingUuid ? { listing_id: listingUuid } : {}),
     }
     const { error } = await supabase.from('contact_events').insert([payload])
     if (error) {
