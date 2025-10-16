@@ -20,6 +20,8 @@ const Help = lazyWithRetry(() => import('./pages/Help'))
 const HowToPublish = lazyWithRetry(() => import('./pages/HowToPublish'))
 const OfficialStore = lazyWithRetry(() => import('./pages/OfficialStore'))
 const Store = lazyWithRetry(() => import('./pages/Store'))
+const CategoryLanding = lazyWithRetry(() => import('./pages/CategoryLanding'))
+const Tiendas = lazyWithRetry(() => import('./pages/Tiendas'))
 const FAQ = lazyWithRetry(() => import('./pages/FAQ'))
 const Terms = lazyWithRetry(() => import('./pages/Terms'))
 const Privacy = lazyWithRetry(() => import('./pages/Privacy'))
@@ -38,6 +40,7 @@ const CheckoutSuccess = lazy(() => import('./pages/Checkout/Success'))
 const CheckoutFailure = lazy(() => import('./pages/Checkout/Failure'))
 const CheckoutPending = lazy(() => import('./pages/Checkout/Pending'))
 import SEO, { type SEOProps } from './components/SEO'
+import GlobalJsonLd from './components/GlobalJsonLd'
 import { useRef } from 'react'
 import { trackMetaPixel } from './lib/metaPixel'
 
@@ -322,6 +325,7 @@ export default function App() {
             <CompareProvider>
                 <div className="min-h-screen flex flex-col">
                   <SEO {...seoConfig} />
+                  <GlobalJsonLd />
                   <Header />
                   <ScrollToTop />
 
@@ -334,6 +338,8 @@ export default function App() {
 
                       {/* Marketplace (shop) */}
                       <Route path="/marketplace" element={<Marketplace />} />
+                      {/* Landings por categoría */}
+                      <Route path="/marketplace/:slug" element={<CategoryLanding />} />
 
                       {/* Alias/compatibilidad */}
                       {/* /market → /marketplace (preserva query) */}
@@ -380,6 +386,7 @@ export default function App() {
                       <Route path="/ayuda" element={<Help />} />
                       <Route path="/como-publicar" element={<HowToPublish />} />
                       <Route path="/tienda-oficial" element={<OfficialStore />} />
+                      <Route path="/tiendas" element={<Tiendas />} />
                       <Route path="/tienda/:slug" element={<Store />} />
 
                       {/* Checkout status */}

@@ -1496,6 +1496,7 @@ function EditProfileView({
   const [instagram, setInstagram] = useState(profile?.instagram_handle ?? '')
   const [facebook, setFacebook] = useState(profile?.facebook_handle ?? '')
   const [website, setWebsite] = useState(profile?.website_url ?? '')
+  const [bio, setBio] = useState(profile?.bio ?? '')
   // Tienda oficial
   const [storeEnabled, setStoreEnabled] = useState<boolean>(Boolean(profile?.store_enabled))
   const [storeName, setStoreName] = useState(profile?.store_name ?? '')
@@ -1541,6 +1542,7 @@ function EditProfileView({
     setInstagram(profile?.instagram_handle ?? '')
     setFacebook(profile?.facebook_handle ?? '')
     setWebsite(profile?.website_url ?? '')
+    setBio(profile?.bio ?? '')
     setStoreEnabled(Boolean(profile?.store_enabled))
     setStoreName(profile?.store_name ?? '')
     setStoreSlug(profile?.store_slug ?? '')
@@ -1637,6 +1639,7 @@ function EditProfileView({
         instagramHandle: instagram ? normaliseHandle(instagram) : null,
         facebookHandle: facebook ? normaliseUrl(facebook) : null,
         websiteUrl: website ? normaliseUrl(website) : null,
+        bio: bio ? bio.trim() : null,
         whatsapp: formattedWhatsapp,
         // store
         storeEnabled,
@@ -1758,6 +1761,18 @@ function EditProfileView({
         <label className="text-sm font-medium text-[#14212e]">
           Sitio web (opcional)
           <input className="input mt-1" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://tusitio.com" />
+        </label>
+
+        <label className="text-sm font-medium text-[#14212e]">
+          Biografía (opcional)
+          <textarea
+            className="textarea mt-1"
+            value={bio}
+            onChange={(e) => setBio(e.target.value)}
+            placeholder="Contá brevemente sobre tu experiencia como ciclista, tu estilo y lo que buscás en el marketplace."
+            rows={4}
+          />
+          <span className="text-xs text-[#14212e]/60">Se mostrará en tu perfil público.</span>
         </label>
 
         {Boolean(profile?.store_enabled) && (

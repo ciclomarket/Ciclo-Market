@@ -25,6 +25,31 @@
         "source": "/share/listing/:id",
         "destination": "https://ciclo-market.onrender.com/share/listing/:id",
         "type": 302
+      },
+      {
+        "source": "/sitemap.xml",
+        "destination": "https://ciclo-market.onrender.com/sitemap.xml",
+        "type": 302
+      },
+      {
+        "source": "/sitemap-static.xml",
+        "destination": "https://ciclo-market.onrender.com/sitemap-static.xml",
+        "type": 302
+      },
+      {
+        "source": "/sitemap-stores.xml",
+        "destination": "https://ciclo-market.onrender.com/sitemap-stores.xml",
+        "type": 302
+      },
+      {
+        "source": "/sitemap-categories.xml",
+        "destination": "https://ciclo-market.onrender.com/sitemap-categories.xml",
+        "type": 302
+      },
+      {
+        "source": "/sitemap-listings-:page.xml",
+        "destination": "https://ciclo-market.onrender.com/sitemap-listings-:page.xml",
+        "type": 302
       }
     ],
     "rewrites": [

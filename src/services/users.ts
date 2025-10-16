@@ -13,6 +13,7 @@ export interface UserProfileInput {
   instagramHandle?: string | null
   facebookHandle?: string | null
   websiteUrl?: string | null
+  bio?: string | null
   verified?: boolean
   whatsapp?: string | null
   // Store (official shop) optional fields
@@ -33,6 +34,7 @@ export interface UserProfileRecord {
   id: string
   email: string
   full_name?: string | null
+  bio?: string | null
   province?: string | null
   city?: string | null
   bike_preferences?: string[] | null
@@ -119,6 +121,7 @@ export async function upsertUserProfile(payload: Partial<UserProfileInput> & { i
     if (payload.instagramHandle !== undefined) updates.instagram_handle = payload.instagramHandle
     if (payload.facebookHandle !== undefined) updates.facebook_handle = payload.facebookHandle
     if (payload.websiteUrl !== undefined) updates.website_url = payload.websiteUrl
+    if (payload.bio !== undefined) updates.bio = payload.bio
     if (payload.verified !== undefined) updates.verified = payload.verified
     if (payload.whatsapp !== undefined) updates.whatsapp_number = payload.whatsapp
     if (payload.storeEnabled !== undefined) updates.store_enabled = payload.storeEnabled
@@ -160,6 +163,7 @@ export async function upsertUserProfile(payload: Partial<UserProfileInput> & { i
       instagram_handle: payload.instagramHandle ?? null,
       facebook_handle: payload.facebookHandle ?? null,
       website_url: payload.websiteUrl ?? null,
+      bio: payload.bio ?? null,
       verified: payload.verified ?? false,
       whatsapp_number: payload.whatsapp ?? null,
       store_enabled: payload.storeEnabled ?? null,
@@ -209,6 +213,39 @@ export async function fetchStoreProfileBySlug(slug: string): Promise<UserProfile
     return data as UserProfileRecord
   } catch {
     return null
+  }
+}
+
+export interface StoreSummary {
+  id: string
+  store_slug: string
+  store_name: string | null
+  store_avatar_url: string | null
+  city: string | null
+  province: string | null
+}
+
+export async function fetchStores(): Promise<StoreSummary[]> {
+  if (!supabaseEnabled) return []
+  try {
+    const supabase = getSupabaseClient()
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, store_slug, store_name, store_avatar_url, city, province, store_enabled')
+      .eq('store_enabled', true)
+      .not('store_slug', 'is', null)
+      .order('store_name', { ascending: true })
+    if (error || !Array.isArray(data)) return []
+    return data.filter((r: any) => r.store_slug).map((r: any) => ({
+      id: String(r.id),
+      store_slug: String(r.store_slug),
+      store_name: r.store_name ?? null,
+      store_avatar_url: r.store_avatar_url ?? null,
+      city: r.city ?? null,
+      province: r.province ?? null
+    }))
+  } catch {
+    return []
   }
 }
 

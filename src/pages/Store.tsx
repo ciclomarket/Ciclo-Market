@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import Container from '../components/Container'
 import SEO from '../components/SEO'
+import JsonLd from '../components/JsonLd'
 import { fetchUserProfile, fetchStoreProfileBySlug, type UserProfileRecord } from '../services/users'
 import { fetchListingsBySeller } from '../services/listings'
 import ListingCard from '../components/ListingCard'
@@ -192,7 +193,25 @@ export default function Store() {
         description={`Productos de ${storeName} en Ciclo Market. ${address || ''}`}
         image={banner}
         type="profile"
-      />
+      >
+        <JsonLd
+          data={{
+            '@context': 'https://schema.org',
+            '@type': profile.store_address ? 'LocalBusiness' : 'Organization',
+            name: storeName,
+            url: `${(import.meta.env.VITE_FRONTEND_URL || window.location.origin).replace(/\/$/, '')}/tienda/${profile.store_slug || profile.id}`,
+            logo: avatar,
+            image: banner,
+            address: address || undefined,
+            contactPoint: (phone ? [{ '@type': 'ContactPoint', telephone: phone, contactType: 'customer service' }] : undefined),
+            sameAs: [
+              profile.store_instagram ? `https://instagram.com/${String(profile.store_instagram).replace(/^@+/, '')}` : null,
+              profile.store_facebook ? `https://facebook.com/${String(profile.store_facebook).replace(/^@+/, '')}` : null,
+              profile.store_website || null,
+            ].filter(Boolean),
+          }}
+        />
+      </SEO>
       <div className="relative h-48 md:h-64 w-full overflow-hidden bg-[#14212e]">
         <img src={banner} alt="Banner" className="h-full w-full object-cover" style={{ objectPosition: `center ${bannerPosY}%` }} />
         {/* Fade inferior sutil en todos los tamaños para legibilidad del título */}

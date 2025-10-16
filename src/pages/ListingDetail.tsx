@@ -18,6 +18,7 @@ import { useAuth } from '../context/AuthContext'
 import { fetchUserProfile, fetchUserContactEmail, setUserVerificationStatus, type UserProfileRecord } from '../services/users'
 import { logContactEvent, fetchSellerReviews } from '../services/reviews'
 import SEO from '../components/SEO'
+import JsonLd from '../components/JsonLd'
 import { trackMetaPixel } from '../lib/metaPixel'
 import { useToast } from '../context/ToastContext'
 import ListingQuestionsSection from '../components/ListingQuestionsSection'
@@ -490,6 +491,27 @@ export default function ListingDetail() {
             <meta property="product:price:currency" content={priceCurrency} />
           </>
         ) : null}
+        {/* JSON-LD Product */}
+        <JsonLd
+          data={{
+            '@context': 'https://schema.org',
+            '@type': 'Product',
+            name: listing.title,
+            description: metaDescription,
+            image: Array.isArray(listing.images) && listing.images.length ? listing.images : (firstImage ? [firstImage] : []),
+            brand: listing.brand || undefined,
+            category: listing.category || undefined,
+            offers: priceAmount
+              ? {
+                  '@type': 'Offer',
+                  price: priceAmount,
+                  priceCurrency,
+                  availability: productAvailability === 'instock' ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
+                  url: canonicalUrl,
+                }
+              : undefined,
+          }}
+        />
       </SEO>
       <div className="bg-[#14212e]">
         <Container>

@@ -79,75 +79,205 @@ app.get('/', (_req, res) => {
   res.send('Ciclo Market API ready')
 })
 
+// Sitemap index que referencia sitemaps por tipo
 app.get('/sitemap.xml', async (_req, res) => {
   try {
     res.type('application/xml')
-    const baseOrigin = (process.env.FRONTEND_URL || '').split(',')[0]?.trim() || 'https://ciclomarket.ar'
-    const staticPaths = [
-      '/',
-      '/marketplace',
-      '/ofertas',
-      '/publicar',
-      '/como-publicar',
-      '/ayuda',
-      '/tienda-oficial',
-      '/faq',
-      '/terminos',
-      '/privacidad',
-    ]
+    const origin = (process.env.FRONTEND_URL || '').split(',')[0]?.trim() || 'https://ciclomarket.ar'
 
-    const nowIso = new Date().toISOString().slice(0, 10)
-    const staticUrls = staticPaths
-      .map((p) => `
-  <url>
-    <loc>${baseOrigin}${p}</loc>
-    <lastmod>${nowIso}</lastmod>
-  </url>`)
-      .join('')
-
-    // Dynamic listings
-    let listingUrls = ''
+    // Calcular cantidad de páginas para listings
+    let pages = 1
+    const PAGE_SIZE = 1000
     try {
       const supabase = getServerSupabaseClient()
-      const { data, error } = await supabase
+      const { count } = await supabase
         .from('listings')
-        .select('id, slug, created_at, status')
+        .select('id', { count: 'exact', head: true })
         .eq('status', 'active')
-        .order('created_at', { ascending: false })
-        .limit(2000)
-      if (!error && Array.isArray(data)) {
-        listingUrls = data
-          .map((l) => {
-            const slugOrId = l.slug || l.id
-            const lastmod = l.created_at ? new Date(l.created_at).toISOString().slice(0, 10) : nowIso
-            return `
-  <url>
-    <loc>${baseOrigin}/listing/${encodeURIComponent(slugOrId)}</loc>
-    <lastmod>${lastmod}</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.7</priority>
-  </url>`
-          })
-          .join('')
+      if (typeof count === 'number' && count > 0) {
+        pages = Math.max(1, Math.ceil(count / PAGE_SIZE))
       }
-    } catch (e) {
-      // fallback to only static
-    }
+    } catch {}
+
+    const lastmod = new Date().toISOString()
+    const listingEntries = Array.from({ length: pages }, (_, i) => {
+      const n = i + 1
+      return `
+  <sitemap>
+    <loc>${origin}/sitemap-listings-${n}.xml</loc>
+    <lastmod>${lastmod}</lastmod>
+  </sitemap>`
+    }).join('')
 
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${staticUrls}${listingUrls}
-</urlset>`
-    res.set('Cache-Control', 'public, max-age=1800') // 30 minutos
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <sitemap>
+    <loc>${origin}/sitemap-static.xml</loc>
+    <lastmod>${lastmod}</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>${origin}/sitemap-stores.xml</loc>
+    <lastmod>${lastmod}</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>${origin}/sitemap-categories.xml</loc>
+    <lastmod>${lastmod}</lastmod>
+  </sitemap>${listingEntries}
+</sitemapindex>`
+    res.set('Cache-Control', 'public, max-age=1800')
     return res.send(xml)
   } catch (e) {
-    // fallback a archivo estático si algo falla
     try {
       return res.sendFile(path.join(publicDir, 'sitemap.xml'))
     } catch {
       return res.status(500).send('')
     }
   }
+})
+
+// Sitemap: páginas estáticas
+app.get('/sitemap-static.xml', async (_req, res) => {
+  res.type('application/xml')
+  const origin = (process.env.FRONTEND_URL || '').split(',')[0]?.trim() || 'https://ciclomarket.ar'
+  const nowIso = new Date().toISOString().slice(0, 10)
+  const staticPaths = [
+    '/',
+    '/marketplace',
+    '/ofertas',
+    '/publicar',
+    '/como-publicar',
+    '/ayuda',
+    '/tienda-oficial',
+    '/tiendas',
+    '/faq',
+    '/terminos',
+    '/privacidad',
+  ]
+  const urls = staticPaths
+    .map((p) => `
+  <url>
+    <loc>${origin}${p}</loc>
+    <lastmod>${nowIso}</lastmod>
+    <changefreq>weekly</changefreq>
+  </url>`)
+    .join('')
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls}
+</urlset>`
+  res.set('Cache-Control', 'public, max-age=1800')
+  return res.send(xml)
+})
+
+// Sitemap: listings paginados
+app.get('/sitemap-listings-:page(\\d+).xml', async (req, res) => {
+  try {
+    res.type('application/xml')
+    const origin = (process.env.FRONTEND_URL || '').split(',')[0]?.trim() || 'https://ciclomarket.ar'
+    const page = Math.max(1, parseInt(String(req.params.page || '1'), 10) || 1)
+    const PAGE_SIZE = 1000
+    const from = (page - 1) * PAGE_SIZE
+    const to = from + PAGE_SIZE - 1
+    const supabase = getServerSupabaseClient()
+    const { data, error } = await supabase
+      .from('listings')
+      .select('id, slug, created_at', { count: 'exact' })
+      .eq('status', 'active')
+      .order('created_at', { ascending: false })
+      .range(from, to)
+    if (error) throw error
+    const nowIso = new Date().toISOString().slice(0, 10)
+    const urls = (data || [])
+      .map((l) => {
+        const slugOrId = l.slug || l.id
+        const lastmod = l.created_at ? new Date(l.created_at).toISOString().slice(0, 10) : nowIso
+        return `
+  <url>
+    <loc>${origin}/listing/${encodeURIComponent(slugOrId)}</loc>
+    <lastmod>${lastmod}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>`
+      })
+      .join('')
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls}
+</urlset>`
+    res.set('Cache-Control', 'public, max-age=1800')
+    return res.send(xml)
+  } catch (e) {
+    return res.status(500).send('')
+  }
+})
+
+// Sitemap: tiendas oficiales
+app.get('/sitemap-stores.xml', async (_req, res) => {
+  try {
+    res.type('application/xml')
+    const origin = (process.env.FRONTEND_URL || '').split(',')[0]?.trim() || 'https://ciclomarket.ar'
+    const supabase = getServerSupabaseClient()
+    const { data, error } = await supabase
+      .from('users')
+      .select('store_slug, created_at, store_enabled')
+      .eq('store_enabled', true)
+      .not('store_slug', 'is', null)
+    if (error) throw error
+    const nowIso = new Date().toISOString().slice(0, 10)
+    const urls = (data || [])
+      .filter((r) => r.store_slug)
+      .map((r) => {
+        const loc = `${origin}/tienda/${encodeURIComponent(String(r.store_slug))}`
+        const lastmod = r.created_at ? new Date(r.created_at).toISOString().slice(0, 10) : nowIso
+        return `
+  <url>
+    <loc>${loc}</loc>
+    <lastmod>${lastmod}</lastmod>
+    <changefreq>weekly</changefreq>
+  </url>`
+      })
+      .join('')
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls}
+</urlset>`
+    res.set('Cache-Control', 'public, max-age=1800')
+    return res.send(xml)
+  } catch (e) {
+    return res.status(500).send('')
+  }
+})
+
+// Sitemap: categorías/landings curadas
+app.get('/sitemap-categories.xml', async (_req, res) => {
+  res.type('application/xml')
+  const origin = (process.env.FRONTEND_URL || '').split(',')[0]?.trim() || 'https://ciclomarket.ar'
+  const nowIso = new Date().toISOString().slice(0, 10)
+  const categorySlugs = [
+    'bicicletas-de-ruta',
+    'mtb',
+    'urbana',
+    'fixie',
+    'triatlon',
+    'e-bike',
+    'pista',
+    'accesorios',
+    'indumentaria',
+  ]
+  const urls = categorySlugs
+    .map((slug) => `
+  <url>
+    <loc>${origin}/marketplace/${slug}</loc>
+    <lastmod>${nowIso}</lastmod>
+    <changefreq>weekly</changefreq>
+  </url>`)
+    .join('')
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls}
+</urlset>`
+  res.set('Cache-Control', 'public, max-age=1800')
+  return res.send(xml)
 })
 
 app.get('/robots.txt', (_req, res) => {
