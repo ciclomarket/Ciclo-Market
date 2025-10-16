@@ -12,6 +12,7 @@ export type ReviewRecord = {
   comment?: string | null
   created_at: string
   buyer_name?: string
+  buyer_avatar_url?: string | null
 }
 
 export type ReviewsSummary = {

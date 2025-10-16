@@ -266,10 +266,19 @@ export default function Profile() {
   return (
     <div className="min-h-[calc(100vh-120px)] bg-[#14212e] py-10">
       <Container>
-        <div className="overflow-hidden rounded-[28px] border border-white/10 bg-white shadow-[0_35px_80px_rgba(12,20,28,0.35)]">
-          <header className="border-b border-[#14212e]/10 bg-[#14212e] px-6 py-6 text-white">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div className="flex items-start justify-between gap-3 md:block">
+        <div className="overflow-hidden rounded-[28px] border border-white/10 bg-[#14212e] shadow-[0_35px_80px_rgba(12,20,28,0.35)]">
+          <header className="border-b border-white/10 bg-[#14212e] px-6 py-6 text-white">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div className="flex items-start gap-4">
+                <div className="size-16 overflow-hidden rounded-2xl border border-white/20 bg-white/10">
+                  {avatarUrl ? (
+                    <img src={avatarUrl} alt={displayName} className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-lg font-semibold text-white/80">
+                      {displayName.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                </div>
                 <div>
                   <p className="text-xs uppercase tracking-[0.3em] text-white/70">Perfil del vendedor</p>
                   <h1 className="text-2xl font-semibold">{displayName}</h1>
@@ -284,16 +293,6 @@ export default function Profile() {
                     <p className="mt-1 text-xs text-white/60">Miembro desde {memberSinceLabel}</p>
                   )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setMobileNavOpen(true)}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/30 text-white transition hover:border-white/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:hidden"
-                  aria-label="Abrir menú del vendedor"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-6 w-6" stroke="currentColor" fill="none" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M4 12h16M4 17h16" />
-                  </svg>
-                </button>
               </div>
               <div className="flex items-center gap-3">
                 {websiteLink && (
@@ -309,12 +308,23 @@ export default function Profile() {
                 <Button to="/marketplace" variant="secondary" className="bg-white text-[#14212e] hover:bg-white/90">
                   Ver marketplace
                 </Button>
+                <button
+                  type="button"
+                  onClick={() => setMobileNavOpen(true)}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/30 text-white transition hover:border-white/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white md:hidden"
+                  aria-label="Abrir menú del vendedor"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-6 w-6" stroke="currentColor" fill="none" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M4 12h16M4 17h16" />
+                  </svg>
+                </button>
               </div>
             </div>
+            <div className="mt-4 text-xs text-white/70">Inicio / Vendedor / <span className="text-white">{displayName}</span></div>
           </header>
 
           <div className="grid gap-6 p-6 md:grid-cols-[260px_1fr]">
-            <nav className="hidden rounded-3xl border border-[#14212e]/10 bg-[#14212e]/5 p-3 text-sm text-[#14212e]/80 md:block">
+            <nav className="hidden rounded-3xl border border-white/15 bg-[#14212e] p-3 text-sm text-white md:block">
               <ul className="grid gap-1">
                 {TABS.map((tab) => (
                   <li key={tab}>
@@ -322,7 +332,7 @@ export default function Profile() {
                       type="button"
                       onClick={() => setActiveTab(tab)}
                       className={`w-full rounded-2xl px-4 py-3 text-left transition ${
-                        activeTab === tab ? 'bg-white text-[#14212e] shadow' : 'hover:bg-white/40'
+                        activeTab === tab ? 'bg-white text-[#14212e] shadow' : 'text-white hover:bg-white/10'
                       }`}
                     >
                       {tab}
@@ -332,7 +342,7 @@ export default function Profile() {
               </ul>
             </nav>
 
-            <section className="rounded-3xl border border-[#14212e]/10 bg-white p-6 shadow-[0_25px_60px_rgba(12,20,28,0.25)]">
+            <section className="rounded-3xl border border-white/10 bg-white p-6 shadow-[0_25px_60px_rgba(12,20,28,0.35)]">
               {activeTab === 'Perfil' && (
                 <div className="space-y-6">
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
@@ -488,11 +498,22 @@ export default function Profile() {
                     {reviews.map((r) => (
                       <div key={r.id} className="rounded-2xl border border-[#14212e]/10 bg-white p-4">
                         <div className="flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-2">
-                            <StarRating value={r.rating} />
-                            {r.buyer_name && (
-                              <span className="text-xs font-semibold text-[#14212e]/80">{r.buyer_name}</span>
-                            )}
+                          <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2">
+                              <StarRating value={r.rating} />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border border-[#14212e]/10 bg-[#f2f6fb] text-xs font-semibold text-[#14212e]">
+                                {r.buyer_avatar_url ? (
+                                  <img src={r.buyer_avatar_url} alt={r.buyer_name || 'Comprador'} className="h-full w-full object-cover" />
+                                ) : (
+                                  <span>{(r.buyer_name || 'C').charAt(0)}</span>
+                                )}
+                              </div>
+                              {r.buyer_name && (
+                                <span className="text-xs font-semibold text-[#14212e]/80">{r.buyer_name}</span>
+                              )}
+                            </div>
                           </div>
                           <span className="text-xs text-[#14212e]/60">{new Date(r.created_at).toLocaleDateString('es-AR')}</span>
                         </div>

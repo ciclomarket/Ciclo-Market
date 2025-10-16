@@ -854,25 +854,26 @@ app.get('/api/reviews/:sellerId', async (req, res) => {
       reviews = r2.data
     }
     const list = Array.isArray(reviews) ? reviews : []
-    // Enriquecer con nombre del comprador (Nombre + inicial del apellido)
+    // Enriquecer con nombre del comprador (Nombre + inicial del apellido) y avatar
     let byName = list
     try {
       const buyerIds = Array.from(new Set(list.map((r) => r.buyer_id).filter(Boolean)))
       if (buyerIds.length) {
         const { data: usersData } = await supabase
           .from('users')
-          .select('id, full_name')
+          .select('id, full_name, avatar_url')
           .in('id', buyerIds)
-        const nameMap = new Map((usersData || []).map((u) => [u.id, u.full_name || null]))
+        const nameMap = new Map((usersData || []).map((u) => [u.id, { name: u.full_name || null, avatar: u.avatar_url || null }]))
         byName = list.map((r) => {
-          const full = String(nameMap.get(r.buyer_id) || '').trim()
+          const meta = nameMap.get(r.buyer_id) || { name: null, avatar: null }
+          const full = String(meta.name || '').trim()
           let label = 'Comprador verificado'
           if (full) {
             const parts = full.split(/\s+/).filter(Boolean)
             if (parts.length === 1) label = parts[0]
             else if (parts.length > 1) label = `${parts[0]} ${parts[1].charAt(0).toUpperCase()}.`
           }
-          return { ...r, buyer_name: label }
+          return { ...r, buyer_name: label, buyer_avatar_url: meta.avatar }
         })
       }
     } catch {}
