@@ -24,10 +24,22 @@ export type ReviewsSummary = {
 export async function logContactEvent(payload: { sellerId: string; listingId?: string | null; buyerId?: string | null; type: 'whatsapp' | 'email' }) {
   try {
     const endpoint = API_BASE ? `${API_BASE}/api/contacts/log` : '/api/contacts/log'
+    const body = JSON.stringify(payload)
+    // Intento 1: sendBeacon (fiable cuando la página navega o abre nueva pestaña)
+    try {
+      if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+        const ok = navigator.sendBeacon(endpoint, new Blob([body], { type: 'application/json' }))
+        if (ok) return
+      }
+    } catch { /* ignore and fallback */ }
+    // Intento 2: fetch con keepalive
     await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body,
+      // keepalive ayuda si el navegador cambia de página o pestaña
+      // soportado en la mayoría de navegadores modernos
+      keepalive: true as any,
     })
   } catch (err) {
     console.warn('[reviews] logContactEvent failed', err)

@@ -661,6 +661,94 @@ app.post('/api/contacts/log', async (req, res) => {
     if (error) {
       console.warn('[contacts] insert failed', error)
     }
+    // Emisión inmediata de recordatorio/notification/email (one-shot, si hay buyer)
+    if (buyerId) {
+      try {
+        // Asegurar recordatorio para el par vendedor-comprador (ready inmediatamente)
+        await supabase
+          .from('review_reminders')
+          .upsert({
+            seller_id: sellerId,
+            buyer_id: buyerId,
+            listing_id: listingId || null,
+            contact_event_id: null,
+            ready_at: new Date().toISOString(),
+          }, { onConflict: 'seller_id,buyer_id' })
+
+        // Leer estado actual para evitar duplicados
+        const { data: rem } = await supabase
+          .from('review_reminders')
+          .select('id,sent_inapp,sent_email')
+          .eq('seller_id', sellerId)
+          .eq('buyer_id', buyerId)
+          .maybeSingle()
+
+        // In-app notification (si no fue enviada)
+        if (rem && rem.sent_inapp === false) {
+          const cta = `/vendedor/${sellerId}?review=1`
+          const insertPayload = {
+            user_id: buyerId,
+            type: 'system',
+            title: 'Podés dejar una reseña',
+            body: 'Tu reseña para este vendedor ya está disponible. ¡Contá tu experiencia y ayudá a otros!',
+            cta_url: cta,
+            metadata: { seller_id: sellerId },
+          }
+          const { error: notifErr } = await supabase.from('notifications').insert([insertPayload])
+          if (notifErr) {
+            console.warn('[contacts] notification insert failed', notifErr)
+          } else {
+            await supabase
+              .from('review_reminders')
+              .update({ sent_inapp: true })
+              .eq('id', rem.id)
+          }
+        }
+
+        // Email (si hay configuración y aún no se envió)
+        if (rem && rem.sent_email === false) {
+          const canSendMail = (() => {
+            try { return require('./lib/mail').isMailConfigured() } catch { return false }
+          })()
+          if (canSendMail) {
+            try {
+              // Buscar email del comprador
+              const { data: profile } = await supabase
+                .from('users')
+                .select('id,email,full_name')
+                .eq('id', buyerId)
+                .maybeSingle()
+              const to = profile?.email
+              if (to) {
+                const baseFront = (process.env.FRONTEND_URL || '').split(',')[0]?.trim() || ''
+                const ctaUrl = baseFront ? `${baseFront}/vendedor/${sellerId}?review=1` : null
+                await sendMail({
+                  from: process.env.SMTP_FROM || `Ciclo Market <${process.env.SMTP_USER}>`,
+                  to,
+                  subject: 'Ya podés dejar una reseña',
+                  html: `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#14212e;">
+                    <h2>Dejá tu reseña</h2>
+                    <p>Hola ${profile.full_name || 'ciclista'},</p>
+                    <p>Ya podés dejar una reseña sobre tu experiencia con este vendedor.</p>
+                    ${ctaUrl ? `<div style="margin:16px 0;"><a href="${ctaUrl}" style="display:inline-block;padding:10px 16px;background:#14212e;color:#fff;text-decoration:none;border-radius:8px;">Escribir reseña</a></div>` : ''}
+                    <p>Gracias por ayudar a la comunidad Ciclo Market.</p>
+                  </div>`,
+                })
+                await supabase
+                  .from('review_reminders')
+                  .update({ sent_email: true })
+                  .eq('id', rem.id)
+              }
+            } catch (mailErr) {
+              console.warn('[contacts] send review email failed', mailErr)
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[contacts] immediate reminder/notification failed', e)
+      }
+    }
+
     return res.json({ ok: true })
   } catch (err) {
     console.warn('[contacts] log failed', err)
