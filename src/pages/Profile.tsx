@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import Container from '../components/Container'
 import ListingCard from '../components/ListingCard'
 import Button from '../components/Button'
@@ -74,6 +74,7 @@ function facebookUrl(value?: string | null) {
 
 export default function Profile() {
   const { sellerId } = useParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const { user } = useAuth()
   const { show: showToast } = useToast()
@@ -155,6 +156,28 @@ export default function Profile() {
       setCanReview(result)
     })()
   }, [user?.id, sellerId])
+
+  // Deep-link: ?review=1 abre pestaña Reseñas y modal si está permitido
+  useEffect(() => {
+    if (!sellerId) return
+    const wantsReview = searchParams.get('review') === '1'
+    if (!wantsReview) return
+    setActiveTab('Reseñas')
+    // Esperar a que cargue canReview
+    const t = setTimeout(() => {
+      if (canReview?.allowed) setReviewModalOpen(true)
+    }, 100)
+    return () => clearTimeout(t)
+  }, [sellerId, searchParams, canReview?.allowed])
+
+  // Limpiar el query param después de abrir
+  useEffect(() => {
+    if (!reviewModalOpen) return
+    if (searchParams.has('review')) {
+      searchParams.delete('review')
+      setSearchParams(searchParams, { replace: true })
+    }
+  }, [reviewModalOpen])
 
   useEffect(() => {
     if (!mobileNavOpen) return
@@ -398,6 +421,11 @@ export default function Profile() {
                       </button>
                     )}
                   </div>
+                  {canReview && !canReview.allowed && (
+                    <div className="rounded-2xl border border-[#14212e]/10 bg-[#f2f6fb] p-3 text-xs text-[#14212e]/70">
+                      {canReview.reason || 'Aún no podés escribir una reseña.'}
+                    </div>
+                  )}
                   {(!reviewsSummary || reviewsSummary.count === 0) && (
                     <div className="rounded-2xl border border-[#14212e]/10 bg-[#f2f6fb] p-6 text-sm text-[#14212e]/70">
                       Aún no hay reseñas para este vendedor.
@@ -407,6 +435,47 @@ export default function Profile() {
                     <div className="flex items-center gap-3 text-[#14212e]">
                       <StarRating value={reviewsSummary.avgRating} />
                       <span className="text-sm">{reviewsSummary.avgRating.toFixed(1)} promedio · {reviewsSummary.count} reseñas</span>
+                    </div>
+                  )}
+                  {reviewsSummary && reviewsSummary.count > 0 && (
+                    <div className="grid gap-4 md:grid-cols-2">
+                      {/* Distribución de estrellas */}
+                      <div className="rounded-2xl border border-[#14212e]/10 bg-white p-4">
+                        <p className="mb-2 text-sm font-semibold text-[#14212e]">Distribución</p>
+                        <div className="space-y-1">
+                          {([5,4,3,2,1] as const).map((star) => {
+                            const dist = (reviewsSummary as any).dist || {}
+                            const count = Number(dist[star] || 0)
+                            const pct = reviewsSummary.count ? Math.round((count / reviewsSummary.count) * 100) : 0
+                            return (
+                              <div key={star} className="flex items-center gap-2 text-xs text-[#14212e]/80">
+                                <span className="w-10 shrink-0">{star}★</span>
+                                <div className="relative h-2 flex-1 overflow-hidden rounded bg-[#14212e]/10">
+                                  <div className="absolute inset-y-0 left-0 bg-amber-400" style={{ width: `${pct}%` }} />
+                                </div>
+                                <span className="w-10 text-right">{count}</span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                      {/* Etiquetas más mencionadas */}
+                      <div className="rounded-2xl border border-[#14212e]/10 bg-white p-4">
+                        <p className="mb-2 text-sm font-semibold text-[#14212e]">Lo más mencionado</p>
+                        <div className="flex flex-wrap gap-2">
+                          {Object.entries(((reviewsSummary as any).tagsCount || {}) as Record<string, number>)
+                            .sort((a, b) => b[1] - a[1])
+                            .slice(0, 6)
+                            .map(([tag, count]) => (
+                              <span key={tag} className="rounded-full border border-[#14212e]/15 bg-[#f2f6fb] px-3 py-1 text-xs text-[#14212e]">
+                                {tag.replace(/_/g, ' ')} · {count}
+                              </span>
+                            ))}
+                          {Object.keys(((reviewsSummary as any).tagsCount || {})).length === 0 && (
+                            <span className="text-xs text-[#14212e]/60">Sin etiquetas destacadas.</span>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   )}
                   <div className="space-y-3">

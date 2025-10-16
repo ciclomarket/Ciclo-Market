@@ -72,7 +72,13 @@ export default function ImageCarousel({ images }: { images: string[] }) {
               decoding="async"
               onError={(e) => {
                 // Si una miniatura falla, ocultarla
-                (e.currentTarget as HTMLImageElement).style.visibility = 'hidden'
+                const el = e.currentTarget as HTMLImageElement
+                // Fallback al original si la transformación no funciona
+                if (src && el.src !== src) {
+                  el.src = src
+                  return
+                }
+                el.style.visibility = 'hidden'
               }}
             />
           </button>
@@ -108,7 +114,13 @@ export default function ImageCarousel({ images }: { images: string[] }) {
             alt="Imagen ampliada"
             className="max-h-[90vh] max-w-[95vw] object-contain"
             onError={(e) => {
-              (e.currentTarget as HTMLImageElement).style.display = 'none'
+              const el = e.currentTarget as HTMLImageElement
+              // Fallback al original
+              if (currentImage && el.src !== currentImage) {
+                el.src = currentImage
+                return
+              }
+              el.style.display = 'none'
             }}
           />
           <div className="absolute right-4">

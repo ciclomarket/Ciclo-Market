@@ -9,9 +9,12 @@ export type TransformOpts = {
  * Given a Supabase public object URL, return the render/image URL with transforms.
  * If the URL is not a Supabase storage public URL, returns the original URL.
  */
+const ENABLE_TRANSFORMS = String(import.meta.env.VITE_SUPABASE_IMG_TRANSFORM || '').toLowerCase() === 'true'
+
 export function transformSupabasePublicUrl(url: string, opts: TransformOpts = {}): string {
   try {
     if (!url || typeof url !== 'string') return url
+    if (!ENABLE_TRANSFORMS) return url
     const u = new URL(url)
     // Expected pattern: /storage/v1/object/public/<bucket>/<path>
     if (!u.pathname.includes('/storage/v1/object/public/')) return url
@@ -31,4 +34,3 @@ export function transformSupabasePublicUrl(url: string, opts: TransformOpts = {}
     return url
   }
 }
-

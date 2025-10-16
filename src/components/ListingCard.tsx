@@ -114,7 +114,16 @@ export default function ListingCard({ l }: { l: Listing }) {
             loading="lazy"
             decoding="async"
             onLoad={() => setImageLoaded(true)}
-            onError={() => setImageLoaded(true)}
+            onError={(e) => {
+              // Fallback a URL original si la transformación devuelve 400/404
+              try {
+                const el = e.currentTarget as HTMLImageElement
+                if (l.images?.[0] && el.src !== l.images[0]) {
+                  el.src = l.images[0]
+                }
+              } catch {}
+              setImageLoaded(true)
+            }}
             className={`h-full w-full object-cover transition duration-700 ${imageLoaded ? 'opacity-100 scale-100' : 'opacity-0 scale-105'} ${imageStatusClass} group-hover:scale-105`}
           />
           <div

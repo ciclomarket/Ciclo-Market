@@ -675,13 +675,28 @@ app.get('/api/reviews/:sellerId', async (req, res) => {
     const supabase = getServerSupabaseClient()
     const { data: reviews, error } = await supabase
       .from('reviews')
-      .select('id,seller_id,buyer_id,listing_id,rating,tags,comment,created_at')
+      .select('id,seller_id,buyer_id,listing_id,rating,tags,comment,created_at,status')
       .eq('seller_id', sellerId)
+      .eq('status', 'published')
       .order('created_at', { ascending: false })
     if (error) return res.status(500).json({ error: 'fetch_failed' })
-    const count = reviews?.length || 0
-    const avgRating = count ? (reviews.reduce((acc, r) => acc + (r.rating || 0), 0) / count) : 0
-    return res.json({ reviews: reviews || [], summary: { sellerId, count, avgRating } })
+    const list = Array.isArray(reviews) ? reviews : []
+    const count = list.length
+    const avgRating = count ? (list.reduce((acc, r) => acc + (r.rating || 0), 0) / count) : 0
+    // Distribución de calificaciones y conteo de etiquetas
+    const dist = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
+    const tagsCount = {}
+    for (const r of list) {
+      const rr = Number(r.rating || 0)
+      if (rr >= 1 && rr <= 5) dist[rr] = (dist[rr] || 0) + 1
+      if (Array.isArray(r.tags)) {
+        for (const t of r.tags) {
+          const key = String(t)
+          tagsCount[key] = (tagsCount[key] || 0) + 1
+        }
+      }
+    }
+    return res.json({ reviews: list, summary: { sellerId, count, avgRating, dist, tagsCount } })
   } catch (err) {
     console.warn('[reviews] fetch failed', err)
     return res.status(500).json({ error: 'unexpected_error' })
@@ -695,15 +710,13 @@ app.get('/api/reviews/can-review', async (req, res) => {
     const sellerId = String(req.query.sellerId || '')
     if (!buyerId || !sellerId) return res.status(400).json({ allowed: false })
     const supabase = getServerSupabaseClient()
-    const cutoffIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
     const { data: contacts } = await supabase
       .from('contact_events')
       .select('id,created_at')
       .eq('seller_id', sellerId)
       .eq('buyer_id', buyerId)
-      .lte('created_at', cutoffIso)
       .limit(1)
-    if (!contacts || contacts.length === 0) return res.json({ allowed: false, reason: 'Esperá 24 h desde el primer contacto.' })
+    if (!contacts || contacts.length === 0) return res.json({ allowed: false, reason: 'Primero contactá al vendedor (WhatsApp o email).' })
     const { data: existing } = await supabase
       .from('reviews')
       .select('id')
@@ -725,14 +738,44 @@ app.post('/api/reviews/submit', async (req, res) => {
     if (!sellerId || !buyerId || !rating) return res.status(400).send('missing_fields')
     const r = Number(rating)
     if (!Number.isFinite(r) || r < 1 || r > 5) return res.status(400).send('invalid_rating')
+    if (String(sellerId) === String(buyerId)) return res.status(400).send('not_allowed')
     const supabase = getServerSupabaseClient()
+    // Validaciones server-side: única reseña por par y requiere al menos un contacto
+    try {
+      const { data: existing } = await supabase
+        .from('reviews')
+        .select('id')
+        .eq('seller_id', sellerId)
+        .eq('buyer_id', buyerId)
+        .limit(1)
+      if (existing && existing.length > 0) return res.status(400).send('not_allowed')
+      const { data: contacts } = await supabase
+        .from('contact_events')
+        .select('id')
+        .eq('seller_id', sellerId)
+        .eq('buyer_id', buyerId)
+        .limit(1)
+      if (!contacts || contacts.length === 0) return res.status(400).send('not_allowed')
+    } catch (e) {
+      // Si falla la verificación, negar por defecto
+      return res.status(400).send('not_allowed')
+    }
+    // Sanitizar etiquetas a un set permitido
+    const ALLOWED_TAGS = new Set(['atencion', 'respetuoso', 'buen_vendedor', 'compre'])
+    let safeTags = null
+    if (Array.isArray(tags)) {
+      const uniq = Array.from(new Set(tags.map((t) => String(t))))
+      safeTags = uniq.filter((t) => ALLOWED_TAGS.has(t)).slice(0, 6)
+      if (safeTags.length === 0) safeTags = null
+    }
     const payload = {
       seller_id: sellerId,
       buyer_id: buyerId,
       listing_id: listingId || null,
       rating: r,
-      tags: Array.isArray(tags) ? tags : null,
+      tags: safeTags,
       comment: typeof comment === 'string' && comment.trim() ? String(comment).slice(0, 1000) : null,
+      status: 'published',
     }
     const { error } = await supabase.from('reviews').insert([payload])
     if (error) return res.status(500).send('insert_failed')
@@ -1613,6 +1656,16 @@ app.listen(PORT, '0.0.0.0', () => {
     }
   } else {
     console.info('[newsletterDigest] disabled (NEWSLETTER_DIGEST_ENABLED != "true")')
+  }
+  if (process.env.REVIEW_REMINDER_ENABLED === 'true') {
+    try {
+      const { startReviewReminderJob } = require('./jobs/reviewReminder')
+      startReviewReminderJob()
+    } catch (err) {
+      console.warn('[reviewReminder] not started:', err?.message || err)
+    }
+  } else {
+    console.info('[reviewReminder] disabled (REVIEW_REMINDER_ENABLED != "true")')
   }
 })
 /* ----------------------------- Auth helper -------------------------------- */

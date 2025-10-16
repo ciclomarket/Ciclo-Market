@@ -20,7 +20,6 @@ export async function compressToWebp(input: File, opts: CompressOptions = {}): P
   if (!input || !(input instanceof File) || !input.type.startsWith('image/')) return input
 
   const options = { ...DEFAULTS, ...opts }
-  if (input.size <= options.minSizeBytes) return renameExtension(input, 'webp')
 
   const imageUrl = URL.createObjectURL(input)
   try {
@@ -48,23 +47,25 @@ export async function compressToWebp(input: File, opts: CompressOptions = {}): P
     if (!ctx) return renameExtension(input, 'webp')
     ctx.drawImage(img, 0, 0, targetWidth, targetHeight)
 
-    // Try WebP first, then fallback to JPEG
-    let blob: Blob | null = await new Promise((resolve) =>
+    // Encode to WebP (preferido). Si falla, intentamos JPEG; si aún así falla, devolvemos el original.
+    let webpBlob: Blob | null = await new Promise((resolve) =>
       canvas.toBlob(resolve, 'image/webp', options.quality)
     )
-    if (!blob) {
-      blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', options.quality))
+    if (!webpBlob) {
+      // Fallback poco probable
+      const jpegBlob: Blob | null = await new Promise((resolve) =>
+        canvas.toBlob(resolve, 'image/jpeg', options.quality)
+      )
+      if (!jpegBlob) return input
+      // Aun si el JPEG resultara más grande, preferimos retornarlo comprimido
+      const outNameJpg = changeExtension(sanitizeName(input.name), 'jpg')
+      return new File([jpegBlob], outNameJpg, { type: 'image/jpeg' })
     }
-    if (!blob) return renameExtension(input, 'webp')
 
-    // Keep compressed only if it’s smaller
-    if (blob.size >= input.size) return renameExtension(input, 'webp')
-
-    const ext = blob.type.includes('webp') ? 'webp' : 'jpg'
-    const outName = changeExtension(sanitizeName(input.name), ext)
-    return new File([blob], outName, { type: blob.type })
+    const outName = changeExtension(sanitizeName(input.name), 'webp')
+    return new File([webpBlob], outName, { type: 'image/webp' })
   } catch {
-    return renameExtension(input, 'webp')
+    return input
   } finally {
     URL.revokeObjectURL(imageUrl)
   }
@@ -80,6 +81,6 @@ function changeExtension(name: string, ext: string): string {
 
 function renameExtension(file: File, ext: string): File {
   const outName = changeExtension(sanitizeName(file.name), ext)
+  // Mantiene el contenido original; NO cambia el tipo. Evitar usar este camino para forzar webp.
   return new File([file], outName, { type: file.type })
 }
-

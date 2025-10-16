@@ -42,6 +42,16 @@ services:
       - key: NEWSLETTER_DIGEST_CRON
         value: "0 21 * * 2" # martes 21:00
 
+      # Review reminders (habilitar reseñas automáticamente y avisar 1 vez)
+      - key: REVIEW_REMINDER_ENABLED
+        value: "true"
+      - key: REVIEW_REMINDER_TZ
+        value: America/Argentina/Buenos_Aires
+      - key: REVIEW_REMINDER_CRON
+        value: "*/10 * * * *"  # cada 10 minutos (no reenvía, sólo chequea)
+      - key: REVIEW_REMINDER_BATCH_LIMIT
+        value: "200"
+
       # Optional
       - key: SHARE_FALLBACK_IMAGE
         value: https://your-domain.com/og-preview.png

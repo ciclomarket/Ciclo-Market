@@ -17,6 +17,8 @@ export type ReviewsSummary = {
   sellerId: string
   count: number
   avgRating: number
+  dist?: Record<number, number>
+  tagsCount?: Record<string, number>
 }
 
 export async function logContactEvent(payload: { sellerId: string; listingId?: string | null; buyerId?: string | null; type: 'whatsapp' | 'email' }) {
@@ -70,4 +72,3 @@ export async function submitReview(payload: { sellerId: string; buyerId: string;
   }
   return await res.json()
 }
-
