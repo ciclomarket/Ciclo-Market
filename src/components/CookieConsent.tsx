@@ -44,7 +44,7 @@ export default function CookieConsent() {
   if (!visible) return null
 
   const applyConsent = (granted: boolean) => {
-    try { localStorage.setItem(STORAGE_KEY, granted ? 'granted' : 'denied') } catch {}
+    try { localStorage.setItem(STORAGE_KEY, granted ? 'granted' : 'denied') } catch { void 0 }
     const gtag = (window as any).gtag as ((...args: any[]) => void) | undefined
     if (typeof gtag === 'function') {
       gtag('consent', 'update', { analytics_storage: granted ? 'granted' : 'denied' })

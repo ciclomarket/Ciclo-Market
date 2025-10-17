@@ -12,7 +12,6 @@ export default class ErrorBoundary extends Component<Props, State> {
     return { hasError: true }
   }
   componentDidCatch(error: any, info: any) {
-    // eslint-disable-next-line no-console
     console.error('[app] Uncaught error', error, info)
   }
   render() {
@@ -34,4 +33,3 @@ export default class ErrorBoundary extends Component<Props, State> {
     return this.props.children
   }
 }
-

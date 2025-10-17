@@ -14,6 +14,7 @@ import type { Listing, ListingQuestion } from '../types'
 import { useToast } from '../context/ToastContext'
 import { formatNameWithInitial } from '../utils/user'
 import { fetchUserDisplayNames } from '../services/users'
+import { containsPhoneLike } from '../utils/moderation'
 
 type Props = {
   listing: Listing
@@ -175,6 +176,10 @@ export default function ListingQuestionsSection({ listing, listingUnavailable }:
       setQuestionError('Escribí una consulta un poco más detallada.')
       return
     }
+    if (containsPhoneLike(text)) {
+      setQuestionError('No publiques teléfonos ni WhatsApp. Usá los botones de contacto del aviso.')
+      return
+    }
     setQuestionSubmitting(true)
     setQuestionError(null)
     try {
@@ -224,6 +229,10 @@ export default function ListingQuestionsSection({ listing, listingUnavailable }:
     const text = (answerDrafts[questionId] ?? '').trim()
     if (text.length < MIN_ANSWER_LENGTH) {
       setAnswerErrors((prev) => ({ ...prev, [questionId]: 'Escribí una respuesta.' }))
+      return
+    }
+    if (containsPhoneLike(text)) {
+      setAnswerErrors((prev) => ({ ...prev, [questionId]: 'No compartas teléfonos. Usá los botones de contacto.' }))
       return
     }
     setAnswerSubmitting((prev) => ({ ...prev, [questionId]: true }))
@@ -339,7 +348,7 @@ export default function ListingQuestionsSection({ listing, listingUnavailable }:
                 <label className="text-sm font-medium text-[#14212e]">¿Tenés una duda?</label>
                 <textarea
                   className="input h-28 resize-none"
-                  placeholder="Preguntale al vendedor sobre el estado, componentes, envío, etc."
+                  placeholder="Preguntale al vendedor (no compartas teléfonos; usá los botones de contacto)"
                   value={questionDraft}
                   onChange={(event) => {
                     setQuestionDraft(event.target.value)
@@ -434,7 +443,7 @@ export default function ListingQuestionsSection({ listing, listingUnavailable }:
                         <div className="mt-3 space-y-2">
                           <textarea
                             className="input h-24 resize-none"
-                            placeholder="Escribí tu respuesta pública"
+                            placeholder="Escribí tu respuesta pública (no compartas teléfonos; usá los botones de contacto)"
                             value={answerDrafts[question.id] ?? ''}
                             onChange={(event) => handleAnswerChange(question.id, event.target.value)}
                             maxLength={600}

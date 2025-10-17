@@ -48,7 +48,7 @@ export async function compressToWebp(input: File, opts: CompressOptions = {}): P
     ctx.drawImage(img, 0, 0, targetWidth, targetHeight)
 
     // Encode to WebP (preferido). Si falla, intentamos JPEG; si aún así falla, devolvemos el original.
-    let webpBlob: Blob | null = await new Promise((resolve) =>
+    const webpBlob: Blob | null = await new Promise((resolve) =>
       canvas.toBlob(resolve, 'image/webp', options.quality)
     )
     if (!webpBlob) {

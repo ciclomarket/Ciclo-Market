@@ -28,6 +28,7 @@ export interface UserProfileInput {
   storeBannerUrl?: string | null
   storeAvatarUrl?: string | null
   storeBannerPositionY?: number | null
+  storeHours?: string | null
 }
 
 export interface UserProfileRecord {
@@ -47,6 +48,7 @@ export interface UserProfileRecord {
   website_url?: string | null
   verified?: boolean | null
   whatsapp_number?: string | null
+  preferred_brands?: string[] | null
   // Store fields (nullable if not enabled)
   store_enabled?: boolean | null
   store_name?: string | null
@@ -59,6 +61,7 @@ export interface UserProfileRecord {
   store_banner_url?: string | null
   store_avatar_url?: string | null
   store_banner_position_y?: number | null
+  store_hours?: string | null
 }
 
 export async function createUserProfile(payload: UserProfileInput): Promise<boolean> {
@@ -92,6 +95,7 @@ export async function createUserProfile(payload: UserProfileInput): Promise<bool
       store_banner_url: payload.storeBannerUrl ?? null,
       store_banner_position_y: payload.storeBannerPositionY ?? null,
       store_avatar_url: payload.storeAvatarUrl ?? null,
+      store_hours: payload.storeHours ?? null,
       created_at: new Date().toISOString()
     })
     return !error
@@ -135,6 +139,7 @@ export async function upsertUserProfile(payload: Partial<UserProfileInput> & { i
     if (payload.storeBannerUrl !== undefined) updates.store_banner_url = payload.storeBannerUrl
     if (payload.storeBannerPositionY !== undefined) updates.store_banner_position_y = payload.storeBannerPositionY
     if (payload.storeAvatarUrl !== undefined) updates.store_avatar_url = payload.storeAvatarUrl
+    if (payload.storeHours !== undefined) updates.store_hours = payload.storeHours
 
     const { data, error } = await supabase
       .from('users')
@@ -177,6 +182,7 @@ export async function upsertUserProfile(payload: Partial<UserProfileInput> & { i
       store_banner_url: payload.storeBannerUrl ?? null,
       store_banner_position_y: payload.storeBannerPositionY ?? null,
       store_avatar_url: payload.storeAvatarUrl ?? null,
+      store_hours: payload.storeHours ?? null,
       created_at: new Date().toISOString()
     }
     const { error: insertError } = await supabase.from('users').insert(insertPayload)
@@ -221,8 +227,12 @@ export interface StoreSummary {
   store_slug: string
   store_name: string | null
   store_avatar_url: string | null
+  store_banner_url?: string | null
   city: string | null
   province: string | null
+  store_address?: string | null
+  store_lat?: number | null
+  store_lon?: number | null
 }
 
 export async function fetchStores(): Promise<StoreSummary[]> {
@@ -231,7 +241,7 @@ export async function fetchStores(): Promise<StoreSummary[]> {
     const supabase = getSupabaseClient()
     const { data, error } = await supabase
       .from('users')
-      .select('id, store_slug, store_name, store_avatar_url, city, province, store_enabled')
+      .select('id, store_slug, store_name, store_avatar_url, store_banner_url, city, province, store_enabled, store_address, store_lat, store_lon')
       .eq('store_enabled', true)
       .not('store_slug', 'is', null)
       .order('store_name', { ascending: true })
@@ -241,11 +251,43 @@ export async function fetchStores(): Promise<StoreSummary[]> {
       store_slug: String(r.store_slug),
       store_name: r.store_name ?? null,
       store_avatar_url: r.store_avatar_url ?? null,
+      store_banner_url: r.store_banner_url ?? null,
       city: r.city ?? null,
-      province: r.province ?? null
+      province: r.province ?? null,
+      store_address: r.store_address ?? null,
+      store_lat: typeof r.store_lat === 'number' ? r.store_lat : (r.store_lat ? Number(r.store_lat) : null),
+      store_lon: typeof r.store_lon === 'number' ? r.store_lon : (r.store_lon ? Number(r.store_lon) : null)
     }))
   } catch {
     return []
+  }
+}
+
+export async function fetchStoreActivityCounts(): Promise<Record<string, number>> {
+  if (!supabaseEnabled) return {}
+  try {
+    const supabase = getSupabaseClient()
+    // Intento A: agregación en PostgREST
+    const { data, error } = await supabase
+      .from('listings')
+      .select('seller_id, count:id')
+      .eq('status', 'active')
+      .not('seller_id', 'is', null)
+
+    if (error || !Array.isArray(data)) return {}
+
+    const counts: Record<string, number> = {}
+    for (const row of data as any[]) {
+      const sid = String(row.seller_id || '')
+      // algunas versiones devuelven { count: number }, otras { count:id: number }
+      const c = (row as any).count ?? (row as any)['count:id'] ?? 0
+      if (!sid) continue
+      // Si la API devolvió una fila por listing (sin agrupar), acumulamos
+      counts[sid] = (counts[sid] || 0) + (typeof c === 'number' && c > 0 ? c : 1)
+    }
+    return counts
+  } catch {
+    return {}
   }
 }
 
@@ -294,6 +336,26 @@ export async function fetchUserDisplayNames(userIds: string[]): Promise<Record<s
     }, {})
   } catch (err) {
     console.warn('[users] fetchUserDisplayNames failed', err)
+    return {}
+  }
+}
+
+export async function fetchStoresMeta(userIds: string[]): Promise<Record<string, string | null>> {
+  if (!supabaseEnabled) return {}
+  const uniqueIds = Array.from(new Set(userIds.filter((id): id is string => Boolean(id))))
+  if (uniqueIds.length === 0) return {}
+  try {
+    const supabase = getSupabaseClient()
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, store_enabled, store_avatar_url')
+      .in('id', uniqueIds)
+    if (error || !data) return {}
+    return data.reduce<Record<string, string | null>>((acc, row: any) => {
+      if (row?.id && row?.store_enabled) acc[row.id] = row.store_avatar_url || null
+      return acc
+    }, {})
+  } catch {
     return {}
   }
 }

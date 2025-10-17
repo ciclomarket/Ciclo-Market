@@ -20,7 +20,6 @@ const Help = lazyWithRetry(() => import('./pages/Help'))
 const HowToPublish = lazyWithRetry(() => import('./pages/HowToPublish'))
 const OfficialStore = lazyWithRetry(() => import('./pages/OfficialStore'))
 const Store = lazyWithRetry(() => import('./pages/Store'))
-const CategoryLanding = lazyWithRetry(() => import('./pages/CategoryLanding'))
 const Tiendas = lazyWithRetry(() => import('./pages/Tiendas'))
 const FAQ = lazyWithRetry(() => import('./pages/FAQ'))
 const Terms = lazyWithRetry(() => import('./pages/Terms'))
@@ -50,7 +49,7 @@ function RedirectWithSearch({ to }: { to: string }) {
   return <Navigate to={`${to}${search}`} replace />
 }
 
-function resolveSeoForPath(pathname: string): SEOProps {
+function resolveSeoForPath(pathname: string, search: string): SEOProps {
   const normalized = pathname.toLowerCase()
 
   if (normalized === '/' || normalized === '') {
@@ -75,11 +74,15 @@ function resolveSeoForPath(pathname: string): SEOProps {
     normalized.startsWith('/buscar') ||
     normalized.startsWith('/ofertas')
   ) {
+    // Si hay filtros dinámicos en query, marcamos noindex y canonical sin query
+    const hasFilters = /[?&](cat|brand|deal|q|min|max|sub)=/i.test(search)
     return {
       title: 'Comprar bicicletas nuevas y usadas',
       description:
         'Explorá cientos de bicicletas verificadas por tipo, talle, ubicación y rango de precio. Filtrá por gravel, ruta, MTB, e-bikes y accesorios para encontrar tu próxima bici.',
       image: '/OG-Marketplace.png',
+      url: hasFilters ? '/marketplace' : undefined,
+      noIndex: hasFilters,
       keywords: [
         'comprar bicicletas argentina',
         'bicicletas usadas certificadas',
@@ -169,7 +172,17 @@ function resolveSeoForPath(pathname: string): SEOProps {
       description:
         'Conocé información del local, contacto y todos los productos publicados por esta tienda en Ciclo Market.',
       image: '/og-preview.png',
+      type: 'profile',
       keywords: ['tienda oficial', 'vendedor verificado', 'productos del vendedor']
+    }
+  }
+
+  if (normalized.startsWith('/listing/')) {
+    return {
+      title: 'Detalle del producto',
+      description: 'Mirá fotos, precio y especificaciones técnicas de la publicación en Ciclo Market.',
+      image: '/og-preview.png',
+      type: 'product'
     }
   }
 
@@ -184,6 +197,15 @@ function resolveSeoForPath(pathname: string): SEOProps {
         'faq marketplace bicicletas',
         'ayuda vender bicicleta'
       ]
+    }
+  }
+
+  if (normalized.startsWith('/tiendas')) {
+    return {
+      title: 'Tiendas oficiales',
+      description: 'Descubrí todas las tiendas oficiales en Ciclo Market y mirá sus productos publicados, datos de contacto y redes.',
+      image: '/og-preview.png',
+      keywords: ['tiendas oficiales', 'tienda ciclomarket', 'vender bicicletas tienda']
     }
   }
 
@@ -301,7 +323,7 @@ function ScrollToTop() {
 
 export default function App() {
   const location = useLocation()
-  const seoConfig = useMemo(() => resolveSeoForPath(location.pathname), [location.pathname])
+  const seoConfig = useMemo(() => resolveSeoForPath(location.pathname, location.search), [location.pathname, location.search])
   const first = useRef(true)
   // Pixel se inicializa desde CookieConsent tras consentimiento
   useEffect(() => {
@@ -338,8 +360,6 @@ export default function App() {
 
                       {/* Marketplace (shop) */}
                       <Route path="/marketplace" element={<Marketplace />} />
-                      {/* Landings por categoría */}
-                      <Route path="/marketplace/:slug" element={<CategoryLanding />} />
 
                       {/* Alias/compatibilidad */}
                       {/* /market → /marketplace (preserva query) */}

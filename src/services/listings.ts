@@ -131,6 +131,23 @@ export async function fetchListing(identifier: string): Promise<Listing | null> 
     if (idError || !byId) return null
     const status = typeof (byId as any)?.status === 'string' ? (byId as any).status.trim().toLowerCase() : undefined
     if (status === 'deleted') return null
+    // Backfill slug si falta: usar título + modelo + año y asegurar unicidad
+    if (!(byId as any).slug) {
+      try {
+        const title = String((byId as any).title || '')
+        const model = String((byId as any).model || '')
+        const year = (byId as any).year ? String((byId as any).year) : ''
+        const baseForSlug = [title, model, year].filter((v) => v && v.trim()).join(' ') || title
+        const newSlug = await ensureUniqueSlug(baseForSlug, supabase)
+        const { data: updated } = await supabase
+          .from('listings')
+          .update({ slug: newSlug })
+          .eq('id', (byId as any).id)
+          .select('*')
+          .maybeSingle()
+        if (updated) return normalizeListing(updated as ListingRow)
+      } catch { void 0 }
+    }
     return normalizeListing(byId as ListingRow)
   } catch {
     return null
@@ -323,7 +340,10 @@ export async function createListing(payload: Omit<Listing, 'id' | 'createdAt'>):
   if (!supabaseEnabled) return null
   try {
     const supabase = getSupabaseClient()
-    const baseForSlug = [payload.brand, payload.model, payload.category].filter(Boolean).join(' ') || payload.title
+    // Slug base: título + modelo + año (cuando están disponibles)
+    const baseForSlug = [payload.title, payload.model, payload.year ? String(payload.year) : null]
+      .filter((v) => typeof v === 'string' && (v as string).trim())
+      .join(' ') || payload.title
     const slug = await ensureUniqueSlug(baseForSlug, supabase)
     const expiresAt = payload.expiresAt ? new Date(payload.expiresAt).toISOString() : null
     const toInsert = {

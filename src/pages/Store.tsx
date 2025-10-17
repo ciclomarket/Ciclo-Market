@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import Container from '../components/Container'
-import SEO from '../components/SEO'
+// SEO global se maneja desde App; acá sólo inyectamos JSON-LD
 import JsonLd from '../components/JsonLd'
-import { fetchUserProfile, fetchStoreProfileBySlug, type UserProfileRecord } from '../services/users'
+import FilterDropdown from '../components/FilterDropdown'
+import { fetchUserProfile, fetchStoreProfileBySlug, fetchUserContactEmail, type UserProfileRecord } from '../services/users'
+import { normaliseWhatsapp, buildWhatsappUrl } from '../utils/whatsapp'
 import { fetchListingsBySeller } from '../services/listings'
 import ListingCard from '../components/ListingCard'
 import type { Listing } from '../types'
@@ -81,6 +83,437 @@ const FILTERS: FilterSection[] = [
   },
 ]
 
+type MultiFilterKey = 'brand' | 'material' | 'frameSize' | 'wheelSize' | 'drivetrain' | 'condition' | 'year' | 'size'
+type StoreFiltersState = {
+  brand: string[]
+  material: string[]
+  frameSize: string[]
+  wheelSize: string[]
+  drivetrain: string[]
+  condition: string[]
+  year: string[]
+  size: string[]
+  priceMin?: number
+  priceMax?: number
+  deal?: '1'
+  q?: string
+}
+
+const MULTI_FILTER_ORDER: MultiFilterKey[] = ['brand','material','frameSize','wheelSize','drivetrain','condition','year','size']
+const MULTI_FILTER_LABELS: Record<MultiFilterKey, string> = {
+  brand: 'Marca',
+  material: 'Material',
+  frameSize: 'Tamaño cuadro',
+  wheelSize: 'Rodado',
+  drivetrain: 'Grupo transmisión',
+  condition: 'Condición',
+  year: 'Año',
+  size: 'Talle'
+}
+
+type ListingMetadata = {
+  condition?: string
+  apparelSize?: string
+}
+
+type ListingFacetsResult = {
+  options: Record<MultiFilterKey, string[]>
+  priceRange: { min: number; max: number }
+  metadata: Record<string, ListingMetadata>
+}
+
+const APPAREL_SIZE_ORDER = ['XXS','XS','S','M','L','XL','XXL','XXXL','4XL','5XL']
+
+const normalizeText = (value: string) => value
+  ? value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .toLowerCase()
+  : ''
+
+const uniqueInsensitive = (values: string[]) => {
+  const seen = new Set<string>()
+  const output: string[] = []
+  for (const value of values) {
+    const normalized = normalizeText(value)
+    if (!normalized || seen.has(normalized)) continue
+    seen.add(normalized)
+    output.push(value.trim())
+  }
+  return output
+}
+
+const extractExtrasMap = (extras?: string | null) => {
+  const map: Record<string, string> = {}
+  if (!extras) return map
+  extras
+    .split('•')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .forEach((part) => {
+      const [rawKey, ...rest] = part.split(':')
+      if (!rawKey || rest.length === 0) return
+      const key = normalizeText(rawKey)
+      const value = rest.join(':').trim()
+      if (!value) return
+      map[key] = value
+    })
+  return map
+}
+
+const extractCondition = (listing: Listing) => {
+  const extrasMap = extractExtrasMap(listing.extras)
+  if (extrasMap.condicion) return extrasMap.condicion
+  const description = listing.description ?? ''
+  const match = description.match(/condici[oó]n:\s*([^\n•]+)/i)
+  if (match && match[1]) return match[1].trim()
+  return undefined
+}
+
+const extractApparelSize = (listing: Listing) => {
+  if (listing.category !== 'Indumentaria') return undefined
+  const extrasMap = extractExtrasMap(listing.extras)
+  return extrasMap.talle ?? undefined
+}
+
+const cleanValue = (value?: string | null) => {
+  if (!value) return undefined
+  const trimmed = value.trim()
+  return trimmed ? trimmed.replace(/\s+/g, ' ') : undefined
+}
+
+function sortAlpha(values: Iterable<string>) {
+  return Array.from(values).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))
+}
+
+function sortYearDesc(values: Iterable<string>) {
+  return Array.from(values).sort((a, b) => Number(b) - Number(a))
+}
+
+function sortSizes(values: Iterable<string>) {
+  const normalizedOrder = APPAREL_SIZE_ORDER.map((v) => normalizeText(v))
+  return Array.from(values).sort((a, b) => {
+    const normA = normalizeText(a)
+    const normB = normalizeText(b)
+    const idxA = normalizedOrder.indexOf(normA)
+    const idxB = normalizedOrder.indexOf(normB)
+    if (idxA !== -1 || idxB !== -1) {
+      if (idxA === -1) return 1
+      if (idxB === -1) return -1
+      return idxA - idxB
+    }
+    return a.localeCompare(b, 'es', { sensitivity: 'base' })
+  })
+}
+
+function computeListingFacets(listings: Listing[]): ListingFacetsResult {
+  const sets: Record<MultiFilterKey, Set<string>> = {
+    brand: new Set(),
+    material: new Set(),
+    frameSize: new Set(),
+    wheelSize: new Set(),
+    drivetrain: new Set(),
+    condition: new Set(),
+    year: new Set(),
+    size: new Set()
+  }
+  const metadata: Record<string, ListingMetadata> = {}
+  let minPrice = Number.POSITIVE_INFINITY
+  let maxPrice = 0
+
+  for (const listing of listings) {
+    const brand = cleanValue(listing.brand)
+    if (brand) sets.brand.add(brand)
+
+    const material = cleanValue(listing.material)
+    if (material) sets.material.add(material)
+
+    const frameSize = cleanValue(listing.frameSize)
+    if (frameSize) sets.frameSize.add(frameSize)
+
+    const wheelSize = cleanValue(listing.wheelSize)
+    if (wheelSize) sets.wheelSize.add(wheelSize)
+
+    const drivetrain = cleanValue(listing.drivetrain)
+    if (drivetrain) sets.drivetrain.add(drivetrain)
+
+    if (typeof listing.year === 'number' && listing.year > 1900) {
+      sets.year.add(String(listing.year))
+    }
+
+    const condition = cleanValue(extractCondition(listing))
+    if (condition) sets.condition.add(condition)
+
+    const apparelSize = cleanValue(extractApparelSize(listing))
+    if (apparelSize) sets.size.add(apparelSize)
+
+    metadata[listing.id] = {
+      condition: condition || undefined,
+      apparelSize: apparelSize || undefined
+    }
+
+    const price = Number(listing.price)
+    if (Number.isFinite(price) && price > 0) {
+      if (price < minPrice) minPrice = price
+      if (price > maxPrice) maxPrice = price
+    }
+  }
+
+  return {
+    options: {
+      brand: sortAlpha(sets.brand),
+      material: sortAlpha(sets.material),
+      frameSize: sortAlpha(sets.frameSize),
+      wheelSize: sortAlpha(sets.wheelSize),
+      drivetrain: sortAlpha(sets.drivetrain),
+      condition: sortAlpha(sets.condition),
+      year: sortYearDesc(sets.year),
+      size: sortSizes(sets.size)
+    },
+    priceRange: {
+      min: Number.isFinite(minPrice) ? Math.floor(minPrice) : 0,
+      max: Number.isFinite(maxPrice) ? Math.ceil(maxPrice) : 0
+    },
+    metadata
+  }
+}
+
+type MultiSelectContentProps = {
+  options: string[]
+  selected: string[]
+  onChange: (next: string[]) => void
+  close: () => void
+  placeholder?: string
+}
+
+function MultiSelectContent({ options, selected, onChange, close, placeholder = 'Buscar' }: MultiSelectContentProps) {
+  const [query, setQuery] = useState('')
+  const selectedSet = useMemo(() => new Set(selected.map((value) => normalizeText(value))), [selected])
+  const filtered = useMemo(() => {
+    const q = normalizeText(query)
+    if (!q) return options
+    return options.filter((option) => normalizeText(option).includes(q))
+  }, [options, query])
+
+  const toggleOption = (value: string) => {
+    const normalized = normalizeText(value)
+    if (selectedSet.has(normalized)) {
+      onChange(selected.filter((item) => normalizeText(item) !== normalized))
+    } else {
+      onChange([...selected, value])
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      {options.length > 6 ? (
+        <input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder={placeholder}
+          className="input h-10 w-full rounded-full border border-white/10 bg-[#0a101a] px-4 text-sm text-white placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-white/40"
+        />
+      ) : null}
+      <div className="max-h-56 overflow-y-auto pr-1">
+        {filtered.length ? (
+          <ul className="flex flex-col gap-2 text-sm">
+            {filtered.map((option) => {
+              const normalized = normalizeText(option)
+              const checked = selectedSet.has(normalized)
+              return (
+                <li key={option}>
+                  <label className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 hover:bg-white/10">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleOption(option)}
+                      className="h-4 w-4 accent-white"
+                    />
+                    <span>{option}</span>
+                  </label>
+                </li>
+              )
+            })}
+          </ul>
+        ) : (
+          <div className="py-4 text-sm text-white/60">Sin coincidencias.</div>
+        )}
+      </div>
+      <div className="flex items-center justify-between pt-1 text-sm">
+        <button
+          type="button"
+          onClick={() => {
+            onChange([])
+            close()
+          }}
+          className="text-white/70 hover:text-white"
+        >
+          Limpiar
+        </button>
+        <button type="button" onClick={close} className="rounded-full bg-white px-3 py-1 text-[#14212e] hover:bg-white/90">
+          Listo
+        </button>
+      </div>
+    </div>
+  )
+}
+
+type PriceFilterContentProps = {
+  min?: number
+  max?: number
+  bounds: { min: number; max: number }
+  onApply: (range: { min?: number; max?: number }) => void
+  onClear: () => void
+  close: () => void
+}
+
+function PriceFilterContent({ min, max, bounds, onApply, onClear, close }: PriceFilterContentProps) {
+  const [minValue, setMinValue] = useState(min ? String(min) : '')
+  const [maxValue, setMaxValue] = useState(max ? String(max) : '')
+
+  useEffect(() => {
+    setMinValue(min ? String(min) : '')
+  }, [min])
+
+  useEffect(() => {
+    setMaxValue(max ? String(max) : '')
+  }, [max])
+
+  const apply = () => {
+    const parsedMin = minValue ? Number(minValue) : undefined
+    const parsedMax = maxValue ? Number(maxValue) : undefined
+    const safeMin = Number.isFinite(parsedMin) && parsedMin! > 0 ? Math.round(parsedMin!) : undefined
+    const safeMax = Number.isFinite(parsedMax) && parsedMax! > 0 ? Math.round(parsedMax!) : undefined
+    if (typeof safeMin === 'number' && typeof safeMax === 'number' && safeMin > safeMax) {
+      alert('El precio mínimo no puede ser mayor que el máximo.')
+      return
+    }
+    onApply({ min: safeMin, max: safeMax })
+    close()
+  }
+
+  return (
+    <div className="flex flex-col gap-3 text-sm">
+      <div className="text-xs text-white/60">
+        Rango disponible: {bounds.min ? `$${bounds.min.toLocaleString('es-AR')}` : '—'} – {bounds.max ? `$${bounds.max.toLocaleString('es-AR')}` : '—'}
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-white/60">Desde</span>
+          <input
+            type="number"
+            min={0}
+            value={minValue}
+            onChange={(event) => setMinValue(event.target.value)}
+            className="input h-10 rounded-full border border-white/10 bg-[#0a101a] px-3 text-white focus:outline-none focus:ring-2 focus:ring-white/40"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-white/60">Hasta</span>
+          <input
+            type="number"
+            min={0}
+            value={maxValue}
+            onChange={(event) => setMaxValue(event.target.value)}
+            className="input h-10 rounded-full border border-white/10 bg-[#0a101a] px-3 text-white focus:outline-none focus:ring-2 focus:ring-white/40"
+          />
+        </label>
+      </div>
+      <div className="flex items-center justify-between pt-1">
+        <button
+          type="button"
+          onClick={() => {
+            onClear()
+            close()
+          }}
+          className="text-white/70 hover:text-white"
+        >
+          Limpiar
+        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={close}
+            className="rounded-full border border-white/20 px-3 py-1 text-white hover:border-white/40"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={apply}
+            className="rounded-full bg-white px-3 py-1 font-semibold text-[#14212e] hover:bg-white/90"
+          >
+            Aplicar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+type DealFilterContentProps = {
+  active: boolean
+  onToggle: (nextActive: boolean) => void
+  close: () => void
+}
+
+function DealFilterContent({ active, onToggle, close }: DealFilterContentProps) {
+  return (
+    <div className="flex flex-col gap-3 text-sm">
+      <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2 hover:border-white/30">
+        <input
+          type="checkbox"
+          checked={active}
+          onChange={(event) => onToggle(event.target.checked)}
+          className="h-4 w-4 accent-white"
+        />
+        <div>
+          <div className="font-medium text-white">Solo con descuento</div>
+          <div className="text-xs text-white/60">Productos con precio rebajado sobre el original.</div>
+        </div>
+      </label>
+      <button
+        type="button"
+        onClick={() => {
+          onToggle(false)
+          close()
+        }}
+        className="self-end rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#14212e] hover:bg-white/90"
+      >
+        Listo
+      </button>
+    </div>
+  )
+}
+const STORE_CATEGORY_BANNERS: Array<{ key: 'all' | 'acc' | 'app'; label: string; section: '' | 'accessories' | 'apparel'; description: string; image: string; imageMobile: string }> = [
+  {
+    key: 'all',
+    label: 'Todas',
+    section: '',
+    description: 'Todo el catálogo disponible',
+    image: '/design/Banners/1.png',
+    imageMobile: '/design/Banners-Mobile/1.png'
+  },
+  {
+    key: 'acc',
+    label: 'Accesorios',
+    section: 'accessories',
+    description: 'Componentes y upgrades',
+    image: '/design/Banners/2.png',
+    imageMobile: '/design/Banners-Mobile/2.png'
+  },
+  {
+    key: 'app',
+    label: 'Indumentaria',
+    section: 'apparel',
+    description: 'Ropa técnica y casual',
+    image: '/design/Banners/3.png',
+    imageMobile: '/design/Banners-Mobile/3.png'
+  }
+]
+
 export default function Store() {
   const params = useParams()
   const [search, setSearch] = useSearchParams()
@@ -88,8 +521,56 @@ export default function Store() {
   const [profile, setProfile] = useState<UserProfileRecord | null>(null)
   const [listings, setListings] = useState<Listing[]>([])
   const [loading, setLoading] = useState(true)
+  const [storeEmail, setStoreEmail] = useState<string | null>(null)
+  const [filters, setFiltersState] = useState<StoreFiltersState>({
+    brand: [],
+    material: [],
+    frameSize: [],
+    wheelSize: [],
+    drivetrain: [],
+    condition: [],
+    year: [],
+    size: [],
+    priceMin: undefined,
+    priceMax: undefined,
+    deal: undefined,
+    q: undefined
+  })
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
+  const [mobileSortOpen, setMobileSortOpen] = useState(false)
+  const [sortMode, setSortMode] = useState<'relevance' | 'newest' | 'asc' | 'desc'>('relevance')
   const activeSection = (search.get('sec') || '').trim()
   const activeOption = (search.get('opt') || '').trim()
+
+  const setSection = useCallback((sec: string, opt?: string) => {
+    const next = new URLSearchParams(search)
+    if (!sec) {
+      next.delete('sec')
+      next.delete('opt')
+    } else {
+      next.set('sec', sec)
+      if (!opt) next.delete('opt')
+      else next.set('opt', opt)
+    }
+    setSearch(next, { replace: true })
+  }, [search, setSearch])
+
+  const setFilters = useCallback((patch: Partial<StoreFiltersState>) => {
+    setFiltersState((prev) => ({
+      brand: 'brand' in patch ? patch.brand ?? [] : prev.brand,
+      material: 'material' in patch ? patch.material ?? [] : prev.material,
+      frameSize: 'frameSize' in patch ? patch.frameSize ?? [] : prev.frameSize,
+      wheelSize: 'wheelSize' in patch ? patch.wheelSize ?? [] : prev.wheelSize,
+      drivetrain: 'drivetrain' in patch ? patch.drivetrain ?? [] : prev.drivetrain,
+      condition: 'condition' in patch ? patch.condition ?? [] : prev.condition,
+      year: 'year' in patch ? patch.year ?? [] : prev.year,
+      size: 'size' in patch ? patch.size ?? [] : prev.size,
+      priceMin: 'priceMin' in patch ? patch.priceMin : prev.priceMin,
+      priceMax: 'priceMax' in patch ? patch.priceMax : prev.priceMax,
+      deal: 'deal' in patch ? patch.deal : prev.deal,
+      q: 'q' in patch ? patch.q : prev.q
+    }))
+  }, [])
 
   const sellerId = useMemo(() => profile?.id ?? null, [profile])
 
@@ -126,7 +607,23 @@ export default function Store() {
     return () => { mounted = false }
   }, [sellerId])
 
-  const filtered = useMemo(() => {
+  // Buscar email del vendedor/tienda cuando haya perfil
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      try {
+        const pid = profile?.id
+        if (!pid) { if (active) setStoreEmail(null); return }
+        const email = await fetchUserContactEmail(pid)
+        if (active) setStoreEmail(email)
+      } catch {
+        if (active) setStoreEmail(null)
+      }
+    })()
+    return () => { active = false }
+  }, [profile?.id])
+
+  const sectionFiltered = useMemo(() => {
     if (!activeSection && !activeOption) return listings
     const section = FILTERS.find((s) => s.id === activeSection) || null
     if (section && activeOption) {
@@ -138,33 +635,172 @@ export default function Store() {
     }
     return listings
   }, [listings, activeSection, activeOption])
+  const facetsData = useMemo(() => computeListingFacets(sectionFiltered), [sectionFiltered])
+  const listingMetadata = facetsData.metadata
+  const filtered = useMemo(() => {
+    const brandSet = new Set(filters.brand.map((value) => normalizeText(value)))
+    const materialSet = new Set(filters.material.map((value) => normalizeText(value)))
+    const frameSizeSet = new Set(filters.frameSize.map((value) => normalizeText(value)))
+    const wheelSizeSet = new Set(filters.wheelSize.map((value) => normalizeText(value)))
+    const drivetrainSet = new Set(filters.drivetrain.map((value) => normalizeText(value)))
+    const conditionSet = new Set(filters.condition.map((value) => normalizeText(value)))
+    const yearSet = new Set(filters.year.map((value) => normalizeText(value)))
+    const sizeSet = new Set(filters.size.map((value) => normalizeText(value)))
+    const priceMin = typeof filters.priceMin === 'number' ? filters.priceMin : null
+    const priceMax = typeof filters.priceMax === 'number' ? filters.priceMax : null
 
-  const [minPrice, setMinPrice] = useState<string>('')
-  const [maxPrice, setMaxPrice] = useState<string>('')
-  const [sort, setSort] = useState<'newest'|'price_asc'|'price_desc'>('newest')
+    const matchesValue = (value: string | undefined, activeSet: Set<string>) => {
+      if (!activeSet.size) return true
+      if (!value) return false
+      return activeSet.has(normalizeText(value))
+    }
 
-  const priceFiltered = useMemo(() => {
-    const min = Number(minPrice) || 0
-    const max = Number(maxPrice) || 0
-    return filtered.filter((l) => {
-      const p = Number(l.price) || 0
-      if (min && p < min) return false
-      if (max && p > max) return false
+    return sectionFiltered.filter((listing) => {
+      if (!matchesValue(listing.brand, brandSet)) return false
+      if (!matchesValue(listing.material, materialSet)) return false
+      if (!matchesValue(listing.frameSize, frameSizeSet)) return false
+      if (!matchesValue(listing.wheelSize, wheelSizeSet)) return false
+      if (!matchesValue(listing.drivetrain, drivetrainSet)) return false
+
+      if (yearSet.size) {
+        const year = listing.year ? String(listing.year) : ''
+        if (!year || !yearSet.has(normalizeText(year))) return false
+      }
+
+      const derived = listingMetadata[listing.id] ?? {}
+
+      if (conditionSet.size) {
+        if (!derived.condition || !conditionSet.has(normalizeText(derived.condition))) return false
+      }
+
+      if (sizeSet.size) {
+        if (!derived.apparelSize || !sizeSet.has(normalizeText(derived.apparelSize))) return false
+      }
+
+      if (priceMin !== null && listing.price < priceMin) return false
+      if (priceMax !== null && listing.price > priceMax) return false
+
+      if (filters.deal === '1') {
+        const hasDeal = typeof listing.originalPrice === 'number' && listing.originalPrice > listing.price
+        if (!hasDeal) return false
+      }
+
+      if (filters.q) {
+        const q = filters.q.toLowerCase()
+        const haystack = [listing.title, listing.brand, listing.model, listing.description]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+        if (!haystack.includes(q)) return false
+      }
+
       return true
     })
-  }, [filtered, minPrice, maxPrice])
+  }, [sectionFiltered, filters, listingMetadata])
 
   const finalList = useMemo(() => {
-    const arr = [...priceFiltered]
-    if (sort === 'newest') {
-      arr.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
-    } else if (sort === 'price_asc') {
-      arr.sort((a, b) => (a.price || 0) - (b.price || 0))
-    } else if (sort === 'price_desc') {
-      arr.sort((a, b) => (b.price || 0) - (a.price || 0))
+    const arr = [...filtered]
+    if (sortMode === 'relevance') {
+      return arr
+    }
+    if (sortMode === 'newest') {
+      return arr.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
+    }
+    if (sortMode === 'asc') {
+      return arr.sort((a, b) => (a.price ?? 0) - (b.price ?? 0))
+    }
+    if (sortMode === 'desc') {
+      return arr.sort((a, b) => (b.price ?? 0) - (a.price ?? 0))
     }
     return arr
-  }, [priceFiltered, sort])
+  }, [filtered, sortMode])
+
+  const summaryFor = (key: MultiFilterKey) => {
+    const values = filters[key]
+    if (!values.length) return 'Todos'
+    if (values.length === 1) return values[0]
+    return `${values.length} seleccionadas`
+  }
+
+  const priceSummary = (() => {
+    const { priceMin, priceMax } = filters
+    if (typeof priceMin === 'number' || typeof priceMax === 'number') {
+      const minLabel = typeof priceMin === 'number' ? `$${priceMin.toLocaleString('es-AR')}` : 'Min'
+      const maxLabel = typeof priceMax === 'number' ? `$${priceMax.toLocaleString('es-AR')}` : 'Max'
+      return `${minLabel} – ${maxLabel}`
+    }
+    return 'Todos'
+  })()
+
+  const sortSummary = (() => {
+    switch (sortMode) {
+      case 'relevance':
+        return 'Relevancia'
+      case 'newest':
+        return 'Más recientes'
+      case 'desc':
+        return 'Precio ↓'
+      case 'asc':
+        return 'Precio ↑'
+      default:
+        return 'Relevancia'
+    }
+  })()
+
+  const activeFilterChips: Array<{ key: string; label: string; onRemove: () => void }> = []
+  if (activeSection || activeOption) {
+    const section = FILTERS.find((sec) => sec.id === activeSection)
+    const option = section?.options.find((opt) => opt.id === activeOption)
+    const label = option?.label || section?.label
+    if (label) {
+      activeFilterChips.push({
+        key: 'section',
+        label: `Categoría: ${label}`,
+        onRemove: () => setSection('')
+      })
+    }
+  }
+  for (const key of MULTI_FILTER_ORDER) {
+    for (const value of filters[key]) {
+      activeFilterChips.push({
+        key: `${key}-${value}`,
+        label: `${MULTI_FILTER_LABELS[key]}: ${value}`,
+        onRemove: () => setFilters({ [key]: filters[key].filter((item) => normalizeText(item) !== normalizeText(value)) } as Partial<StoreFiltersState>)
+      })
+    }
+  }
+  if (typeof filters.priceMin === 'number' || typeof filters.priceMax === 'number') {
+    const parts: string[] = []
+    if (typeof filters.priceMin === 'number') parts.push(`desde $${filters.priceMin.toLocaleString('es-AR')}`)
+    if (typeof filters.priceMax === 'number') parts.push(`hasta $${filters.priceMax.toLocaleString('es-AR')}`)
+    activeFilterChips.push({
+      key: 'price',
+      label: `Precio ${parts.join(' ')}`,
+      onRemove: () => setFilters({ priceMin: undefined, priceMax: undefined })
+    })
+  }
+  if (filters.deal === '1') {
+    activeFilterChips.push({
+      key: 'deal',
+      label: 'Solo descuentos',
+      onRemove: () => setFilters({ deal: undefined })
+    })
+  }
+
+  const hasActiveFilters = activeFilterChips.length > 0
+
+  const handleClearFilters = useCallback(() => {
+    const reset: Partial<StoreFiltersState> = {
+      priceMin: undefined,
+      priceMax: undefined,
+      deal: undefined,
+      q: undefined
+    }
+    for (const key of MULTI_FILTER_ORDER) {
+      ;(reset as any)[key] = []
+    }
+    setFilters(reset)
+  }, [setFilters])
 
   if (loading) return <Container className="py-12">Cargando tienda…</Container>
   if (!profile || !profile.store_enabled) return <Container className="py-12">Tienda no encontrada.</Container>
@@ -175,43 +811,27 @@ export default function Store() {
   const storeName = profile.store_name || profile.full_name || 'Tienda'
   const address = profile.store_address || [profile.city, profile.province].filter(Boolean).join(', ')
   const phone = profile.store_phone || profile.whatsapp_number || ''
-
-  const setSection = (sec: string, opt?: string) => {
-    const next = new URLSearchParams(search)
-    if (!sec) { next.delete('sec'); next.delete('opt') }
-    else {
-      next.set('sec', sec)
-      if (!opt) next.delete('opt'); else next.set('opt', opt)
-    }
-    setSearch(next, { replace: true })
-  }
+  const workingHours = (profile as any).store_hours as string | null
 
   return (
     <div className="min-h-[70vh] bg-[#14212e]">
-      <SEO
-        title={storeName}
-        description={`Productos de ${storeName} en Ciclo Market. ${address || ''}`}
-        image={banner}
-        type="profile"
-      >
-        <JsonLd
-          data={{
-            '@context': 'https://schema.org',
-            '@type': profile.store_address ? 'LocalBusiness' : 'Organization',
-            name: storeName,
-            url: `${(import.meta.env.VITE_FRONTEND_URL || window.location.origin).replace(/\/$/, '')}/tienda/${profile.store_slug || profile.id}`,
-            logo: avatar,
-            image: banner,
-            address: address || undefined,
-            contactPoint: (phone ? [{ '@type': 'ContactPoint', telephone: phone, contactType: 'customer service' }] : undefined),
-            sameAs: [
-              profile.store_instagram ? `https://instagram.com/${String(profile.store_instagram).replace(/^@+/, '')}` : null,
-              profile.store_facebook ? `https://facebook.com/${String(profile.store_facebook).replace(/^@+/, '')}` : null,
-              profile.store_website || null,
-            ].filter(Boolean),
-          }}
-        />
-      </SEO>
+      <JsonLd
+        data={{
+          '@context': 'https://schema.org',
+          '@type': profile.store_address ? 'LocalBusiness' : 'Organization',
+          name: storeName,
+          url: `${(import.meta.env.VITE_FRONTEND_URL || window.location.origin).replace(/\/$/, '')}/tienda/${profile.store_slug || profile.id}`,
+          logo: avatar,
+          image: banner,
+          address: address || undefined,
+          contactPoint: (phone ? [{ '@type': 'ContactPoint', telephone: phone, contactType: 'customer service' }] : undefined),
+          sameAs: [
+            profile.store_instagram ? `https://instagram.com/${String(profile.store_instagram).replace(/^@+/, '')}` : null,
+            profile.store_facebook ? `https://facebook.com/${String(profile.store_facebook).replace(/^@+/, '')}` : null,
+            profile.store_website || null,
+          ].filter(Boolean),
+        }}
+      />
       <div className="relative h-48 md:h-64 w-full overflow-hidden bg-[#14212e]">
         <img src={banner} alt="Banner" className="h-full w-full object-cover" style={{ objectPosition: `center ${bannerPosY}%` }} />
         {/* Fade inferior sutil en todos los tamaños para legibilidad del título */}
@@ -221,38 +841,57 @@ export default function Store() {
         />
       </div>
       <Container>
-        <div className="relative z-20 -mt-8 md:-mt-10 flex flex-wrap items-end gap-4">
-          <img src={avatar} alt={storeName} className="h-20 w-20 rounded-2xl border-4 border-white object-cover shadow" />
-          <div className="flex-1 min-w-0 pt-2">
+        <div className="relative z-20 -mt-14 md:-mt-10 flex flex-col items-center gap-3 md:flex-row md:items-end md:gap-4">
+          <img src={avatar} alt={storeName} className="h-24 w-24 md:h-20 md:w-20 rounded-2xl border-4 border-white object-cover shadow" />
+          <div className="flex-1 min-w-0 pt-1 text-center md:text-left">
             <h1 className="text-2xl font-bold text-white truncate">{storeName}</h1>
-            <p className="text-sm text-white/80 truncate">{address}</p>
-            <div className="mt-2 flex flex-wrap gap-2 text-sm">
+            {profile.verified ? (
+              <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-emerald-500/90 px-2.5 py-0.5 text-xs font-semibold text-white">✓ Verificado</div>
+            ) : null}
+            <p className="mt-1 text-sm text-white/85 truncate">{address}</p>
+            <div className="mt-3 grid w-full max-w-md grid-cols-3 gap-2 justify-items-stretch md:max-w-none">
               {phone && (
-                <a href={`tel:${phone}`} className="inline-flex items-center gap-2 rounded-full border border-white/30 bg-white/10 px-3 py-1.5 text-white shadow hover:bg-white/20">
+                <a href={`tel:${phone}`} className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#14212e] shadow hover:bg-white/90 md:px-4 md:py-2 md:text-sm" aria-label="Llamar">
                   <PhoneIcon /> Llamar
                 </a>
               )}
-              {profile.store_instagram && (
-                <a href={normalizeHandle(profile.store_instagram, 'ig')} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-full border border-white/30 bg-white/10 px-3 py-1.5 text-white shadow hover:bg-white/20">
-                  <InstagramIcon /> Instagram
-                </a>
-              )}
-              {profile.store_facebook && (
-                <a href={normalizeHandle(profile.store_facebook, 'fb')} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-full border border-white/30 bg-white/10 px-3 py-1.5 text-white shadow hover:bg-white/20">
-                  <FacebookIcon /> Facebook
-                </a>
-              )}
-              {profile.store_website && (
-                <a href={profile.store_website} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-full border border-white/30 bg-white/10 px-3 py-1.5 text-white shadow hover:bg-white/20">
-                  <LinkIcon /> Sitio web
-                </a>
-              )}
+              <a href={storeEmail ? `mailto:${storeEmail}` : '#'} onClick={(e) => { if (!storeEmail) e.preventDefault() }} className={`inline-flex items-center justify-center gap-2 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#14212e] shadow md:px-4 md:py-2 md:text-sm ${storeEmail ? 'hover:bg-white/90' : 'opacity-60 cursor-not-allowed'}`} aria-label="E-mail">
+                <EmailIcon /> E‑mail
+              </a>
+              {(() => {
+                const waNumber = normaliseWhatsapp(profile.whatsapp_number || phone || '')
+                const waLink = buildWhatsappUrl(waNumber || (profile.whatsapp_number || phone || ''), 'Hola! Vi su tienda en Ciclo Market.')
+                const href = waLink || undefined
+                const disabled = !href
+                const classes = `inline-flex items-center justify-center gap-2 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#14212e] shadow md:px-4 md:py-2 md:text-sm ${disabled ? 'opacity-60 cursor-not-allowed' : 'hover:bg-white/90'}`
+                return (
+                  <a href={href} target={disabled ? undefined : '_blank'} rel={disabled ? undefined : 'noreferrer'} className={classes} onClick={(e) => { if (disabled) e.preventDefault() }} aria-label="WhatsApp">
+                    <img src="/whatsapp.png" alt="" className="h-4 w-4" aria-hidden /> WhatsApp
+                  </a>
+                )
+              })()}
             </div>
+            {(profile.store_instagram || profile.store_facebook || profile.store_website) && (
+              <div className="mt-3 text-center text-xs text-white/80 md:text-left">
+                <span className="text-white/70">Redes:</span>{' '}
+                {profile.store_instagram ? (<a href={normalizeHandle(profile.store_instagram, 'ig')} target="_blank" rel="noreferrer" className="underline hover:text-white">Instagram</a>) : null}
+                {profile.store_facebook ? (<><span>{' '}|{' '}</span><a href={normalizeHandle(profile.store_facebook, 'fb')} target="_blank" rel="noreferrer" className="underline hover:text-white">Facebook</a></>) : null}
+                {profile.store_website ? (<><span>{' '}|{' '}</span><a href={profile.store_website} target="_blank" rel="noreferrer" className="underline hover:text-white">Web</a></>) : null}
+              </div>
+            )}
           </div>
         </div>
 
         <div className="mt-6 grid gap-6 lg:grid-cols-[260px_1fr]">
           <aside className="lg:sticky lg:top-28">
+            {workingHours && (
+              <div className="mb-4 rounded-xl border border-white/10 bg-white/5 p-3 text-white">
+                <div className="flex items-center justify-between text-sm font-semibold">
+                  <span>Horarios de atención</span>
+                </div>
+                <p className="mt-2 whitespace-pre-line text-sm text-white/80">{workingHours}</p>
+              </div>
+            )}
             <div className="mb-3 lg:hidden">
               <button
                 type="button"
@@ -292,23 +931,46 @@ export default function Store() {
               </ul>
               <h3 className="mt-4 text-sm font-semibold text-[#14212e] mb-2">Precio</h3>
               <div className="flex items-center gap-2">
-                <input className="input flex-1" inputMode="numeric" placeholder="Mín" value={minPrice} onChange={(e) => setMinPrice(e.target.value.replace(/[^0-9]/g,''))} />
+                <input
+                  className="input flex-1"
+                  inputMode="numeric"
+                  placeholder="Mín"
+                  value={typeof filters.priceMin === 'number' ? String(filters.priceMin) : ''}
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/[^0-9]/g, '')
+                    const next = raw ? Number(raw) : undefined
+                    setFilters({ priceMin: next })
+                  }}
+                />
                 <span className="text-xs text-[#14212e]/50">—</span>
-                <input className="input flex-1" inputMode="numeric" placeholder="Máx" value={maxPrice} onChange={(e) => setMaxPrice(e.target.value.replace(/[^0-9]/g,''))} />
+                <input
+                  className="input flex-1"
+                  inputMode="numeric"
+                  placeholder="Máx"
+                  value={typeof filters.priceMax === 'number' ? String(filters.priceMax) : ''}
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/[^0-9]/g, '')
+                    const next = raw ? Number(raw) : undefined
+                    setFilters({ priceMax: next })
+                  }}
+                />
               </div>
               <h3 className="mt-4 text-sm font-semibold text-[#14212e] mb-2">Ordenar</h3>
-              <select className="select w-full" value={sort} onChange={(e) => setSort(e.target.value as any)}>
-                <option value="newest">Más nuevas</option>
-                <option value="price_asc">Precio: menor a mayor</option>
-                <option value="price_desc">Precio: mayor a menor</option>
+              <select
+                className="select w-full"
+                value={sortMode}
+                onChange={(e) => setSortMode(e.target.value as 'relevance' | 'newest' | 'asc' | 'desc')}
+              >
+                <option value="relevance">Relevancia</option>
+                <option value="newest">Más recientes</option>
+                <option value="desc">Precio: mayor a menor</option>
+                <option value="asc">Precio: menor a mayor</option>
               </select>
               <button
                 type="button"
                 className="mt-4 w-full rounded-full border border-[#14212e]/20 px-3 py-2 text-sm text-[#14212e] hover:bg-[#14212e]/5"
                 onClick={() => {
-                  setMinPrice('')
-                  setMaxPrice('')
-                  setSort('newest')
+                  handleClearFilters()
                   setSection('')
                 }}
               >
@@ -317,16 +979,299 @@ export default function Store() {
             </div>
           </aside>
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 items-start content-start">
-            {finalList.map((l) => (
-              <ListingCard key={l.id} l={l} />
-            ))}
-            {finalList.length === 0 && (
-              <div className="py-12 text-center text-[#14212e]/60 col-span-full">No hay productos en esta categoría.</div>
-            )}
+          <div className="space-y-6">
+            <div className="grid grid-cols-3 gap-2 sm:gap-4">
+              {STORE_CATEGORY_BANNERS.map((card) => {
+                const isActive = card.section ? activeSection === card.section : !activeSection
+                return (
+                  <button
+                    key={card.key}
+                    type="button"
+                    onClick={() => setSection(card.section)}
+                    className={`relative w-full overflow-hidden rounded-3xl border-2 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#14212e] ${
+                      isActive ? 'border-white shadow-lg' : 'border-white/15 bg-white/5 hover:border-white/30 hover:shadow-md'
+                    }`}
+                    aria-pressed={isActive}
+                  >
+                    <div className="relative aspect-square sm:aspect-[17/5]">
+                      <picture className="block h-full w-full">
+                        <source media="(max-width: 640px)" srcSet={card.imageMobile} />
+                        <img src={card.image} alt={card.label} className="h-full w-full object-cover" loading="lazy" decoding="async" />
+                      </picture>
+                      <div className="absolute inset-0 bg-gradient-to-t from-[#050c18]/85 via-transparent to-transparent" aria-hidden />
+                      <div className="absolute inset-0 flex items-end p-2 sm:p-4">
+                        <div className="space-y-1 text-left">
+                          <span className="text-sm font-semibold text-white sm:text-lg">{card.label}</span>
+                          <span className="hidden text-xs text-white/80 sm:block">{card.description}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+
+            <div className="sm:hidden">
+              <div className="flex w-full overflow-hidden rounded-2xl bg-white text-[#14212e] shadow">
+                <button
+                  type="button"
+                  onClick={() => setMobileFiltersOpen(true)}
+                  className="flex-1 px-4 py-3 text-sm font-semibold uppercase tracking-wide"
+                >
+                  Filtros
+                </button>
+                <div className="w-px bg-[#14212e]/10" />
+                <button
+                  type="button"
+                  onClick={() => setMobileSortOpen(true)}
+                  className="flex-1 px-4 py-3 text-sm font-semibold uppercase tracking-wide"
+                >
+                  {sortSummary}
+                </button>
+              </div>
+            </div>
+
+            <div className="sm:hidden text-xs text-white/70">{finalList.length} resultados</div>
+
+            <div className="hidden flex-col gap-3 sm:flex lg:flex-row lg:items-center lg:justify-between">
+              <div className="text-sm text-white/70">{finalList.length} resultados</div>
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-white/60">Ordenar</span>
+                <select
+                  className="input w-48 rounded-full border border-white/10 bg-white/90 text-sm text-[#14212e]"
+                  value={sortMode}
+                  onChange={(e) => setSortMode(e.target.value as 'relevance' | 'newest' | 'asc' | 'desc')}
+                >
+                  <option value="relevance">Relevancia</option>
+                  <option value="newest">Más recientes</option>
+                  <option value="desc">Precio: mayor a menor</option>
+                  <option value="asc">Precio: menor a mayor</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="hidden flex-wrap gap-2 sm:flex">
+              {MULTI_FILTER_ORDER.map((key) => {
+                const rawOptions = facetsData.options[key]
+                const options = Array.from(new Set([...rawOptions, ...filters[key]]))
+                return (
+                  <FilterDropdown
+                    key={key}
+                    label={MULTI_FILTER_LABELS[key]}
+                    summary={summaryFor(key)}
+                    disabled={!options.length}
+                  >
+                    {({ close }) => (
+                      <MultiSelectContent
+                        options={options}
+                        selected={filters[key]}
+                        onChange={(next) => setFilters({ [key]: next } as Partial<StoreFiltersState>)}
+                        close={close}
+                        placeholder={`Buscar ${MULTI_FILTER_LABELS[key].toLowerCase()}`}
+                      />
+                    )}
+                  </FilterDropdown>
+                )
+              })}
+              <FilterDropdown label="Precio" summary={priceSummary}>
+                {({ close }) => (
+                  <PriceFilterContent
+                    min={filters.priceMin}
+                    max={filters.priceMax}
+                    bounds={facetsData.priceRange}
+                    onApply={({ min, max }) => setFilters({ priceMin: min, priceMax: max })}
+                    onClear={() => setFilters({ priceMin: undefined, priceMax: undefined })}
+                    close={close}
+                  />
+                )}
+              </FilterDropdown>
+              <FilterDropdown label="Promos" summary={filters.deal === '1' ? 'Activas' : 'Todas'}>
+                {({ close }) => (
+                  <DealFilterContent
+                    active={filters.deal === '1'}
+                    onToggle={(active) => setFilters({ deal: active ? '1' : undefined })}
+                    close={close}
+                  />
+                )}
+              </FilterDropdown>
+            </div>
+
+            {hasActiveFilters ? (
+              <div className="flex flex-wrap items-center gap-2">
+                {activeFilterChips.map((chip) => (
+                  <button
+                    key={chip.key}
+                    type="button"
+                    onClick={chip.onRemove}
+                    className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs text-white transition hover:border-white/40 hover:bg-white/20"
+                  >
+                    <span>{chip.label}</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6m0 12L6 6" />
+                    </svg>
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={handleClearFilters}
+                  className="text-xs text-white/70 underline-offset-2 hover:text-white hover:underline"
+                >
+                  Limpiar todo
+                </button>
+              </div>
+            ) : null}
+
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-2 lg:grid-cols-3 items-start content-start">
+              {finalList.map((l) => (
+                <ListingCard key={l.id} l={l} storeLogoUrl={profile.store_avatar_url || profile.avatar_url || null} />
+              ))}
+              {finalList.length === 0 && (
+                <div className="py-12 text-center text-[#14212e]/60 col-span-full">No hay productos en esta categoría.</div>
+              )}
+            </div>
           </div>
         </div>
       </Container>
+
+      {mobileFiltersOpen ? (
+        <div
+          className="fixed inset-0 z-50 bg-[#050c18]/80 backdrop-blur-sm sm:hidden"
+          onClick={() => setMobileFiltersOpen(false)}
+        >
+          <div
+            className="absolute inset-x-0 bottom-0 max-h-[90vh] rounded-t-3xl bg-[#0f1724] p-5 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-semibold text-white">Filtros</h3>
+              <button
+                type="button"
+                onClick={() => setMobileFiltersOpen(false)}
+                className="rounded-full border border-white/20 px-3 py-1 text-xs text-white"
+              >
+                Cerrar
+              </button>
+            </div>
+            <div className="mt-4 space-y-3 text-white">
+              {MULTI_FILTER_ORDER.map((key) => {
+                const rawOptions = facetsData.options[key]
+                const options = Array.from(new Set([...rawOptions, ...filters[key]]))
+                return (
+                  <FilterDropdown
+                    key={`mobile-${key}`}
+                    label={MULTI_FILTER_LABELS[key]}
+                    summary={summaryFor(key)}
+                    disabled={!options.length}
+                    className="w-full"
+                    buttonClassName="w-full justify-between"
+                  >
+                    {({ close }) => (
+                      <MultiSelectContent
+                        options={options}
+                        selected={filters[key]}
+                        onChange={(next) => setFilters({ [key]: next } as Partial<StoreFiltersState>)}
+                        close={close}
+                        placeholder={`Buscar ${MULTI_FILTER_LABELS[key].toLowerCase()}`}
+                      />
+                    )}
+                  </FilterDropdown>
+                )
+              })}
+              <FilterDropdown
+                label="Precio"
+                summary={priceSummary}
+                className="w-full"
+                buttonClassName="w-full justify-between"
+              >
+                {({ close }) => (
+                  <PriceFilterContent
+                    min={filters.priceMin}
+                    max={filters.priceMax}
+                    bounds={facetsData.priceRange}
+                    onApply={({ min, max }) => setFilters({ priceMin: min, priceMax: max })}
+                    onClear={() => setFilters({ priceMin: undefined, priceMax: undefined })}
+                    close={close}
+                  />
+                )}
+              </FilterDropdown>
+              <FilterDropdown
+                label="Promos"
+                summary={filters.deal === '1' ? 'Activas' : 'Todas'}
+                className="w-full"
+                buttonClassName="w-full justify-between"
+              >
+                {({ close }) => (
+                  <DealFilterContent
+                    active={filters.deal === '1'}
+                    onToggle={(active) => setFilters({ deal: active ? '1' : undefined })}
+                    close={close}
+                  />
+                )}
+              </FilterDropdown>
+              {hasActiveFilters ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleClearFilters()
+                    setMobileFiltersOpen(false)
+                  }}
+                  className="w-full rounded-full border border-white/20 px-4 py-2 text-sm text-white hover:border-white/40 hover:bg-white/10"
+                >
+                  Limpiar filtros
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {mobileSortOpen ? (
+        <div
+          className="fixed inset-0 z-50 bg-[#050c18]/80 backdrop-blur-sm sm:hidden"
+          onClick={() => setMobileSortOpen(false)}
+        >
+          <div
+            className="absolute inset-x-0 bottom-0 rounded-t-3xl bg-[#0f1724] p-5 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-semibold text-white">Ordenar por</h3>
+              <button
+                type="button"
+                onClick={() => setMobileSortOpen(false)}
+                className="rounded-full border border-white/20 px-3 py-1 text-xs text-white"
+              >
+                Cerrar
+              </button>
+            </div>
+            <div className="mt-4 space-y-2 text-sm text-white">
+              {[
+                { value: 'relevance', label: 'Relevancia' },
+                { value: 'newest', label: 'Más recientes' },
+                { value: 'desc', label: 'Precio: mayor a menor' },
+                { value: 'asc', label: 'Precio: menor a mayor' }
+              ].map((option) => {
+                const active = sortMode === option.value
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => {
+                      setSortMode(option.value as 'relevance' | 'newest' | 'asc' | 'desc')
+                      setMobileSortOpen(false)
+                    }}
+                    className={`w-full rounded-2xl border px-4 py-3 text-left transition ${
+                      active ? 'border-white bg-white/15' : 'border-white/15 hover:border-white/30 hover:bg-white/10'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -344,6 +1289,13 @@ function normalizeHandle(value: string, type: 'ig' | 'fb') {
 
 function PhoneIcon() {
   return <img src="/call.png" alt="" className="h-5 w-5" loading="lazy" decoding="async" aria-hidden />
+}
+function EmailIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Zm0 0 8 6 8-6" />
+    </svg>
+  )
 }
 function InstagramIcon() {
   return (

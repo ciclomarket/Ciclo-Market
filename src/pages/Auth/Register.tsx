@@ -101,7 +101,7 @@ export default function Register() {
           try {
             const { subscribeNewsletter } = await import('../../services/newsletter')
             await subscribeNewsletter({ email: email.trim(), name: fullName.trim(), audienceId: 'e38e76f3-6904-443f-a1de-77a1e142440a' })
-          } catch {}
+          } catch { void 0 }
         }
       }
 

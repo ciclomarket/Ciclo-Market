@@ -627,8 +627,8 @@ export default function Header() {
           <Link to="/como-publicar" className="py-3 text-black/70 hover:text-black">
             Cómo publicar
           </Link>
-          <Link to="/tienda-oficial" className="py-3 text-black/70 hover:text-black">
-            Tienda oficial
+          <Link to="/tiendas" className="py-3 text-black/70 hover:text-black">
+            Tiendas oficiales
           </Link>
         </div>
 
@@ -735,8 +735,8 @@ export default function Header() {
                 <Link to="/como-publicar" className="underline" onClick={closeMobileMenu}>
                   Cómo publicar
                 </Link>
-                <Link to="/tienda-oficial" className="underline" onClick={closeMobileMenu}>
-                  Tienda oficial
+                <Link to="/tiendas" className="underline" onClick={closeMobileMenu}>
+                  Tiendas oficiales
                 </Link>
               </div>
             </div>

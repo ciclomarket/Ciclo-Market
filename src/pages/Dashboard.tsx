@@ -23,7 +23,7 @@ import useFaves from '../hooks/useFaves'
 import useUpload from '../hooks/useUpload'
 import { createGift } from '../services/gifts'
 
-const TABS = ['Perfil', 'Publicaciones', 'Favoritos', 'Notificaciones', 'Editar perfil', 'Editar tienda', 'Verificá tu perfil', 'Cerrar sesión'] as const
+const TABS = ['Perfil', 'Publicaciones', 'Favoritos', 'Notificaciones', 'Editar perfil', 'Suscripción', 'Editar tienda', 'Verificá tu perfil', 'Cerrar sesión'] as const
 type SellerTab = (typeof TABS)[number]
 
 const TAB_METADATA: Record<SellerTab, { title: string; description: string }> = {
@@ -46,6 +46,10 @@ const TAB_METADATA: Record<SellerTab, { title: string; description: string }> = 
   'Editar perfil': {
     title: 'Editar perfil',
     description: 'Actualizá tus datos, redes y WhatsApp',
+  },
+  'Suscripción': {
+    title: 'Suscripción',
+    description: 'Gestioná tu plan y beneficios activos',
   },
   'Editar tienda': {
     title: 'Editar tienda',
@@ -647,7 +651,7 @@ export default function Dashboard() {
                           try {
                             await reviewShareBoost(item.id, true, user?.id)
                             setModItems((prev) => prev.filter((x) => x.id !== item.id))
-                          } catch {}
+                          } catch { void 0 }
                         }}
                         className="text-xs"
                       >
@@ -659,7 +663,7 @@ export default function Dashboard() {
                           try {
                             await reviewShareBoost(item.id, false, user?.id)
                             setModItems((prev) => prev.filter((x) => x.id !== item.id))
-                          } catch {}
+                          } catch { void 0 }
                         }}
                         className="text-xs text-red-600"
                       >
@@ -987,6 +991,16 @@ function ListingsView({ listings, onRefresh }: { listings: Listing[]; onRefresh?
     const timeout = window.setTimeout(() => setSuccessMessage(null), 5000)
     return () => window.clearTimeout(timeout)
   }, [successMessage])
+  // Cerrar menú con Escape (hook arriba de cualquier return condicional)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpenMenuFor(null)
+    }
+    if (typeof window !== 'undefined') window.addEventListener('keydown', onKey)
+    return () => {
+      if (typeof window !== 'undefined') window.removeEventListener('keydown', onKey)
+    }
+  }, [openMenuFor])
   if (!listings.length) {
     return (
       <div className="flex flex-col items-center justify-center gap-4 py-10 text-center">
@@ -1112,15 +1126,7 @@ function ListingsView({ listings, onRefresh }: { listings: Listing[]; onRefresh?
     }
   }
 
-  // Cerrar menú con Escape
-  useEffect(() => {
-    if (!openMenuFor) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpenMenuFor(null)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [openMenuFor])
+  
 
   return (
     <div className="space-y-4">
@@ -1865,6 +1871,7 @@ function EditStoreView({ profile, userId, onStoreUpdated }: { profile: UserProfi
   const [storeBannerUrl, setStoreBannerUrl] = useState(profile?.store_banner_url ?? '')
   const [storeAvatarUrl, setStoreAvatarUrl] = useState(profile?.store_avatar_url ?? '')
   const [storeBannerPosY, setStoreBannerPosY] = useState<number>(typeof profile?.store_banner_position_y === 'number' ? (profile?.store_banner_position_y as number) : 50)
+  const [storeHours, setStoreHours] = useState(profile?.store_hours ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -1883,6 +1890,7 @@ function EditStoreView({ profile, userId, onStoreUpdated }: { profile: UserProfi
     setStoreBannerUrl(profile?.store_banner_url ?? '')
     setStoreAvatarUrl(profile?.store_avatar_url ?? '')
     setStoreBannerPosY(typeof profile?.store_banner_position_y === 'number' ? profile!.store_banner_position_y! : 50)
+    setStoreHours(profile?.store_hours ?? '')
   }, [profile])
 
   if (!profile?.store_enabled) {
@@ -1913,6 +1921,7 @@ function EditStoreView({ profile, userId, onStoreUpdated }: { profile: UserProfi
         storeBannerUrl: storeBannerUrl ? normaliseUrl(storeBannerUrl) : null,
         storeAvatarUrl: storeAvatarUrl ? normaliseUrl(storeAvatarUrl) : null,
         storeBannerPositionY: Number.isFinite(storeBannerPosY) ? storeBannerPosY : 50,
+        storeHours: storeHours.trim() || null,
       })
       if (!ok) throw new Error(err || 'No pudimos guardar los cambios')
       if (onStoreUpdated) await onStoreUpdated()
@@ -2031,6 +2040,19 @@ function EditStoreView({ profile, userId, onStoreUpdated }: { profile: UserProfi
         <label className="text-sm font-medium text-[#14212e]">
           Sitio web
           <input className="input mt-1" value={storeWebsite} onChange={(e) => setStoreWebsite(e.target.value)} placeholder="https://tutienda.com" />
+        </label>
+      </div>
+
+      <div className="grid gap-2">
+        <label className="text-sm font-medium text-[#14212e]">
+          Horarios de atención
+          <textarea
+            className="input mt-1 h-28"
+            value={storeHours}
+            onChange={(e) => setStoreHours(e.target.value)}
+            placeholder={"Lun a Vie 10–19\nSáb 10–14"}
+          />
+          <span className="text-xs text-[#14212e]/60">Texto libre. Por ejemplo: “Lun a Vie 10–19 · Sáb 10–14”.</span>
         </label>
       </div>
 

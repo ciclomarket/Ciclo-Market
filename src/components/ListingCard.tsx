@@ -10,7 +10,7 @@ import { useCompare } from '../context/CompareContext'
 import { buildListingSlug } from '../utils/slug'
 import { hasPaidPlan } from '../utils/plans'
 
-export default function ListingCard({ l }: { l: Listing }) {
+export default function ListingCard({ l, storeLogoUrl }: { l: Listing; storeLogoUrl?: string | null }) {
   const [imageLoaded, setImageLoaded] = useState(false)
   const { has, toggle } = useFaves()
   const { ids: compareIds, toggle: toggleCompare } = useCompare()
@@ -63,8 +63,8 @@ export default function ListingCard({ l }: { l: Listing }) {
   const isArchived = l.status === 'archived'
   const statusLabel = isSold ? 'Vendida' : isArchived ? 'Archivada' : isExpired ? 'Vencida' : null
   const imageStatusClass = (isArchived || isExpired) ? 'opacity-60 grayscale' : isSold ? 'opacity-85' : ''
-  const titleClass = (isArchived || isExpired) ? 'line-clamp-1 font-semibold text-[#14212e]/50' : 'line-clamp-1 font-semibold text-[#14212e]'
-  const metaClass = (isArchived || isExpired) ? 'mt-1 text-sm text-[#14212e]/50' : 'mt-1 text-sm text-[#14212e]/70'
+  const titleClass = (isArchived || isExpired) ? 'line-clamp-2 font-semibold text-[#14212e]/50' : 'line-clamp-2 font-semibold text-[#14212e]'
+  const metaClass = (isArchived || isExpired) ? 'mt-1 text-xs text-[#14212e]/50 line-clamp-1' : 'mt-1 text-xs text-[#14212e]/70 line-clamp-1'
   return (
     <div className="relative h-full">
       <div className="absolute top-2 left-2 right-2 z-10 flex items-center justify-between gap-2">
@@ -107,7 +107,7 @@ export default function ListingCard({ l }: { l: Listing }) {
         </div>
       </div>
       <Link to={`/listing/${slug}`} className="card-flat group flex h-full flex-col overflow-hidden">
-        <div className="aspect-video relative overflow-hidden bg-black/10">
+        <div className="aspect-[5/4] sm:aspect-video relative overflow-hidden bg-black/10">
           <img
             src={transformSupabasePublicUrl(l.images[0], { width: 800, quality: 75, format: 'webp' })}
             alt={l.title}
@@ -121,7 +121,7 @@ export default function ListingCard({ l }: { l: Listing }) {
                 if (l.images?.[0] && el.src !== l.images[0]) {
                   el.src = l.images[0]
                 }
-              } catch {}
+              } catch { void 0 }
               setImageLoaded(true)
             }}
             className={`h-full w-full object-cover transition duration-700 ${imageLoaded ? 'opacity-100 scale-100' : 'opacity-0 scale-105'} ${imageStatusClass} group-hover:scale-105`}
@@ -130,18 +130,21 @@ export default function ListingCard({ l }: { l: Listing }) {
             aria-hidden="true"
             className={`pointer-events-none absolute inset-0 bg-gradient-to-br from-white/40 via-white/10 to-white/40 transition-opacity duration-500 ${imageLoaded ? 'opacity-0' : 'opacity-100 animate-pulse'}`}
           />
+          {storeLogoUrl ? (
+            <img src={storeLogoUrl} alt="Logo tienda" className="absolute bottom-2 left-2 h-8 w-8 rounded-full border border-white/50 bg-white object-cover shadow" loading="lazy" decoding="async" />
+          ) : null}
         </div>
-        <div className="flex flex-1 flex-col px-5 py-4">
-          <div className="flex items-start justify-between gap-3">
-            <h3 className={titleClass}>{l.title}</h3>
-            <div className="text-right leading-none">
-              <span className="block font-semibold text-mb-primary">{priceLabel}</span>
-              {originalPriceLabel && (
-                <span className="block text-xs text-[#14212e]/50 line-through">{originalPriceLabel}</span>
-              )}
-            </div>
+        <div className="flex flex-1 flex-col px-4 py-3 sm:px-5 sm:py-4 min-h-[110px] sm:min-h-[120px]">
+          <h3 className={`${titleClass} text-sm sm:text-base`}>{l.title}</h3>
+          <div className="mt-1 leading-tight">
+            <span className="block font-semibold text-mb-primary text-sm sm:text-base">{priceLabel}</span>
+            {originalPriceLabel && (
+              <span className="block text-xs text-[#14212e]/50 line-through">{originalPriceLabel}</span>
+            )}
           </div>
-          <p className={metaClass}>{metaDisplay.join(' • ')}</p>
+          {!storeLogoUrl && metaDisplay.length ? (
+            <p className={metaClass}>{metaDisplay.join(' • ')}</p>
+          ) : null}
         </div>
       </Link>
     </div>

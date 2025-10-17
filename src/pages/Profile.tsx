@@ -382,7 +382,7 @@ export default function Profile() {
                 <div>
                   <p className="text-sm font-semibold text-[#14212e]">Marcas favoritas</p>
                   <ul className="mt-2 flex flex-wrap gap-2">
-                    {profile.preferred_brands.map((brand) => (
+                    {profile.preferred_brands.map((brand: string) => (
                       <li key={brand} className="rounded-full border border-[#14212e]/20 bg-white px-3 py-1 text-xs font-semibold text-[#14212e]">
                         {brand}
                       </li>

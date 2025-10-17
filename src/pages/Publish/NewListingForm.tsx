@@ -137,6 +137,7 @@ export default function NewListingForm() {
         if (active) setGiftValidating(false)
       }
     })()
+
     return () => { active = false }
   }, [searchParams])
 
@@ -839,6 +840,11 @@ export default function NewListingForm() {
         .single()
 
       if (updateError || !updated) {
+        const msg = String(updateError?.message || '').toLowerCase()
+        if (msg.includes('whatsapp') || msg.includes('tel') || msg.includes('telefono') || msg.includes('teléfono')) {
+          showToast('Evitá publicar teléfonos o WhatsApp en descripción o extras. Para WhatsApp elegí un plan Básico o Premium.', { variant: 'error' } as any)
+          return
+        }
         console.error('Error update listing:', updateError)
         alert('No pudimos actualizar la publicación. Intentá nuevamente.')
         return
@@ -856,8 +862,13 @@ export default function NewListingForm() {
       .single()
 
     if (insertErr || !inserted) {
+      const msg = String(insertErr?.message || '').toLowerCase()
+      if (msg.includes('whatsapp') || msg.includes('tel') || msg.includes('telefono') || msg.includes('teléfono')) {
+        showToast('Evitá publicar teléfonos o WhatsApp en descripción o extras. Para WhatsApp elegí un plan Básico o Premium.', { variant: 'error' } as any)
+        return
+      }
       console.error('Error insert listing:', insertErr)
-      alert('No pudimos crear la publicación. Verificá Supabase y volvé a intentar.')
+      alert('No pudimos crear la publicación. Intentá nuevamente.')
       return
     }
 
@@ -875,7 +886,7 @@ export default function NewListingForm() {
 
     // 3.c Redimir gift si corresponde (best-effort)
     if (giftCode && user?.id) {
-      try { await redeemGift(giftCode, user.id) } catch {}
+      try { await redeemGift(giftCode, user.id) } catch { void 0 }
     }
 
     // Ya pagaste tu plan (si correspondía). Redirigimos al detalle del aviso.
@@ -1304,6 +1315,7 @@ export default function NewListingForm() {
 
                 <Field label="Agregados extras (opcional)">
                   <textarea className="textarea" value={extras} onChange={(e) => setExtras(e.target.value)} placeholder="Cambios, upgrades, mantenimiento, accesorios incluidos..." />
+                  <p className="text-xs text-black/50 mt-1">No publiques teléfonos ni WhatsApp. Para contacto usá el campo de WhatsApp o Email.</p>
                 </Field>
               </>
             )}
@@ -1333,6 +1345,7 @@ export default function NewListingForm() {
                     ? 'Si la dejás vacía: “Sin descripción adicional”.'
                     : 'Si la dejás vacía: “No declara descripción específica”.'}
               </p>
+              <p className="text-xs text-red-600/80 mt-1">Por seguridad no publiques teléfonos ni WhatsApp en este campo.</p>
             </Field>
             
             

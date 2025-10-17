@@ -184,7 +184,7 @@ export default function Plans() {
   useMemo(() => {
     const code = searchParams.get('gift')?.trim() || null
     if (!code) { setGiftCode(null); setGiftPlan(null); setGiftError(null); return null }
-    let cancelled = false
+    const cancelled = false
     setGiftValidating(true)
     setGiftError(null)
     ;(async () => {

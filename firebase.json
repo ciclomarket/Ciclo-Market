@@ -26,30 +26,39 @@
         "destination": "https://ciclo-market.onrender.com/share/listing/:id",
         "type": 302
       },
+      { "source": "/marketplace/bicicletas-de-ruta", "destination": "/marketplace?cat=Ruta", "type": 301 },
+      { "source": "/marketplace/mtb", "destination": "/marketplace?cat=MTB", "type": 301 },
+      { "source": "/marketplace/urbana", "destination": "/marketplace?cat=Urbana", "type": 301 },
+      { "source": "/marketplace/fixie", "destination": "/marketplace?cat=Fixie", "type": 301 },
+      { "source": "/marketplace/triatlon", "destination": "/marketplace?cat=Triatl%C3%B3n", "type": 301 },
+      { "source": "/marketplace/e-bike", "destination": "/marketplace?cat=E-Bike", "type": 301 },
+      { "source": "/marketplace/pista", "destination": "/marketplace?cat=Pista", "type": 301 },
+      { "source": "/marketplace/accesorios", "destination": "/marketplace?cat=Accesorios", "type": 301 },
+      { "source": "/marketplace/indumentaria", "destination": "/marketplace?cat=Indumentaria", "type": 301 },
       {
         "source": "/sitemap.xml",
         "destination": "https://ciclo-market.onrender.com/sitemap.xml",
-        "type": 302
+        "type": 301
       },
       {
         "source": "/sitemap-static.xml",
         "destination": "https://ciclo-market.onrender.com/sitemap-static.xml",
-        "type": 302
+        "type": 301
       },
       {
         "source": "/sitemap-stores.xml",
         "destination": "https://ciclo-market.onrender.com/sitemap-stores.xml",
-        "type": 302
+        "type": 301
       },
       {
         "source": "/sitemap-categories.xml",
         "destination": "https://ciclo-market.onrender.com/sitemap-categories.xml",
-        "type": 302
+        "type": 301
       },
       {
         "source": "/sitemap-listings-:page.xml",
         "destination": "https://ciclo-market.onrender.com/sitemap-listings-:page.xml",
-        "type": 302
+        "type": 301
       }
     ],
     "rewrites": [

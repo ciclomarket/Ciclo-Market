@@ -17,7 +17,7 @@ import { normaliseWhatsapp, buildWhatsappUrl } from '../utils/whatsapp'
 import { useAuth } from '../context/AuthContext'
 import { fetchUserProfile, fetchUserContactEmail, setUserVerificationStatus, type UserProfileRecord } from '../services/users'
 import { logContactEvent, fetchSellerReviews } from '../services/reviews'
-import SEO from '../components/SEO'
+// SEO global se maneja desde App; acá sólo inyectamos JSON-LD
 import JsonLd from '../components/JsonLd'
 import { trackMetaPixel } from '../lib/metaPixel'
 import { useToast } from '../context/ToastContext'
@@ -182,6 +182,15 @@ export default function ListingDetail() {
     }
   }, [listing?.sellerId])
 
+  // Normalizar URL a slug canónico si es distinto al parámetro actual
+  useEffect(() => {
+    const target = listing?.slug
+    const current = params.slug || ''
+    if (target && current && current !== target) {
+      navigate(`/listing/${encodeURIComponent(target)}`, { replace: true })
+    }
+  }, [listing?.slug, params.slug, navigate])
+
   // Oferta deshabilitada
 
   if (loading) return <Container>Cargando publicación…</Container>
@@ -242,7 +251,7 @@ export default function ListingDetail() {
   // Extraer specs desde description/extras (tokens "Clave: Valor")
   const extractToken = (label: string): string | null => {
     const sources = [listing.description || '', listing.extras || '']
-    const pattern = new RegExp(`${label}\s*:\s*([^•\n]+)`, 'i')
+    const pattern = new RegExp(String.raw`${label}\s*:\s*([^•\n]+)`, 'i')
     for (const src of sources) {
       const m = src.match(pattern)
       if (m && m[1]) return m[1].trim()
@@ -483,36 +492,27 @@ export default function ListingDetail() {
 
   return (
     <>
-      <SEO title={listing.title} description={metaDescription} image={firstImage} url={canonicalUrl} type="product">
-        <meta property="product:availability" content={productAvailability} />
-        {priceAmount ? (
-          <>
-            <meta property="product:price:amount" content={priceAmount} />
-            <meta property="product:price:currency" content={priceCurrency} />
-          </>
-        ) : null}
-        {/* JSON-LD Product */}
-        <JsonLd
-          data={{
-            '@context': 'https://schema.org',
-            '@type': 'Product',
-            name: listing.title,
-            description: metaDescription,
-            image: Array.isArray(listing.images) && listing.images.length ? listing.images : (firstImage ? [firstImage] : []),
-            brand: listing.brand || undefined,
-            category: listing.category || undefined,
-            offers: priceAmount
-              ? {
-                  '@type': 'Offer',
-                  price: priceAmount,
-                  priceCurrency,
-                  availability: productAvailability === 'instock' ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
-                  url: canonicalUrl,
-                }
-              : undefined,
-          }}
-        />
-      </SEO>
+      {/* JSON-LD Product */}
+      <JsonLd
+        data={{
+          '@context': 'https://schema.org',
+          '@type': 'Product',
+          name: listing.title,
+          description: metaDescription,
+          image: Array.isArray(listing.images) && listing.images.length ? listing.images : (firstImage ? [firstImage] : []),
+          brand: listing.brand || undefined,
+          category: listing.category || undefined,
+          offers: priceAmount
+            ? {
+                '@type': 'Offer',
+                price: priceAmount,
+                priceCurrency,
+                availability: productAvailability === 'instock' ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
+                url: canonicalUrl,
+              }
+            : undefined,
+        }}
+      />
       <div className="bg-[#14212e]">
         <Container>
           <div className="grid w-full gap-4 lg:gap-6 lg:grid-cols-[2fr_1fr]">

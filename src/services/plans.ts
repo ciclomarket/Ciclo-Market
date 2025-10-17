@@ -27,13 +27,13 @@ function sanitizeDescription(desc?: string | null, code?: string | null): string
   let out = desc
   if (plan === 'basic' || plan === 'premium') {
     // Quitar frases de "destaque X días" para evitar duplicado con features
-    out = out.replace(/desta(?:cado|cada|que|queado)?[^\.!?\n,;]*\d+\s*d[ií]as?/gi, '')
-    out = out.replace(/desta(?:cado|cada|que|queado)?[^\.!?\n,;]*/gi, '')
+    out = out.replace(/desta(?:cado|cada|que|queado)?[^.!?\n,;]*\d+\s*d[ií]as?/gi, '')
+    out = out.replace(/desta(?:cado|cada|que|queado)?[^.!?\n,;]*/gi, '')
   }
   // Limpieza general: espacios dobles, puntuación sobrante al final
   out = out.replace(/\s{2,}/g, ' ').replace(/[\s,;.-]+$/g, '').trim()
   // Quitar puntuación y espacios al inicio (p.ej. ", difusión …")
-  out = out.replace(/^[,;\.\s]+/, '')
+  out = out.replace(/^[,;.\s]+/, '')
   // Capitalizar primera letra si es minúscula
   if (out) out = out.charAt(0).toUpperCase() + out.slice(1)
   return out || undefined
@@ -49,7 +49,7 @@ const normalizePlan = (row: PlanRow): Plan => {
     canonicalPlanCode(row.name ?? undefined)
 
   // Base mapping
-  let mapped: Plan = {
+  const mapped: Plan = {
     id: row.id,
     code: row.code ?? row.id,
     name: row.name,

@@ -12,7 +12,7 @@ export function lazyWithRetry<T extends React.ComponentType<any>>(
   const { retries = 1, delayMs = 400 } = options
   return lazy(async () => {
     let attempt = 0
-    while (true) {
+    while (attempt <= retries) {
       try {
         const mod = await importer()
         // Clear one-shot retry flag on success
@@ -37,4 +37,3 @@ export function lazyWithRetry<T extends React.ComponentType<any>>(
     }
   })
 }
-

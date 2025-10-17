@@ -119,10 +119,7 @@ app.get('/sitemap.xml', async (_req, res) => {
     <loc>${origin}/sitemap-stores.xml</loc>
     <lastmod>${lastmod}</lastmod>
   </sitemap>
-  <sitemap>
-    <loc>${origin}/sitemap-categories.xml</loc>
-    <lastmod>${lastmod}</lastmod>
-  </sitemap>${listingEntries}
+  ${listingEntries}
 </sitemapindex>`
     res.set('Cache-Control', 'public, max-age=1800')
     return res.send(xml)
@@ -250,32 +247,9 @@ ${urls}
 
 // Sitemap: categorías/landings curadas
 app.get('/sitemap-categories.xml', async (_req, res) => {
+  // Ya no listamos categorías como landings indexables.
   res.type('application/xml')
-  const origin = (process.env.FRONTEND_URL || '').split(',')[0]?.trim() || 'https://ciclomarket.ar'
-  const nowIso = new Date().toISOString().slice(0, 10)
-  const categorySlugs = [
-    'bicicletas-de-ruta',
-    'mtb',
-    'urbana',
-    'fixie',
-    'triatlon',
-    'e-bike',
-    'pista',
-    'accesorios',
-    'indumentaria',
-  ]
-  const urls = categorySlugs
-    .map((slug) => `
-  <url>
-    <loc>${origin}/marketplace/${slug}</loc>
-    <lastmod>${nowIso}</lastmod>
-    <changefreq>weekly</changefreq>
-  </url>`)
-    .join('')
-  const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${urls}
-</urlset>`
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>`
   res.set('Cache-Control', 'public, max-age=1800')
   return res.send(xml)
 })
@@ -297,12 +271,13 @@ app.get(['/share/listing/:id', '/listing/:id'], async (req, res) => {
     const supabase = getServerSupabaseClient()
     const { data: listing, error } = await supabase
       .from('listings')
-      .select('id, title, price, price_currency, description, images, status, frame_size, material, year, drivetrain, drivetrain_detail')
+      .select('id, slug, title, price, price_currency, description, images, status, frame_size, material, year, drivetrain, drivetrain_detail')
       .eq('id', id)
       .single()
 
     const baseFront = (process.env.FRONTEND_URL || '').split(',')[0]?.trim() || 'https://ciclomarket.ar'
-    const canonicalUrl = `${baseFront}/listing/${encodeURIComponent(id)}`
+    const slugOrId = (listing && listing.slug) ? listing.slug : id
+    const canonicalUrl = `${baseFront}/listing/${encodeURIComponent(slugOrId)}`
     const fallbackImg = process.env.SHARE_FALLBACK_IMAGE || `${baseFront}/og-preview.png`
 
     if (error || !listing) {
