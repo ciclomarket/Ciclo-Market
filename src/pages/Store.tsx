@@ -907,7 +907,11 @@ export default function Store() {
               </a>
               {(() => {
                 const waNumber = normaliseWhatsapp(profile.whatsapp_number || phone || '')
-                const waLink = buildWhatsappUrl(waNumber || (profile.whatsapp_number || phone || ''), 'Hola! Vi su tienda en Ciclo Market.')
+                const trimmedStoreName = (storeName || '').trim()
+                const storeWaMessage = trimmedStoreName
+                  ? `Hola ${trimmedStoreName}! Vi tu tienda en Ciclo Market.`
+                  : 'Hola! Vi tu tienda en Ciclo Market.'
+                const waLink = buildWhatsappUrl(waNumber || (profile.whatsapp_number || phone || ''), storeWaMessage)
                 const href = waLink || undefined
                 const disabled = !href
                 const classes = `inline-flex items-center justify-center gap-2 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#14212e] shadow md:px-4 md:py-2 md:text-sm ${disabled ? 'opacity-60 cursor-not-allowed' : 'hover:bg-white/90'}`

@@ -1,18 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
 import MiniLineChart from '@admin/components/MiniLineChart'
-import { fetchDailyEvents, fetchTopListingsByViews, fetchTopListingsByWaClicks, type DailyEventsByType } from '@admin/services/engagement'
+import { fetchDailyEvents, fetchTopListingsByViews, fetchTopListingsByWaClicks, fetchTopStoresByViews, computeComparatives, type DailyEventsByType } from '@admin/services/engagement'
 
 type Period = 7 | 30
 
-function toChart(series: Array<{ day: string; total: number }>) {
-  return series.map((p, idx) => ({ x: idx, y: p.total }))
+function toChart(series?: Array<{ day: string; total: number }>) {
+  const arr = Array.isArray(series) ? series : []
+  return arr.map((p, idx) => ({ x: idx, y: p.total }))
 }
 
 export default function EngagementPage() {
   const [period, setPeriod] = useState<Period>(30)
-  const [events, setEvents] = useState<DailyEventsByType>({ site: [], listing: [], store: [] })
+  const [events, setEvents] = useState<DailyEventsByType>({ site: [], listing: [], store: [], wa: [] })
   const [topViews, setTopViews] = useState<Array<{ id: string; title: string; total: number }>>([])
   const [topWa, setTopWa] = useState<Array<{ id: string; title: string; total: number }>>([])
+  const [topStores, setTopStores] = useState<Array<{ id: string; name: string; total: number }>>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -21,15 +23,17 @@ export default function EngagementPage() {
     setLoading(true)
     setError(null)
     Promise.all([
-      fetchDailyEvents(period),
+      fetchDailyEvents(period * 2),
       fetchTopListingsByViews(period, 10),
       fetchTopListingsByWaClicks(period, 10),
+      fetchTopStoresByViews(period, 10),
     ])
-      .then(([ev, tv, twa]) => {
+      .then(([ev, tv, twa, ts]) => {
         if (!alive) return
         setEvents(ev)
         setTopViews(tv)
         setTopWa(twa)
+        setTopStores(ts)
       })
       .catch((err) => {
         console.warn('[engagement] load failed', err)
@@ -42,6 +46,8 @@ export default function EngagementPage() {
   const siteData = useMemo(() => toChart(events.site), [events.site])
   const listingData = useMemo(() => toChart(events.listing), [events.listing])
   const storeData = useMemo(() => toChart(events.store), [events.store])
+  const waData = useMemo(() => toChart(events.wa), [events.wa])
+  const cmp = useMemo(() => computeComparatives(events, period), [events, period])
 
   return (
     <div>
@@ -67,6 +73,21 @@ export default function EngagementPage() {
       ) : null}
 
       <section className="admin-grid" style={{ marginBottom: '1.5rem' }}>
+        {[{ label: 'Site Views', c: cmp.site }, { label: 'Listing Views', c: cmp.listing }, { label: 'Store Views', c: cmp.store }, { label: 'WA Clicks', c: cmp.wa }].map((card) => (
+          <article key={card.label} className="admin-card">
+            <h3>{card.label}</h3>
+            <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'baseline', gap: '0.6rem' }}>
+              <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#f2f6fb' }}>{card.c.current}</div>
+              <div style={{ fontSize: '0.9rem', color: card.c.delta >= 0 ? '#6fff9d' : '#ff8f8f' }}>
+                {card.c.delta >= 0 ? '▲' : '▼'} {Math.abs(Math.round(card.c.pct))}% vs prev {period}d
+              </div>
+            </div>
+            <div style={{ marginTop: '0.25rem', fontSize: '0.85rem', color: '#9fb3c9' }}>Prev: {card.c.previous}</div>
+          </article>
+        ))}
+      </section>
+
+      <section className="admin-grid" style={{ marginBottom: '1.5rem' }}>
         <article className="admin-card">
           <h3>Site Views</h3>
           <div style={{ marginTop: '0.75rem' }}>{siteData.length > 1 ? <MiniLineChart data={siteData} width={520} height={140} /> : <div style={{ color: '#92a5bc' }}>{loading ? 'Cargando…' : 'Sin datos'}</div>}</div>
@@ -78,6 +99,10 @@ export default function EngagementPage() {
         <article className="admin-card">
           <h3>Store Views</h3>
           <div style={{ marginTop: '0.75rem' }}>{storeData.length > 1 ? <MiniLineChart data={storeData} width={520} height={140} stroke="#6fff9d" fill="rgba(111,255,157,0.18)" /> : <div style={{ color: '#92a5bc' }}>{loading ? 'Cargando…' : 'Sin datos'}</div>}</div>
+        </article>
+        <article className="admin-card">
+          <h3>WA Clicks</h3>
+          <div style={{ marginTop: '0.75rem' }}>{waData.length > 1 ? <MiniLineChart data={waData} width={520} height={140} stroke="#ffd166" fill="rgba(255,209,102,0.18)" /> : <div style={{ color: '#92a5bc' }}>{loading ? 'Cargando…' : 'Sin datos'}</div>}</div>
         </article>
       </section>
 
@@ -137,8 +162,35 @@ export default function EngagementPage() {
             </table>
           </div>
         </article>
+
+        <article className="admin-card">
+          <h3>Top tiendas por vistas</h3>
+          <div style={{ marginTop: '0.75rem', overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '520px' }}>
+              <thead>
+                <tr style={{ background: 'rgba(12,23,35,0.9)', textAlign: 'left', color: '#9fb3c9', fontSize: '0.78rem', letterSpacing: '0.08em' }}>
+                  <th style={{ padding: '0.6rem 0.9rem' }}>Tienda</th>
+                  <th style={{ padding: '0.6rem 0.9rem' }}>Vistas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan={2} style={{ padding: '1rem', color: '#92a5bc', textAlign: 'center' }}>Cargando…</td></tr>
+                ) : topStores.length ? (
+                  topStores.map((row) => (
+                    <tr key={row.id} style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                      <td style={{ padding: '0.7rem 0.9rem', color: '#c2d5eb' }}>{row.name}</td>
+                      <td style={{ padding: '0.7rem 0.9rem', color: '#c2d5eb' }}>{row.total}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr><td colSpan={2} style={{ padding: '1rem', color: '#92a5bc', textAlign: 'center' }}>Sin datos</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </article>
       </section>
     </div>
   )
 }
-

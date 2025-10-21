@@ -1,4 +1,7 @@
 {
+  "functions": {
+    "source": "functions"
+  },
   "hosting": {
     "public": "dist",
     "ignore": [
@@ -21,11 +24,6 @@
       }
     ],
     "redirects": [
-      {
-        "source": "/share/listing/:id",
-        "destination": "https://ciclo-market.onrender.com/share/listing/:id",
-        "type": 302
-      },
       { "source": "/marketplace/bicicletas-de-ruta", "destination": "/marketplace?cat=Ruta", "type": 301 },
       { "source": "/marketplace/mtb", "destination": "/marketplace?cat=MTB", "type": 301 },
       { "source": "/marketplace/urbana", "destination": "/marketplace?cat=Urbana", "type": 301 },
@@ -62,10 +60,8 @@
       }
     ],
     "rewrites": [
-      {
-        "source": "**",
-        "destination": "/index.html"
-      }
+      { "source": "/share/**", "function": "shareListing" },
+      { "source": "**", "destination": "/index.html" }
     ]
   }
 }

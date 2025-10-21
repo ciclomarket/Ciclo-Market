@@ -330,11 +330,28 @@ app.get(['/share/listing/:id', '/listing/:id'], async (req, res) => {
   try {
     const { id } = req.params
     const supabase = getServerSupabaseClient()
-    const { data: listing, error } = await supabase
-      .from('listings')
-      .select('id, slug, title, price, price_currency, description, images, status, frame_size, material, year, drivetrain, drivetrain_detail')
-      .eq('id', id)
-      .single()
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id || ''))
+
+    async function fetchByIdOrSlug(key) {
+      // Try by id first if it looks like a UUID
+      if (isUuid) {
+        const { data, error } = await supabase
+          .from('listings')
+          .select('id, slug, title, price, price_currency, description, images, status, frame_size, material, year, drivetrain, drivetrain_detail')
+          .eq('id', key)
+          .single()
+        if (!error && data) return { data }
+      }
+      // Fallback by slug (or primary if not UUID)
+      const { data, error } = await supabase
+        .from('listings')
+        .select('id, slug, title, price, price_currency, description, images, status, frame_size, material, year, drivetrain, drivetrain_detail')
+        .eq('slug', key)
+        .single()
+      return { data, error }
+    }
+
+    const { data: listing, error } = await fetchByIdOrSlug(id)
 
     const baseFront = (process.env.FRONTEND_URL || '').split(',')[0]?.trim() || 'https://ciclomarket.ar'
     const slugOrId = (listing && listing.slug) ? listing.slug : id

@@ -16,6 +16,7 @@ export async function track(type: TrackType, payload: Record<string, any> = {}):
     if (typeof window === 'undefined') return
     const ref = document.referrer || ''
     const path = window.location.pathname + window.location.search
+    const BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
     const body = {
       type,
       anon_id: getAnonId(),
@@ -23,7 +24,7 @@ export async function track(type: TrackType, payload: Record<string, any> = {}):
       path: path.slice(0, 512),
       ...payload,
     }
-    await fetch('/api/track', {
+    await fetch(BASE ? `${BASE}/api/track` : '/api/track', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -41,4 +42,3 @@ export function trackOncePerSession(key: string, fn: () => void) {
   sessionStorage.setItem(storageKey, '1')
   fn()
 }
-

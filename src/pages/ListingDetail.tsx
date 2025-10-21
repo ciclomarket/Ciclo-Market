@@ -225,35 +225,39 @@ export default function ListingDetail() {
   if (loading) return <Container>Cargando publicación…</Container>
   if (!listing) return <Container>Publicación no encontrada.</Container>
 
-  const articleSummaryParts = [listing.brand, listing.model, listing.year ? String(listing.year) : null].filter(Boolean)
-  const articleSummary = articleSummaryParts.length ? articleSummaryParts.join(' ') : listing.title
   const listingSlugOrId = listing.slug ?? listing.id
   const listingPath = `/listing/${listingSlugOrId}`
   const envFrontendOrigin = (import.meta.env.VITE_FRONTEND_URL || '').trim()
   const runtimeOrigin = typeof window !== 'undefined' ? window.location.origin : ''
   const frontendOrigin = (envFrontendOrigin || runtimeOrigin || 'https://ciclomarket.ar').replace(/\/$/, '')
   const canonicalUrl = `${frontendOrigin}${listingPath}`
-  const envShareBase = (import.meta.env.VITE_SHARE_BASE_URL || import.meta.env.VITE_API_BASE_URL || '').trim()
+  const shareOrigin = 'https://ciclomarket.ar'
+  const shareUrl = `${shareOrigin.replace(/\/$/, '')}${listingPath}`
+  // URL con OG listo para previews (backend)
+  // Usamos exclusivamente VITE_SHARE_BASE_URL para previews OG bajo el dominio principal
+  const envShareBase = (import.meta.env.VITE_SHARE_BASE_URL || '').trim()
   const shareBase = envShareBase ? envShareBase.replace(/\/$/, '') : ''
-  const resolvedShareOrigin = (shareBase || frontendOrigin || '').replace(/\/$/, '')
-  // Para previews OG en WhatsApp/Facebook, usamos siempre el ID en el endpoint del backend
-  const shareId = listing.id
-  const cacheBust = listing.createdAt ? String(listing.createdAt) : String(Date.now())
-  const shareUrl = resolvedShareOrigin
-    ? `${resolvedShareOrigin}/share/listing/${shareId}?v=${encodeURIComponent(cacheBust)}`
-    : `${canonicalUrl}?v=${encodeURIComponent(cacheBust)}`
-  const sellerPreferredLink =
-    sellerProfile?.website_url ??
-    (listing as any)?.sellerLink ??
-    (listing as any)?.sellerWebsite ??
-    (listing as any)?.sellerUrl ??
+  const previewCacheBust = listing.createdAt ? String(listing.createdAt) : String(Date.now())
+  const previewKey = encodeURIComponent(listing.slug ?? listing.id)
+  const previewUrl = shareBase ? `${shareBase}/share/listing/${previewKey}?v=${encodeURIComponent(previewCacheBust)}` : shareUrl
+  const normalizeName = (value?: string | null) => {
+    const trimmed = value?.trim()
+    return trimmed ? trimmed : null
+  }
+  const greetingName =
+    normalizeName(sellerProfile?.store_enabled ? sellerProfile?.store_name : null) ??
+    normalizeName(listing.sellerName) ??
+    normalizeName(sellerProfile?.full_name) ??
     null
-  const linkForMessage = sellerPreferredLink || shareUrl
-  const waMessageBase = `Hola! Me interesa este artículo ${articleSummary}.`
-  const waMessage = linkForMessage ? `${waMessageBase} ${linkForMessage}` : waMessageBase
+  const greetingPrefix = greetingName ? `¡Hola ${greetingName}!` : '¡Hola!'
+  const listingTitleForMessage = (listing.title || '').trim()
+  const contactMessage = `${greetingPrefix} Desde ciclomarket.ar vi tu anuncio: ${listingTitleForMessage} ${previewUrl} y me interesa saber más información.`.trim()
   const sellerWhatsappRaw = listing.sellerWhatsapp ?? sellerProfile?.whatsapp_number ?? ''
   const sellerWhatsappNumber = normaliseWhatsapp(sellerWhatsappRaw)
-  const waLink = buildWhatsappUrl(sellerWhatsappNumber ?? sellerWhatsappRaw, waMessage.trim())
+  const waLink = buildWhatsappUrl(sellerWhatsappNumber ?? sellerWhatsappRaw, contactMessage)
+  const emailSubject = `Consulta sobre ${listing.title}`
+  const mailtoSubjectParam = encodeURIComponent(emailSubject)
+  const mailtoBodyParam = encodeURIComponent(contactMessage)
   const sellerAvatarUrl = sellerProfile?.store_avatar_url || listing.sellerAvatar || sellerProfile?.avatar_url || null
 
   const formattedPrice = formatListingPrice(listing.price, listing.priceCurrency, format, fx)
@@ -302,7 +306,7 @@ export default function ListingDetail() {
 
   const handleShare = (platform: 'whatsapp' | 'facebook') => {
     if (!shareUrl) return
-    const encodedUrl = encodeURIComponent(shareUrl)
+    const encodedUrl = encodeURIComponent(previewUrl)
     const encodedText = encodeURIComponent(shareText)
     switch (platform) {
       case 'whatsapp':
@@ -523,7 +527,7 @@ export default function ListingDetail() {
       items.push({
         id: 'email',
         label: 'Enviar correo',
-        href: `mailto:${emailRecipient}?subject=${encodeURIComponent(`Consulta sobre ${listing.title}`)}`,
+        href: `mailto:${emailRecipient}?subject=${mailtoSubjectParam}&body=${mailtoBodyParam}`,
         icon: <MailIcon />,
         className: 'bg-[#0b1724]'
       })
