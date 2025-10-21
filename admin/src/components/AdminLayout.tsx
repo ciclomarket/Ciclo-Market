@@ -4,6 +4,7 @@ import { useAdminAuth } from '@admin/context/AdminAuthContext'
 const NAV_ITEMS = [
   { to: '/', label: 'Resumen', description: 'Visión general del marketplace' },
   { to: '/analytics', label: 'Analítica', description: 'Usuarios, ventas y tráfico' },
+  { to: '/engagement', label: 'Engagement', description: 'Vistas y clics (WA) por día' },
   { to: '/listings', label: 'Publicaciones', description: 'Revisión y moderación de avisos' },
   { to: '/stores', label: 'Tiendas oficiales', description: 'Gestión y métricas de partners' },
 ]
