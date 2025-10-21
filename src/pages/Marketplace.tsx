@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import Container from '../components/Container'
 import ListingCard from '../components/ListingCard'
+import { transformSupabasePublicUrl } from '../utils/supabaseImage'
 import { fetchStoresMeta } from '../services/users'
 import EmptyState from '../components/EmptyState'
 import SkeletonCard from '../components/SkeletonCard'
@@ -221,7 +222,10 @@ const extractCondition = (listing: Listing) => {
 const extractApparelSize = (listing: Listing) => {
   if (listing.category !== 'Indumentaria') return undefined
   const extrasMap = extractExtrasMap(listing.extras)
-  return extrasMap.talle ?? undefined
+  const value = extrasMap.talle ?? extrasMap.talles
+  if (!value) return undefined
+  const first = value.split(',')[0]?.trim()
+  return first || value
 }
 
 const cleanValue = (value?: string | null) => {
@@ -254,6 +258,12 @@ function computeListingFacets(listings: Listing[]): ListingFacetsResult {
 
     const frameSize = cleanValue(listing.frameSize)
     if (frameSize) sets.frameSize.add(frameSize)
+    // Incluir múltiples talles desde extras
+    const extrasMap = extractExtrasMap(listing.extras)
+    const multi = extrasMap.talles
+    if (multi) {
+      multi.split(',').map((s) => s.trim()).filter(Boolean).forEach((s) => sets.frameSize.add(s))
+    }
 
     const wheelSize = cleanValue(listing.wheelSize)
     if (wheelSize) sets.wheelSize.add(wheelSize)
@@ -270,6 +280,12 @@ function computeListingFacets(listings: Listing[]): ListingFacetsResult {
 
     const apparelSize = cleanValue(extractApparelSize(listing))
     if (apparelSize) sets.size.add(apparelSize)
+    // Incluir todos los talles de indumentaria desde "Talles"
+    const extrasForSizes = extractExtrasMap(listing.extras)
+    const multiSizes = extrasForSizes.talles
+    if (multiSizes) {
+      multiSizes.split(',').map((s) => s.trim()).filter(Boolean).forEach((s) => sets.size.add(s))
+    }
 
     metadata[listing.id] = {
       condition: condition || undefined,
@@ -605,7 +621,19 @@ export default function Marketplace() {
     const filteredList = categoryFiltered.filter((listing) => {
       if (!matchesValue(listing.brand, brandSet)) return false
       if (!matchesValue(listing.material, materialSet)) return false
-      if (!matchesValue(listing.frameSize, frameSizeSet)) return false
+      if (frameSizeSet.size) {
+        const directMatch = matchesValue(listing.frameSize, frameSizeSet)
+        if (!directMatch) {
+          const extrasMap = extractExtrasMap(listing.extras)
+          const multi = extrasMap.talles || ''
+          const anyMulti = multi
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean)
+            .some((s) => frameSizeSet.has(normalizeText(s)))
+          if (!anyMulti) return false
+        }
+      }
       if (!matchesValue(listing.wheelSize, wheelSizeSet)) return false
       if (!matchesValue(listing.drivetrain, drivetrainSet)) return false
 
@@ -621,7 +649,17 @@ export default function Marketplace() {
       }
 
       if (sizeSet.size) {
-        if (!derived.apparelSize || !sizeSet.has(normalizeText(derived.apparelSize))) return false
+        const hasSingle = derived.apparelSize && sizeSet.has(normalizeText(derived.apparelSize))
+        if (!hasSingle) {
+          const extrasMap = extractExtrasMap(listing.extras)
+          const multi = extrasMap.talles || ''
+          const anyMulti = multi
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean)
+            .some((s) => sizeSet.has(normalizeText(s)))
+          if (!anyMulti) return false
+        }
       }
 
       if (priceMin !== null && listing.price < priceMin) return false
@@ -665,7 +703,8 @@ export default function Marketplace() {
   const visible = filtered.slice(0, count)
 
   useEffect(() => {
-    setCount(40)
+    // Menor carga inicial para mejorar LCP en mobile
+    setCount(12)
   }, [paramsKey])
 
   useEffect(() => {
@@ -674,12 +713,37 @@ export default function Marketplace() {
     const io = new IntersectionObserver((entries) => {
       const entry = entries[0]
       if (entry.isIntersecting) {
-        setCount((c) => (c + 40 <= filtered.length ? c + 40 : filtered.length))
+        setCount((c) => (c + 24 <= filtered.length ? c + 24 : filtered.length))
       }
     }, { rootMargin: '600px 0px' })
     io.observe(el)
     return () => io.disconnect()
   }, [filtered.length])
+
+  // Preload estratégico: primeras 2 imágenes visibles
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const preloadTargets = visible.slice(0, 2)
+    const created: HTMLLinkElement[] = []
+    for (const l of preloadTargets) {
+      const img = l.images?.[0]
+      if (!img) continue
+      const link = document.createElement('link')
+      link.rel = 'preload'
+      link.as = 'image'
+      link.href = transformSupabasePublicUrl(img, { width: 640, quality: 70, format: 'webp' })
+      const srcset = [320, 480, 640, 768, 960].map((w) => `${transformSupabasePublicUrl(img, { width: w, quality: 70, format: 'webp' })} ${w}w`).join(', ')
+      link.setAttribute('imagesrcset', srcset)
+      link.setAttribute('imagesizes', '(max-width: 1279px) 50vw, 33vw')
+      document.head.appendChild(link)
+      created.push(link)
+    }
+    return () => {
+      for (const el of created) {
+        try { document.head.removeChild(el) } catch { void 0 }
+      }
+    }
+  }, [visible.slice(0, 2).map((x) => x.id).join(',')])
 
   const handleCategory = useCallback((cat: Cat) => {
     setFilters({ cat })
@@ -999,16 +1063,20 @@ export default function Marketplace() {
             </div>
 
             {loading ? (
-              <div className="grid grid-cols-2 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+              <div className="grid -mx-2 grid-cols-1 gap-0 sm:mx-0 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">
                 {Array.from({ length: 6 }).map((_, idx) => (
-                  <SkeletonCard key={`skeleton-${idx}`} />
+                  <div key={`skeleton-${idx}`} className="p-2 sm:p-0">
+                    <SkeletonCard />
+                  </div>
                 ))}
               </div>
             ) : visible.length ? (
               <>
-                <div className="grid grid-cols-2 gap-5 sm:grid-cols-2 xl:grid-cols-3">
-                  {visible.map((listing) => (
-                    <ListingCard key={listing.id} l={listing} storeLogoUrl={storeLogos[listing.sellerId] || null} />
+                <div className="grid -mx-2 grid-cols-1 gap-0 sm:mx-0 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">
+                  {visible.map((listing, idx) => (
+                    <div key={listing.id} className="p-2 sm:p-0">
+                      <ListingCard l={listing} storeLogoUrl={storeLogos[listing.sellerId] || null} priority={idx < 4} />
+                    </div>
                   ))}
                 </div>
                 <div ref={sentinelRef} className="h-12" />

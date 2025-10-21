@@ -5,7 +5,7 @@ import Button from '../components/Button'
 import ListingCard from '../components/ListingCard'
 import { mockListings } from '../mock/mockData'
 import { useAuth } from '../context/AuthContext'
-import { supabase, supabaseEnabled } from '../services/supabase'
+import { getSupabaseClient, supabaseEnabled } from '../services/supabase'
 import { archiveListing, fetchListingsBySeller, reduceListingPrice, fetchListingsByIds, updateListingStatus, deleteListing } from '../services/listings'
 import { fetchUserProfile, type UserProfileRecord, upsertUserProfile } from '../services/users'
 import type { Listing } from '../types'
@@ -16,6 +16,7 @@ import { uploadAvatar, uploadStoreBanner, uploadStoreAvatar } from '../services/
 import { PROVINCES, OTHER_CITY_OPTION } from '../constants/locations'
 import { BIKE_CATEGORIES } from '../constants/catalog'
 import { deriveProfileSlug, pickDiscipline } from '../utils/user'
+import { loadGoogleMaps } from '../utils/googleMaps'
 import { normaliseWhatsapp, extractLocalWhatsapp, sanitizeLocalWhatsappInput } from '../utils/whatsapp'
 import { useNotifications } from '../context/NotificationContext'
 import { useToast } from '../context/ToastContext'
@@ -181,7 +182,7 @@ export default function Dashboard() {
     try {
       if (supabaseEnabled) {
         const [listingsData, profileData] = await Promise.all([
-          fetchListingsBySeller(user.id),
+          fetchListingsBySeller(user.id, { includeArchived: true }),
           fetchUserProfile(user.id)
         ])
         setSellerListings(listingsData)
@@ -1176,35 +1177,7 @@ function ListingsView({ listings, onRefresh }: { listings: Listing[]; onRefresh?
 
               {openMenuFor === listing.id && (
                 <div className="absolute left-0 bottom-full z-50 mb-2 w-full min-w-[220px] rounded-xl border border-[#14212e]/10 bg-white p-2 text-sm text-[#14212e] shadow-xl">
-                  {/* Renovar publicación solo si está vencida */}
-                  {(listing.status === 'expired' || (typeof listing.expiresAt === 'number' && listing.expiresAt > 0 && listing.expiresAt < now)) && (
-                    <button
-                      type="button"
-                      className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-[#14212e]/5"
-                      onClick={() => { void handleRenew(listing); setOpenMenuFor(null) }}
-                    >
-                      Renovar publicación
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-[#14212e]/5"
-                    onClick={() => {
-                      navigate(
-                        `/publicar/nueva?id=${listing.id}&type=${
-                          listing.category === 'Accesorios'
-                            ? 'accessory'
-                            : listing.category === 'Indumentaria'
-                              ? 'apparel'
-                              : 'bike'
-                        }`
-                      )
-                      setOpenMenuFor(null)
-                    }}
-                  >
-                    Editar
-                    <span className="text-xs text-[#14212e]/60">E</span>
-                  </button>
+                  {/* 3 atajos */}
                   <button
                     type="button"
                     className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-[#14212e]/5"
@@ -1227,12 +1200,17 @@ function ListingsView({ listings, onRefresh }: { listings: Listing[]; onRefresh?
                   >
                     Archivar
                   </button>
+                  {/* Link a más acciones */}
                   <button
                     type="button"
-                    className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-red-600 hover:bg-red-50"
-                    onClick={() => { void handleDelete(listing.id); setOpenMenuFor(null) }}
+                    className="mt-1 flex w-full items-center justify-between rounded-lg bg-[#14212e]/90 px-3 py-2 text-white hover:bg-[#14212e]"
+                    onClick={() => {
+                      const path = `/listing/${listing.slug || listing.id}`
+                      navigate(path)
+                      setOpenMenuFor(null)
+                    }}
                   >
-                    Eliminar
+                    Más acciones…
                   </button>
                 </div>
               )}
@@ -1503,18 +1481,6 @@ function EditProfileView({
   const [facebook, setFacebook] = useState(profile?.facebook_handle ?? '')
   const [website, setWebsite] = useState(profile?.website_url ?? '')
   const [bio, setBio] = useState(profile?.bio ?? '')
-  // Tienda oficial
-  const [storeEnabled, setStoreEnabled] = useState<boolean>(Boolean(profile?.store_enabled))
-  const [storeName, setStoreName] = useState(profile?.store_name ?? '')
-  const [storeSlug, setStoreSlug] = useState(profile?.store_slug ?? '')
-  const [storeAddress, setStoreAddress] = useState(profile?.store_address ?? '')
-  const [storePhone, setStorePhone] = useState(profile?.store_phone ?? '')
-  const [storeInstagram, setStoreInstagram] = useState(profile?.store_instagram ?? '')
-  const [storeFacebook, setStoreFacebook] = useState(profile?.store_facebook ?? '')
-  const [storeWebsite, setStoreWebsite] = useState(profile?.store_website ?? '')
-  const [storeBannerUrl, setStoreBannerUrl] = useState(profile?.store_banner_url ?? '')
-  const [storeAvatarUrl, setStoreAvatarUrl] = useState(profile?.store_avatar_url ?? '')
-
   
   const COUNTRY_CODES = [
     { cc: 'AR', dial: '54', label: 'Argentina', flag: '🇦🇷' },
@@ -1549,15 +1515,6 @@ function EditProfileView({
     setFacebook(profile?.facebook_handle ?? '')
     setWebsite(profile?.website_url ?? '')
     setBio(profile?.bio ?? '')
-    setStoreEnabled(Boolean(profile?.store_enabled))
-    setStoreName(profile?.store_name ?? '')
-    setStoreSlug(profile?.store_slug ?? '')
-    setStoreAddress(profile?.store_address ?? '')
-    setStorePhone(profile?.store_phone ?? '')
-    setStoreInstagram(profile?.store_instagram ?? '')
-    setStoreFacebook(profile?.store_facebook ?? '')
-    setStoreWebsite(profile?.store_website ?? '')
-    setStoreBannerUrl(profile?.store_banner_url ?? '')
     // Detectar prefijo y número local desde el perfil
     const digits = String(profile?.whatsapp_number || '').replace(/[^0-9]/g, '')
     if (digits) {
@@ -1595,7 +1552,8 @@ function EditProfileView({
       if (!url) throw new Error('No pudimos subir la imagen')
       const result = await upsertUserProfile({ id: userId, avatarUrl: url })
       if (!result.success) throw new Error(result.error ?? 'No pudimos actualizar la foto')
-      if (supabaseEnabled && supabase) {
+      if (supabaseEnabled) {
+        const supabase = getSupabaseClient()
         await supabase.from('listings').update({ seller_avatar: url }).eq('seller_id', userId)
       }
       setAvatarUrl(url)
@@ -1629,7 +1587,6 @@ function EditProfileView({
     setError(null)
     try {
       const formattedWhatsapp = whatsappLocal ? `${whatsappDial}${sanitizeLocalWhatsappInput(whatsappLocal)}` : null
-      const slugSanitized = (storeSlug || storeName || fullName || '').toLowerCase().trim().replace(/[^a-z0-9-_]+/g, '-').replace(/^-+|-+$/g, '') || null
       const result = await upsertUserProfile({
         id: userId,
         email: effectiveEmail,
@@ -1646,17 +1603,7 @@ function EditProfileView({
         facebookHandle: facebook ? normaliseUrl(facebook) : null,
         websiteUrl: website ? normaliseUrl(website) : null,
         bio: bio ? bio.trim() : null,
-        whatsapp: formattedWhatsapp,
-        // store
-        storeEnabled,
-        storeName: storeName.trim() || null,
-        storeSlug: slugSanitized,
-        storeAddress: storeAddress.trim() || null,
-        storePhone: storePhone.trim() || null,
-        storeInstagram: storeInstagram ? normaliseHandle(storeInstagram) : null,
-        storeFacebook: storeFacebook ? normaliseUrl(storeFacebook) : null,
-        storeWebsite: storeWebsite ? normaliseUrl(storeWebsite) : null,
-        storeBannerUrl: storeBannerUrl ? normaliseUrl(storeBannerUrl) : null,
+        whatsapp: formattedWhatsapp
       })
       if (!result.success) {
         throw new Error(result.error ?? 'No pudimos guardar tu perfil. Intentá nuevamente.')
@@ -1780,52 +1727,6 @@ function EditProfileView({
           />
           <span className="text-xs text-[#14212e]/60">Se mostrará en tu perfil público.</span>
         </label>
-
-        {Boolean(profile?.store_enabled) && (
-        <div className="mt-2 rounded-2xl border border-[#14212e]/10 bg-white p-4">
-          <h3 className="text-base font-semibold text-[#14212e]">Tienda oficial</h3>
-          <div className="mt-3 grid gap-4 sm:grid-cols-2">
-            <label className="inline-flex items-center gap-2 text-sm text-[#14212e]">
-              <input type="checkbox" className="accent-mb-primary" checked={storeEnabled} onChange={(e) => setStoreEnabled(e.target.checked)} />
-              Habilitar tienda oficial
-            </label>
-            <div>
-              <label className="text-sm font-medium text-[#14212e]">Nombre de la tienda</label>
-              <input className="input mt-1" value={storeName} onChange={(e) => setStoreName(e.target.value)} placeholder="Mi Bici Shop" />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-[#14212e]">Slug</label>
-              <input className="input mt-1" value={storeSlug} onChange={(e) => setStoreSlug(e.target.value)} placeholder="mi-bici-shop" />
-              <p className="mt-1 text-xs text-[#14212e]/60">URL: ciclomarket.ar/tienda/{(storeSlug || storeName || 'mi-bici-shop').toLowerCase().replace(/[^a-z0-9-_]+/g, '-')}</p>
-            </div>
-            <div className="sm:col-span-2">
-              <label className="text-sm font-medium text-[#14212e]">Dirección del local</label>
-              <input className="input mt-1" value={storeAddress} onChange={(e) => setStoreAddress(e.target.value)} placeholder="Calle 123, Ciudad, Provincia" />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-[#14212e]">Teléfono del local</label>
-              <input className="input mt-1" value={storePhone} onChange={(e) => setStorePhone(e.target.value)} placeholder="+54 11 5555-5555" />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-[#14212e]">Banner (URL)</label>
-              <input className="input mt-1" value={storeBannerUrl} onChange={(e) => setStoreBannerUrl(e.target.value)} placeholder="https://.../banner.jpg" />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-[#14212e]">Instagram</label>
-              <input className="input mt-1" value={storeInstagram} onChange={(e) => setStoreInstagram(e.target.value)} placeholder="@tutienda" />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-[#14212e]">Facebook</label>
-              <input className="input mt-1" value={storeFacebook} onChange={(e) => setStoreFacebook(e.target.value)} placeholder="facebook.com/tutienda" />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-[#14212e]">Sitio web</label>
-              <input className="input mt-1" value={storeWebsite} onChange={(e) => setStoreWebsite(e.target.value)} placeholder="https://tutienda.com" />
-            </div>
-          </div>
-        </div>
-        )}
-
         {/* WhatsApp — único input */}
         <label className="text-sm font-medium text-[#14212e]">
           WhatsApp (privado)
@@ -1860,6 +1761,13 @@ function EditProfileView({
   )
 }
 
+type PlaceSuggestion = {
+  placeId: string
+  description: string
+  primaryText: string
+  secondaryText: string
+}
+
 function EditStoreView({ profile, userId, onStoreUpdated }: { profile: UserProfileRecord | null; userId?: string; onStoreUpdated?: () => Promise<void> | void }) {
   const [storeName, setStoreName] = useState(profile?.store_name ?? '')
   const [storeSlug, setStoreSlug] = useState(profile?.store_slug ?? '')
@@ -1872,12 +1780,26 @@ function EditStoreView({ profile, userId, onStoreUpdated }: { profile: UserProfi
   const [storeAvatarUrl, setStoreAvatarUrl] = useState(profile?.store_avatar_url ?? '')
   const [storeBannerPosY, setStoreBannerPosY] = useState<number>(typeof profile?.store_banner_position_y === 'number' ? (profile?.store_banner_position_y as number) : 50)
   const [storeHours, setStoreHours] = useState(profile?.store_hours ?? '')
+  const [storeLat, setStoreLat] = useState<number | null>(typeof profile?.store_lat === 'number' ? profile.store_lat : null)
+  const [storeLon, setStoreLon] = useState<number | null>(typeof profile?.store_lon === 'number' ? profile.store_lon : null)
+  const [addressSuggestions, setAddressSuggestions] = useState<PlaceSuggestion[]>([])
+  const [addressFocused, setAddressFocused] = useState(false)
+  const [addressError, setAddressError] = useState<string | null>(null)
+  const [addressResolving, setAddressResolving] = useState(false)
+  const [placesReady, setPlacesReady] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const { show: showToast } = useToast()
   const logoFileRef = useRef<HTMLInputElement | null>(null)
   const bannerFileRef = useRef<HTMLInputElement | null>(null)
+  const autocompleteServiceRef = useRef<any | null>(null)
+  const placesServiceRef = useRef<any | null>(null)
+  const geocoderRef = useRef<any | null>(null)
+  const blurTimeoutRef = useRef<number | null>(null)
+  const googleRef = useRef<any | null>(typeof window !== 'undefined' ? window.google ?? null : null)
+  const lastResolvedAddressRef = useRef<string | null>(profile?.store_address ?? null)
+  const hasGoogleMapsKey = Boolean((import.meta as any)?.env?.VITE_GOOGLE_MAPS_KEY)
 
   useEffect(() => {
     setStoreName(profile?.store_name ?? '')
@@ -1891,7 +1813,166 @@ function EditStoreView({ profile, userId, onStoreUpdated }: { profile: UserProfi
     setStoreAvatarUrl(profile?.store_avatar_url ?? '')
     setStoreBannerPosY(typeof profile?.store_banner_position_y === 'number' ? profile!.store_banner_position_y! : 50)
     setStoreHours(profile?.store_hours ?? '')
+    setStoreLat(typeof profile?.store_lat === 'number' ? profile.store_lat : null)
+    setStoreLon(typeof profile?.store_lon === 'number' ? profile.store_lon : null)
+    lastResolvedAddressRef.current = profile?.store_address ?? null
+    setAddressSuggestions([])
+    setAddressError(null)
   }, [profile])
+
+  useEffect(() => {
+    return () => {
+      if (blurTimeoutRef.current) window.clearTimeout(blurTimeoutRef.current)
+    }
+  }, [])
+
+  useEffect(() => {
+    const apiKey = (import.meta as any)?.env?.VITE_GOOGLE_MAPS_KEY as string | undefined
+    if (!apiKey) return
+    let active = true
+    ;(async () => {
+      try {
+        const google = await loadGoogleMaps(apiKey, ['places'])
+        if (!active) return
+        googleRef.current = google
+        autocompleteServiceRef.current = new google.maps.places.AutocompleteService()
+        placesServiceRef.current = new google.maps.places.PlacesService(document.createElement('div'))
+        geocoderRef.current = new google.maps.Geocoder()
+        setPlacesReady(true)
+      } catch (err) {
+        console.warn('[EditStoreView] No se pudo inicializar Google Maps', err)
+      }
+    })()
+    return () => { active = false }
+  }, [])
+
+  useEffect(() => {
+    if (!placesReady || !addressFocused) {
+      if (!addressFocused) setAddressSuggestions([])
+      return
+    }
+    const trimmed = storeAddress.trim()
+    if (trimmed.length < 3) {
+      setAddressSuggestions([])
+      return
+    }
+    const handle = window.setTimeout(() => {
+      const service = autocompleteServiceRef.current
+      const google = googleRef.current
+      if (!service || !google?.maps?.places) return
+      service.getPlacePredictions(
+        {
+          input: trimmed,
+          componentRestrictions: { country: ['ar', 'uy', 'py', 'br', 'cl', 'pe', 've'] },
+          types: ['geocode'],
+        },
+        (predictions: any[], status: any) => {
+          const statusOk = status === 'OK' || status === google.maps.places.PlacesServiceStatus?.OK
+          if (!statusOk || !predictions?.length) {
+            setAddressSuggestions([])
+            return
+          }
+          setAddressSuggestions(predictions.map((p: any) => ({
+            placeId: p.place_id,
+            description: p.description,
+            primaryText: p.structured_formatting?.main_text ?? p.description,
+            secondaryText: p.structured_formatting?.secondary_text ?? '',
+          })))
+        }
+      )
+    }, 220)
+    return () => window.clearTimeout(handle)
+  }, [storeAddress, placesReady, addressFocused])
+
+  const handleAddressInputChange = (value: string) => {
+    setStoreAddress(value)
+    setStoreLat(null)
+    setStoreLon(null)
+    lastResolvedAddressRef.current = null
+    setAddressError(null)
+  }
+
+  const handleAddressFocus = () => {
+    if (blurTimeoutRef.current) {
+      window.clearTimeout(blurTimeoutRef.current)
+      blurTimeoutRef.current = null
+    }
+    setAddressFocused(true)
+  }
+
+  const handleAddressBlur = () => {
+    blurTimeoutRef.current = window.setTimeout(() => {
+      setAddressFocused(false)
+      setAddressSuggestions([])
+    }, 120)
+  }
+
+  const resolvePlaceDetails = useCallback((placeId: string): Promise<{ lat: number; lon: number; address?: string } | null> => {
+    const service = placesServiceRef.current
+    const google = googleRef.current
+    if (!service || !google?.maps?.places) return Promise.resolve(null)
+    return new Promise((resolve) => {
+      service.getDetails({ placeId, fields: ['geometry.location', 'formatted_address'] }, (place: any, status: any) => {
+        const statusOk = status === 'OK' || status === google.maps.places.PlacesServiceStatus?.OK
+        if (!statusOk || !place?.geometry?.location) {
+          resolve(null)
+          return
+        }
+        const loc = place.geometry.location
+        const latValue = typeof loc.lat === 'function' ? loc.lat() : loc.lat
+        const lonValue = typeof loc.lng === 'function' ? loc.lng() : loc.lng
+        resolve({ lat: latValue, lon: lonValue, address: place.formatted_address ?? undefined })
+      })
+    })
+  }, [])
+
+  const ensureAddressCoordinates = useCallback((address: string): Promise<{ lat: number | null; lon: number | null }> => {
+    const geocoder = geocoderRef.current
+    const google = googleRef.current
+    if (!geocoder || !google?.maps) return Promise.resolve({ lat: null, lon: null })
+    return new Promise((resolve) => {
+      geocoder.geocode({ address }, (results: any[], status: any) => {
+        const statusOk = status === 'OK' || status === google.maps.GeocoderStatus?.OK
+        if (statusOk && results?.[0]?.geometry?.location) {
+          const location = results[0].geometry.location
+          const latValue = typeof location.lat === 'function' ? location.lat() : location.lat
+          const lonValue = typeof location.lng === 'function' ? location.lng() : location.lng
+          resolve({ lat: latValue, lon: lonValue })
+        } else {
+          resolve({ lat: null, lon: null })
+        }
+      })
+    })
+  }, [])
+
+  const handleAddressSelect = useCallback(async (suggestion: PlaceSuggestion) => {
+    if (blurTimeoutRef.current) {
+      window.clearTimeout(blurTimeoutRef.current)
+      blurTimeoutRef.current = null
+    }
+    setAddressFocused(false)
+    setAddressSuggestions([])
+    setAddressError(null)
+    setAddressResolving(true)
+    try {
+      const details = await resolvePlaceDetails(suggestion.placeId)
+      if (details) {
+        const formatted = details.address ?? suggestion.description
+        setStoreAddress(formatted)
+        setStoreLat(details.lat)
+        setStoreLon(details.lon)
+        lastResolvedAddressRef.current = formatted
+      } else {
+        setStoreAddress(suggestion.description)
+        setStoreLat(null)
+        setStoreLon(null)
+        lastResolvedAddressRef.current = null
+        setAddressError('No pudimos ubicar esa dirección automáticamente. Probá otra opción.')
+      }
+    } finally {
+      setAddressResolving(false)
+    }
+  }, [resolvePlaceDetails])
 
   if (!profile?.store_enabled) {
     return (
@@ -1909,11 +1990,44 @@ function EditStoreView({ profile, userId, onStoreUpdated }: { profile: UserProfi
     setError(null)
     try {
       const slugSanitized = (storeSlug || storeName || '').toLowerCase().trim().replace(/[^a-z0-9-_]+/g, '-').replace(/^-+|-+$/g, '') || null
+      const trimmedAddress = storeAddress.trim()
+      let finalLat = storeLat
+      let finalLon = storeLon
+      if (trimmedAddress) {
+        const coordinatesStale = finalLat === null || finalLon === null || (lastResolvedAddressRef.current?.trim() ?? '') !== trimmedAddress
+        if (coordinatesStale) {
+          if (geocoderRef.current) {
+            setAddressResolving(true)
+            try {
+              const coords = await ensureAddressCoordinates(trimmedAddress)
+              if (coords.lat !== null && coords.lon !== null) {
+                finalLat = coords.lat
+                finalLon = coords.lon
+                setStoreLat(coords.lat)
+                setStoreLon(coords.lon)
+                lastResolvedAddressRef.current = trimmedAddress
+                setAddressError(null)
+              } else {
+                setAddressError('No pudimos ubicar esa dirección automáticamente. Revisá la dirección antes de guardar.')
+              }
+            } finally {
+              setAddressResolving(false)
+            }
+          }
+        }
+      } else {
+        finalLat = null
+        finalLon = null
+        setStoreLat(null)
+        setStoreLon(null)
+        lastResolvedAddressRef.current = null
+      }
+
       const { success: ok, error: err } = await upsertUserProfile({
         id: userId,
         storeName: storeName.trim() || null,
         storeSlug: slugSanitized,
-        storeAddress: storeAddress.trim() || null,
+        storeAddress: trimmedAddress || null,
         storePhone: storePhone.trim() || null,
         storeInstagram: storeInstagram ? normaliseHandle(storeInstagram) : null,
         storeFacebook: storeFacebook ? normaliseUrl(storeFacebook) : null,
@@ -1922,6 +2036,8 @@ function EditStoreView({ profile, userId, onStoreUpdated }: { profile: UserProfi
         storeAvatarUrl: storeAvatarUrl ? normaliseUrl(storeAvatarUrl) : null,
         storeBannerPositionY: Number.isFinite(storeBannerPosY) ? storeBannerPosY : 50,
         storeHours: storeHours.trim() || null,
+        storeLat: finalLat ?? null,
+        storeLon: finalLon ?? null,
       })
       if (!ok) throw new Error(err || 'No pudimos guardar los cambios')
       if (onStoreUpdated) await onStoreUpdated()
@@ -1949,10 +2065,48 @@ function EditStoreView({ profile, userId, onStoreUpdated }: { profile: UserProfi
         <input className="input mt-1" value={storeSlug} onChange={(e) => setStoreSlug(e.target.value)} placeholder="mi-bici-shop" />
         <span className="text-xs text-[#14212e]/60">URL: ciclomarket.ar/tienda/{(storeSlug || storeName || 'mi-bici-shop').toLowerCase().replace(/[^a-z0-9-_]+/g, '-')}</span>
       </label>
-      <label className="text-sm font-medium text-[#14212e]">
-        Dirección del local
-        <input className="input mt-1" value={storeAddress} onChange={(e) => setStoreAddress(e.target.value)} placeholder="Calle 123, Ciudad, Provincia" />
-      </label>
+      <div className="text-sm font-medium text-[#14212e]">
+        <label htmlFor="store-address" className="block">Dirección del local</label>
+        <div className="relative mt-1">
+          <input
+            id="store-address"
+            className="input w-full"
+            value={storeAddress}
+            onChange={(e) => handleAddressInputChange(e.target.value)}
+            onFocus={handleAddressFocus}
+            onBlur={handleAddressBlur}
+            placeholder="Calle 123, Ciudad, Provincia"
+            autoComplete="off"
+          />
+          {placesReady && addressFocused && addressSuggestions.length > 0 && (
+            <ul className="absolute z-20 mt-1 max-h-60 w-full overflow-auto rounded-2xl border border-[#14212e]/10 bg-white text-[#14212e] shadow-lg">
+              {addressSuggestions.map((suggestion) => (
+                <li key={suggestion.placeId}>
+                  <button
+                    type="button"
+                    className="flex w-full flex-col gap-0.5 px-4 py-2 text-left text-sm hover:bg-[#14212e]/5"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => handleAddressSelect(suggestion)}
+                  >
+                    <span className="font-medium">{suggestion.primaryText}</span>
+                    {suggestion.secondaryText ? (
+                      <span className="text-xs text-[#14212e]/70">{suggestion.secondaryText}</span>
+                    ) : null}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        {addressResolving && <span className="mt-1 block text-xs text-[#14212e]/60">Buscando ubicación…</span>}
+        {typeof storeLat === 'number' && typeof storeLon === 'number' && !addressResolving && (
+          <span className="mt-1 block text-xs text-[#14212e]/60">Ubicación detectada: {storeLat.toFixed(5)}, {storeLon.toFixed(5)}</span>
+        )}
+        {addressError && <span className="mt-1 block text-xs text-red-600">{addressError}</span>}
+        {!hasGoogleMapsKey && (
+          <span className="mt-1 block text-xs text-[#14212e]/50">Para obtener sugerencias en vivo añadí tu clave de Google Maps en la configuración.</span>
+        )}
+      </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="text-sm font-medium text-[#14212e]">
           Teléfono del local

@@ -175,8 +175,10 @@ export default function Tiendas() {
     address: (store as any).store_address ?? null,
     city: store.city,
     province: store.province,
-    lat: (store as any).store_lat ?? null,
-    lon: (store as any).store_lon ?? null
+    lat: typeof (store as any).store_lat === 'number' ? (store as any).store_lat : null,
+    lon: typeof (store as any).store_lon === 'number' ? (store as any).store_lon : null,
+    phone: (store as any).store_phone ?? null,
+    website: (store as any).store_website ?? null,
   })), [filteredStores])
 
   const activeFilterChips: Array<{ key: string; label: string; onRemove: () => void }> = []
@@ -205,7 +207,7 @@ export default function Tiendas() {
         <img
           src="/hero-tiendas.webp"
           alt="Tiendas oficiales"
-          className="absolute inset-0 h-full w-full object-cover"
+          className="absolute inset-0 h-full w-full object-cover md:object-[50%_30%]"
         />
         <div className="absolute inset-0 bg-[#0b131c]/80" />
         <div className="relative">
@@ -227,15 +229,15 @@ export default function Tiendas() {
             ) : (
               <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
                 {/* Mapa primero en mobile */}
-                <div className="order-1 h-80 rounded-3xl border border-white/10 bg-white/5 p-3 sm:h-[420px] lg:order-2 lg:h-[calc(100vh-260px)]">
+                <div className="order-1 h-80 min-w-0 rounded-3xl border border-white/10 bg-white/5 p-3 sm:h-[420px] lg:order-2 lg:h-[calc(100vh-260px)]">
                   <div className="h-full w-full overflow-hidden rounded-2xl">
                     {(import.meta as any).env?.VITE_GOOGLE_MAPS_KEY
-                      ? <GoogleStoresMap stores={mapStores} />
+                      ? <GoogleStoresMap stores={mapStores as any} focusStoreId={activeStoreId} />
                       : <StoresMap stores={mapStores} focusStoreId={activeStoreId} onStoreClick={(id) => setActiveStoreId(id)} />}
                   </div>
                 </div>
                 {/* Panel de búsqueda/lista segundo en mobile */}
-                <aside className="order-2 flex h-full flex-col gap-4 rounded-3xl border border-white/10 bg-white/5 p-4 lg:order-1 lg:pr-6">
+                <aside className="order-2 flex min-h-0 min-w-0 flex-col gap-4 rounded-3xl border border-white/10 bg-white/5 p-4 lg:order-1 lg:h-[calc(100vh-260px)] lg:pr-6">
                   <div className="flex flex-col gap-3">
                     <div className="flex gap-2">
                       <input
@@ -325,7 +327,7 @@ export default function Tiendas() {
                     </ul>
                   </div>
 
-                  <div className="flex-1 overflow-y-auto pr-1">
+                  <div className="max-h-[28rem] overflow-y-auto pr-1 sm:max-h-none sm:flex-1">
                     {filteredStores.length ? (
                       <ul className="space-y-3">
                         {filteredStores.map((store) => {

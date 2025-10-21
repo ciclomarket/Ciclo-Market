@@ -12,8 +12,13 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "strict": true,
-    "baseUrl": "."
+    "baseUrl": ".",
+    "paths": {
+      "@admin/*": ["admin/src/*"],
+      "@app/*": ["src/*"],
+      "@shared/*": ["src/*"]
+    }
   },
-  "include": ["src"],
+  "include": ["src", "admin/src"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

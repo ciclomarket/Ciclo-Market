@@ -10,6 +10,7 @@ try {
 const express = require('express')
 const cors = require('cors')
 const { MercadoPagoConfig, Preference } = require('mercadopago')
+const { createClient: createSupabaseServerClient } = require('@supabase/supabase-js')
 const { sendMail, isMailConfigured } = require('./lib/mail')
 const { getServerSupabaseClient } = require('./lib/supabaseClient')
 const { startRenewalNotificationJob } = (() => {
@@ -78,6 +79,37 @@ function escapeHtml(s) {
 app.get('/', (_req, res) => {
   res.send('Ciclo Market API ready')
 })
+
+/* ----------------------------- Supabase (service) ------------------------- */
+// Cliente con service role para registrar pagos (solo backend)
+const supabaseService = (() => {
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) {
+    console.warn('[payments] SUPABASE_SERVICE_ROLE_KEY not configured – payments will not be recorded')
+    return null
+  }
+  return createSupabaseServerClient(url, key)
+})()
+
+async function recordPayment({ userId, listingId, amount, currency = 'ARS', status = 'succeeded', provider = 'mercadopago', providerRef = null }) {
+  if (!supabaseService) return
+  try {
+    const payload = {
+      user_id: userId ?? null,
+      listing_id: listingId ?? null,
+      amount: typeof amount === 'number' ? amount : null,
+      currency,
+      status,
+      provider,
+      provider_ref: providerRef,
+    }
+    const { error } = await supabaseService.from('payments').insert(payload)
+    if (error) console.error('[payments] insert failed', error)
+  } catch (err) {
+    console.error('[payments] unexpected error', err)
+  }
+}
 
 // Sitemap index que referencia sitemaps por tipo
 app.get('/sitemap.xml', async (_req, res) => {
@@ -749,6 +781,59 @@ app.post('/api/listings/:id/cleanup-images', async (req, res) => {
   }
 })
 
+// Prune: borra imágenes de listings con status='deleted' y luego elimina filas
+app.post('/api/dev/prune-deleted', async (req, res) => {
+  try {
+    if (process.env.ENABLE_DEV_ENDPOINTS !== 'true') return res.status(403).json({ error: 'forbidden' })
+    const limit = Math.max(1, Math.min(1000, Number(req.body?.limit || 200)))
+    const supabase = getServerSupabaseClient()
+
+    const { data: rows, error } = await supabase
+      .from('listings')
+      .select('id, images')
+      .eq('status', 'deleted')
+      .limit(limit)
+
+    if (error) return res.status(500).json({ error: 'fetch_failed' })
+    if (!rows || rows.length === 0) return res.json({ ok: true, removed: 0, imagesRemoved: 0 })
+
+    // Agrupación por bucket para borrar del storage
+    const byBucket = new Map()
+    for (const row of rows) {
+      const urls = Array.isArray(row.images) ? row.images : []
+      for (const url of urls) {
+        const parsed = parseSupabasePublicUrl(String(url))
+        if (!parsed) continue
+        if (!byBucket.has(parsed.bucket)) byBucket.set(parsed.bucket, new Set())
+        byBucket.get(parsed.bucket).add(parsed.path)
+      }
+    }
+
+    let imagesRemoved = 0
+    for (const [bucket, set] of byBucket.entries()) {
+      const paths = Array.from(set)
+      if (!paths.length) continue
+      const { error: rmErr } = await supabase.storage.from(bucket).remove(paths)
+      if (rmErr) {
+        console.warn('[prune-deleted] storage remove failed', bucket, rmErr.message)
+        continue
+      }
+      imagesRemoved += paths.length
+    }
+
+    const ids = rows.map((r) => r.id)
+    const { error: delErr } = await supabase.from('listings').delete().in('id', ids)
+    if (delErr) {
+      console.warn('[prune-deleted] rows delete failed', delErr)
+      return res.status(500).json({ error: 'rows_delete_failed', imagesRemoved, candidates: rows.length })
+    }
+    return res.json({ ok: true, removed: ids.length, imagesRemoved })
+  } catch (err) {
+    console.warn('[prune-deleted] failed', err)
+    return res.status(500).json({ error: 'unexpected_error' })
+  }
+})
+
 /* ----------------------------- Contacts + Reviews ------------------------- */
 // Registra un evento de contacto (whatsapp/email) para habilitar reseñas 24h después
 app.post('/api/contacts/log', async (req, res) => {
@@ -1151,6 +1236,93 @@ app.post('/api/dev/renewal-test/:id', async (req, res) => {
     return res.json({ ok: true })
   } catch (e) {
     console.error('[dev] renewal-test failed', e)
+    return res.status(500).json({ error: 'unexpected_error' })
+  }
+})
+
+// Preview sender for the renewal reminder email (uses the new template)
+app.post('/api/dev/renewal-preview', async (req, res) => {
+  try {
+    if (process.env.ENABLE_DEV_ENDPOINTS !== 'true') return res.status(403).json({ error: 'forbidden' })
+    const supabase = getServerSupabaseClient()
+    const { to = 'admin@ciclomarket.ar', listingId = null, title = null, expiresInHours = 24 } = req.body || {}
+
+    const baseFront = (process.env.FRONTEND_URL || '').split(',')[0]?.trim() || 'https://ciclomarket.ar'
+    const cleanBase = baseFront.replace(/\/$/, '')
+
+    let listingTitle = title || 'Tu bicicleta'
+    let highlightUrl = `${cleanBase}/publicar`
+    if (listingId) {
+      const { data: listing } = await supabase
+        .from('listings')
+        .select('id,slug,title')
+        .eq('id', listingId)
+        .maybeSingle()
+      if (listing) {
+        listingTitle = listing.title || listingTitle
+        const slugOrId = listing.slug || listing.id
+        highlightUrl = `${cleanBase}/listing/${encodeURIComponent(slugOrId)}/destacar`
+      }
+    }
+
+    const expiresDate = new Date(Date.now() + Number(expiresInHours) * 60 * 60 * 1000)
+    const expiresLabel = expiresDate.toLocaleString('es-AR', { dateStyle: 'long', timeStyle: 'short' })
+    const renewApiHint = `${cleanBase}/dashboard?tab=Publicaciones`
+    const bikesUrl = `${cleanBase}/marketplace?cat=Ruta`
+    const partsUrl = `${cleanBase}/marketplace?cat=Accesorios`
+    const apparelUrl = `${cleanBase}/marketplace?cat=Indumentaria`
+
+    if (!isMailConfigured()) return res.status(503).json({ error: 'mail_not_configured' })
+
+    await sendMail({
+      from: process.env.SMTP_FROM || `Ciclo Market <${process.env.SMTP_USER}>`,
+      to,
+      subject: `Tu publicación "${listingTitle}" está por vencer (preview)` ,
+      html: `
+      <div style="background:#ffffff;margin:0 auto;max-width:640px;font-family:Arial, sans-serif;color:#14212e">
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="width:100%">
+          <tr>
+            <td style="padding:20px 24px;text-align:center">
+              <img src="${cleanBase}/site-logo.png" alt="Ciclo Market" style="height:64px;width:auto;display:inline-block" />
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#14212e;color:#fff;text-align:center;padding:10px 12px">
+              <a href="${bikesUrl}" style="color:#fff;text-decoration:none;margin:0 10px;font-size:14px">Bicicletas</a>
+              <a href="${partsUrl}" style="color:#fff;text-decoration:none;margin:0 10px;font-size:14px">Accesorios</a>
+              <a href="${apparelUrl}" style="color:#fff;text-decoration:none;margin:0 10px;font-size:14px">Indumentaria</a>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:24px">
+              <h2 style="margin:0 0 8px;font-size:20px;color:#0c1723">Tu publicación está por vencer</h2>
+              <p style="margin:0 0 12px">Tu aviso <strong>${listingTitle}</strong> vence el <strong>${expiresLabel}</strong>.</p>
+              <p style="margin:0 0 16px;text-align:center">
+                <a href="${renewApiHint}" style="display:inline-block;padding:12px 18px;background:#14212e;color:#fff;text-decoration:none;border-radius:10px;margin-right:8px;font-weight:600">Renovar publicación</a>
+                <a href="${highlightUrl}" style="display:inline-block;padding:12px 18px;background:#2563eb;color:#fff;text-decoration:none;border-radius:10px;font-weight:600">Destacar ahora</a>
+              </p>
+              <div style="margin-top:18px;padding:14px 16px;background:#f6f8fb;border:1px solid #e5ebf3;border-radius:10px">
+                <h3 style="margin:0 0 8px;font-size:16px;color:#0c1723">Planes recomendados</h3>
+                <ul style="margin:0;padding-left:18px;color:#374151">
+                  <li style="margin:6px 0"><b>Básica</b>: 60 días de publicación, 7 días de destaque, botón de WhatsApp habilitado.</li>
+                  <li style="margin:6px 0"><b>Premium</b>: 60 días de publicación, 14 días de destaque, WhatsApp + difusión en redes.</li>
+                </ul>
+              </div>
+              <div style="margin-top:18px;padding:14px 16px;background:#fdfcf8;border:1px solid #f0e6c3;border-radius:10px">
+                <h3 style="margin:0 0 8px;font-size:16px;color:#0c1723">Preguntas y respuestas</h3>
+                <p style="margin:0 0 8px;color:#374151">Respondé rápido las consultas para mejorar tu conversión. Las respuestas ayudan a todos los interesados.</p>
+                <p style="margin:0;color:#6b7280;font-size:12px">Consejo: habilitá el botón de WhatsApp con un plan destacado para cerrar ventas más rápido.</p>
+              </div>
+              <p style="margin:16px 0 0;font-size:12px;color:#6b7280">Si los botones no funcionan, ingresá a tu panel: <a href="${renewApiHint}" style="color:#0c72ff;text-decoration:underline">${renewApiHint}</a></p>
+            </td>
+          </tr>
+        </table>
+      </div>
+      `
+    })
+    return res.json({ ok: true })
+  } catch (e) {
+    console.error('[dev] renewal-preview failed', e)
     return res.status(500).json({ error: 'unexpected_error' })
   }
 })
@@ -1910,9 +2082,9 @@ app.post('/api/checkout', async (req, res) => {
       return res.status(400).json({ error: 'missing_redirect_urls' })
     }
 
-    const notificationUrl = process.env.SERVER_BASE_URL
-      ? `${process.env.SERVER_BASE_URL.replace(/\/$/, '')}/api/webhooks/mercadopago`
-      : undefined
+    // Prefer explicit SERVER_BASE_URL, fallback to Render's public URL
+    const publicBase = (process.env.SERVER_BASE_URL || process.env.RENDER_EXTERNAL_URL || '').replace(/\/$/, '')
+    const notificationUrl = publicBase ? `${publicBase}/api/webhooks/mercadopago` : undefined
 
     const preference = {
       items: [
@@ -1933,6 +2105,7 @@ app.post('/api/checkout', async (req, res) => {
     const mpStart = Date.now()
     const mpRes = await preferenceClient.create({ body: preference })
     console.log('[checkout] preferenceClient.create duration:', Date.now() - mpStart, 'ms')
+    if (notificationUrl) console.log('[checkout] notification_url:', notificationUrl)
     const url = mpRes.init_point || null
 
     if (!url) {
@@ -1955,9 +2128,56 @@ app.post('/api/checkout', async (req, res) => {
 })
 
 /* ----------------------------- Webhooks MP --------------------------------- */
-app.post('/api/webhooks/mercadopago', (req, res) => {
-  console.log('[MP webhook]', JSON.stringify(req.body))
-  res.sendStatus(200)
+app.post('/api/webhooks/mercadopago', async (req, res) => {
+  try {
+    console.log('[MP webhook]', JSON.stringify(req.body))
+    const type = req.body?.type || req.query?.type
+    const paymentId = req.body?.data?.id || req.query?.id
+    if (type === 'payment' && paymentId) {
+      try {
+        const { Payment } = require('mercadopago')
+        const paymentClient = new Payment(mpClient)
+        const mpPayment = await paymentClient.get({ id: String(paymentId) })
+        const statusRaw = (mpPayment && mpPayment.status) ? String(mpPayment.status) : 'pending'
+        const status = statusRaw === 'approved' ? 'succeeded' : statusRaw
+        const amount = typeof mpPayment?.transaction_amount === 'number' ? mpPayment.transaction_amount : null
+        const currency = mpPayment?.currency_id || 'ARS'
+        await recordPayment({ userId: null, listingId: null, amount, currency, status, providerRef: String(paymentId) })
+      } catch (err) {
+        console.error('[MP webhook] payment fetch/record failed', err)
+      }
+    }
+  } catch (e) {
+    console.error('[MP webhook] handler error', e)
+  } finally {
+    res.sendStatus(200)
+  }
+})
+
+/* ----------------------------- Payment confirm (manual) ------------------- */
+// Admin-triggered endpoint to confirm a payment by id (fallback if webhooks fail)
+// Requires x-cron-secret header to prevent abuse
+app.post('/api/payments/confirm', async (req, res) => {
+  try {
+    const secret = String(req.headers['x-cron-secret'] || '')
+    if (!secret || secret !== String(process.env.CRON_SECRET || '')) {
+      return res.status(401).json({ ok: false, error: 'unauthorized' })
+    }
+    const paymentId = String(req.body?.payment_id || req.query?.payment_id || '').trim()
+    if (!paymentId) return res.status(400).json({ ok: false, error: 'missing_payment_id' })
+    const { Payment } = require('mercadopago')
+    const paymentClient = new Payment(mpClient)
+    const mpPayment = await paymentClient.get({ id: String(paymentId) })
+    const statusRaw = (mpPayment && mpPayment.status) ? String(mpPayment.status) : 'pending'
+    const status = statusRaw === 'approved' ? 'succeeded' : statusRaw
+    const amount = typeof mpPayment?.transaction_amount === 'number' ? mpPayment.transaction_amount : null
+    const currency = mpPayment?.currency_id || 'ARS'
+    await recordPayment({ userId: null, listingId: null, amount, currency, status, providerRef: String(paymentId) })
+    return res.json({ ok: true, status, amount, currency })
+  } catch (err) {
+    console.error('[payments/confirm] failed', err)
+    return res.status(500).json({ ok: false, error: 'unexpected_error' })
+  }
 })
 
 /* ------------------------------- Start ------------------------------------- */

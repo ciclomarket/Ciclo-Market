@@ -14,6 +14,8 @@ export type StorePin = {
   province?: string | null
   lat?: number | null
   lon?: number | null
+  phone?: string | null
+  website?: string | null
 }
 
 type Props = {
@@ -79,6 +81,8 @@ export default function StoresMap({ stores, focusStoreId, onStoreClick }: Props)
         slug: s.slug,
         name: s.name,
         avatarUrl: s.avatarUrl,
+        phone: s.phone,
+        website: s.website,
         q: qParts.join(', '),
         lat: typeof s.lat === 'number' ? s.lat : null,
         lon: typeof s.lon === 'number' ? s.lon : null
@@ -139,10 +143,22 @@ export default function StoresMap({ stores, focusStoreId, onStoreClick }: Props)
         const icon = L.divIcon({ html, className: 'cm-store-marker', iconSize: [size, size], iconAnchor: [size / 2, size], popupAnchor: [0, -size / 2] })
         const marker = L.marker([coord.lat, coord.lon], { icon })
           .addTo(map) as any
-        marker.bindTooltip(s.name, { direction: 'top', offset: [0, -size / 2], opacity: 0.9 })
+        const phoneLink = s.phone ? `<a href="tel:${s.phone}" style="padding:6px 10px;border-radius:999px;font-size:12px;text-decoration:none;border:1px solid #0f1724;color:#0f1724">Llamar</a>` : ''
+        const webLink = s.website ? `<a href="${s.website}" target="_blank" rel="noopener" style="padding:6px 10px;border-radius:999px;font-size:12px;text-decoration:none;border:1px solid #0f1724;color:#0f1724">Web</a>` : ''
+        const popupHtml = `
+          <div style="min-width:200px;max-width:260px">
+            <div style="font-weight:600;color:#0f1724">${s.name}</div>
+            ${s.q ? `<div style="font-size:12px;color:#4b5563;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${s.q}</div>` : ''}
+            <div style="margin-top:8px">
+              <a href="/tienda/${encodeURIComponent(s.slug)}" style="background:#0f1724;color:#fff;padding:6px 10px;border-radius:999px;font-size:12px;text-decoration:none;margin-right:6px">Ver tienda</a>
+              ${phoneLink}
+              ${webLink}
+            </div>
+          </div>`
+        marker.bindPopup(popupHtml, { offset: [0, -size / 2] })
         marker.on('click', () => {
           if (onStoreClick) onStoreClick(s.id)
-          window.location.href = `/tienda/${encodeURIComponent(s.slug)}`
+          marker.openPopup()
         })
         markers.push(marker)
         markersRef.current[s.id] = marker
@@ -165,8 +181,8 @@ export default function StoresMap({ stores, focusStoreId, onStoreClick }: Props)
     if (!marker) return
     const latLng = marker.getLatLng()
     mapRef.current.setView(latLng, Math.max(mapRef.current.getZoom(), 7), { animate: true })
-    marker.openTooltip()
+    marker.openPopup()
   }, [focusStoreId, ready])
 
-  return <div ref={containerRef} className="h-80 w-full rounded-2xl border border-white/10" />
+  return <div ref={containerRef} className="h-80 w-full min-w-0 rounded-2xl border border-white/10" />
 }

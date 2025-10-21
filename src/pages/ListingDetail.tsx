@@ -9,7 +9,7 @@ import { formatListingPrice } from '../utils/pricing'
 import { getPlanLabel, hasPaidPlan, isPlanVerified } from '../utils/plans'
 import { useCompare } from '../context/CompareContext'
 import useFaves from '../hooks/useFaves'
-import { fetchListing, updateListingPlan, deleteListing } from '../services/listings'
+import { fetchListing, updateListingPlan, deleteListing, setListingWhatsapp, updateListingStatus, archiveListing, reduceListingPrice, extendListingExpiryDays, updateListingFields } from '../services/listings'
 import { supabaseEnabled, getSupabaseClient } from '../services/supabase'
 import type { Listing } from '../types'
 import { formatNameWithInitial } from '../utils/user'
@@ -24,6 +24,8 @@ import { useToast } from '../context/ToastContext'
 import ListingQuestionsSection from '../components/ListingQuestionsSection'
 import { submitShareBoost } from '../services/shareBoost'
 import useUpload from '../hooks/useUpload'
+import { FALLBACK_PLANS } from '../services/plans'
+import { canonicalPlanCode } from '../utils/planCodes'
 
 export default function ListingDetail() {
   const params = useParams()
@@ -37,11 +39,31 @@ export default function ListingDetail() {
   // Oferta deshabilitada
   const [shareModalOpen, setShareModalOpen] = useState(false)
   const [moderatorUpdating, setModeratorUpdating] = useState(false)
+  const [modAction, setModAction] = useState('')
   const [sellerVerified, setSellerVerified] = useState(false)
   const [applyingHighlight, setApplyingHighlight] = useState(false)
   const [sellerProfile, setSellerProfile] = useState<UserProfileRecord | null>(null)
   const [sellerAuthEmail, setSellerAuthEmail] = useState<string | null>(null)
   const [sellerRating, setSellerRating] = useState<{ avg: number; count: number } | null>(null)
+  const [reduceOpen, setReduceOpen] = useState(false)
+  const [reduceValue, setReduceValue] = useState('')
+  const [extendOpen, setExtendOpen] = useState(false)
+  const [extendDays, setExtendDays] = useState('7')
+  const [editTitleOpen, setEditTitleOpen] = useState(false)
+  const [editTitleValue, setEditTitleValue] = useState('')
+  const [editDescOpen, setEditDescOpen] = useState(false)
+  const [editDescValue, setEditDescValue] = useState('')
+  const [editFieldOpen, setEditFieldOpen] = useState(false)
+  const [editFieldName, setEditFieldName] = useState<string>('')
+  const [editFieldType, setEditFieldType] = useState<'text' | 'number' | 'textarea'>('text')
+  const [editFieldValue, setEditFieldValue] = useState('')
+
+  const openEditField = (name: string, value: string | number | null | undefined, type: 'text'|'number'|'textarea' = 'text') => {
+    setEditFieldName(name)
+    setEditFieldType(type)
+    setEditFieldValue(value != null ? String(value) : '')
+    setEditFieldOpen(true)
+  }
   const { ids: compareIds, toggle: toggleCompare } = useCompare()
   const { has: hasFav, toggle: toggleFav } = useFaves()
   const listingKey = params.slug ?? params.id ?? ''
@@ -387,6 +409,84 @@ export default function ListingDetail() {
     }
   }
 
+  const handleModeratorWhatsapp = async (enable: boolean) => {
+    if (!listing) return
+    setModeratorUpdating(true)
+    try {
+      const phone = enable ? (sellerProfile?.whatsapp_number || null) : null
+      const updated = await setListingWhatsapp(listing.id, phone)
+      if (updated) setListing(updated)
+      if (enable && !phone) alert('El perfil no tiene WhatsApp cargado. Agregalo en el perfil para habilitar el botón.')
+    } catch (err) {
+      console.error('[listing-detail] moderator whatsapp failed', err)
+      alert('No pudimos actualizar el botón de WhatsApp. Intentá nuevamente.')
+    } finally {
+      setModeratorUpdating(false)
+    }
+  }
+
+  const runModeratorAction = async () => {
+    if (!modAction) return
+    const confirmAll = ['delete'].includes(modAction) ? window.confirm('Confirmá la acción seleccionada.') : true
+    if (!confirmAll) return
+    if (modAction === 'highlight7') return void handleModeratorHighlight('basic', 7)
+    if (modAction === 'highlight14') return void handleModeratorHighlight('premium', 14)
+    if (modAction === 'unhighlight') return void handleModeratorHighlight(null as any, null)
+    if (modAction === 'verify') return void handleModeratorVerify(true)
+    if (modAction === 'unverify') return void handleModeratorVerify(false)
+    if (modAction === 'enable_wa') return void handleModeratorWhatsapp(true)
+    if (modAction === 'disable_wa') return void handleModeratorWhatsapp(false)
+    if (modAction === 'delete') return void handleModeratorDelete()
+    if (modAction === 'mark_sold') {
+      if (!listing) return
+      setModeratorUpdating(true)
+      const updated = await updateListingStatus(listing.id, 'sold')
+      if (updated) setListing(updated)
+      setModeratorUpdating(false)
+      return
+    }
+    if (modAction === 'mark_active') {
+      if (!listing) return
+      setModeratorUpdating(true)
+      const updated = await updateListingStatus(listing.id, 'active')
+      if (updated) setListing(updated)
+      setModeratorUpdating(false)
+      return
+    }
+    if (modAction === 'archive') {
+      if (!listing) return
+      setModeratorUpdating(true)
+      const ok = await archiveListing(listing.id)
+      if (ok) setListing({ ...(listing as any), status: 'archived' } as any)
+      setModeratorUpdating(false)
+      return
+    }
+    if (modAction === 'reduce_price') {
+      if (!listing) return
+      const input = window.prompt('Reducí el precio (mismo formato que la moneda actual):', String(listing.price))
+      if (input === null) return
+      const normalized = Number(String(input).replace(/,/g, '.'))
+      if (!Number.isFinite(normalized) || normalized <= 0 || normalized >= listing.price) {
+        alert('Ingresá un monto válido menor al actual.')
+        return
+      }
+      setModeratorUpdating(true)
+      const updated = await reduceListingPrice({ id: listing.id, newPrice: normalized, currentPrice: listing.price, originalPrice: listing.originalPrice })
+      if (updated) setListing(updated)
+      setModeratorUpdating(false)
+      return
+    }
+    if (modAction === 'extend_7' || modAction === 'extend_14') {
+      if (!listing) return
+      const days = modAction === 'extend_7' ? 7 : 14
+      setModeratorUpdating(true)
+      const updated = await extendListingExpiryDays(listing.id, days)
+      if (updated) setListing(updated)
+      setModeratorUpdating(false)
+      return
+    }
+  }
+
   const ContactIcons = () => {
     if (!user) {
       return (
@@ -520,7 +620,19 @@ export default function ListingDetail() {
             <div className="card p-6 lg:p-5">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <h1 className="text-2xl lg:text-xl font-bold text-[#14212e] leading-tight">{listing.title}</h1>
+                  <div className="flex items-center gap-2">
+                    <h1 className="text-2xl lg:text-xl font-bold text-[#14212e] leading-tight">{listing.title}</h1>
+                    {isModerator && (
+                      <button
+                        type="button"
+                        className="rounded-full border border-[#14212e]/20 p-1 text-[#14212e] hover:bg-white/50"
+                        aria-label="Editar título"
+                        onClick={() => { setEditTitleValue(listing.title || ''); setEditTitleOpen(true) }}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25Zm14.71-9.04a1 1 0 0 0 0-1.41l-1.51-1.51a1 1 0 0 0-1.41 0l-1.13 1.13 3.75 3.75 1.3-1.46Z"/></svg>
+                      </button>
+                    )}
+                  </div>
                   <p className="mt-2 lg:mt-1 text-sm text-[#14212e]/70">{listing.location}</p>
                   {isFeaturedListing && (
                     <span className="mt-3 lg:mt-2 inline-flex items-center gap-2 rounded-full bg-[#14212e] px-3 py-1 text-xs font-semibold text-white">
@@ -542,8 +654,18 @@ export default function ListingDetail() {
                 </div>
               </div>
               <div className="mt-2 flex items-end gap-3">
-                <span className="text-3xl lg:text-2xl font-extrabold text-mb-primary">{formattedPrice}</span>
+                <span className="text-3xl lg:text-2xl font-extrabold text-[#14212e]">{formattedPrice}</span>
                 {originalPriceLabel && <span className="text-sm text-[#14212e]/60 line-through">{originalPriceLabel}</span>}
+                {isModerator && (
+                  <button
+                    type="button"
+                    className="ml-1 rounded-full border border-[#14212e]/20 p-1 text-[#14212e] hover:bg-white/50"
+                    aria-label="Editar precio"
+                    onClick={() => { setReduceValue(String(listing.price)); setReduceOpen(true) }}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25Zm14.71-9.04a1 1 0 0 0 0-1.41l-1.51-1.51a1 1 0 0 0-1.41 0l-1.13 1.13 3.75 3.75 1.3-1.46Z"/></svg>
+                  </button>
+                )}
               </div>
               {/* Sección de información de la tienda (teléfono/dirección) removida a pedido */}
               <p className="mt-4 text-xs text-[#14212e]/60 lg:hidden">
@@ -694,65 +816,133 @@ export default function ListingDetail() {
                           const days = Math.ceil((ms - now) / (24*60*60*1000))
                           return days <= 0 ? 'vencido' : `${days} día${days===1?'':'s'}`
                         }
+                        const planCode = canonicalPlanCode(listing.plan ?? undefined)
+                        const planDef = FALLBACK_PLANS.find((p) => canonicalPlanCode(p.code || undefined) === planCode)
+                        const planDuration = planDef?.listingDurationDays ?? planDef?.periodDays ?? undefined
+                        const hasHighlight = hasPaidPlan(listing.sellerPlan ?? (listing.plan as any), listing.sellerPlanExpires)
                         return (
                           <>
-                            <div>Publicación activa: {expiresAt ? fmt(expiresAt) : 'sin fecha'}</div>
-                            <div>Destaque: {planExpires ? fmt(planExpires) : 'sin destaque'}</div>
+                            <div>Publicación (restante): {expiresAt ? fmt(expiresAt) : 'sin fecha'}</div>
+                            {planDuration ? (
+                              <div>Plan: {planCode ? (planDef?.name || planCode) : 'Estándar'} · {planDuration} días</div>
+                            ) : null}
+                            <div>Destaque: {hasHighlight ? (planExpires ? fmt(planExpires) : 'activo') : 'sin destaque'}</div>
                           </>
                         )
                       })()}
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        variant="ghost"
-                        disabled={moderatorUpdating}
-                        onClick={() => handleModeratorHighlight('basic', 7)}
+                    {/* Botón primario dinámico (sólo mod) */}
+                    {(() => {
+                      const hasHighlight = hasPaidPlan(listing.sellerPlan ?? (listing.plan as any), listing.sellerPlanExpires)
+                      const isSold = listing.status === 'sold'
+                      return (
+                        <div className="mb-2 flex flex-wrap gap-2">
+                          {!hasHighlight && listing.status !== 'archived' && (
+                            <Button variant="ghost" disabled={moderatorUpdating} onClick={() => { setModAction('highlight7'); void runModeratorAction() }}>
+                              Destacar 7 días 🔥
+                            </Button>
+                          )}
+                          {!isSold ? (
+                            <Button variant="ghost" disabled={moderatorUpdating} onClick={() => { setModAction('mark_sold'); void runModeratorAction() }}>
+                              Marcar vendida
+                            </Button>
+                          ) : (
+                            <Button variant="ghost" disabled={moderatorUpdating} onClick={() => { setModAction('mark_active'); void runModeratorAction() }}>
+                              Marcar disponible
+                            </Button>
+                          )}
+                        </div>
+                      )
+                    })()}
+                    {/* Dropdown de acciones rápidas + confirmar */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <select
+                        className="select text-xs"
+                        value={modAction}
+                        onChange={(e) => setModAction(e.target.value)}
                       >
-                        Destacar 7 días 🔥
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        disabled={moderatorUpdating}
-                        onClick={() => handleModeratorHighlight('premium', 14)}
-                      >
-                        Destacar 14 días ⚡
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        disabled={moderatorUpdating}
-                        onClick={() => handleModeratorHighlight(null as any, null)}
-                        className="text-red-600"
-                      >
-                        Quitar destaque
+                        <option value="">Elegir acción…</option>
+                        <option value="highlight7">Destacar 7 días</option>
+                        <option value="highlight14">Destacar 14 días</option>
+                        <option value="unhighlight">Quitar destaque</option>
+                        <option value="verify">Verificar vendedor</option>
+                        <option value="unverify">Quitar verificación</option>
+                        <option value="enable_wa">Habilitar WhatsApp</option>
+                        <option value="disable_wa">Deshabilitar WhatsApp</option>
+                        <option value="mark_sold">Marcar como vendida</option>
+                        <option value="mark_active">Marcar disponible</option>
+                        <option value="archive">Archivar publicación</option>
+                        <option value="reduce_price">Reducir precio</option>
+                        <option value="extend_7">Extender 7 días</option>
+                        <option value="extend_14">Extender 14 días</option>
+                        <option value="delete">Eliminar publicación</option>
+                      </select>
+                      <Button variant="ghost" disabled={moderatorUpdating || !modAction} onClick={runModeratorAction}>
+                        Confirmar
                       </Button>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        variant="ghost"
-                        disabled={moderatorUpdating || sellerVerified}
-                        onClick={() => handleModeratorVerify(true)}
-                      >
-                        Verificar vendedor
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        disabled={moderatorUpdating || !sellerVerified}
-                        onClick={() => handleModeratorVerify(false)}
-                        className="text-red-600"
-                      >
-                        Quitar verificación
-                      </Button>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        variant="ghost"
-                        disabled={moderatorUpdating}
-                        onClick={() => void handleModeratorDelete()}
-                        className="text-red-600"
-                      >
-                        Eliminar publicación
-                      </Button>
-                    </div>
+                    {/* Modales: Reducir precio / Extender vigencia */}
+                    {reduceOpen && (
+                      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setReduceOpen(false)}>
+                        <div className="w-full max-w-sm rounded-2xl bg-white p-4" onClick={(e) => e.stopPropagation()}>
+                          <h3 className="text-sm font-semibold text-[#14212e]">Reducir precio</h3>
+                          <p className="mt-1 text-xs text-[#14212e]/70">Ingresá el nuevo precio. Debe ser menor al actual.</p>
+                          <input type="number" value={reduceValue} onChange={(e) => setReduceValue(e.target.value)} className="input mt-3 w-full" />
+                          <div className="mt-3 flex justify-end gap-2">
+                            <button className="rounded-full border border-[#14212e]/20 px-3 py-1.5 text-sm text-[#14212e]" onClick={() => setReduceOpen(false)}>Cancelar</button>
+                            <button
+                              className="rounded-full bg-[#14212e] px-3 py-1.5 text-sm font-semibold text-white"
+                              onClick={async () => {
+                                if (!listing) return
+                                const normalized = Number(String(reduceValue).replace(/,/g, '.'))
+                                if (!Number.isFinite(normalized) || normalized <= 0 || normalized >= listing.price) {
+                                  alert('Ingresá un monto válido menor al actual.')
+                                  return
+                                }
+                                setModeratorUpdating(true)
+                                const updated = await reduceListingPrice({ id: listing.id, newPrice: normalized, currentPrice: listing.price, originalPrice: listing.originalPrice })
+                                if (updated) setListing(updated)
+                                setModeratorUpdating(false)
+                                setReduceOpen(false)
+                              }}
+                            >
+                              Confirmar
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {extendOpen && (
+                      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setExtendOpen(false)}>
+                        <div className="w-full max-w-sm rounded-2xl bg-white p-4" onClick={(e) => e.stopPropagation()}>
+                          <h3 className="text-sm font-semibold text-[#14212e]">Extender vigencia</h3>
+                          <p className="mt-1 text-xs text-[#14212e]/70">Cantidad de días para extender.</p>
+                          <input type="number" value={extendDays} onChange={(e) => setExtendDays(e.target.value)} className="input mt-3 w-full" />
+                          <div className="mt-3 flex justify-end gap-2">
+                            <button className="rounded-full border border-[#14212e]/20 px-3 py-1.5 text-sm text-[#14212e]" onClick={() => setExtendOpen(false)}>Cancelar</button>
+                            <button
+                              className="rounded-full bg-[#14212e] px-3 py-1.5 text-sm font-semibold text-white"
+                              onClick={async () => {
+                                if (!listing) return
+                                const val = parseInt(extendDays, 10)
+                                if (!Number.isFinite(val) || val <= 0) {
+                                  alert('Ingresá un número de días válido (> 0).')
+                                  return
+                                }
+                                setModeratorUpdating(true)
+                                const updated = await extendListingExpiryDays(listing.id, val)
+                                if (updated) setListing(updated)
+                                setModeratorUpdating(false)
+                                setExtendOpen(false)
+                              }}
+                            >
+                              Confirmar
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {/* Botones individuales ocultos; usar el dropdown + Confirmar */}
                   </div>
                 )}
               </div>
@@ -766,20 +956,29 @@ export default function ListingDetail() {
             <section className="card p-6">
               <h2 className="text-lg font-semibold text-[#14212e]">Especificaciones</h2>
               <div className="mt-4 grid grid-cols-2 gap-3">
-                <Spec label="Marca" value={listing.brand} />
-                <Spec label="Modelo" value={listing.model} />
-                {listing.year ? <Spec label="Año" value={String(listing.year)} /> : null}
+                <Spec label="Marca" value={listing.brand} canEdit={isModerator} onEdit={() => openEditField('brand', listing.brand, 'text')} />
+                <Spec label="Modelo" value={listing.model} canEdit={isModerator} onEdit={() => openEditField('model', listing.model, 'text')} />
+                {listing.year ? <Spec label="Año" value={String(listing.year)} canEdit={isModerator} onEdit={() => openEditField('year', listing.year ?? '', 'number')} /> : null}
                 <Spec label="Categoría" value={listing.category} />
                 {/* Orden: Material + Horquilla (si existe) + Talle */}
-                {listing.material ? <Spec label="Material" value={listing.material} /> : null}
+                {listing.material ? <Spec label="Material" value={listing.material} canEdit={isModerator} onEdit={() => openEditField('material', listing.material, 'text')} /> : null}
                 {listing.category === 'MTB' && specFork ? <Spec label="Horquilla" value={specFork} /> : null}
-                {listing.frameSize ? <Spec label="Talle / Medida" value={listing.frameSize} /> : null}
+                {(() => {
+                  const parts = (listing.extras || '')
+                    .split('•')
+                    .map((p) => p.trim())
+                    .filter(Boolean)
+                  const token = parts.find((p) => p.toLowerCase().startsWith('talles:'))
+                  const multi = token ? token.split(':').slice(1).join(':').trim() : ''
+                  if (multi) return <Spec label="Talles" value={multi} />
+                  return listing.frameSize ? <Spec label="Talle / Medida" value={listing.frameSize} canEdit={isModerator} onEdit={() => openEditField('frameSize', listing.frameSize, 'text')} /> : null
+                })()}
                 {/* Luego Ruedas + Rodado */}
-                {listing.wheelset ? <Spec label="Ruedas" value={listing.wheelset} /> : null}
-                {listing.wheelSize ? <Spec label="Rodado" value={listing.wheelSize} /> : null}
+                {listing.wheelset ? <Spec label="Ruedas" value={listing.wheelset} canEdit={isModerator} onEdit={() => openEditField('wheelset', listing.wheelset, 'text')} /> : null}
+                {listing.wheelSize ? <Spec label="Rodado" value={listing.wheelSize} canEdit={isModerator} onEdit={() => openEditField('wheelSize', listing.wheelSize, 'text')} /> : null}
                 {/* Grupo de transmisión */}
                 {(listing.drivetrain || listing.drivetrainDetail) ? (
-                  <Spec label="Grupo" value={(listing.drivetrain || listing.drivetrainDetail) as string} />
+                  <Spec label="Grupo" value={(listing.drivetrain || listing.drivetrainDetail) as string} canEdit={isModerator} onEdit={() => openEditField('drivetrain', (listing.drivetrain || listing.drivetrainDetail) as string, 'text')} />
                 ) : null}
                 {/* Tipo de freno */}
                 {isBikeCategory && specBrake ? <Spec label="Freno" value={specBrake} /> : null}
@@ -788,14 +987,26 @@ export default function ListingDetail() {
                 {listing.category === 'E-Bike' && specMotor ? <Spec label="Motor" value={specMotor} /> : null}
                 {listing.category === 'E-Bike' && specCharge ? <Spec label="Batería / Carga" value={specCharge} /> : null}
                 {isBikeCategory && specCondition ? <Spec label="Condición" value={specCondition} /> : null}
-                {listing.extras ? <Spec label="Extras" value={listing.extras} fullWidth /> : null}
+                {listing.extras ? <Spec label="Extras" value={listing.extras} fullWidth canEdit={isModerator} onEdit={() => openEditField('extras', listing.extras, 'textarea')} /> : null}
               </div>
             </section>
           </div>
 
           <div className="order-4 w-full min-w-0 lg:col-start-1 lg:row-start-3">
             <section className="card p-6">
-              <h2 className="text-lg font-semibold text-[#14212e]">Descripción</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-semibold text-[#14212e]">Descripción</h2>
+                {isModerator && (
+                  <button
+                    type="button"
+                    className="rounded-full border border-[#14212e]/20 p-1 text-[#14212e] hover:bg-white/50"
+                    aria-label="Editar descripción"
+                    onClick={() => { setEditDescValue(listing.description || ''); setEditDescOpen(true) }}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25Zm14.71-9.04a1 1 0 0 0 0-1.41l-1.51-1.51a1 1 0 0 0-1.41 0l-1.13 1.13 3.75 3.75 1.3-1.46Z"/></svg>
+                  </button>
+                )}
+              </div>
               <p className="mt-3 text-sm leading-relaxed text-[#14212e]/80 whitespace-pre-wrap">
                 {listing.description}
               </p>
@@ -811,12 +1022,111 @@ export default function ListingDetail() {
         </Container>
       </div>
       {/* Modal de oferta removido */}
+      {/* Modal editar título */}
+      {editTitleOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setEditTitleOpen(false)}>
+          <div className="w-full max-w-sm rounded-2xl bg-white p-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-sm font-semibold text-[#14212e]">Editar título</h3>
+            <input type="text" value={editTitleValue} onChange={(e) => setEditTitleValue(e.target.value)} className="input mt-3 w-full" />
+            <div className="mt-3 flex justify-end gap-2">
+              <button className="rounded-full border border-[#14212e]/20 px-3 py-1.5 text-sm text-[#14212e]" onClick={() => setEditTitleOpen(false)}>Cancelar</button>
+              <button
+                className="rounded-full bg-[#14212e] px-3 py-1.5 text-sm font-semibold text-white"
+                onClick={async () => {
+                  if (!listing) return
+                  const val = editTitleValue.trim()
+                  if (!val) { alert('El título no puede estar vacío.'); return }
+                  setModeratorUpdating(true)
+                  const updated = await updateListingFields(listing.id, { title: val })
+                  if (updated) setListing(updated)
+                  setModeratorUpdating(false)
+                  setEditTitleOpen(false)
+                }}
+              >
+                Guardar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal editar descripción */}
+      {editDescOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setEditDescOpen(false)}>
+          <div className="w-full max-w-md rounded-2xl bg-white p-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-sm font-semibold text-[#14212e]">Editar descripción</h3>
+            <textarea value={editDescValue} onChange={(e) => setEditDescValue(e.target.value)} className="textarea mt-3 w-full" rows={8} />
+            <div className="mt-3 flex justify-end gap-2">
+              <button className="rounded-full border border-[#14212e]/20 px-3 py-1.5 text-sm text-[#14212e]" onClick={() => setEditDescOpen(false)}>Cancelar</button>
+              <button
+                className="rounded-full bg-[#14212e] px-3 py-1.5 text-sm font-semibold text-white"
+                onClick={async () => {
+                  if (!listing) return
+                  const val = editDescValue.trim()
+                  setModeratorUpdating(true)
+                  const updated = await updateListingFields(listing.id, { description: val })
+                  if (updated) setListing(updated)
+                  setModeratorUpdating(false)
+                  setEditDescOpen(false)
+                }}
+              >
+                Guardar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {shareModalOpen && listing && isOwner && (
         <ShareBoostModal
           listingId={listing.id}
           sellerId={listing.sellerId}
           onClose={() => setShareModalOpen(false)}
         />
+      )}
+
+      {/* Modal editar campo genérico */}
+      {editFieldOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setEditFieldOpen(false)}>
+          <div className="w-full max-w-md rounded-2xl bg-white p-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-sm font-semibold text-[#14212e]">Editar {editFieldName}</h3>
+            {editFieldType === 'textarea' ? (
+              <textarea value={editFieldValue} onChange={(e) => setEditFieldValue(e.target.value)} className="textarea mt-3 w-full" rows={8} />
+            ) : (
+              <input type={editFieldType === 'number' ? 'number' : 'text'} value={editFieldValue} onChange={(e) => setEditFieldValue(e.target.value)} className="input mt-3 w-full" />
+            )}
+            <div className="mt-3 flex justify-end gap-2">
+              <button className="rounded-full border border-[#14212e]/20 px-3 py-1.5 text-sm text-[#14212e]" onClick={() => setEditFieldOpen(false)}>Cancelar</button>
+              <button
+                className="rounded-full bg-[#14212e] px-3 py-1.5 text-sm font-semibold text-white"
+                onClick={async () => {
+                  if (!listing) return
+                  let patch: Partial<Listing> = {}
+                  const val = editFieldValue
+                  switch (editFieldName) {
+                    case 'brand': patch.brand = val; break
+                    case 'model': patch.model = val; break
+                    case 'year': patch.year = val ? Number(val) : undefined; break
+                    case 'material': patch.material = val; break
+                    case 'frameSize': patch.frameSize = val; break
+                    case 'wheelset': patch.wheelset = val; break
+                    case 'wheelSize': patch.wheelSize = val; break
+                    case 'drivetrain': patch.drivetrain = val; break
+                    case 'extras': patch.extras = val; break
+                    default: break
+                  }
+                  if (Object.keys(patch).length === 0) { setEditFieldOpen(false); return }
+                  setModeratorUpdating(true)
+                  const updated = await updateListingFields(listing.id, patch)
+                  if (updated) setListing(updated)
+                  setModeratorUpdating(false)
+                  setEditFieldOpen(false)
+                }}
+              >
+                Guardar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   )
@@ -890,10 +1200,22 @@ const MailIcon = () => (
   </svg>
 )
 
-function Spec({ label, value, fullWidth = false }: { label: string; value: string; fullWidth?: boolean }) {
+function Spec({ label, value, fullWidth = false, canEdit = false, onEdit }: { label: string; value: string; fullWidth?: boolean; canEdit?: boolean; onEdit?: () => void }) {
   return (
     <div className={fullWidth ? 'col-span-2' : undefined}>
-      <p className="text-xs uppercase tracking-wide text-[#14212e]/50">{label}</p>
+      <div className="flex items-center gap-2">
+        <p className="text-xs uppercase tracking-wide text-[#14212e]/50">{label}</p>
+        {canEdit && onEdit && (
+          <button
+            type="button"
+            className="rounded-full border border-[#14212e]/20 p-0.5 text-[#14212e] hover:bg-white/50"
+            aria-label={`Editar ${label}`}
+            onClick={onEdit}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25Zm14.71-9.04a1 1 0 0 0 0-1.41l-1.51-1.51a1 1 0 0 0-1.41 0l-1.13 1.13 3.75 3.75 1.3-1.46Z"/></svg>
+          </button>
+        )}
+      </div>
       <p className="mt-1 text-sm font-medium text-[#14212e]">{value || '—'}</p>
     </div>
   )

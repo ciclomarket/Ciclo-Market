@@ -10,6 +10,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useCurrency } from '../context/CurrencyContext'
 import { formatListingPrice } from '../utils/pricing'
 import HorizontalSlider from '../components/HorizontalSlider'
+import { transformSupabasePublicUrl } from '../utils/supabaseImage'
 import { fetchListings } from '../services/listings'
 import { supabaseEnabled } from '../services/supabase'
 import type { Listing } from '../types'
@@ -48,6 +49,29 @@ const BRAND_LOGOS: Record<(typeof BRANDS)[number]['slug'], string> = {
   colner: colnerLogo,
 }
 
+function HeroBackground() {
+  const [src, setSrc] = useState('/bicicletas-home-card.jpg')
+  useEffect(() => {
+    const pick = () => {
+      const w = window.innerWidth
+      const dpr = window.devicePixelRatio || 1
+      // Elegir asset según ancho/dpr. En mobile usamos la versión más liviana.
+      if (w * dpr > 1200) setSrc('/bicicletas-home.jpg')
+      else setSrc('/bicicletas-home-card.jpg')
+    }
+    pick()
+    window.addEventListener('resize', pick)
+    return () => window.removeEventListener('resize', pick)
+  }, [])
+  return (
+    <div
+      className="absolute inset-0 -z-20 bg-cover bg-center md:[background-position:50%_28%]"
+      style={{ backgroundImage: `url(${src})` }}
+      aria-hidden
+    />
+  )
+}
+
 function OfferCard({ l }: { l: any }) {
   const { format, fx } = useCurrency()
   const hasOriginal = typeof l.originalPrice === 'number' && l.originalPrice > l.price
@@ -70,16 +94,23 @@ function OfferCard({ l }: { l: any }) {
     metaParts = [typeValue, useValue ? `Uso: ${useValue}` : null, city]
   } else if (l.category === 'Indumentaria') {
     const typeValue = getExtraValue('Tipo')
-    const sizeValue = getExtraValue('Talle')
+    const multiSizes = getExtraValue('Talles')
+    const singleSize = getExtraValue('Talle')
+    const mergedSize = multiSizes ?? singleSize
+    const usePlural = Boolean(multiSizes) || Boolean(mergedSize && mergedSize.includes(','))
     const conditionValue = getExtraValue('Condición')
     metaParts = [
       typeValue,
-      sizeValue ? `Talle: ${sizeValue}` : null,
+      mergedSize ? `${usePlural ? 'Talles' : 'Talle'}: ${mergedSize}` : null,
       conditionValue ? `Condición: ${conditionValue}` : null,
       city
     ]
   } else {
-    const sizeLabel = `Talle: ${l.frameSize?.trim() || 'N/D'}`
+    const multiSizes = getExtraValue('Talles')
+    const singleSize = l.frameSize?.trim() || null
+    const mergedSize = multiSizes ?? singleSize
+    const usePlural = Boolean(multiSizes) || Boolean(mergedSize && mergedSize.includes(','))
+    const sizeLabel = mergedSize ? `${usePlural ? 'Talles' : 'Talle'}: ${mergedSize}` : null
     const drivetrainLabel = l.drivetrain?.trim() || null
     metaParts = [sizeLabel, drivetrainLabel, city]
   }
@@ -105,7 +136,7 @@ function OfferCard({ l }: { l: any }) {
         <h3 className="line-clamp-1 font-semibold text-[#14212e]">{l.title}</h3>
         <p className="mt-1 text-sm text-[#14212e]/70">{metaDisplay.join(' • ')}</p>
         <div className="mt-2 flex items-baseline gap-2">
-          <span className="font-bold text-mb-primary">
+          <span className="font-bold text-[#14212e]">
             {formatListingPrice(l.price, l.priceCurrency, format, fx)}
           </span>
           {hasOriginal && (
@@ -238,6 +269,31 @@ export default function Home() {
     navigate(`/marketplace?brand=${encodeURIComponent(brandName)}`)
   }
 
+  // Preload estratégico: primeras 2 de "Últimas publicadas"
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const preloadTargets = filtered.slice(0, 2)
+    const created: HTMLLinkElement[] = []
+    for (const l of preloadTargets) {
+      const img = (l as any).images?.[0]
+      if (!img) continue
+      const link = document.createElement('link')
+      link.rel = 'preload'
+      link.as = 'image'
+      link.href = transformSupabasePublicUrl(img, { width: 640, quality: 70, format: 'webp' })
+      const srcset = [320, 480, 640, 768, 960].map((w) => `${transformSupabasePublicUrl(img, { width: w, quality: 70, format: 'webp' })} ${w}w`).join(', ')
+      link.setAttribute('imagesrcset', srcset)
+      link.setAttribute('imagesizes', '(max-width: 1279px) 75vw, 50vw')
+      document.head.appendChild(link)
+      created.push(link)
+    }
+    return () => {
+      for (const el of created) {
+        try { document.head.removeChild(el) } catch { void 0 }
+      }
+    }
+  }, [filtered.slice(0, 2).map((x) => (x as any).id).join(',')])
+
   return (
     <div
       className="relative isolate overflow-hidden text-white"
@@ -245,16 +301,8 @@ export default function Home() {
     >
       {/* HERO */}
       <section className="relative overflow-hidden border-b border-white/10 text-white">
-        <img
-          src="/bicicletas-home.jpg"
-          srcSet="/bicicletas-home-card.jpg 720w, /bicicletas-home.jpg 1520w"
-          sizes="100vw"
-          alt="Ciclistas rodando en ruta"
-          className="absolute inset-0 -z-20 h-full w-full object-cover"
-          loading="eager"
-          fetchPriority="high"
-          decoding="async"
-        />
+        {/* Hero como background CSS para no contar como LCP */}
+        <HeroBackground />
         <div className="absolute inset-0 -z-10 bg-[#14212e]/60" />
         <div className="absolute inset-0 -z-10 bg-[radial-gradient(1200px_600px_at_-20%_-10%,rgba(255,255,255,0.18),transparent_70%)]" />
         <div className="absolute inset-0 -z-10 bg-[radial-gradient(900px_520px_at_110%_10%,rgba(20,33,46,0.28),transparent_78%)]" />
@@ -303,7 +351,7 @@ export default function Home() {
 
       {/* BICICLETAS DESTACADAS */}
       {featuredListings.length > 0 && (
-        <section className="bg-[#14212e] pt-10 pb-6">
+        <section className="bg-[#14212e] pt-10 pb-6" style={{ contentVisibility: 'auto' as any }}>
           <Container className="text-white">
             <HorizontalSlider
               title="Bicicletas destacadas"
@@ -311,7 +359,7 @@ export default function Home() {
               items={featuredListings}
               maxItems={24}
               initialLoad={8}
-              renderCard={(l: any) => <ListingCard l={l} />}
+              renderCard={(l: any, idx?: number) => <ListingCard l={l} priority={(idx ?? 0) < 4} />}
               tone="dark"
             />
           </Container>
@@ -319,7 +367,7 @@ export default function Home() {
       )}
 
       {/* OFERTAS DESTACADAS */}
-      <section className="bg-[#1d2f41] pt-8 pb-8">
+      <section className="bg-[#1d2f41] pt-8 pb-8" style={{ contentVisibility: 'auto' as any }}>
         <Container className="text-white">
           {offers.length ? (
             <HorizontalSlider
@@ -328,7 +376,7 @@ export default function Home() {
               items={offers}
               maxItems={20}
               initialLoad={8}
-              renderCard={(l:any) => <OfferCard l={l} />}
+              renderCard={(l:any, idx?: number) => <ListingCard l={l} priority={(idx ?? 0) < 4} />}
               tone="dark"
             />
           ) : (
@@ -344,7 +392,7 @@ export default function Home() {
       </section>
 
       {/* ÚLTIMAS PUBLICADAS */}
-      <section id="explorar" className="bg-[#14212e] pt-8 pb-10">
+      <section id="explorar" className="bg-[#14212e] pt-8 pb-10" style={{ contentVisibility: 'auto' as any }}>
         <Container className="text-white">
           <div className="flex items-center justify-between mb-4 text-white">
             <h2 className="text-xl font-semibold">Últimas publicadas</h2>
@@ -360,7 +408,7 @@ export default function Home() {
               items={filtered}
               maxItems={20}
               initialLoad={8}
-              renderCard={(l:any) => <ListingCard l={l} />}
+              renderCard={(l:any, idx?: number) => <ListingCard l={l} priority={(idx ?? 0) < 4} />}
               tone="dark"
             />
           ) : (
@@ -370,7 +418,7 @@ export default function Home() {
       </section>
 
       {/* MARCAS con logos clickeables */}
-      <section className="bg-[#1d2f41] py-12">
+      <section className="bg-[#1d2f41] py-12" style={{ contentVisibility: 'auto' as any }}>
         <Container className="text-white">
           <div className="flex items-center justify-between mb-4 text-white">
             <h3 className="text-lg font-semibold">Marcas destacadas</h3>
@@ -397,7 +445,7 @@ export default function Home() {
       </section>
 
       {/* ¿CÓMO FUNCIONA? */}
-      <section className="section-ribbon py-14 text-white">
+      <section className="section-ribbon py-14 text-white" style={{ contentVisibility: 'auto' as any }}>
         <Container className="text-white">
           <div className="text-center mb-8">
             <h2 className="text-2xl font-semibold">Cómo funciona</h2>

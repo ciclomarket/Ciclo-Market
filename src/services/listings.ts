@@ -97,7 +97,7 @@ export async function fetchListings(): Promise<Listing[]> {
     if (error || !data) return []
     const filtered = data.filter((row: any) => {
       const status = typeof row?.status === 'string' ? row.status.trim().toLowerCase() : 'active'
-      return status !== 'draft' && status !== 'deleted'
+      return status !== 'draft' && status !== 'deleted' && status !== 'archived'
     })
     return filtered.map((row: any) => normalizeListing(row as ListingRow))
   } catch {
@@ -173,7 +173,10 @@ export async function fetchListingsByIds(ids: string[]): Promise<Listing[]> {
   }
 }
 
-export async function fetchListingsBySeller(sellerId: string): Promise<Listing[]> {
+export async function fetchListingsBySeller(
+  sellerId: string,
+  options?: { includeArchived?: boolean }
+): Promise<Listing[]> {
   if (!supabaseEnabled) return []
   try {
     const supabase = getSupabaseClient()
@@ -183,9 +186,12 @@ export async function fetchListingsBySeller(sellerId: string): Promise<Listing[]
       .eq('seller_id', sellerId)
       .order('created_at', { ascending: false })
     if (error || !data) return []
+    const includeArchived = options?.includeArchived ?? false
     const filtered = data.filter((row: any) => {
       const status = typeof row?.status === 'string' ? row.status.trim().toLowerCase() : ''
-      return status !== 'deleted'
+      if (status === 'deleted') return false
+      if (!includeArchived && status === 'archived') return false
+      return true
     })
     return filtered.map((row: any) => normalizeListing(row as ListingRow))
   } catch {
@@ -276,6 +282,93 @@ export async function deleteListing(id: string): Promise<boolean> {
   } catch (err) {
     console.warn('[listings] delete exception', err)
     return false
+  }
+}
+
+export async function extendListingExpiryDays(id: string, days: number): Promise<Listing | null> {
+  if (!supabaseEnabled) return null
+  try {
+    const supabase = getSupabaseClient()
+    // Fetch current expires_at
+    const { data: row } = await supabase.from('listings').select('expires_at').eq('id', id).maybeSingle()
+    const base = row?.expires_at ? new Date(row.expires_at) : new Date()
+    base.setDate(base.getDate() + days)
+    const nextIso = base.toISOString()
+    const { data, error } = await supabase
+      .from('listings')
+      .update({ expires_at: nextIso })
+      .eq('id', id)
+      .select('*')
+      .maybeSingle()
+    if (error) {
+      console.warn('[listings] extend expiry error', error)
+      return null
+    }
+    return data ? normalizeListing(data as ListingRow) : null
+  } catch (err) {
+    console.warn('[listings] extend expiry exception', err)
+    return null
+  }
+}
+
+export async function updateListingFields(id: string, patch: Partial<Listing>): Promise<Listing | null> {
+  if (!supabaseEnabled) return null
+  try {
+    const supabase = getSupabaseClient()
+    const updates: Record<string, any> = {}
+    if (patch.title !== undefined) updates.title = patch.title
+    if (patch.description !== undefined) updates.description = patch.description
+    if (patch.brand !== undefined) updates.brand = patch.brand
+    if (patch.model !== undefined) updates.model = patch.model
+    if (patch.year !== undefined) updates.year = patch.year
+    if (patch.material !== undefined) updates.material = patch.material
+    if (patch.frameSize !== undefined) updates.frame_size = patch.frameSize
+    if (patch.drivetrain !== undefined) updates.drivetrain = patch.drivetrain
+    if (patch.drivetrainDetail !== undefined) updates.drivetrain_detail = patch.drivetrainDetail
+    if (patch.wheelset !== undefined) updates.wheelset = patch.wheelset
+    if (patch.wheelSize !== undefined) updates.wheel_size = patch.wheelSize
+    if (patch.extras !== undefined) updates.extras = patch.extras
+    if (patch.location !== undefined) updates.location = patch.location
+    if (patch.price !== undefined) updates.price = patch.price
+    if (patch.priceCurrency !== undefined) updates.price_currency = patch.priceCurrency
+
+    if (Object.keys(updates).length === 0) return null
+
+    const { data, error } = await supabase
+      .from('listings')
+      .update(updates)
+      .eq('id', id)
+      .select('*')
+      .maybeSingle()
+    if (error) {
+      console.warn('[listings] update fields error', error)
+      return null
+    }
+    return data ? normalizeListing(data as ListingRow) : null
+  } catch (err) {
+    console.warn('[listings] update fields exception', err)
+    return null
+  }
+}
+
+export async function setListingWhatsapp(id: string, value: string | null): Promise<Listing | null> {
+  if (!supabaseEnabled) return null
+  try {
+    const supabase = getSupabaseClient()
+    const { data, error } = await supabase
+      .from('listings')
+      .update({ seller_whatsapp: value })
+      .eq('id', id)
+      .select('*')
+      .maybeSingle()
+    if (error) {
+      console.warn('[listings] set whatsapp error', error)
+      return null
+    }
+    return data ? normalizeListing(data as ListingRow) : null
+  } catch (err) {
+    console.warn('[listings] set whatsapp exception', err)
+    return null
   }
 }
 

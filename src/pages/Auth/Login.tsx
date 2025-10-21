@@ -1,16 +1,17 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import Container from '../../components/Container'
 import Button from '../../components/Button'
 import { SocialAuthButtons } from '../../components/SocialAuthButtons'
 import { useAuth } from '../../context/AuthContext'
-import { getSupabaseClient, supabaseEnabled } from '../../services/supabase'
+import { getSupabaseClient, supabaseEnabled, setAuthPersistence } from '../../services/supabase'
 
 type OAuthProvider = 'google' | 'facebook'
 
 export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [rememberMe, setRememberMe] = useState(true)
   const [loadingProvider, setLoadingProvider] = useState<Partial<Record<OAuthProvider, boolean>>>({})
   const navigate = useNavigate()
   const { enabled } = useAuth()
@@ -19,16 +20,24 @@ export default function Login() {
     setLoadingProvider((prev) => ({ ...prev, [provider]: value }))
   }
 
+  // Cargar preferencia previa
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const prev = window.localStorage.getItem('mb_auth_persist')
+    setRememberMe(prev !== 'session')
+  }, [])
+
   const loginEmail = async () => {
     if (!enabled || !supabaseEnabled) return alert('Login deshabilitado: configurá Supabase en .env')
     try {
+      setAuthPersistence(Boolean(rememberMe))
       const supabase = getSupabaseClient()
       const { error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password
       })
       if (error) throw error
-      navigate('/dashboard')
+      if (typeof window !== 'undefined') window.location.assign('/dashboard')
     } catch (err: any) {
       const message = err instanceof Error ? err.message : 'No pudimos iniciar sesión. Intentá nuevamente.'
       alert(message)
@@ -43,6 +52,7 @@ export default function Login() {
     }
     try {
       setProviderLoading(provider, true)
+      setAuthPersistence(Boolean(rememberMe))
       const supabase = getSupabaseClient()
       const scopes = provider === 'facebook'
         ? 'public_profile,email'
@@ -146,6 +156,15 @@ export default function Login() {
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
                   />
+                </label>
+                <label className="flex items-center gap-2 text-[11px] text-white/80">
+                  <input
+                    type="checkbox"
+                    className="accent-mb-primary"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                  />
+                  Mantenerme conectado
                 </label>
               </div>
               <Button

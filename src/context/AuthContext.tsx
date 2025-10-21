@@ -1,7 +1,7 @@
 // src/context/AuthContext.tsx
 import { createContext, useContext, useEffect, useState } from 'react'
 import type { User } from '@supabase/supabase-js'
-import { supabase, supabaseEnabled, getSupabaseClient } from '../services/supabase'
+import { supabaseEnabled, getSupabaseClient } from '../services/supabase'
 import { syncProfileFromAuthUser } from '../utils/authProfile'
 
 interface Ctx {
@@ -29,7 +29,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [roleLoading, setRoleLoading] = useState(true)
 
   const loadRole = async (userId: string | null) => {
-    if (!supabaseEnabled || !supabase) {
+    if (!supabaseEnabled) {
       setRole('user')
       setRoleLoading(false)
       return
@@ -67,13 +67,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   useEffect(() => {
-    if (!supabaseEnabled || !supabase) {
+    if (!supabaseEnabled) {
       setLoading(false)
       setRole('user')
       setRoleLoading(false)
       return
     }
-    const client = supabase
+    const client = getSupabaseClient()
     const init = async () => {
       const { data } = await client.auth.getSession()
       const sessionUser = data.session?.user ?? null
@@ -99,8 +99,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const logout = async () => {
-    if (supabaseEnabled && supabase) {
-      await supabase.auth.signOut()
+    if (supabaseEnabled) {
+      const client = getSupabaseClient()
+      await client.auth.signOut()
       setUser(null)
       setRole('user')
     }

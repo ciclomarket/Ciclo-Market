@@ -6,8 +6,11 @@
   "scripts": {
     "start": "npm run server",
     "dev": "vite",
+    "dev:admin": "vite --config admin/vite.config.ts",
     "build": "vite build",
+    "build:admin": "vite build --config admin/vite.config.ts",
     "preview": "vite preview",
+    "preview:admin": "vite preview --config admin/vite.config.ts --port 5274",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "server": "node server/src/index.js"

@@ -1,10 +1,42 @@
 const cron = require('node-cron')
+const { createClient } = require('@supabase/supabase-js')
 const { getServerSupabaseClient } = require('../lib/supabaseClient')
 const { sendMail, isMailConfigured, isSMTPConfigured, isResendConfigured } = require('../lib/mail')
 
-const DEFAULT_WINDOW_HOURS = 72
+const DEFAULT_WINDOW_HOURS = 24
 const DEFAULT_COOLDOWN_HOURS = 24
 const DEFAULT_CRON_SCHEDULE = '0 * * * *' // cada hora
+
+const supabaseServiceClient = (() => {
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !serviceKey) {
+    console.warn('[renewalNotifier] SUPABASE_SERVICE_ROLE_KEY no configurada; no se registrarán pagos')
+    return null
+  }
+  return createClient(url, serviceKey)
+})()
+
+async function recordPayment({ userId, listingId, amount, currency = 'ARS', status = 'succeeded', provider = 'mercadopago', providerRef = null }) {
+  if (!supabaseServiceClient) return
+  try {
+    const payload = {
+      user_id: userId ?? null,
+      listing_id: listingId ?? null,
+      amount: typeof amount === 'number' ? amount : null,
+      currency,
+      status,
+      provider,
+      provider_ref: providerRef,
+    }
+    const { error } = await supabaseServiceClient.from('payments').insert(payload)
+    if (error) {
+      console.error('[renewalNotifier] recordPayment insert failed', error)
+    }
+  } catch (err) {
+    console.error('[renewalNotifier] recordPayment unexpected error', err)
+  }
+}
 
 async function fetchExpiringListings({ supabase, windowHours, cooldownHours }) {
   const now = new Date()
@@ -66,21 +98,64 @@ async function sendReminder({ listing, profile }) {
   const highlightUrl = `${baseFront}/listing/${listing.id}/destacar`
   const renewApiHint = `${baseFront}/dashboard?tab=Publicaciones` // Llevar directo a Publicaciones en el panel
 
+  const baseFront = (process.env.FRONTEND_URL || '').split(',')[0]?.trim() || 'https://ciclomarket.ar'
+  const bikesUrl = `${baseFront.replace(/\/$/, '')}/marketplace?cat=Ruta`
+  const partsUrl = `${baseFront.replace(/\/$/, '')}/marketplace?cat=Accesorios`
+  const apparelUrl = `${baseFront.replace(/\/$/, '')}/marketplace?cat=Indumentaria`
+
   const mailOptions = {
     from: process.env.SMTP_FROM || `Ciclo Market <${process.env.SMTP_USER}>`,
     to: profile.email,
     subject: `Tu publicación "${listing.title}" está por vencer`,
     html: `
-      <div style="font-family: Arial, sans-serif; line-height: 1.6; color:#14212e;">
-        <h2>Tu publicación está por vencer</h2>
-        <p>Hola ${profile.full_name || 'vendedor'},</p>
-        <p>Tu aviso <strong>${listing.title}</strong> vence el <strong>${expiresLabel}</strong>.</p>
-        <p>Podés mantenerla activa y ganar visibilidad con estas opciones:</p>
-        <div style="margin:16px 0;">
-          <a href="${renewApiHint}" style="display:inline-block;padding:10px 16px;background:#14212e;color:#fff;text-decoration:none;border-radius:8px;margin-right:8px;">Renovar publicación</a>
-          <a href="${highlightUrl}" style="display:inline-block;padding:10px 16px;background:#2563eb;color:#fff;text-decoration:none;border-radius:8px;">Destacar ahora</a>
-        </div>
-        <p>Gracias por usar Ciclo Market.</p>
+      <div style="background:#ffffff;margin:0 auto;max-width:640px;font-family:Arial, sans-serif;color:#14212e">
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="width:100%">
+          <tr>
+            <td style="padding:20px 24px;text-align:center">
+              <img src="${baseFront.replace(/\/$/, '')}/site-logo.png" alt="Ciclo Market" style="height:64px;width:auto;display:inline-block" />
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#14212e;color:#fff;text-align:center;padding:10px 12px">
+              <a href="${bikesUrl}" style="color:#fff;text-decoration:none;margin:0 10px;font-size:14px">Bicicletas</a>
+              <a href="${partsUrl}" style="color:#fff;text-decoration:none;margin:0 10px;font-size:14px">Accesorios</a>
+              <a href="${apparelUrl}" style="color:#fff;text-decoration:none;margin:0 10px;font-size:14px">Indumentaria</a>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:24px">
+              <h2 style="margin:0 0 8px;font-size:20px;color:#0c1723">Tu publicación está por vencer</h2>
+              <p style="margin:0 0 8px">Hola ${profile.full_name || 'vendedor'},</p>
+              <p style="margin:0 0 12px">Tu aviso <strong>${listing.title}</strong> vence el <strong>${expiresLabel}</strong>.</p>
+              <p style="margin:0 0 12px">Podés mantenerla activa y ganar visibilidad con estas opciones:</p>
+              <p style="margin:0 0 16px;text-align:center">
+                <a href="${renewApiHint}" style="display:inline-block;padding:12px 18px;background:#14212e;color:#fff;text-decoration:none;border-radius:10px;margin-right:8px;font-weight:600">Renovar publicación</a>
+                <a href="${highlightUrl}" style="display:inline-block;padding:12px 18px;background:#2563eb;color:#fff;text-decoration:none;border-radius:10px;font-weight:600">Destacar ahora</a>
+              </p>
+
+              <div style="margin-top:18px;padding:14px 16px;background:#f6f8fb;border:1px solid #e5ebf3;border-radius:10px">
+                <h3 style="margin:0 0 8px;font-size:16px;color:#0c1723">Planes recomendados</h3>
+                <ul style="margin:0;padding-left:18px;color:#374151">
+                  <li style="margin:6px 0"><b>Básica</b>: 60 días de publicación, 7 días de destaque, botón de WhatsApp habilitado.</li>
+                  <li style="margin:6px 0"><b>Premium</b>: 60 días de publicación, 14 días de destaque, WhatsApp + difusión en redes.</li>
+                </ul>
+              </div>
+
+              <div style="margin-top:18px;padding:14px 16px;background:#fdfcf8;border:1px solid #f0e6c3;border-radius:10px">
+                <h3 style="margin:0 0 8px;font-size:16px;color:#0c1723">Preguntas y respuestas</h3>
+                <p style="margin:0 0 8px;color:#374151">Recordá responder rápido las consultas para mejorar tu conversión. Las respuestas ayudan a todos los interesados.</p>
+                <p style="margin:0;color:#6b7280;font-size:12px">Consejo: habilitá el botón de WhatsApp con un plan destacado para cerrar ventas más rápido.</p>
+              </div>
+
+              <p style="margin:16px 0 0;font-size:12px;color:#6b7280">Si los botones no funcionan, ingresá a tu panel: <a href="${renewApiHint}" style="color:#0c72ff;text-decoration:underline">${renewApiHint}</a></p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#0b1724;color:#fff;padding:12px 24px;text-align:center;font-size:12px">
+              © ${new Date().getFullYear()} Ciclo Market · <a href="${baseFront.replace(/\/$/, '')}/privacidad" style="color:#fff">Privacidad</a>
+            </td>
+          </tr>
+        </table>
       </div>
     `
   }

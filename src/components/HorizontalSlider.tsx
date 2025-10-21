@@ -10,7 +10,7 @@ type Props = {
   title: string;
   subtitle?: string;
   items: Item[];
-  renderCard: (item: any) => React.ReactNode;
+  renderCard: (item: any, index?: number) => React.ReactNode;
   maxItems?: number;     // default 20
   initialLoad?: number;  // default 8
   tone?: Tone;
@@ -108,9 +108,9 @@ export default function HorizontalSlider({
         aria-label={title}
       >
         <div className="flex gap-5 pr-4">
-          {visibleItems.map((it: any) => (
+          {visibleItems.map((it: any, idx: number) => (
             <div key={it.id} className="shrink-0 w-[75%] sm:w-[50%] lg:w-[25%] snap-start">
-              {renderCard(it)}
+              {renderCard(it, idx)}
             </div>
           ))}
         </div>

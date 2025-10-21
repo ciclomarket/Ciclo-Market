@@ -8,6 +8,9 @@ tsconfig.tsbuildinfo
 # Env / secrets
 *.env
 sendgrid.env
+# Ignore example envs (keep them local-only if preferred)
+.env.example
+server/.env.example
 
 # Supabase exports / backups
 supabase/

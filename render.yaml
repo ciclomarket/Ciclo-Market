@@ -31,7 +31,7 @@ services:
       - key: RENEWAL_REMINDER_CRON
         value: "0 * * * *"  # cada hora
       - key: RENEWAL_REMINDER_WINDOW_HOURS
-        value: "72"         # buscar publicaciones que vencen en 72h
+        value: "24"         # buscar publicaciones que vencen en 24h
       - key: RENEWAL_REMINDER_COOLDOWN_HOURS
         value: "24"         # no reenviar dentro de 24h
       # Newsletter digest (últimos ingresos)

@@ -29,6 +29,8 @@ export interface UserProfileInput {
   storeAvatarUrl?: string | null
   storeBannerPositionY?: number | null
   storeHours?: string | null
+  storeLat?: number | null
+  storeLon?: number | null
 }
 
 export interface UserProfileRecord {
@@ -62,6 +64,8 @@ export interface UserProfileRecord {
   store_avatar_url?: string | null
   store_banner_position_y?: number | null
   store_hours?: string | null
+  store_lat?: number | null
+  store_lon?: number | null
 }
 
 export async function createUserProfile(payload: UserProfileInput): Promise<boolean> {
@@ -96,6 +100,8 @@ export async function createUserProfile(payload: UserProfileInput): Promise<bool
       store_banner_position_y: payload.storeBannerPositionY ?? null,
       store_avatar_url: payload.storeAvatarUrl ?? null,
       store_hours: payload.storeHours ?? null,
+      store_lat: payload.storeLat ?? null,
+      store_lon: payload.storeLon ?? null,
       created_at: new Date().toISOString()
     })
     return !error
@@ -140,6 +146,8 @@ export async function upsertUserProfile(payload: Partial<UserProfileInput> & { i
     if (payload.storeBannerPositionY !== undefined) updates.store_banner_position_y = payload.storeBannerPositionY
     if (payload.storeAvatarUrl !== undefined) updates.store_avatar_url = payload.storeAvatarUrl
     if (payload.storeHours !== undefined) updates.store_hours = payload.storeHours
+    if (payload.storeLat !== undefined) updates.store_lat = payload.storeLat
+    if (payload.storeLon !== undefined) updates.store_lon = payload.storeLon
 
     const { data, error } = await supabase
       .from('users')
@@ -183,6 +191,8 @@ export async function upsertUserProfile(payload: Partial<UserProfileInput> & { i
       store_banner_position_y: payload.storeBannerPositionY ?? null,
       store_avatar_url: payload.storeAvatarUrl ?? null,
       store_hours: payload.storeHours ?? null,
+      store_lat: payload.storeLat ?? null,
+      store_lon: payload.storeLon ?? null,
       created_at: new Date().toISOString()
     }
     const { error: insertError } = await supabase.from('users').insert(insertPayload)
@@ -233,6 +243,8 @@ export interface StoreSummary {
   store_address?: string | null
   store_lat?: number | null
   store_lon?: number | null
+  store_phone?: string | null
+  store_website?: string | null
 }
 
 export async function fetchStores(): Promise<StoreSummary[]> {
@@ -241,7 +253,7 @@ export async function fetchStores(): Promise<StoreSummary[]> {
     const supabase = getSupabaseClient()
     const { data, error } = await supabase
       .from('users')
-      .select('id, store_slug, store_name, store_avatar_url, store_banner_url, city, province, store_enabled, store_address, store_lat, store_lon')
+      .select('id, store_slug, store_name, store_avatar_url, store_banner_url, city, province, store_enabled, store_address, store_lat, store_lon, store_phone, store_website')
       .eq('store_enabled', true)
       .not('store_slug', 'is', null)
       .order('store_name', { ascending: true })
@@ -256,7 +268,9 @@ export async function fetchStores(): Promise<StoreSummary[]> {
       province: r.province ?? null,
       store_address: r.store_address ?? null,
       store_lat: typeof r.store_lat === 'number' ? r.store_lat : (r.store_lat ? Number(r.store_lat) : null),
-      store_lon: typeof r.store_lon === 'number' ? r.store_lon : (r.store_lon ? Number(r.store_lon) : null)
+      store_lon: typeof r.store_lon === 'number' ? r.store_lon : (r.store_lon ? Number(r.store_lon) : null),
+      store_phone: r.store_phone ?? null,
+      store_website: r.store_website ?? null,
     }))
   } catch {
     return []

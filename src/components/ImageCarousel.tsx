@@ -15,8 +15,15 @@ export default function ImageCarousel({ images }: { images: string[] }) {
   const safeIndex = displayImages.length ? Math.min(i, displayImages.length - 1) : 0
   const currentImage = displayImages[safeIndex]
   const currentTransformed = currentImage
-    ? transformSupabasePublicUrl(currentImage, { width: 1600, quality: 78, format: 'webp' })
+    ? transformSupabasePublicUrl(currentImage, { width: 1280, quality: 78, format: 'webp' })
     : undefined
+  const currentSrcSet = useMemo(() => {
+    if (!currentImage) return undefined
+    const widths = [640, 960, 1280, 1600]
+    return widths
+      .map((w) => `${transformSupabasePublicUrl(currentImage, { width: w, quality: 78, format: 'webp' })} ${w}w`)
+      .join(', ')
+  }, [currentImage])
   const [lightbox, setLightbox] = useState(false)
 
   useEffect(() => {
@@ -37,6 +44,8 @@ export default function ImageCarousel({ images }: { images: string[] }) {
           <button type="button" className="h-full w-full" onClick={() => setLightbox(true)} aria-label="Ampliar imagen">
             <img
               src={currentTransformed}
+              srcSet={currentSrcSet}
+              sizes="100vw"
               alt="Vista de la publicación"
               className="h-full w-full max-w-full object-cover"
               loading="lazy"
@@ -111,6 +120,8 @@ export default function ImageCarousel({ images }: { images: string[] }) {
           </div>
           <img
             src={currentTransformed}
+            srcSet={currentSrcSet}
+            sizes="100vw"
             alt="Imagen ampliada"
             className="max-h-[90vh] max-w-[95vw] object-contain"
             onError={(e) => {

@@ -3,7 +3,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { KEYWORDS } from '../data/keywords'
 import { useAuth } from '../context/AuthContext'
-import { getSupabaseClient, supabaseEnabled } from '../services/supabase'
+import { getSupabaseClient, supabaseEnabled, setAuthPersistence } from '../services/supabase'
+import { fetchStores, type StoreSummary } from '../services/users'
 import { SocialAuthButtons } from './SocialAuthButtons'
 
 type MegaCol = { title: string; links: Array<{ label: string; to: string }> }
@@ -18,8 +19,8 @@ const MEGA: MegaItem[] = [
         links: [
           { label: 'Bicicletas de Ruta', to: '/marketplace?cat=Ruta' },
           { label: 'Gravel', to: '/marketplace?cat=Gravel' },
-          { label: 'Triatlón / TT', to: '/marketplace?cat=Ruta&sub=TT' },
-          { label: 'Vintage / Acero', to: '/marketplace?cat=Ruta&sub=Vintage' },
+          { label: 'Triatlón / TT', to: '/marketplace?cat=Ruta&q=triatlón%20tt' },
+          { label: 'Vintage / Acero', to: '/marketplace?cat=Ruta&q=vintage%20acero' },
         ],
       },
       {
@@ -36,10 +37,10 @@ const MEGA: MegaItem[] = [
         title: 'Rango de precio',
         links: [
           { label: 'Ofertas', to: '/marketplace?deal=1' },
-          { label: 'Hasta USD 1.500', to: '/marketplace?max=1500' },
-          { label: 'USD 1.500–3.000', to: '/marketplace?min=1500&max=3000' },
-          { label: 'USD 3.000–5.000', to: '/marketplace?min=3000&max=5000' },
-          { label: 'Premium (+USD 5.000)', to: '/marketplace?min=5000' },
+          { label: 'Hasta USD 1.500', to: '/marketplace?price_max=1500' },
+          { label: 'USD 1.500–3.000', to: '/marketplace?price_min=1500&price_max=3000' },
+          { label: 'USD 3.000–5.000', to: '/marketplace?price_min=3000&price_max=5000' },
+          { label: 'Premium (+USD 5.000)', to: '/marketplace?price_min=5000' },
         ],
       },
     ],
@@ -50,10 +51,10 @@ const MEGA: MegaItem[] = [
       {
         title: 'Categorías',
         links: [
-          { label: 'Cross Country', to: '/marketplace?cat=MTB&sub=XC' },
-          { label: 'Trail', to: '/marketplace?cat=MTB&sub=Trail' },
-          { label: 'Enduro', to: '/marketplace?cat=MTB&sub=Enduro' },
-          { label: 'Downhill', to: '/marketplace?cat=MTB&sub=DH' },
+          { label: 'Cross Country', to: '/marketplace?cat=MTB&q=cross%20country%20xc' },
+          { label: 'Trail', to: '/marketplace?cat=MTB&q=trail' },
+          { label: 'Enduro', to: '/marketplace?cat=MTB&q=enduro' },
+          { label: 'Downhill', to: '/marketplace?cat=MTB&q=downhill%20dh' },
         ],
       },
       {
@@ -69,9 +70,9 @@ const MEGA: MegaItem[] = [
         title: 'Rango de precio',
         links: [
           { label: 'Hot Deals', to: '/marketplace?deal=1&cat=MTB' },
-          { label: 'Budget (≤ USD 1.500)', to: '/marketplace?cat=MTB&max=1500' },
-          { label: 'Mid (USD 1.500–3.000)', to: '/marketplace?cat=MTB&min=1500&max=3000' },
-          { label: 'Performance (USD 3.000–5.000)', to: '/marketplace?cat=MTB&min=3000&max=5000' },
+          { label: 'Budget (≤ USD 1.500)', to: '/marketplace?cat=MTB&price_max=1500' },
+          { label: 'Mid (USD 1.500–3.000)', to: '/marketplace?cat=MTB&price_min=1500&price_max=3000' },
+          { label: 'Performance (USD 3.000–5.000)', to: '/marketplace?cat=MTB&price_min=3000&price_max=5000' },
         ],
       },
     ],
@@ -84,7 +85,7 @@ const MEGA: MegaItem[] = [
         links: [
           { label: 'Urbana', to: '/marketplace?cat=Urbana' },
           { label: 'Fixie', to: '/marketplace?cat=Fixie' },
-          { label: 'Single Speed', to: '/marketplace?cat=Fixie&sub=SingleSpeed' },
+          { label: 'Single Speed', to: '/marketplace?cat=Fixie&q=single%20speed' },
         ],
       },
       {
@@ -103,25 +104,25 @@ const MEGA: MegaItem[] = [
       {
         title: 'Componentes',
         links: [
-          { label: 'Ruedas', to: '/marketplace?cat=Accesorios&sub=Ruedas' },
-          { label: 'Grupos', to: '/marketplace?cat=Accesorios&sub=Grupos' },
-          { label: 'Cockpits', to: '/marketplace?cat=Accesorios&sub=Cockpit' },
-          { label: 'Sillines', to: '/marketplace?cat=Accesorios&sub=Sillin' },
+          { label: 'Ruedas', to: '/marketplace?cat=Accesorios&q=ruedas%20cubiertas' },
+          { label: 'Grupos', to: '/marketplace?cat=Accesorios&q=grupos' },
+          { label: 'Cockpits', to: '/marketplace?cat=Accesorios&q=cockpit%20manubrio%20stem' },
+          { label: 'Sillines', to: '/marketplace?cat=Accesorios&q=sillín%20sillin' },
         ],
       },
       {
         title: 'Neumáticos',
         links: [
-          { label: 'Ruta 23–28', to: '/marketplace?cat=Accesorios&sub=Cubiertas%20Ruta' },
-          { label: 'Gravel 35–50', to: '/marketplace?cat=Accesorios&sub=Cubiertas%20Gravel' },
-          { label: 'MTB 2.2–2.6', to: '/marketplace?cat=Accesorios&sub=Cubiertas%20MTB' },
+          { label: 'Ruta 23–28', to: '/marketplace?cat=Accesorios&q=cubiertas%20ruta' },
+          { label: 'Gravel 35–50', to: '/marketplace?cat=Accesorios&q=cubiertas%20gravel' },
+          { label: 'MTB 2.2–2.6', to: '/marketplace?cat=Accesorios&q=cubiertas%20mtb' },
         ],
       },
       {
         title: 'Ofertas',
         links: [
           { label: 'Liquidación', to: '/marketplace?cat=Accesorios&deal=1' },
-          { label: 'Outlet ruedas', to: '/marketplace?cat=Accesorios&sub=Ruedas&deal=1' },
+          { label: 'Outlet ruedas', to: '/marketplace?cat=Accesorios&deal=1&q=ruedas' },
         ],
       },
     ],
@@ -132,23 +133,23 @@ const MEGA: MegaItem[] = [
       {
         title: 'Electrónica',
         links: [
-          { label: 'Ciclocomputadoras', to: '/marketplace?cat=Accesorios&sub=GPS' },
-          { label: 'Rodillos', to: '/marketplace?cat=Accesorios&sub=Rodillo' },
-          { label: 'Luces', to: '/marketplace?cat=Accesorios&sub=Luces' },
+          { label: 'Ciclocomputadoras', to: '/marketplace?cat=Accesorios&q=gps%20ciclocomputadora' },
+          { label: 'Rodillos', to: '/marketplace?cat=Accesorios&q=rodillo' },
+          { label: 'Luces', to: '/marketplace?cat=Accesorios&q=luces' },
         ],
       },
       {
         title: 'Hidratación y porta',
         links: [
-          { label: 'Caramagnolas', to: '/marketplace?cat=Accesorios&sub=Caramañola' },
-          { label: 'Porta caramañola', to: '/marketplace?cat=Accesorios&sub=Porta' },
+          { label: 'Caramagnolas', to: '/marketplace?cat=Accesorios&q=caramañola%20caramagnola' },
+          { label: 'Porta caramañola', to: '/marketplace?cat=Accesorios&q=porta%20caramañola' },
         ],
       },
       {
         title: 'Seguridad',
         links: [
-          { label: 'Cascos', to: '/marketplace?cat=Accesorios&sub=Casco' },
-          { label: 'Cámaras & Tubeless', to: '/marketplace?cat=Accesorios&sub=Camaras' },
+          { label: 'Cascos', to: '/marketplace?cat=Indumentaria&q=casco' },
+          { label: 'Cámaras & Tubeless', to: '/marketplace?cat=Accesorios&q=camaras%20tubeless' },
         ],
       },
     ],
@@ -159,22 +160,22 @@ const MEGA: MegaItem[] = [
       {
         title: 'Para rodar',
         links: [
-          { label: 'Maillots', to: '/marketplace?cat=Indumentaria&sub=Jersey' },
-          { label: 'Baberos / Shorts', to: '/marketplace?cat=Indumentaria&sub=Babero' },
-          { label: 'Guantes', to: '/marketplace?cat=Indumentaria&sub=Guantes' },
+          { label: 'Maillots', to: '/marketplace?cat=Indumentaria&q=jersey%20maillot' },
+          { label: 'Baberos / Shorts', to: '/marketplace?cat=Indumentaria&q=babero%20short' },
+          { label: 'Guantes', to: '/marketplace?cat=Indumentaria&q=guantes' },
         ],
       },
       {
         title: 'Zapatillas',
         links: [
-          { label: 'Ruta (3 pernos)', to: '/marketplace?cat=Indumentaria&sub=Zapatillas%20Ruta' },
-          { label: 'MTB (2 pernos)', to: '/marketplace?cat=Indumentaria&sub=Zapatillas%20MTB' },
+          { label: 'Ruta (3 pernos)', to: '/marketplace?cat=Indumentaria&q=zapatillas%20ruta' },
+          { label: 'MTB (2 pernos)', to: '/marketplace?cat=Indumentaria&q=zapatillas%20mtb' },
         ],
       },
       {
         title: 'Ofertas',
         links: [
-          { label: 'Outlet Indumentaria', to: '/marketplace?deal=1&cat=Indumentaria&sub=Ropa' },
+          { label: 'Outlet Indumentaria', to: '/marketplace?deal=1&cat=Indumentaria' },
         ],
       },
     ],
@@ -325,6 +326,8 @@ export default function Header() {
   const [loginLoading, setLoginLoading] = useState(false)
   const navigate = useNavigate()
   const hoverTimer = useRef<number | null>(null)
+  const [stores, setStores] = useState<StoreSummary[]>([])
+  const [storesOpen, setStoresOpen] = useState(false)
 
   useEffect(() => {
     if (user) {
@@ -363,11 +366,45 @@ export default function Header() {
     if (hoverTimer.current) window.clearTimeout(hoverTimer.current)
   }
 
+  // Cargar tiendas oficiales para mega menú dinámico
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      try {
+        if (!supabaseEnabled) return
+        const rows = await fetchStores()
+        if (mounted) setStores(rows)
+      } catch { /* noop */ }
+    })()
+    return () => { mounted = false }
+  }, [])
+
+  const megaItems: MegaItem[] = useMemo(() => {
+    if (!stores || stores.length === 0) return MEGA
+    const top = stores.slice(0, 9)
+    const cols: MegaCol[] = []
+    for (let i = 0; i < 3; i++) {
+      const chunk = top.slice(i * 3, i * 3 + 3)
+      cols.push({
+        title: i === 0 ? 'Tiendas oficiales' : '',
+        links: chunk.map((s) => ({ label: (s.store_name || s.store_slug).toString(), to: `/tienda/${s.store_slug}` }))
+      })
+    }
+    return [...MEGA, { label: 'Tiendas oficiales', cols }]
+  }, [stores])
+
   const isMobileViewport = useIsMobile()
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
     setMounted(true)
+  }, [])
+
+  // Inicializar el estado del checkbox desde la preferencia guardada
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const prev = window.localStorage.getItem('mb_auth_persist')
+    setRememberMe(prev !== 'session')
   }, [])
 
   useEffect(() => {
@@ -393,6 +430,8 @@ export default function Header() {
     try {
       setLoginLoading(true)
       setLoginError(null)
+      // Aplicar preferencia de persistencia antes de iniciar sesión
+      setAuthPersistence(Boolean(rememberMe))
       const supabase = getSupabaseClient()
       const { error } = await supabase.auth.signInWithPassword({
         email: loginEmail.trim(),
@@ -400,7 +439,7 @@ export default function Header() {
       })
       if (error) throw error
       setLoginOpen(false)
-      navigate('/dashboard')
+      if (typeof window !== 'undefined') window.location.assign('/dashboard')
     } catch (err: any) {
       const msg = err?.message ?? 'No pudimos iniciar sesión. Intentá nuevamente.'
       setLoginError(msg)
@@ -417,6 +456,8 @@ export default function Header() {
     try {
       setLoginLoading(true)
       setLoginError(null)
+      // Aplicar preferencia de persistencia antes de iniciar sesión
+      setAuthPersistence(Boolean(rememberMe))
       const supabase = getSupabaseClient()
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -447,6 +488,8 @@ export default function Header() {
     try {
       setLoginLoading(true)
       setLoginError(null)
+      // Aplicar preferencia de persistencia antes de iniciar sesión
+      setAuthPersistence(Boolean(rememberMe))
       const supabase = getSupabaseClient()
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'facebook',
@@ -472,7 +515,7 @@ export default function Header() {
           <img
             src="/site-logo.png"
             alt="Ciclo Market"
-            className="h-12 md:h-16 w-auto block transform md:scale-[1.2] origin-left"
+            className="h-12 md:h-16 w-auto block transform scale-[0.8] md:scale-[0.96] origin-left"
             width={200}
             height={80}
             loading="eager"
@@ -609,7 +652,7 @@ export default function Header() {
         <div
           className="max-w-6xl mx-auto px-4 flex items-center gap-6 text-sm font-medium"
           onMouseEnter={cancelCloseMega}
-          onMouseLeave={scheduleCloseMega}
+          onMouseLeave={() => { scheduleCloseMega(); setStoresOpen(false) }}
         >
           {MEGA.map((item, idx) => (
             <button
@@ -627,13 +670,17 @@ export default function Header() {
           <Link to="/como-publicar" className="py-3 text-black/70 hover:text-black">
             Cómo publicar
           </Link>
-          <Link to="/tiendas" className="py-3 text-black/70 hover:text-black">
+          <Link
+            to="/tiendas"
+            className={`py-3 border-b-2 transition ${storesOpen ? 'border-mb-primary text-mb-primary' : 'border-transparent text-black/70 hover:text-black'}`}
+            onMouseEnter={() => { setOpenIdx(null); setStoresOpen(true) }}
+          >
             Tiendas oficiales
           </Link>
         </div>
 
         {openIdx !== null && (
-          <div className="absolute inset-x-0 top-full bg-white border-b border-black/10 shadow-lg" onMouseEnter={cancelCloseMega} onMouseLeave={scheduleCloseMega}>
+          <div className="absolute inset-x-0 top-full bg-white border-b border-black/10 shadow-lg" onMouseEnter={cancelCloseMega} onMouseLeave={() => { scheduleCloseMega(); setStoresOpen(false) }}>
             <div className="max-w-6xl mx-auto px-6 py-6 grid grid-cols-1 sm:grid-cols-3 gap-6">
               {MEGA[openIdx].cols.map((col, i) => (
                 <div key={i}>
@@ -650,6 +697,40 @@ export default function Header() {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {storesOpen && (
+          <div className="absolute inset-x-0 top-full bg-white border-b border-black/10 shadow-lg" onMouseEnter={cancelCloseMega} onMouseLeave={() => { scheduleCloseMega(); setStoresOpen(false) }}>
+            <div className="max-w-6xl mx-auto px-6 py-6 grid grid-cols-1 sm:grid-cols-3 gap-6">
+              {[0,1,2].map((colIdx) => {
+                const items = stores.slice(0, 9).slice(colIdx * 3, colIdx * 3 + 3)
+                return (
+                  <div key={`stores-col-${colIdx}`}>
+                    <h4 className="text-xs uppercase tracking-wide text-black/50 mb-3">{colIdx === 0 ? 'Tiendas oficiales' : '\u00A0'}</h4>
+                    <ul className="space-y-2">
+                      {items.map((s) => (
+                        <li key={s.store_slug}>
+                          <Link to={`/tienda/${s.store_slug}`} className="text-sm text-black/70 hover:text-mb-primary" onClick={() => setStoresOpen(false)}>
+                            {s.store_name || s.store_slug}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )
+              })}
+            </div>
+            {stores.length > 9 && (
+              <div className="max-w-6xl mx-auto px-6 pb-5 -mt-3">
+                <Link to="/tiendas" className="inline-flex items-center gap-2 text-sm text-black/70 hover:text-mb-primary" onClick={() => setStoresOpen(false)}>
+                  Ver más tiendas
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                  </svg>
+                </Link>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -732,11 +813,25 @@ export default function Header() {
               </div>
 
               <div className="grid gap-2 text-sm">
-                <Link to="/como-publicar" className="underline" onClick={closeMobileMenu}>
-                  Cómo publicar
-                </Link>
-                <Link to="/tiendas" className="underline" onClick={closeMobileMenu}>
+                <Link
+                  to="/tiendas"
+                  onClick={closeMobileMenu}
+                  className="inline-flex items-center justify-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-semibold text-[#14212e] shadow hover:bg-white/90"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 9h18l-2 11H5L3 9Zm1-3 2-3h12l2 3" />
+                  </svg>
                   Tiendas oficiales
+                </Link>
+                <Link
+                  to="/como-publicar"
+                  onClick={closeMobileMenu}
+                  className="inline-flex items-center justify-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-semibold text-[#14212e] shadow hover:bg-white/90"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 4h12v16H4zM8 4v16M4 8h12" />
+                  </svg>
+                  Cómo publicar
                 </Link>
               </div>
             </div>

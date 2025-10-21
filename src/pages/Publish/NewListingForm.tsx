@@ -9,7 +9,7 @@ import { useCurrency } from '../../context/CurrencyContext'
 import { BIKE_CATEGORIES, FRAME_SIZES, WHEEL_SIZE_OPTIONS } from '../../constants/catalog'
 import { PROVINCES, OTHER_CITY_OPTION } from '../../constants/locations'
 import { useAuth } from '../../context/AuthContext'
-import { supabase, supabaseEnabled, getSupabaseClient } from '../../services/supabase'
+import { supabaseEnabled, getSupabaseClient } from '../../services/supabase'
 import { usePlans } from '../../context/PlanContext'
 import { canonicalPlanCode, normalisePlanText, resolvePlanCode, type PlanCode } from '../../utils/planCodes'
 import { formatNameWithInitial } from '../../utils/user'
@@ -196,6 +196,7 @@ export default function NewListingForm() {
   const [material, setMaterial] = useState(MATERIAL_OPTIONS[0])
   const [customMaterial, setCustomMaterial] = useState('')
   const [frameSize, setFrameSize] = useState('')
+  const [frameSizesMulti, setFrameSizesMulti] = useState('')
   const [drivetrain, setDrivetrain] = useState(DRIVETRAIN_OPTIONS[0])
   const [drivetrainOther, setDrivetrainOther] = useState('')
   const [wheelset, setWheelset] = useState('')
@@ -244,6 +245,7 @@ export default function NewListingForm() {
   const [accessoryUseNote, setAccessoryUseNote] = useState('')
   const [apparelType, setApparelType] = useState<(typeof APPAREL_TYPES)[number]>(APPAREL_TYPES[0])
   const [apparelSize, setApparelSize] = useState<string>(APPAREL_SIZES[3])
+  const [apparelSizesMulti, setApparelSizesMulti] = useState<string>('')
   const [apparelFit, setApparelFit] = useState<(typeof APPAREL_FIT_OPTIONS)[number]>(APPAREL_FIT_OPTIONS[0])
   const [apparelCondition, setApparelCondition] = useState<(typeof CONDITION_OPTIONS)[number]>(CONDITION_OPTIONS[1])
 
@@ -330,6 +332,7 @@ export default function NewListingForm() {
         setCustomMaterial(draft.customMaterial)
       }
       if (typeof draft.frameSize === 'string') setFrameSize(draft.frameSize)
+      if (typeof draft.frameSizesMulti === 'string') setFrameSizesMulti(draft.frameSizesMulti)
       if (typeof draft.drivetrain === 'string') setDrivetrain(draft.drivetrain)
       if (typeof draft.drivetrainOther === 'string') setDrivetrainOther(draft.drivetrainOther)
       if (typeof draft.wheelset === 'string') setWheelset(draft.wheelset)
@@ -341,6 +344,7 @@ export default function NewListingForm() {
       if (typeof draft.accessoryUseNote === 'string') setAccessoryUseNote(draft.accessoryUseNote)
       if (typeof draft.apparelType === 'string' && (APPAREL_TYPES as readonly string[]).includes(draft.apparelType)) setApparelType(draft.apparelType as (typeof APPAREL_TYPES)[number])
       if (typeof draft.apparelSize === 'string') setApparelSize(draft.apparelSize)
+      if (typeof draft.apparelSizesMulti === 'string') setApparelSizesMulti(draft.apparelSizesMulti)
       if (typeof draft.apparelFit === 'string' && (APPAREL_FIT_OPTIONS as readonly string[]).includes(draft.apparelFit)) setApparelFit(draft.apparelFit as (typeof APPAREL_FIT_OPTIONS)[number])
       if (typeof draft.apparelCondition === 'string' && (CONDITION_OPTIONS as readonly string[]).includes(draft.apparelCondition)) setApparelCondition(draft.apparelCondition as (typeof CONDITION_OPTIONS)[number])
       if (draft.priceCurrency === 'USD' || draft.priceCurrency === 'ARS') {
@@ -383,6 +387,7 @@ export default function NewListingForm() {
         material,
         customMaterial,
         frameSize,
+        frameSizesMulti,
         drivetrain,
         drivetrainOther,
         wheelset,
@@ -404,6 +409,7 @@ export default function NewListingForm() {
         accessoryUseNote,
         apparelType,
         apparelSize,
+        apparelSizesMulti,
         apparelFit,
         apparelCondition,
         listingType
@@ -422,6 +428,7 @@ export default function NewListingForm() {
     material,
     customMaterial,
     frameSize,
+    frameSizesMulti,
     drivetrain,
     drivetrainOther,
     wheelset,
@@ -443,6 +450,7 @@ export default function NewListingForm() {
     accessoryUseNote,
     apparelType,
     apparelSize,
+    apparelSizesMulti,
     apparelFit,
     apparelCondition,
     listingType
@@ -462,12 +470,34 @@ export default function NewListingForm() {
         const localValue = sanitizeLocalWhatsappInput(extractLocalWhatsapp(data.whatsapp_number))
         if (localValue) setSellerWhatsappLocal(localValue)
       }
+      // Prefill ubicación desde el perfil si no hay borrador ni valores cargados
+      try {
+        if (!listingId) {
+          // Solo si aún no hay provincia/ciudad seleccionadas
+          const profileProvince = (data?.province || '').trim()
+          const profileCity = (data?.city || '').trim()
+          if (profileProvince && !province) {
+            setProvince(profileProvince)
+          }
+          if (profileCity && !city) {
+            // Validar ciudad con la provincia del perfil (si existe)
+            const provName = profileProvince || province
+            const matchProv = PROVINCES.find((p) => p.name === provName)
+            if (matchProv && matchProv.cities?.includes(profileCity as (typeof matchProv.cities)[number])) {
+              setCity(profileCity)
+            } else {
+              setCity(OTHER_CITY_OPTION)
+              setCityOther(profileCity)
+            }
+          }
+        }
+      } catch { /* noop */ }
     }
     void loadProfile()
     return () => {
       active = false
     }
-  }, [user?.id, whatsappEnabled, sellerWhatsappLocal, whatsappUserEdited])
+  }, [user?.id, whatsappEnabled, sellerWhatsappLocal, whatsappUserEdited, listingId, province, city])
 
   const autoTitle = useMemo(() => {
     const composed = `${brand.trim()} ${model.trim()}`.trim()
@@ -555,6 +585,16 @@ export default function NewListingForm() {
           if (sizeValue) {
             setApparelSize(sizeValue)
           }
+          const sizesMulti = getExtraValue('Talles')
+          if (sizesMulti) {
+            setApparelSizesMulti(sizesMulti)
+            if (!sizeValue) {
+              const first = sizesMulti.split(',').map((s) => s.trim()).filter(Boolean)[0]
+              if (first) setApparelSize(first)
+            }
+          } else {
+            setApparelSizesMulti('')
+          }
           const conditionValue = getExtraValue('Condición')
           if (conditionValue && (CONDITION_OPTIONS as readonly string[]).includes(conditionValue)) {
             setApparelCondition(conditionValue as (typeof CONDITION_OPTIONS)[number])
@@ -595,6 +635,9 @@ export default function NewListingForm() {
           }
           setWheelset(existing.wheelset ?? '')
           setWheelSize(existing.wheelSize ?? '')
+          const tallesMulti = getExtraValue('Talles')
+          if (tallesMulti) setFrameSizesMulti(tallesMulti)
+          else setFrameSizesMulti('')
         }
         const locationParts = (existing.location ?? '').split(',').map((part) => part.trim()).filter(Boolean)
         if (locationParts.length === 2) {
@@ -673,7 +716,6 @@ export default function NewListingForm() {
   /** 3) Submit: inserta listing o actualiza si corresponde */
   const submit = async () => {
     if (!enabled || !supabaseEnabled) return alert('Publicar deshabilitado: configurá Supabase en .env')
-    if (!supabase) return alert('Supabase no configurado correctamente')
     if (!user) return alert('Iniciá sesión para crear una publicación')
     if (!planCode) return alert('No se detectó el plan seleccionado')
 
@@ -684,7 +726,7 @@ export default function NewListingForm() {
     if (!brand.trim()) return alert(isAccessory || isApparel ? 'Ingresá la marca del producto' : 'Ingresá la marca de la bicicleta')
     if (!model.trim()) return alert(isAccessory || isApparel ? 'Ingresá el nombre del producto' : 'Ingresá el modelo de la bicicleta')
     if (!isAccessory && !isApparel && !materialValue) return alert('Indicá el material del cuadro')
-    if (isApparel && !apparelSize) return alert('Seleccioná un talle para la prenda')
+    if (isApparel && !apparelSize && !apparelSizesMulti.trim()) return alert('Indicá al menos un talle')
     if (priceNumber <= 0) return alert('Ingresá un precio válido')
     if (!province) return alert('Seleccioná una provincia')
     if (!city) return alert('Seleccioná una ciudad')
@@ -743,11 +785,31 @@ export default function NewListingForm() {
         return parts.join(' • ')
       }
       if (isApparel) {
-        const parts = [`Tipo: ${apparelType}`, `Talle: ${apparelSize}`, `Condición: ${apparelCondition}`, `Fit: ${apparelFit}`]
+        const parts: string[] = [`Tipo: ${apparelType}`, `Condición: ${apparelCondition}`, `Género: ${apparelFit}`]
+        const multi = apparelSizesMulti.trim()
+        if (multi) {
+          const normalized = multi
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean)
+            .join(', ')
+          if (normalized) parts.splice(1, 0, `Talles: ${normalized}`)
+        } else if (apparelSize) {
+          parts.splice(1, 0, `Talle: ${apparelSize}`)
+        }
         if (extras.trim()) parts.push(`Notas: ${extras.trim()}`)
         return parts.join(' • ')
       }
       const parts: string[] = []
+      const multi = frameSizesMulti.trim()
+      if (multi) {
+        const normalized = multi
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .join(', ')
+        if (normalized) parts.push(`Talles: ${normalized}`)
+      }
       // Extras (sin condición/freno/horquilla principal)
       if (seatInfo.trim()) parts.push(`Asiento: ${seatInfo.trim()}`)
       if (handlebarInfo.trim()) parts.push(`Manillar: ${handlebarInfo.trim()}`)
@@ -1039,7 +1101,7 @@ export default function NewListingForm() {
                       ))}
                     </select>
                   </Field>
-                  <Field label="Ajuste / Fit">
+                  <Field label="Género">
                     <select
                       className="select"
                       value={apparelFit}
@@ -1186,6 +1248,15 @@ export default function NewListingForm() {
                       ))}
                     </select>
                   </Field>
+                  <Field label="Más de un talle">
+                    <input
+                      className="input"
+                      value={apparelSizesMulti}
+                      onChange={(e) => setApparelSizesMulti(e.target.value)}
+                      placeholder="Ej.: S, M, XL"
+                    />
+                    <p className="text-xs text-black/50 mt-1">Separá talles con coma. Ej.: S, M, XL</p>
+                  </Field>
                   <Field label="Notas adicionales (opcional)">
                     <textarea
                       className="textarea"
@@ -1229,6 +1300,18 @@ export default function NewListingForm() {
                         <option key={size || 'rodado-none'} value={size}>{size ? size : 'Seleccionar rodado'}</option>
                       ))}
                     </select>
+                  </Field>
+                </div>
+
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <Field label="Más de un talle">
+                    <input
+                      className="input"
+                      value={frameSizesMulti}
+                      onChange={(e) => setFrameSizesMulti(e.target.value)}
+                      placeholder="Ej.: S, M, L"
+                    />
+                    <p className="text-xs text-black/50 mt-1">Separá talles con coma. Ej.: S, M, L</p>
                   </Field>
                 </div>
 
@@ -1473,7 +1556,7 @@ export default function NewListingForm() {
           </div>
           <div>
             <h3 className="text-xl font-bold text-mb-ink">{autoTitle}</h3>
-            <p className="text-mb-primary text-lg font-semibold">{formattedPreviewPrice()}</p>
+            <p className="text-[#14212e] text-lg font-semibold">{formattedPreviewPrice()}</p>
             <p className="text-sm text-black/60 mt-1">{previewLocation}</p>
           </div>
 
@@ -1508,15 +1591,15 @@ export default function NewListingForm() {
                   <dd>{apparelType}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <dt className="font-medium text-black/80">Talle</dt>
-                  <dd>{apparelSize}</dd>
+                  <dt className="font-medium text-black/80">{apparelSizesMulti.trim() ? 'Talles' : 'Talle'}</dt>
+                  <dd>{apparelSizesMulti.trim() ? apparelSizesMulti.trim() : apparelSize}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
                   <dt className="font-medium text-black/80">Condición</dt>
                   <dd>{apparelCondition}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <dt className="font-medium text-black/80">Fit</dt>
+                  <dt className="font-medium text-black/80">Género</dt>
                   <dd>{apparelFit}</dd>
                 </div>
               </>
@@ -1535,10 +1618,10 @@ export default function NewListingForm() {
                     <dd className="text-right">{mtbForkModel}</dd>
                   </div>
                 )}
-                {frameSize && (
+                {(frameSize || frameSizesMulti.trim()) && (
                   <div className="flex justify-between gap-4">
-                    <dt className="font-medium text-black/80">Talle</dt>
-                    <dd>{frameSize}</dd>
+                    <dt className="font-medium text-black/80">{frameSizesMulti.trim() ? 'Talles' : 'Talle'}</dt>
+                    <dd>{frameSizesMulti.trim() ? frameSizesMulti.trim() : frameSize}</dd>
                   </div>
                 )}
                 {/* Ruedas + Rodado */}

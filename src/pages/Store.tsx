@@ -174,7 +174,10 @@ const extractCondition = (listing: Listing) => {
 const extractApparelSize = (listing: Listing) => {
   if (listing.category !== 'Indumentaria') return undefined
   const extrasMap = extractExtrasMap(listing.extras)
-  return extrasMap.talle ?? undefined
+  const value = extrasMap.talle ?? extrasMap.talles
+  if (!value) return undefined
+  const first = value.split(',')[0]?.trim()
+  return first || value
 }
 
 const cleanValue = (value?: string | null) => {
@@ -231,6 +234,12 @@ function computeListingFacets(listings: Listing[]): ListingFacetsResult {
 
     const frameSize = cleanValue(listing.frameSize)
     if (frameSize) sets.frameSize.add(frameSize)
+    // Agregar múltiples talles desde extras si existen
+    const extrasMap = extractExtrasMap(listing.extras)
+    const multi = extrasMap.talles
+    if (multi) {
+      multi.split(',').map((s) => s.trim()).filter(Boolean).forEach((s) => sets.frameSize.add(s))
+    }
 
     const wheelSize = cleanValue(listing.wheelSize)
     if (wheelSize) sets.wheelSize.add(wheelSize)
@@ -247,6 +256,12 @@ function computeListingFacets(listings: Listing[]): ListingFacetsResult {
 
     const apparelSize = cleanValue(extractApparelSize(listing))
     if (apparelSize) sets.size.add(apparelSize)
+    // Agregar todos los talles de indumentaria si vienen en "Talles"
+    const extrasForSizes = extractExtrasMap(listing.extras)
+    const multiSizes = extrasForSizes.talles
+    if (multiSizes) {
+      multiSizes.split(',').map((s) => s.trim()).filter(Boolean).forEach((s) => sets.size.add(s))
+    }
 
     metadata[listing.id] = {
       condition: condition || undefined,
@@ -517,7 +532,7 @@ const STORE_CATEGORY_BANNERS: Array<{ key: 'all' | 'acc' | 'app'; label: string;
 export default function Store() {
   const params = useParams()
   const [search, setSearch] = useSearchParams()
-  const [filtersOpen, setFiltersOpen] = useState(false)
+  // filtros de sidebar removidos
   const [profile, setProfile] = useState<UserProfileRecord | null>(null)
   const [listings, setListings] = useState<Listing[]>([])
   const [loading, setLoading] = useState(true)
@@ -658,7 +673,19 @@ export default function Store() {
     return sectionFiltered.filter((listing) => {
       if (!matchesValue(listing.brand, brandSet)) return false
       if (!matchesValue(listing.material, materialSet)) return false
-      if (!matchesValue(listing.frameSize, frameSizeSet)) return false
+      if (frameSizeSet.size) {
+        const directMatch = matchesValue(listing.frameSize, frameSizeSet)
+        if (!directMatch) {
+          const extrasMap = extractExtrasMap(listing.extras)
+          const multi = extrasMap.talles || ''
+          const anyMulti = multi
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean)
+            .some((s) => frameSizeSet.has(normalizeText(s)))
+          if (!anyMulti) return false
+        }
+      }
       if (!matchesValue(listing.wheelSize, wheelSizeSet)) return false
       if (!matchesValue(listing.drivetrain, drivetrainSet)) return false
 
@@ -674,7 +701,17 @@ export default function Store() {
       }
 
       if (sizeSet.size) {
-        if (!derived.apparelSize || !sizeSet.has(normalizeText(derived.apparelSize))) return false
+        const hasSingle = derived.apparelSize && sizeSet.has(normalizeText(derived.apparelSize))
+        if (!hasSingle) {
+          const extrasMap = extractExtrasMap(listing.extras)
+          const multi = extrasMap.talles || ''
+          const anyMulti = multi
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean)
+            .some((s) => sizeSet.has(normalizeText(s)))
+          if (!anyMulti) return false
+        }
       }
 
       if (priceMin !== null && listing.price < priceMin) return false
@@ -882,102 +919,15 @@ export default function Store() {
           </div>
         </div>
 
-        <div className="mt-6 grid gap-6 lg:grid-cols-[260px_1fr]">
-          <aside className="lg:sticky lg:top-28">
-            {workingHours && (
-              <div className="mb-4 rounded-xl border border-white/10 bg-white/5 p-3 text-white">
-                <div className="flex items-center justify-between text-sm font-semibold">
-                  <span>Horarios de atención</span>
-                </div>
-                <p className="mt-2 whitespace-pre-line text-sm text-white/80">{workingHours}</p>
+        <div className="mt-6 space-y-6">
+          {workingHours && (
+            <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-white">
+              <div className="flex items-center justify-between text-sm font-semibold">
+                <span>Horarios de atención</span>
               </div>
-            )}
-            <div className="mb-3 lg:hidden">
-              <button
-                type="button"
-                className="inline-flex items-center gap-2 rounded-full border border-[#14212e]/20 px-3 py-2 text-sm text-[#14212e] bg-white"
-                onClick={() => setFiltersOpen((v) => !v)}
-              >
-                <MenuIcon /> Filtros
-              </button>
+              <p className="mt-2 whitespace-pre-line text-sm text-white/80">{workingHours}</p>
             </div>
-            <div className={`${filtersOpen ? '' : 'hidden'} lg:block rounded-2xl border border-[#14212e]/10 bg-white p-4`}>
-              <h3 className="text-sm font-semibold text-[#14212e] mb-2">Categorías</h3>
-              <ul className="space-y-3">
-                {FILTERS.map((sec) => (
-                  <li key={sec.id} className="border-b border-[#14212e]/10 pb-3 last:border-0">
-                    <p className="text-sm font-semibold text-[#14212e] mb-2">{sec.label}</p>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        className={`rounded-full px-3 py-1 text-xs font-semibold ${activeSection === sec.id && !activeOption ? 'bg-[#14212e] text-white' : 'bg-[#14212e]/5 text-[#14212e] hover:bg-[#14212e]/10'}`}
-                        onClick={() => setSection(sec.id)}
-                      >
-                        Todo
-                      </button>
-                      {sec.options.map((opt) => (
-                        <button
-                          key={opt.id}
-                          type="button"
-                          className={`rounded-full px-3 py-1 text-xs font-semibold ${activeSection === sec.id && activeOption === opt.id ? 'bg-[#14212e] text-white' : 'bg-[#14212e]/5 text-[#14212e] hover:bg-[#14212e]/10'}`}
-                          onClick={() => setSection(sec.id, opt.id)}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-              <h3 className="mt-4 text-sm font-semibold text-[#14212e] mb-2">Precio</h3>
-              <div className="flex items-center gap-2">
-                <input
-                  className="input flex-1"
-                  inputMode="numeric"
-                  placeholder="Mín"
-                  value={typeof filters.priceMin === 'number' ? String(filters.priceMin) : ''}
-                  onChange={(e) => {
-                    const raw = e.target.value.replace(/[^0-9]/g, '')
-                    const next = raw ? Number(raw) : undefined
-                    setFilters({ priceMin: next })
-                  }}
-                />
-                <span className="text-xs text-[#14212e]/50">—</span>
-                <input
-                  className="input flex-1"
-                  inputMode="numeric"
-                  placeholder="Máx"
-                  value={typeof filters.priceMax === 'number' ? String(filters.priceMax) : ''}
-                  onChange={(e) => {
-                    const raw = e.target.value.replace(/[^0-9]/g, '')
-                    const next = raw ? Number(raw) : undefined
-                    setFilters({ priceMax: next })
-                  }}
-                />
-              </div>
-              <h3 className="mt-4 text-sm font-semibold text-[#14212e] mb-2">Ordenar</h3>
-              <select
-                className="select w-full"
-                value={sortMode}
-                onChange={(e) => setSortMode(e.target.value as 'relevance' | 'newest' | 'asc' | 'desc')}
-              >
-                <option value="relevance">Relevancia</option>
-                <option value="newest">Más recientes</option>
-                <option value="desc">Precio: mayor a menor</option>
-                <option value="asc">Precio: menor a mayor</option>
-              </select>
-              <button
-                type="button"
-                className="mt-4 w-full rounded-full border border-[#14212e]/20 px-3 py-2 text-sm text-[#14212e] hover:bg-[#14212e]/5"
-                onClick={() => {
-                  handleClearFilters()
-                  setSection('')
-                }}
-              >
-                Limpiar filtros
-              </button>
-            </div>
-          </aside>
+          )}
 
           <div className="space-y-6">
             <div className="grid grid-cols-3 gap-2 sm:gap-4">
@@ -1121,9 +1071,11 @@ export default function Store() {
               </div>
             ) : null}
 
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-2 lg:grid-cols-3 items-start content-start">
-              {finalList.map((l) => (
-                <ListingCard key={l.id} l={l} storeLogoUrl={profile.store_avatar_url || profile.avatar_url || null} />
+            <div className="grid -mx-2 grid-cols-1 gap-0 sm:mx-0 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 items-start content-start">
+              {finalList.map((l, idx) => (
+                <div key={l.id} className="p-2 sm:p-0">
+                  <ListingCard l={l} storeLogoUrl={profile.store_avatar_url || profile.avatar_url || null} priority={idx < 4} />
+                </div>
               ))}
               {finalList.length === 0 && (
                 <div className="py-12 text-center text-[#14212e]/60 col-span-full">No hay productos en esta categoría.</div>
@@ -1318,10 +1270,4 @@ function LinkIcon() {
     </svg>
   )
 }
-function MenuIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-    </svg>
-  )
-}
+// MenuIcon ya no se usa

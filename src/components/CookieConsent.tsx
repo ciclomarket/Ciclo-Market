@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { initMetaPixel, setMetaPixelConsent, trackMetaPixel } from '../lib/metaPixel'
+import { initAnalytics } from '../analytics'
 
 declare global { interface Window { __cm_pixel_pv_sent?: boolean } }
 
@@ -16,6 +17,10 @@ export default function CookieConsent() {
       } else {
         // Reaplicar consentimiento guardado
         const choice = saved === 'granted' ? 'granted' : 'denied'
+        if (choice === 'granted') {
+          // Inicializar GA de forma diferida
+          initAnalytics()
+        }
         const gtag = (window as any).gtag as ((...args: any[]) => void) | undefined
         if (typeof gtag === 'function') {
           gtag('consent', 'update', { analytics_storage: choice })
@@ -45,6 +50,10 @@ export default function CookieConsent() {
 
   const applyConsent = (granted: boolean) => {
     try { localStorage.setItem(STORAGE_KEY, granted ? 'granted' : 'denied') } catch { void 0 }
+    if (granted) {
+      // Inicializar GA al aceptar
+      initAnalytics()
+    }
     const gtag = (window as any).gtag as ((...args: any[]) => void) | undefined
     if (typeof gtag === 'function') {
       gtag('consent', 'update', { analytics_storage: granted ? 'granted' : 'denied' })
