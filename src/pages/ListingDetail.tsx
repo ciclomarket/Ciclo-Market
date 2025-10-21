@@ -70,6 +70,7 @@ export default function ListingDetail() {
   const listingKey = params.slug ?? params.id ?? ''
   // Necesario antes de efectos que lo usan
   const isOwner = Boolean(user?.id && listing?.sellerId && user.id === listing.sellerId)
+  
 
   useEffect(() => {
     let active = true
@@ -962,6 +963,16 @@ export default function ListingDetail() {
           </div>
           <div className="order-1 w-full min-w-0 lg:col-start-1 lg:row-start-1">
             <ImageCarousel images={listing.images} />
+            {isModerator && listing && (
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <Link to={`/publicar/nueva?id=${encodeURIComponent(listing.id)}`}>
+                  <Button>
+                    Editar en formulario
+                  </Button>
+                </Link>
+              </div>
+            )}
+          
           </div>
 
           <div className="order-3 w-full min-w-0 lg:col-start-1 lg:row-start-2">

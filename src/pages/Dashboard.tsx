@@ -23,8 +23,9 @@ import { useToast } from '../context/ToastContext'
 import useFaves from '../hooks/useFaves'
 import useUpload from '../hooks/useUpload'
 import { createGift } from '../services/gifts'
+import { fetchCreditsHistory, type Credit } from '../services/credits'
 
-const TABS = ['Perfil', 'Publicaciones', 'Favoritos', 'Notificaciones', 'Editar perfil', 'Suscripción', 'Editar tienda', 'Verificá tu perfil', 'Cerrar sesión'] as const
+const TABS = ['Perfil', 'Publicaciones', 'Créditos', 'Favoritos', 'Notificaciones', 'Editar perfil', 'Suscripción', 'Editar tienda', 'Verificá tu perfil', 'Cerrar sesión'] as const
 type SellerTab = (typeof TABS)[number]
 
 const TAB_METADATA: Record<SellerTab, { title: string; description: string }> = {
@@ -43,6 +44,10 @@ const TAB_METADATA: Record<SellerTab, { title: string; description: string }> = 
   Notificaciones: {
     title: 'Notificaciones',
     description: 'Leé alertas y pendientes importantes',
+  },
+  Créditos: {
+    title: 'Mis créditos',
+    description: 'Disponibles e historial de canjes',
   },
   'Editar perfil': {
     title: 'Editar perfil',
@@ -159,6 +164,8 @@ export default function Dashboard() {
   const { unreadCount: unreadNotifications } = useNotifications()
   const { ids: favouriteIds } = useFaves()
   const favouritesCount = favouriteIds.length
+  const [credits, setCredits] = useState<Credit[]>([])
+  const availableCredits = useMemo(() => credits.filter((c) => c.status === 'available').length, [credits])
   // Moderación (share-boost)
   const [modOpen, setModOpen] = useState(false)
   const [modItems, setModItems] = useState<any[]>([])
@@ -181,12 +188,14 @@ export default function Dashboard() {
     setLoading(true)
     try {
       if (supabaseEnabled) {
-        const [listingsData, profileData] = await Promise.all([
+        const [listingsData, profileData, creditsData] = await Promise.all([
           fetchListingsBySeller(user.id, { includeArchived: true }),
-          fetchUserProfile(user.id)
+          fetchUserProfile(user.id),
+          fetchCreditsHistory(user.id)
         ])
         setSellerListings(listingsData)
         setProfile(profileData)
+        setCredits(creditsData)
       } else {
         const fallbackListings = mockListings.filter((l) => l.sellerId === user.id)
         setSellerListings(fallbackListings)
@@ -281,6 +290,8 @@ export default function Dashboard() {
         return <ListingsView listings={sellerListings} onRefresh={loadData} />
       case 'Notificaciones':
         return <NotificationsView />
+      case 'Créditos':
+        return <CreditsView credits={credits} />
       case 'Favoritos':
         return <FavoritesView favouriteIds={favouriteIds} />
       case 'Editar perfil':
@@ -494,6 +505,10 @@ export default function Dashboard() {
                 </button>
               </div>
               <div className="flex items-center gap-2">
+                <div className="hidden sm:flex items-center gap-2 rounded-full border border-white/30 px-3 py-1.5 text-sm text-white/90">
+                  <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                  {availableCredits} crédito{availableCredits === 1 ? '' : 's'} disponible{availableCredits === 1 ? '' : 's'}
+                </div>
                 {isModerator && (
                   <button
                     type="button"
@@ -1434,6 +1449,13 @@ function TabIcon({ tab }: { tab: SellerTab }) {
           <path strokeLinecap="round" strokeLinejoin="round" d="M14.235 19.458a1.5 1.5 0 01-2.47 0M12 6a4.5 4.5 0 00-4.5 4.5v2.086a2 2 0 01-.586 1.414L6 15.914h12l-.914-.914a2 2 0 01-.586-1.414V10.5A4.5 4.5 0 0012 6z" />
         </svg>
       )
+    case 'Créditos':
+      return (
+        <svg {...common}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5v10.5H3.75z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 10.5h16.5" />
+        </svg>
+      )
     case 'Editar perfil':
       return (
         <svg {...common}>
@@ -1457,6 +1479,97 @@ function TabIcon({ tab }: { tab: SellerTab }) {
     default:
       return null
   }
+}
+
+function CreditsView({ credits }: { credits: Credit[] }) {
+  const available = credits.filter((c) => c.status === 'available')
+  const used = credits.filter((c) => c.status === 'used')
+  const pending = credits.filter((c) => c.status === 'pending')
+  const cancelled = credits.filter((c) => c.status === 'cancelled' || c.status === 'expired')
+  const planLabel = (code: string) => (code === 'premium' ? 'Premium' : 'Básica')
+  const statusLabel = (s: string) => s === 'available' ? 'Disponible' : s === 'used' ? 'Usado' : s === 'pending' ? 'Pendiente' : s === 'expired' ? 'Vencido' : 'Cancelado'
+  const formatDate = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString('es-AR') : '—')
+  const daysLeft = (iso?: string | null) => {
+    if (!iso) return null
+    const d = new Date(iso)
+    const diff = Math.ceil((d.getTime() - Date.now()) / (24 * 60 * 60 * 1000))
+    return isNaN(diff) ? null : diff
+  }
+
+  const rows = credits.slice(0, 100)
+
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-3 sm:grid-cols-4">
+        <div className="rounded-2xl border border-[#14212e]/10 bg-white p-4 shadow">
+          <p className="text-xs uppercase tracking-wide text-[#14212e]/50">Disponibles</p>
+          <p className="mt-1 text-2xl font-semibold text-[#14212e]">{available.length}</p>
+        </div>
+        <div className="rounded-2xl border border-[#14212e]/10 bg-white p-4 shadow">
+          <p className="text-xs uppercase tracking-wide text-[#14212e]/50">Usados</p>
+          <p className="mt-1 text-2xl font-semibold text-[#14212e]">{used.length}</p>
+        </div>
+        <div className="rounded-2xl border border-[#14212e]/10 bg-white p-4 shadow">
+          <p className="text-xs uppercase tracking-wide text-[#14212e]/50">Pendientes</p>
+          <p className="mt-1 text-2xl font-semibold text-[#14212e]">{pending.length}</p>
+        </div>
+        <div className="rounded-2xl border border-[#14212e]/10 bg-white p-4 shadow">
+          <p className="text-xs uppercase tracking-wide text-[#14212e]/50">Cancelados/Vencidos</p>
+          <p className="mt-1 text-2xl font-semibold text-[#14212e]">{cancelled.length}</p>
+        </div>
+      </div>
+
+      <div className="rounded-3xl border border-[#14212e]/10 bg-white p-4 shadow">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-[#14212e]">Historial de créditos</h3>
+          <Link to="/publicar" className="text-sm font-semibold text-[#14212e] underline">Usar crédito</Link>
+        </div>
+        {rows.length === 0 ? (
+          <p className="mt-3 text-sm text-[#14212e]/70">Todavía no tenés créditos. Iniciá un pago desde Publicar para generar uno.</p>
+        ) : (
+          <div className="mt-3 overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="text-left text-[#14212e]/60">
+                  <th className="px-2 py-2">Fecha</th>
+                  <th className="px-2 py-2">Plan</th>
+                  <th className="px-2 py-2">Estado</th>
+                  <th className="px-2 py-2">Vence</th>
+                  <th className="px-2 py-2">Detalle</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((c) => (
+                  <tr key={c.id} className="border-t border-[#14212e]/10">
+                    <td className="px-2 py-2 text-[#14212e]">{new Date(c.created_at).toLocaleString('es-AR')}</td>
+                    <td className="px-2 py-2 text-[#14212e]">{planLabel(c.plan_code)}</td>
+                    <td className="px-2 py-2 text-[#14212e]">{statusLabel(c.status)}</td>
+                    <td className="px-2 py-2 text-[#14212e]">
+                      {formatDate(c.expires_at)}
+                      {c.status === 'available' && daysLeft(c.expires_at) != null && (
+                        <span className="ml-1 text-xs text-[#14212e]/60">({daysLeft(c.expires_at)} días)</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-2 text-[#14212e]">
+                      {c.status === 'used' && c.listing_id ? (
+                        <Link to={`/listing/${c.listing_id}`} className="underline">Usado en publicación</Link>
+                      ) : c.status === 'available' ? (
+                        'Crédito disponible'
+                      ) : c.status === 'pending' ? (
+                        'Acreditando pago'
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }
 
 function EditProfileView({

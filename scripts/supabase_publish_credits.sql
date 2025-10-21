@@ -19,6 +19,8 @@ create table if not exists public.publish_credits (
 create unique index if not exists publish_credits_provider_ref_key on public.publish_credits(provider_ref, provider) where provider_ref is not null;
 create unique index if not exists publish_credits_preference_id_key on public.publish_credits(preference_id, provider) where preference_id is not null;
 create index if not exists publish_credits_user_status_idx on public.publish_credits(user_id, status, created_at desc);
+-- Para revertir canjes no adjuntos eficientemente
+create index if not exists publish_credits_used_at_idx on public.publish_credits(status, used_at, listing_id);
 
 alter table public.publish_credits enable row level security;
 

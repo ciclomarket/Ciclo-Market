@@ -64,7 +64,7 @@ export default function NewListingForm() {
   const navigate = useNavigate()
   const { fx } = useCurrency()
   const { uploadFiles, uploading, progress } = useUpload()
-  const { user, enabled } = useAuth()
+  const { user, enabled, isModerator } = useAuth()
   const { plans } = usePlans()
   const { show: showToast } = useToast()
   const listingId = searchParams.get('id')
@@ -519,7 +519,7 @@ export default function NewListingForm() {
           navigate('/dashboard')
           return
         }
-        if (user && existing.sellerId !== user.id) {
+        if (user && existing.sellerId !== user.id && !isModerator) {
           alert('No tenés permisos para editar esta publicación.')
           navigate('/dashboard')
           return

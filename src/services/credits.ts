@@ -1,11 +1,32 @@
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 
-export type Credit = { id: string; created_at: string; plan_code: 'basic' | 'premium'; status: 'available' | 'used' | 'pending' | 'expired' | 'cancelled' }
+export type Credit = {
+  id: string
+  created_at: string
+  plan_code: 'basic' | 'premium'
+  status: 'available' | 'used' | 'pending' | 'expired' | 'cancelled'
+  used_at?: string | null
+  expires_at?: string | null
+  listing_id?: string | null
+}
 
 export async function fetchMyCredits(userId: string): Promise<Credit[]> {
   if (!API_BASE) return []
   try {
     const res = await fetch(`${API_BASE}/api/credits/me?userId=${encodeURIComponent(userId)}`)
+    if (!res.ok) return []
+    const data = await res.json()
+    if (!Array.isArray(data)) return []
+    return data as Credit[]
+  } catch {
+    return []
+  }
+}
+
+export async function fetchCreditsHistory(userId: string): Promise<Credit[]> {
+  if (!API_BASE) return []
+  try {
+    const res = await fetch(`${API_BASE}/api/credits/history?userId=${encodeURIComponent(userId)}`)
     if (!res.ok) return []
     const data = await res.json()
     if (!Array.isArray(data)) return []
@@ -44,4 +65,3 @@ export async function attachCreditToListing(userId: string, creditId: string, li
     return false
   }
 }
-

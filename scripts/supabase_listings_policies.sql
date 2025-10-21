@@ -51,18 +51,30 @@ begin
       with check (seller_id = auth.uid());
   end if;
 
-  -- UPDATE: moderador/admin (por claim JWT "role")
-  -- Requiere que el token contenga {'role':'moderator'} o {'role':'admin'}
-  if not exists (
+  -- UPDATE: moderador/admin (basado en tabla public.user_roles)
+  -- Permite editar cualquier listing a usuarios con rol 'moderator' o 'admin'
+  -- Idempotente: si existe la política anterior, la recreamos con la nueva condición
+  if exists (
     select 1 from pg_policies where schemaname='public' and tablename='listings' and policyname='listings_update_moderator'
   ) then
-    create policy listings_update_moderator
-      on public.listings
-      for update
-      to authenticated
-      using ((auth.jwt() ->> 'role') in ('moderator','admin'))
-      with check ((auth.jwt() ->> 'role') in ('moderator','admin'));
+    execute 'drop policy listings_update_moderator on public.listings';
   end if;
+  create policy listings_update_moderator
+    on public.listings
+    for update
+    to authenticated
+    using (
+      exists (
+        select 1 from public.user_roles ur
+        where ur.user_id = auth.uid() and ur.role in (''moderator'',''admin'')
+      )
+    )
+    with check (
+      exists (
+        select 1 from public.user_roles ur
+        where ur.user_id = auth.uid() and ur.role in (''moderator'',''admin'')
+      )
+    );
 
   -- Service role full access (backend)
   if not exists (
@@ -76,4 +88,3 @@ begin
       with check (true);
   end if;
 end$$;
-

@@ -2150,12 +2150,14 @@ app.post('/api/checkout', async (req, res) => {
     try {
       const planCode = requestPlanCode
       if (supabaseService && requestUserId && (planCode === 'basic' || planCode === 'premium')) {
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
         const payload = {
           user_id: requestUserId,
           plan_code: planCode,
           status: 'pending',
           provider: 'mercadopago',
           preference_id: preferenceId || null,
+          expires_at: expiresAt,
         }
         await supabaseService.from('publish_credits').insert(payload)
       }
@@ -2205,6 +2207,7 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
             provider: 'mercadopago',
             provider_ref: String(paymentId),
             preference_id: prefId,
+            expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
           }
           try {
             // Upsert por provider_ref (si backend lo soporta)
@@ -2242,11 +2245,13 @@ app.get('/api/credits/me', async (req, res) => {
     if (!supabaseService) return res.json([])
     const userId = String(req.query.userId || req.query.user_id || '').trim()
     if (!userId) return res.json([])
+    const nowIso = new Date().toISOString()
     const { data, error } = await supabaseService
       .from('publish_credits')
       .select('id, created_at, plan_code, status')
       .eq('user_id', userId)
       .eq('status', 'available')
+      .gte('expires_at', nowIso)
       .order('created_at', { ascending: true })
     if (error || !Array.isArray(data)) return res.json([])
     return res.json(data)
@@ -2266,12 +2271,14 @@ app.post('/api/credits/redeem', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'invalid_params' })
     }
     // Buscar el crédito más antiguo disponible y marcar como usado
+    const nowIso = new Date().toISOString()
     const { data: rows } = await supabaseService
       .from('publish_credits')
       .select('id')
       .eq('user_id', userId)
       .eq('plan_code', planCode)
       .eq('status', 'available')
+      .gte('expires_at', nowIso)
       .order('created_at', { ascending: true })
       .limit(1)
     const credit = Array.isArray(rows) && rows[0] ? rows[0] : null
@@ -2293,6 +2300,26 @@ app.post('/api/credits/redeem', async (req, res) => {
   }
 })
 
+// Full history (simple): list all credits for a user
+app.get('/api/credits/history', async (req, res) => {
+  try {
+    if (!supabaseService) return res.json([])
+    const userId = String(req.query.userId || req.query.user_id || '').trim()
+    if (!userId) return res.json([])
+    const { data, error } = await supabaseService
+      .from('publish_credits')
+      .select('id, created_at, plan_code, status, used_at, expires_at, listing_id')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(200)
+    if (error || !Array.isArray(data)) return res.json([])
+    return res.json(data)
+  } catch (err) {
+    console.warn('[credits/history] failed', err)
+    return res.json([])
+  }
+})
+
 // Attach listing to a redeemed credit (best-effort)
 app.post('/api/credits/attach', async (req, res) => {
   try {
@@ -2311,6 +2338,36 @@ app.post('/api/credits/attach', async (req, res) => {
     return res.json({ ok: true })
   } catch (err) {
     console.error('[credits/attach] failed', err)
+    return res.status(500).json({ ok: false, error: 'unexpected_error' })
+  }
+})
+
+// Revertir créditos canjeados sin adjuntar a listing luego de 1 hora (gracia)
+// Protegido con x-cron-secret, pensado para ejecutar desde Render Cron
+app.post('/api/credits/revert-unused', async (req, res) => {
+  try {
+    const secret = String(req.headers['x-cron-secret'] || '')
+    if (!secret || secret !== String(process.env.CRON_SECRET || '')) {
+      return res.status(401).json({ ok: false, error: 'unauthorized' })
+    }
+    if (!supabaseService) return res.status(500).json({ ok: false, error: 'service_unavailable' })
+
+    const cutoffIso = new Date(Date.now() - 60 * 60 * 1000).toISOString() // 1 hora
+    const nowIso = new Date().toISOString()
+    const { data, error } = await supabaseService
+      .from('publish_credits')
+      .update({ status: 'available', used_at: null })
+      .eq('status', 'used')
+      .is('listing_id', null)
+      .lt('used_at', cutoffIso)
+      .gte('expires_at', nowIso)
+      .select('id')
+
+    if (error) return res.status(500).json({ ok: false, error: 'update_failed' })
+    const reverted = Array.isArray(data) ? data.length : 0
+    return res.json({ ok: true, reverted, cutoff: cutoffIso })
+  } catch (err) {
+    console.error('[credits/revert-unused] failed', err)
     return res.status(500).json({ ok: false, error: 'unexpected_error' })
   }
 })
