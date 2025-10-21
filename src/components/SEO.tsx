@@ -20,7 +20,7 @@ const SITE_NAME = 'Ciclo Market'
 const DEFAULT_TITLE = `${SITE_NAME} – Marketplace de bicicletas`
 const DEFAULT_DESCRIPTION =
   'Publicá tu bici, encontrá ofertas y conectá con vendedores en Ciclo Market. Clasificados de bicicletas en Argentina.'
-const DEFAULT_IMAGE = 'https://ciclomarket.ar/site-logo.png'
+const DEFAULT_IMAGE = 'https://ciclomarket.ar/logo-azul.png'
 const DEFAULT_URL = 'https://ciclomarket.ar'
 const DEFAULT_TYPE: NonNullable<SEOProps['type']> = 'website'
 const DEFAULT_LOCALE = 'es_AR'

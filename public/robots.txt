@@ -1,4 +1,9 @@
 User-agent: *
 Allow: /
 
+# Sitemaps
 Sitemap: https://ciclomarket.ar/sitemap.xml
+Sitemap: https://ciclomarket.ar/sitemap-static.xml
+Sitemap: https://ciclomarket.ar/sitemap-stores.xml
+Sitemap: https://ciclomarket.ar/sitemap-categories.xml
+

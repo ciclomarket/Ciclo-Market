@@ -356,7 +356,7 @@ app.get(['/share/listing/:id', '/listing/:id'], async (req, res) => {
     const baseFront = (process.env.FRONTEND_URL || '').split(',')[0]?.trim() || 'https://ciclomarket.ar'
     const slugOrId = (listing && listing.slug) ? listing.slug : id
     const canonicalUrl = `${baseFront}/listing/${encodeURIComponent(slugOrId)}`
-    const fallbackImg = process.env.SHARE_FALLBACK_IMAGE || `${baseFront}/og-preview.png`
+    const fallbackImg = `${baseFront}/logo-azul.png`
 
     if (error || !listing) {
       const nf = `<!doctype html><html lang="es"><head>
@@ -374,32 +374,8 @@ app.get(['/share/listing/:id', '/listing/:id'], async (req, res) => {
       return res.status(404).send(nf)
     }
 
-    // Imagen principal
-    let ogImage = null
-    if (Array.isArray(listing.images)) {
-      const first = listing.images[0]
-      ogImage = typeof first === 'string' ? first : (first && first.url) || null
-    }
-    if (!ogImage) ogImage = fallbackImg
-    // Asegurar URL absoluta para OG
-    if (ogImage && !/^https?:\/\//i.test(ogImage)) {
-      const trimmed = String(ogImage)
-      ogImage = `${baseFront}${trimmed.startsWith('/') ? '' : '/'}${trimmed}`
-    }
-    // Si es una URL pública de Supabase Storage, usar el endpoint de render para imagen transformada (ancho 1200, jpg)
-    try {
-      const u = new URL(ogImage)
-      const isSupabaseObject = /\/storage\/v1\/object\/public\//i.test(u.pathname)
-      if (isSupabaseObject) {
-        // Construir la ruta equivalente en render/image/public
-        const renderPath = u.pathname.replace('/storage/v1/object/public/', '/storage/v1/render/image/public/')
-        const renderUrl = new URL(u.origin + renderPath)
-        renderUrl.searchParams.set('width', '1200')
-        renderUrl.searchParams.set('format', 'jpg')
-        renderUrl.searchParams.set('quality', '85')
-        ogImage = renderUrl.toString()
-      }
-    } catch {}
+    // Imagen OG fija (solicitado): usar siempre el logo
+    const ogImage = fallbackImg
 
     // Título + precio
     let priceFmt = null
@@ -434,8 +410,10 @@ app.get(['/share/listing/:id', '/listing/:id'], async (req, res) => {
 <meta property="og:image:secure_url" content="${ogImage}" />
 <meta property="og:image:width" content="1200" />
 <meta property="og:image:height" content="630" />
+<meta property="og:image:type" content="image/jpeg" />
 <meta property="og:url" content="${canonicalUrl}" />
 <meta property="og:type" content="product" />
+<meta property="og:updated_time" content="${Math.floor(Date.now() / 1000)}" />
 <meta property="product:price:amount" content="${listing.price || ''}" />
 <meta property="product:price:currency" content="${listing.price_currency || 'ARS'}" />
 
