@@ -674,6 +674,61 @@ app.post('/api/gifts/redeem', async (req, res) => {
   }
 })
 
+// Claim a gift code as a publish credit for a user
+app.post('/api/gifts/claim', async (req, res) => {
+  try {
+    const { code, userId } = req.body || {}
+    if (!code || !userId) return res.status(400).json({ ok: false, error: 'missing_fields' })
+    const supabase = getServerSupabaseClient()
+
+    // If a credit for this (code,user) already exists, treat as idempotent success
+    const providerRef = `${code}:${userId}`
+    const { data: existingCredit } = await supabase
+      .from('publish_credits')
+      .select('id, status')
+      .eq('provider', 'gift')
+      .eq('provider_ref', providerRef)
+      .maybeSingle()
+    if (existingCredit?.id) {
+      return res.json({ ok: true, creditId: existingCredit.id })
+    }
+
+    // Validate gift
+    const { data: gift, error } = await supabase
+      .from('gift_codes')
+      .select('*')
+      .eq('code', code)
+      .maybeSingle()
+    if (error || !gift) return res.status(400).json({ ok: false, error: 'invalid_code' })
+    if (gift.uses_left <= 0) return res.status(400).json({ ok: false, error: 'no_uses_left' })
+    if (gift.expires_at && new Date(gift.expires_at).getTime() < Date.now()) return res.status(400).json({ ok: false, error: 'expired' })
+    const planCode = normalisePlanCode(gift.plan)
+    if (!(planCode === 'basic' || planCode === 'premium')) return res.status(400).json({ ok: false, error: 'invalid_plan' })
+
+    // Create credit (available) with provider 'gift'
+    const expiryIso = gift.expires_at || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+    const { data: creditIns, error: creditErr } = await supabase
+      .from('publish_credits')
+      .insert([{ user_id: userId, plan_code: planCode, status: 'available', provider: 'gift', provider_ref: providerRef, expires_at: expiryIso }])
+      .select('id')
+      .maybeSingle()
+    if (creditErr || !creditIns?.id) return res.status(500).json({ ok: false, error: 'credit_insert_failed' })
+
+    // Register redemption and decrement uses_left (best-effort)
+    try {
+      await supabase.from('gift_redemptions').insert([{ code, seller_id: userId }])
+    } catch (e) { /* noop */ }
+    try {
+      await supabase.from('gift_codes').update({ uses_left: Math.max(0, Number(gift.uses_left || 0) - 1) }).eq('code', code)
+    } catch (e) { /* noop */ }
+
+    return res.json({ ok: true, creditId: creditIns.id, planCode })
+  } catch (err) {
+    console.warn('[gifts/claim] failed', err)
+    return res.status(500).json({ ok: false, error: 'unexpected_error' })
+  }
+})
+
 app.post('/api/offers/notify', async (req, res) => {
   if (!isMailConfigured()) {
     return res.status(503).json({ error: 'smtp_unavailable' })

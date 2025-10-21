@@ -28,5 +28,22 @@ export async function createGift(plan: GiftPlan, uses: number = 1, expiresAt?: s
     body: JSON.stringify({ plan, uses, expiresAt })
   })
   if (!res.ok) return { ok: false }
-  return res.json()
+  const data = await res.json().catch(() => ({}))
+  return { ok: Boolean(data?.ok), code: data?.code }
+}
+
+export async function claimGift(code: string, userId: string): Promise<{ ok: boolean; creditId?: string; planCode?: 'basic' | 'premium'; error?: string }> {
+  const endpoint = API_BASE ? `${API_BASE}/api/gifts/claim` : '/api/gifts/claim'
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, userId })
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) return { ok: false, error: data?.error || 'claim_failed' }
+    return { ok: Boolean(data?.ok), creditId: data?.creditId, planCode: data?.planCode }
+  } catch {
+    return { ok: false, error: 'network_error' }
+  }
 }

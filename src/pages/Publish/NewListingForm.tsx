@@ -969,8 +969,8 @@ export default function NewListingForm() {
       try { await attachCreditToListing(user.id, redeemedCreditId, inserted.id) } catch { /* noop */ }
     }
 
-    // 3.d Redimir gift si corresponde (best-effort)
-    if (giftCode && user?.id) {
+    // 3.d Redimir gift si corresponde (best-effort) – solo si NO usamos crédito
+    if (giftCode && user?.id && !wantsToUseCredit) {
       try { await redeemGift(giftCode, user.id) } catch { void 0 }
     }
 

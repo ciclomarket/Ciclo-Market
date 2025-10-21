@@ -66,13 +66,13 @@ begin
     using (
       exists (
         select 1 from public.user_roles ur
-        where ur.user_id = auth.uid() and ur.role in (''moderator'',''admin'')
+        where ur.user_id = auth.uid() and ur.role in ('moderator','admin')
       )
     )
     with check (
       exists (
         select 1 from public.user_roles ur
-        where ur.user_id = auth.uid() and ur.role in (''moderator'',''admin'')
+        where ur.user_id = auth.uid() and ur.role in ('moderator','admin')
       )
     );
 

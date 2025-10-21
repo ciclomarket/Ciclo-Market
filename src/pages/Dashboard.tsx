@@ -166,6 +166,8 @@ export default function Dashboard() {
   const favouritesCount = favouriteIds.length
   const [credits, setCredits] = useState<Credit[]>([])
   const availableCredits = useMemo(() => credits.filter((c) => c.status === 'available').length, [credits])
+  const availableBasic = useMemo(() => credits.filter((c) => c.status === 'available' && c.plan_code === 'basic').length, [credits])
+  const availablePremium = useMemo(() => credits.filter((c) => c.status === 'available' && c.plan_code === 'premium').length, [credits])
   // Moderación (share-boost)
   const [modOpen, setModOpen] = useState(false)
   const [modItems, setModItems] = useState<any[]>([])
@@ -507,7 +509,7 @@ export default function Dashboard() {
               <div className="flex items-center gap-2">
                 <div className="hidden sm:flex items-center gap-2 rounded-full border border-white/30 px-3 py-1.5 text-sm text-white/90">
                   <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400" />
-                  {availableCredits} crédito{availableCredits === 1 ? '' : 's'} disponible{availableCredits === 1 ? '' : 's'}
+                  Disponibles: Básica {availableBasic} • Premium {availablePremium}
                 </div>
                 {isModerator && (
                   <button
@@ -1483,6 +1485,8 @@ function TabIcon({ tab }: { tab: SellerTab }) {
 
 function CreditsView({ credits }: { credits: Credit[] }) {
   const available = credits.filter((c) => c.status === 'available')
+  const availableBasic = available.filter((c) => c.plan_code === 'basic').length
+  const availablePremium = available.filter((c) => c.plan_code === 'premium').length
   const used = credits.filter((c) => c.status === 'used')
   const pending = credits.filter((c) => c.status === 'pending')
   const cancelled = credits.filter((c) => c.status === 'cancelled' || c.status === 'expired')
@@ -1504,6 +1508,7 @@ function CreditsView({ credits }: { credits: Credit[] }) {
         <div className="rounded-2xl border border-[#14212e]/10 bg-white p-4 shadow">
           <p className="text-xs uppercase tracking-wide text-[#14212e]/50">Disponibles</p>
           <p className="mt-1 text-2xl font-semibold text-[#14212e]">{available.length}</p>
+          <p className="text-xs text-[#14212e]/60 mt-1">Básica {availableBasic} • Premium {availablePremium}</p>
         </div>
         <div className="rounded-2xl border border-[#14212e]/10 bg-white p-4 shadow">
           <p className="text-xs uppercase tracking-wide text-[#14212e]/50">Usados</p>

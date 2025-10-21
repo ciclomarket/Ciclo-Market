@@ -8,7 +8,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useEffect } from 'react'
 import { fetchUserProfile } from '../../services/users'
 import { usePlans } from '../../context/PlanContext'
-import { validateGift } from '../../services/gifts'
+import { validateGift, claimGift } from '../../services/gifts'
 import type { Plan } from '../../types'
 import { trackMetaPixel } from '../../lib/metaPixel'
 import { PLAN_ORDER, type PlanCode, canonicalPlanCode, resolvePlanCode } from '../../utils/planCodes'
@@ -149,6 +149,7 @@ export default function Plans() {
   const [giftPlan, setGiftPlan] = useState<PlanCode | null>(null)
   const [giftValidating, setGiftValidating] = useState(false)
   const [giftError, setGiftError] = useState<string | null>(null)
+  const [giftClaimed, setGiftClaimed] = useState(false)
   const [availableCredits, setAvailableCredits] = useState<Array<{ plan_code: 'basic' | 'premium' }>>([])
 
   const typeParam = searchParams.get('type')
@@ -212,6 +213,29 @@ export default function Plans() {
         if (res.ok && (res.plan === 'basic' || res.plan === 'premium')) {
           setGiftCode(code)
           setGiftPlan(res.plan as PlanCode)
+          // Intentar convertir automáticamente el regalo en crédito si el usuario está logueado
+          if (user?.id && !giftClaimed) {
+            try {
+              const claim = await claimGift(code, user.id)
+              if (claim.ok) {
+                setGiftClaimed(true)
+                // Refrescar créditos disponibles
+                try {
+                  const rows = await fetchMyCredits(user.id)
+                  setAvailableCredits(rows.map((r) => ({ plan_code: r.plan_code })))
+                } catch { /* noop */ }
+                // Limpiar el parámetro gift de la URL para evitar reclamos repetidos
+                const next = new URLSearchParams(searchParams)
+                next.delete('gift')
+                setSearchParams(next, { replace: true })
+                // Si ya eligió tipo, lo llevamos directo al formulario con crédito
+                const targetPlan = (claim.planCode as PlanCode) || (res.plan as PlanCode)
+                if (listingType) {
+                  navigate(`/publicar/nueva?type=${listingType}&plan=${targetPlan}&credit=1`, { replace: true })
+                }
+              }
+            } catch { /* noop */ }
+          }
         } else {
           setGiftCode(null)
           setGiftPlan(null)
@@ -224,7 +248,7 @@ export default function Plans() {
       }
     })()
     return null
-  }, [searchParams])
+  }, [searchParams, user?.id, listingType, navigate, setSearchParams, giftClaimed])
 
   const visiblePlans = useMemo(() => {
     const enriched = plans
@@ -291,12 +315,28 @@ export default function Plans() {
       return
     }
 
-    // Bonificado por gift: saltar checkout y pasar el gift al form
+    // Bonificado por gift: convertir a crédito y saltar al form con credit=1
     if (giftCode && giftPlan && giftPlan === planCode) {
-      clearPaymentParams()
-      const next = new URLSearchParams({ type: listingType, plan: planCode, gift: giftCode })
-      navigate(`/publicar/nueva?${next.toString()}`)
-      return
+      try {
+        if (!user?.id) { alert('Iniciá sesión para usar tu regalo.'); return }
+        const res = await claimGift(giftCode, user.id)
+        if (!res.ok) {
+          console.warn('[plans] claim gift failed', res.error)
+          alert('No pudimos convertir tu regalo en crédito. Intentá nuevamente. Si persiste, usá el código en el formulario.')
+          // Fallback al flujo anterior con ?gift
+          clearPaymentParams()
+          const next = new URLSearchParams({ type: listingType, plan: planCode, gift: giftCode })
+          navigate(`/publicar/nueva?${next.toString()}`)
+          return
+        }
+        clearPaymentParams()
+        const next = new URLSearchParams({ type: listingType, plan: planCode, credit: '1' })
+        navigate(`/publicar/nueva?${next.toString()}`)
+        return
+      } catch {
+        alert('No pudimos procesar tu regalo en este momento. Intentá de nuevo.')
+        return
+      }
     }
 
     if (plan.price === 0) {
