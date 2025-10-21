@@ -17,6 +17,7 @@ import { normaliseWhatsapp, extractLocalWhatsapp, sanitizeLocalWhatsappInput } f
 import { fetchListing } from '../../services/listings'
 import { validateGift, redeemGift } from '../../services/gifts'
 import { fetchUserProfile, type UserProfileRecord } from '../../services/users'
+import { redeemCredit, attachCreditToListing } from '../../services/credits'
 import { useToast } from '../../context/ToastContext'
 
 const MATERIAL_OPTIONS = ['Aluminio','Carbono','Aluminio + Carbono','Titanio','Acero','Otro']
@@ -862,6 +863,23 @@ export default function NewListingForm() {
     // Derivar subcategoría cuando aplique
     const subcategory = isAccessory ? accessoryType : (isApparel ? apparelType : undefined)
 
+    // 0. Si viene con crédito (?credit=1) canjear antes de crear el aviso
+    let redeemedCreditId: string | null = null
+    const wantsToUseCredit = searchParams.get('credit') === '1' && (planCode === 'basic' || planCode === 'premium')
+    if (!editingListing && wantsToUseCredit && user?.id) {
+      try {
+        const res = await redeemCredit(user.id, planCode as 'basic' | 'premium')
+        if (!res.ok) {
+          alert('No encontramos un crédito disponible para tu cuenta. Volvé a seleccionar el plan o intentá nuevamente.')
+          return
+        }
+        redeemedCreditId = res.creditId
+      } catch {
+        alert('No pudimos validar tu crédito. Intentá nuevamente en unos minutos.')
+        return
+      }
+    }
+
     const payload = {
       title: autoTitle,
       brand: brand.trim(),
@@ -946,7 +964,12 @@ export default function NewListingForm() {
       return
     }
 
-    // 3.c Redimir gift si corresponde (best-effort)
+    // 3.c Asociar crédito al listing (best-effort)
+    if (redeemedCreditId && inserted?.id && user?.id) {
+      try { await attachCreditToListing(user.id, redeemedCreditId, inserted.id) } catch { /* noop */ }
+    }
+
+    // 3.d Redimir gift si corresponde (best-effort)
     if (giftCode && user?.id) {
       try { await redeemGift(giftCode, user.id) } catch { void 0 }
     }

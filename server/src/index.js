@@ -2062,6 +2062,7 @@ app.post('/api/checkout', async (req, res) => {
     const requestPlanId = req.body?.planId || req.body?.plan || requestPlanCode || 'premium'
     const amountFromBody = Number(req.body?.amount)
     const autoRenew = Boolean(req.body?.autoRenew ?? true)
+    const requestUserId = (req.body?.userId ? String(req.body.userId) : '').trim() || null
 
     let amount = Number.isFinite(amountFromBody) && amountFromBody > 0 ? amountFromBody : 0
 
@@ -2122,7 +2123,9 @@ app.post('/api/checkout', async (req, res) => {
       ],
       back_urls: { success: successUrl, failure: failureUrl, pending: pendingUrl },
       auto_return: 'approved',
-      metadata: { planId: requestPlanId, planCode: requestPlanCode, autoRenew },
+      metadata: { planId: requestPlanId, planCode: requestPlanCode, userId: requestUserId, autoRenew },
+      // external_reference ayuda a correlacionar en MP (visible en pago)
+      external_reference: [requestUserId || 'anon', requestPlanCode || requestPlanId || 'unknown', String(Date.now())].join(':'),
       ...(notificationUrl ? { notification_url: notificationUrl } : {}),
     }
 
@@ -2131,6 +2134,7 @@ app.post('/api/checkout', async (req, res) => {
     console.log('[checkout] preferenceClient.create duration:', Date.now() - mpStart, 'ms')
     if (notificationUrl) console.log('[checkout] notification_url:', notificationUrl)
     const url = mpRes.init_point || null
+    const preferenceId = mpRes.id || null
 
     if (!url) {
       console.error('checkout error: missing_init_point', mpRes)
@@ -2142,6 +2146,22 @@ app.post('/api/checkout', async (req, res) => {
     }
 
     console.log('[checkout] init_point:', url)
+    // Crear crédito pendiente (best-effort) para poder recuperar el flujo
+    try {
+      const planCode = requestPlanCode
+      if (supabaseService && requestUserId && (planCode === 'basic' || planCode === 'premium')) {
+        const payload = {
+          user_id: requestUserId,
+          plan_code: planCode,
+          status: 'pending',
+          provider: 'mercadopago',
+          preference_id: preferenceId || null,
+        }
+        await supabaseService.from('publish_credits').insert(payload)
+      }
+    } catch (e) {
+      console.warn('[checkout] pending credit insert failed (non-fatal)', e?.message || e)
+    }
     return res.json({ url })
   } catch (e) {
     console.error('[checkout] init failed', e?.message || e)
@@ -2166,7 +2186,44 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
         const status = statusRaw === 'approved' ? 'succeeded' : statusRaw
         const amount = typeof mpPayment?.transaction_amount === 'number' ? mpPayment.transaction_amount : null
         const currency = mpPayment?.currency_id || 'ARS'
-        await recordPayment({ userId: null, listingId: null, amount, currency, status, providerRef: String(paymentId) })
+        // Extraer metadata útil
+        const meta = (mpPayment && typeof mpPayment.metadata === 'object') ? mpPayment.metadata : {}
+        const externalRef = (mpPayment && mpPayment.external_reference) ? String(mpPayment.external_reference) : null
+        const userId = typeof meta?.userId === 'string' && meta.userId ? meta.userId : null
+        const planCode = normalisePlanCode(meta?.planCode || meta?.planId)
+        // Registrar pago con userId cuando esté disponible
+        await recordPayment({ userId, listingId: null, amount, currency, status, providerRef: String(paymentId) })
+        // Upsert crédito según estado del pago
+        if (supabaseService && (planCode === 'basic' || planCode === 'premium')) {
+          const creditStatus = status === 'succeeded' ? 'available' : (status === 'pending' ? 'pending' : 'cancelled')
+          const prefId = (mpPayment && mpPayment.order && mpPayment.order.id) ? String(mpPayment.order.id) : null
+          // Intentar actualizar crédito existente por preference_id o provider_ref; si no existe, crear
+          const baseUpdate = {
+            user_id: userId,
+            plan_code: planCode,
+            status: creditStatus,
+            provider: 'mercadopago',
+            provider_ref: String(paymentId),
+            preference_id: prefId,
+          }
+          try {
+            // Upsert por provider_ref (si backend lo soporta)
+            await supabaseService
+              .from('publish_credits')
+              .upsert(baseUpdate, { onConflict: 'provider_ref,provider' })
+          } catch (e1) {
+            console.warn('[webhook] upsert by provider_ref failed', e1?.message || e1)
+          }
+          if (prefId) {
+            try {
+              await supabaseService
+                .from('publish_credits')
+                .upsert(baseUpdate, { onConflict: 'preference_id,provider' })
+            } catch (e2) {
+              console.warn('[webhook] upsert by preference_id failed', e2?.message || e2)
+            }
+          }
+        }
       } catch (err) {
         console.error('[MP webhook] payment fetch/record failed', err)
       }
@@ -2175,6 +2232,86 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
     console.error('[MP webhook] handler error', e)
   } finally {
     res.sendStatus(200)
+  }
+})
+
+/* ----------------------------- Credits API -------------------------------- */
+// List available credits for a user
+app.get('/api/credits/me', async (req, res) => {
+  try {
+    if (!supabaseService) return res.json([])
+    const userId = String(req.query.userId || req.query.user_id || '').trim()
+    if (!userId) return res.json([])
+    const { data, error } = await supabaseService
+      .from('publish_credits')
+      .select('id, created_at, plan_code, status')
+      .eq('user_id', userId)
+      .eq('status', 'available')
+      .order('created_at', { ascending: true })
+    if (error || !Array.isArray(data)) return res.json([])
+    return res.json(data)
+  } catch (err) {
+    console.warn('[credits/me] failed', err)
+    return res.json([])
+  }
+})
+
+// Redeem one available credit for the given plan
+app.post('/api/credits/redeem', async (req, res) => {
+  try {
+    if (!supabaseService) return res.status(500).json({ ok: false, error: 'service_unavailable' })
+    const userId = String(req.body?.userId || '').trim()
+    const planCode = normalisePlanCode(req.body?.planCode || req.body?.plan)
+    if (!userId || !(planCode === 'basic' || planCode === 'premium')) {
+      return res.status(400).json({ ok: false, error: 'invalid_params' })
+    }
+    // Buscar el crédito más antiguo disponible y marcar como usado
+    const { data: rows } = await supabaseService
+      .from('publish_credits')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('plan_code', planCode)
+      .eq('status', 'available')
+      .order('created_at', { ascending: true })
+      .limit(1)
+    const credit = Array.isArray(rows) && rows[0] ? rows[0] : null
+    if (!credit?.id) return res.status(409).json({ ok: false, error: 'no_available_credit' })
+    const { data: updated, error } = await supabaseService
+      .from('publish_credits')
+      .update({ status: 'used', used_at: new Date().toISOString() })
+      .eq('id', credit.id)
+      .eq('user_id', userId)
+      .eq('plan_code', planCode)
+      .eq('status', 'available')
+      .select('id')
+      .single()
+    if (error || !updated) return res.status(409).json({ ok: false, error: 'race_conflict' })
+    return res.json({ ok: true, creditId: updated.id, planCode })
+  } catch (err) {
+    console.error('[credits/redeem] failed', err)
+    return res.status(500).json({ ok: false, error: 'unexpected_error' })
+  }
+})
+
+// Attach listing to a redeemed credit (best-effort)
+app.post('/api/credits/attach', async (req, res) => {
+  try {
+    if (!supabaseService) return res.status(500).json({ ok: false, error: 'service_unavailable' })
+    const creditId = String(req.body?.creditId || '').trim()
+    const listingId = String(req.body?.listingId || '').trim()
+    const userId = String(req.body?.userId || '').trim()
+    if (!creditId || !listingId || !userId) return res.status(400).json({ ok: false, error: 'invalid_params' })
+    const { error } = await supabaseService
+      .from('publish_credits')
+      .update({ listing_id: listingId })
+      .eq('id', creditId)
+      .eq('user_id', userId)
+      .eq('status', 'used')
+    if (error) return res.status(400).json({ ok: false, error: 'attach_failed' })
+    return res.json({ ok: true })
+  } catch (err) {
+    console.error('[credits/attach] failed', err)
+    return res.status(500).json({ ok: false, error: 'unexpected_error' })
   }
 })
 

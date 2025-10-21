@@ -12,6 +12,7 @@ import { validateGift } from '../../services/gifts'
 import type { Plan } from '../../types'
 import { trackMetaPixel } from '../../lib/metaPixel'
 import { PLAN_ORDER, type PlanCode, canonicalPlanCode, resolvePlanCode } from '../../utils/planCodes'
+import { fetchMyCredits } from '../../services/credits'
 
 const PLAN_LABEL: Record<PlanCode, string> = {
   free: 'Gratis',
@@ -148,6 +149,7 @@ export default function Plans() {
   const [giftPlan, setGiftPlan] = useState<PlanCode | null>(null)
   const [giftValidating, setGiftValidating] = useState(false)
   const [giftError, setGiftError] = useState<string | null>(null)
+  const [availableCredits, setAvailableCredits] = useState<Array<{ plan_code: 'basic' | 'premium' }>>([])
 
   const typeParam = searchParams.get('type')
   const listingType: ListingType | null = ((): ListingType | null => {
@@ -165,6 +167,22 @@ export default function Plans() {
         setIsStore(Boolean(profile?.store_enabled))
       } catch {
         if (active) setIsStore(false)
+      }
+    })()
+    return () => { active = false }
+  }, [user?.id])
+
+  // Cargar créditos disponibles del usuario (si hay API base)
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      try {
+        if (!user?.id) { setAvailableCredits([]); return }
+        const rows = await fetchMyCredits(user.id)
+        if (!active) return
+        setAvailableCredits(rows.map((r) => ({ plan_code: r.plan_code })))
+      } catch {
+        if (active) setAvailableCredits([])
       }
     })()
     return () => { active = false }
@@ -284,6 +302,15 @@ export default function Plans() {
     if (plan.price === 0) {
       clearPaymentParams()
       navigate(`/publicar/nueva?type=${listingType}&plan=${encodeURIComponent(planCode)}`)
+      return
+    }
+
+    // Si tiene crédito disponible para este plan, saltar checkout
+    const hasCredit = availableCredits.some((c) => c.plan_code === planCode)
+    if (hasCredit && (planCode === 'basic' || planCode === 'premium')) {
+      clearPaymentParams()
+      const next = new URLSearchParams({ type: listingType, plan: planCode, credit: '1' })
+      navigate(`/publicar/nueva?${next.toString()}`)
       return
     }
 
@@ -546,6 +573,26 @@ export default function Plans() {
               <Button className="bg-[#14212e] text-white hover:bg-[#1b2f3f]" onClick={() => handleSelect(planFromQuery)}>
                 Ir al checkout
               </Button>
+            </div>
+          </div>
+        )}
+
+        {availableCredits.length > 0 && (
+          <div className="mt-8 rounded-3xl border border-emerald-200 bg-emerald-50 p-6 text-emerald-900 shadow">
+            <h2 className="text-lg font-semibold">Tenés créditos disponibles</h2>
+            <p className="mt-2 text-sm">Podés crear tu publicación sin pagar nuevamente.</p>
+            <div className="mt-3 flex flex-wrap gap-3">
+              {['basic','premium'].map((code) => (
+                availableCredits.some((c) => c.plan_code === code) ? (
+                  <Button
+                    key={code}
+                    className="bg-emerald-600 text-white hover:bg-emerald-700"
+                    onClick={() => navigate(`/publicar/nueva?type=${listingType || 'bike'}&plan=${code}&credit=1`)}
+                  >
+                    Usar crédito {code === 'basic' ? 'Básica' : 'Premium'}
+                  </Button>
+                ) : null
+              ))}
             </div>
           </div>
         )}
