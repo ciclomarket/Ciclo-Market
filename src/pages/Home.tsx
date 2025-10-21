@@ -16,6 +16,7 @@ import { supabaseEnabled } from '../services/supabase'
 import type { Listing } from '../types'
 import { buildListingSlug } from '../utils/slug'
 import { hasPaidPlan } from '../utils/plans'
+import { track, trackOncePerSession } from '../services/track'
 
 import specializedLogo from '/brands/specialized.png'
 import canyonLogo from '/brands/canyon.png'
@@ -208,6 +209,9 @@ function Step({ icon, t, d }: { icon: ReactNode; t: string; d: string }) {
 }
 
 export default function Home() {
+  useEffect(() => {
+    trackOncePerSession('site_view_home', () => track('site_view'))
+  }, [])
   const [listings, setListings] = useState<Listing[]>([])
   const [dataStatus, setDataStatus] = useState<'idle' | 'loading' | 'ready'>('loading')
 

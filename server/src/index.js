@@ -111,6 +111,35 @@ async function recordPayment({ userId, listingId, amount, currency = 'ARS', stat
   }
 }
 
+/* ----------------------------- Track events ------------------------------- */
+app.post('/api/track', async (req, res) => {
+  try {
+    if (!supabaseService) return res.sendStatus(204)
+    const { type, listing_id, store_user_id, path, referrer, anon_id, meta } = req.body || {}
+    const clean = (s) => (typeof s === 'string' ? s.slice(0, 512) : null)
+    const allowed = new Set(['site_view','listing_view','store_view','wa_click'])
+    if (!allowed.has(type)) return res.status(400).json({ ok: false, error: 'invalid_type' })
+    const ua = clean(req.headers['user-agent'] || '')
+    const payload = {
+      type,
+      listing_id: listing_id || null,
+      store_user_id: store_user_id || null,
+      user_id: null,
+      anon_id: clean(anon_id) || null,
+      path: clean(path) || null,
+      referrer: clean(referrer) || null,
+      ua,
+      meta: meta && typeof meta === 'object' ? meta : null,
+    }
+    const { error } = await supabaseService.from('events').insert(payload)
+    if (error) console.warn('[track] insert failed', error)
+    return res.sendStatus(204)
+  } catch (err) {
+    console.warn('[track] unexpected', err)
+    return res.sendStatus(204)
+  }
+})
+
 // Sitemap index que referencia sitemaps por tipo
 app.get('/sitemap.xml', async (_req, res) => {
   try {

@@ -5,6 +5,7 @@ import Container from '../components/Container'
 import JsonLd from '../components/JsonLd'
 import FilterDropdown from '../components/FilterDropdown'
 import { fetchUserProfile, fetchStoreProfileBySlug, fetchUserContactEmail, type UserProfileRecord } from '../services/users'
+import { track, trackOncePerSession } from '../services/track'
 import { normaliseWhatsapp, buildWhatsappUrl } from '../utils/whatsapp'
 import { fetchListingsBySeller } from '../services/listings'
 import ListingCard from '../components/ListingCard'
@@ -609,6 +610,15 @@ export default function Store() {
     void load()
     return () => { active = false }
   }, [params.slug])
+
+  // Track store view once per session when profile is loaded
+  useEffect(() => {
+    const pid = profile?.id
+    if (!pid) return
+    trackOncePerSession(`store_view_${pid}`, () => {
+      track('store_view', { store_user_id: pid })
+    })
+  }, [profile?.id])
 
   useEffect(() => {
     let mounted = true

@@ -20,6 +20,7 @@ import { logContactEvent, fetchSellerReviews } from '../services/reviews'
 // SEO global se maneja desde App; acá sólo inyectamos JSON-LD
 import JsonLd from '../components/JsonLd'
 import { trackMetaPixel } from '../lib/metaPixel'
+import { track, trackOncePerSession } from '../services/track'
 import { useToast } from '../context/ToastContext'
 import ListingQuestionsSection from '../components/ListingQuestionsSection'
 import { submitShareBoost } from '../services/shareBoost'
@@ -94,6 +95,9 @@ export default function ListingDetail() {
               value: Number(result.price) || 0,
               currency: (result.priceCurrency || 'ARS').toUpperCase()
             })
+            trackOncePerSession(`listing_view_${result.id}`, () => {
+              track('listing_view', { listing_id: result.id, store_user_id: result.sellerId || null })
+            })
           } catch { /* noop */ }
           return
         }
@@ -109,6 +113,9 @@ export default function ListingDetail() {
             content_category: fallback.category,
             value: Number(fallback.price) || 0,
             currency: (fallback.priceCurrency || 'ARS').toUpperCase()
+          })
+          trackOncePerSession(`listing_view_${fallback.id}`, () => {
+            track('listing_view', { listing_id: fallback.id, store_user_id: fallback.sellerId || null })
           })
         } catch { /* noop */ }
       }
@@ -545,6 +552,7 @@ export default function ListingDetail() {
                     if (item.id === 'whatsapp') {
                       trackMetaPixel('Contact', { method: 'whatsapp', content_ids: [listing.id], content_type: 'product' })
                       logContactEvent({ sellerId: listing.sellerId, listingId: listing.id, buyerId: user?.id || null, type: 'whatsapp' })
+                      track('wa_click', { listing_id: listing.id })
                     } else if (item.id === 'email') {
                       trackMetaPixel('Contact', { method: 'email', content_ids: [listing.id], content_type: 'product' })
                       logContactEvent({ sellerId: listing.sellerId, listingId: listing.id, buyerId: user?.id || null, type: 'email' })
