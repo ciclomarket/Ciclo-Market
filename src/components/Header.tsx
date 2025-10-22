@@ -17,9 +17,9 @@ const MEGA: MegaItem[] = [
       {
         title: 'Categorías',
         links: [
-          { label: 'Bicicletas de Ruta', to: '/marketplace?cat=Ruta' },
-          { label: 'Gravel', to: '/marketplace?cat=Gravel' },
-          { label: 'Triatlón / TT', to: '/marketplace?cat=Ruta&q=triatlón%20tt' },
+          { label: 'Bicicletas de Ruta', to: '/bicicletas-ruta' },
+          { label: 'Gravel', to: '/bicicletas-gravel' },
+          { label: 'Triatlón / TT', to: '/bicicletas-triatlon' },
           { label: 'Vintage / Acero', to: '/marketplace?cat=Ruta&q=vintage%20acero' },
         ],
       },
@@ -51,6 +51,7 @@ const MEGA: MegaItem[] = [
       {
         title: 'Categorías',
         links: [
+          { label: 'MTB (todas)', to: '/bicicletas-mtb' },
           { label: 'Cross Country', to: '/marketplace?cat=MTB&q=cross%20country%20xc' },
           { label: 'Trail', to: '/marketplace?cat=MTB&q=trail' },
           { label: 'Enduro', to: '/marketplace?cat=MTB&q=enduro' },
@@ -84,7 +85,7 @@ const MEGA: MegaItem[] = [
         title: 'Categorías',
         links: [
           { label: 'Urbana', to: '/marketplace?cat=Urbana' },
-          { label: 'Fixie', to: '/marketplace?cat=Fixie' },
+          { label: 'Fixie', to: '/fixie' },
           { label: 'Single Speed', to: '/marketplace?cat=Fixie&q=single%20speed' },
         ],
       },
@@ -101,30 +102,13 @@ const MEGA: MegaItem[] = [
   {
     label: 'Partes',
     cols: [
-      {
-        title: 'Componentes',
-        links: [
-          { label: 'Ruedas', to: '/marketplace?cat=Accesorios&q=ruedas%20cubiertas' },
-          { label: 'Grupos', to: '/marketplace?cat=Accesorios&q=grupos' },
-          { label: 'Cockpits', to: '/marketplace?cat=Accesorios&q=cockpit%20manubrio%20stem' },
-          { label: 'Sillines', to: '/marketplace?cat=Accesorios&q=sillín%20sillin' },
-        ],
-      },
-      {
-        title: 'Neumáticos',
-        links: [
-          { label: 'Ruta 23–28', to: '/marketplace?cat=Accesorios&q=cubiertas%20ruta' },
-          { label: 'Gravel 35–50', to: '/marketplace?cat=Accesorios&q=cubiertas%20gravel' },
-          { label: 'MTB 2.2–2.6', to: '/marketplace?cat=Accesorios&q=cubiertas%20mtb' },
-        ],
-      },
-      {
-        title: 'Ofertas',
-        links: [
-          { label: 'Liquidación', to: '/marketplace?cat=Accesorios&deal=1' },
-          { label: 'Outlet ruedas', to: '/marketplace?cat=Accesorios&deal=1&q=ruedas' },
-        ],
-      },
+      { title: 'Accesorios (todos) →', links: [ { label: 'Ver todos', to: '/accesorios' } ] },
+      { title: 'Componentes y partes', links: [ { label: 'Ver componentes', to: '/marketplace?cat=Accesorios&q=componentes%20partes' } ] },
+      { title: 'Ruedas y cubiertas', links: [ { label: 'Ver ruedas/cubiertas', to: '/marketplace?cat=Accesorios&q=ruedas%20cubiertas' } ] },
+      { title: 'Herramientas y mantenimiento', links: [ { label: 'Ver herramientas', to: '/marketplace?cat=Accesorios&q=herramientas%20mantenimiento' } ] },
+      { title: 'Electrónica y sensores', links: [ { label: 'Ver electrónica', to: '/marketplace?cat=Accesorios&q=gps%20sensor%20ciclocomputadora' } ] },
+      { title: 'Bikepacking y transporte', links: [ { label: 'Ver bikepacking', to: '/marketplace?cat=Accesorios&q=bikepacking%20bolsos%20alforjas' } ] },
+      { title: 'Lubricantes y limpieza', links: [ { label: 'Ver limpieza', to: '/marketplace?cat=Accesorios&q=lubricantes%20limpieza' } ] },
     ],
   },
   {
@@ -157,27 +141,12 @@ const MEGA: MegaItem[] = [
   {
     label: 'Indumentaria',
     cols: [
-      {
-        title: 'Para rodar',
-        links: [
-          { label: 'Maillots', to: '/marketplace?cat=Indumentaria&q=jersey%20maillot' },
-          { label: 'Baberos / Shorts', to: '/marketplace?cat=Indumentaria&q=babero%20short' },
-          { label: 'Guantes', to: '/marketplace?cat=Indumentaria&q=guantes' },
-        ],
-      },
-      {
-        title: 'Zapatillas',
-        links: [
-          { label: 'Ruta (3 pernos)', to: '/marketplace?cat=Indumentaria&q=zapatillas%20ruta' },
-          { label: 'MTB (2 pernos)', to: '/marketplace?cat=Indumentaria&q=zapatillas%20mtb' },
-        ],
-      },
-      {
-        title: 'Ofertas',
-        links: [
-          { label: 'Outlet Indumentaria', to: '/marketplace?deal=1&cat=Indumentaria' },
-        ],
-      },
+      { title: 'Indumentaria (toda) →', links: [ { label: 'Ver toda', to: '/indumentaria' } ] },
+      { title: 'Jerseys / Maillots', links: [ { label: 'Ver jerseys', to: '/marketplace?cat=Indumentaria&q=jersey%20maillot' } ] },
+      { title: 'Bibs / Culotte', links: [ { label: 'Ver bibs/culotte', to: '/marketplace?cat=Indumentaria&q=bib%20culotte' } ] },
+      { title: 'Cascos', links: [ { label: 'Ver cascos', to: '/marketplace?cat=Indumentaria&q=casco' } ] },
+      { title: 'Zapatillas', links: [ { label: 'Ver zapatillas', to: '/marketplace?cat=Indumentaria&q=zapatillas' } ] },
+      { title: 'Guantes', links: [ { label: 'Ver guantes', to: '/marketplace?cat=Indumentaria&q=guantes' } ] },
     ],
   },
 ]
@@ -654,18 +623,24 @@ export default function Header() {
           onMouseEnter={cancelCloseMega}
           onMouseLeave={() => { scheduleCloseMega(); setStoresOpen(false) }}
         >
-          {MEGA.map((item, idx) => (
-            <button
-              key={item.label}
-              type="button"
-              className={`py-3 border-b-2 transition ${openIdx === idx ? 'border-mb-primary text-mb-primary' : 'border-transparent text-black/70 hover:text-black'}`}
-              onMouseEnter={() => openMega(idx)}
-            >
-              {item.label}
-            </button>
-          ))}
+          {MEGA.map((item, idx) => {
+            const first = item.cols?.[0]?.links?.[0]?.to || '/marketplace'
+            return (
+              <Link
+                key={item.label}
+                to={first}
+                className={`py-3 border-b-2 transition ${openIdx === idx ? 'border-mb-primary text-mb-primary' : 'border-transparent text-black/70 hover:text-black'}`}
+                onMouseEnter={() => openMega(idx)}
+              >
+                {item.label}
+              </Link>
+            )
+          })}
           <Link to="/marketplace" className="ml-auto py-3 text-black/70 hover:text-black">
             Marketplace
+          </Link>
+          <Link to="/ofertas-destacadas" className="py-3 text-black/70 hover:text-black">
+            Ofertas
           </Link>
           <Link to="/como-publicar" className="py-3 text-black/70 hover:text-black">
             Cómo publicar

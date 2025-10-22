@@ -7,6 +7,8 @@ type FilterDropdownProps = {
   disabled?: boolean
   className?: string
   buttonClassName?: string
+  // When true, on mobile render content inline below the button (no popup)
+  inlineOnMobile?: boolean
   children: (helpers: { close: () => void }) => ReactNode
 }
 
@@ -17,6 +19,7 @@ export default function FilterDropdown({
   disabled = false,
   className,
   buttonClassName,
+  inlineOnMobile = false,
   children
 }: FilterDropdownProps) {
   const [open, setOpen] = useState(false)
@@ -68,13 +71,22 @@ export default function FilterDropdown({
         </svg>
       </button>
       {open ? (
-        <div
-          className={`absolute z-30 mt-2 w-64 rounded-2xl border border-white/10 bg-[#0f1724] p-4 text-white shadow-xl backdrop-blur ${
-            align === 'right' ? 'right-0' : 'left-0'
-          }`}
-        >
-          {children({ close: () => setOpen(false) })}
-        </div>
+        <>
+          {/* Desktop / tablet dropdown */}
+          <div
+            className={`absolute z-30 mt-2 hidden w-64 rounded-2xl border border-white/10 bg-[#0f1724] p-4 text-white shadow-xl backdrop-blur sm:block ${
+              align === 'right' ? 'right-0' : 'left-0'
+            }`}
+          >
+            {children({ close: () => setOpen(false) })}
+          </div>
+          {/* Mobile inline expansion when requested */}
+          {inlineOnMobile ? (
+            <div className="sm:hidden mt-2 rounded-2xl border border-white/10 bg-[#0f1724] p-4 text-white">
+              {children({ close: () => setOpen(false) })}
+            </div>
+          ) : null}
+        </>
       ) : null}
     </div>
   )

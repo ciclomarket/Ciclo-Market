@@ -14,7 +14,7 @@ import { hasPaidPlan } from '../utils/plans'
 import FilterDropdown from '../components/FilterDropdown'
 
 type Cat = 'Todos' | 'Ruta' | 'MTB' | 'Gravel' | 'Urbana' | 'Fixie' | 'Accesorios' | 'Indumentaria' | 'E-Bike' | 'Niños' | 'Pista' | 'Triatlón'
-type MultiFilterKey = 'brand' | 'material' | 'frameSize' | 'wheelSize' | 'drivetrain' | 'condition' | 'year' | 'size'
+type MultiFilterKey = 'brand' | 'material' | 'frameSize' | 'wheelSize' | 'drivetrain' | 'condition' | 'brake' | 'year' | 'size'
 type FiltersState = {
   cat: Cat
   brand: string[]
@@ -23,6 +23,7 @@ type FiltersState = {
   wheelSize: string[]
   drivetrain: string[]
   condition: string[]
+  brake: string[]
   year: string[]
   size: string[]
   priceMin?: number
@@ -32,8 +33,8 @@ type FiltersState = {
 }
 
 const CAT_VALUES: Cat[] = ['Todos','Ruta','MTB','Gravel','Urbana','Fixie','Accesorios','Indumentaria','E-Bike','Niños','Pista','Triatlón']
-const MULTI_PARAM_KEYS: MultiFilterKey[] = ['brand','material','frameSize','wheelSize','drivetrain','condition','year','size']
-const MULTI_FILTER_ORDER: MultiFilterKey[] = ['brand','material','frameSize','wheelSize','drivetrain','condition','year','size']
+const MULTI_PARAM_KEYS: MultiFilterKey[] = ['brand','material','frameSize','wheelSize','drivetrain','condition','brake','year','size']
+const MULTI_FILTER_ORDER: MultiFilterKey[] = ['brand','material','frameSize','wheelSize','drivetrain','condition','brake','year','size']
 const MULTI_FILTER_LABELS: Record<MultiFilterKey, string> = {
   brand: 'Marca',
   material: 'Material',
@@ -41,6 +42,7 @@ const MULTI_FILTER_LABELS: Record<MultiFilterKey, string> = {
   wheelSize: 'Rodado',
   drivetrain: 'Grupo transmisión',
   condition: 'Condición',
+  brake: 'Freno',
   year: 'Año',
   size: 'Talle'
 }
@@ -107,6 +109,7 @@ function paramsToFilters(params: URLSearchParams): FiltersState {
     wheelSize: [],
     drivetrain: [],
     condition: [],
+    brake: [],
     year: [],
     size: []
   }
@@ -159,6 +162,7 @@ function filtersToSearchParams(current: URLSearchParams, filters: FiltersState) 
 
 type ListingMetadata = {
   condition?: string
+  brake?: string
   apparelSize?: string
 }
 
@@ -242,6 +246,7 @@ function computeListingFacets(listings: Listing[]): ListingFacetsResult {
     wheelSize: new Set(),
     drivetrain: new Set(),
     condition: new Set(),
+    brake: new Set(),
     year: new Set(),
     size: new Set()
   }
@@ -278,6 +283,17 @@ function computeListingFacets(listings: Listing[]): ListingFacetsResult {
     const condition = cleanValue(extractCondition(listing))
     if (condition) sets.condition.add(condition)
 
+    const brake = cleanValue((() => {
+      const extrasMap = extractExtrasMap(listing.extras)
+      if (extrasMap['tipo de freno']) return extrasMap['tipo de freno']
+      if (extrasMap.freno) return extrasMap.freno
+      const description = listing.description ?? ''
+      const match = description.match(/tipo de freno:\s*([^\n•]+)/i) || description.match(/freno:\s*([^\n•]+)/i)
+      if (match && match[1]) return match[1].trim()
+      return undefined
+    })())
+    if (brake) sets.brake.add(brake)
+
     const apparelSize = cleanValue(extractApparelSize(listing))
     if (apparelSize) sets.size.add(apparelSize)
     // Incluir todos los talles de indumentaria desde "Talles"
@@ -289,6 +305,7 @@ function computeListingFacets(listings: Listing[]): ListingFacetsResult {
 
     metadata[listing.id] = {
       condition: condition || undefined,
+      brake: brake || undefined,
       apparelSize: apparelSize || undefined
     }
 
@@ -307,6 +324,7 @@ function computeListingFacets(listings: Listing[]): ListingFacetsResult {
       wheelSize: sortAlpha(sets.wheelSize),
       drivetrain: sortAlpha(sets.drivetrain),
       condition: sortAlpha(sets.condition),
+      brake: sortAlpha(sets.brake),
       year: sortYearDesc(sets.year),
       size: sortSizes(sets.size)
     },
@@ -530,10 +548,14 @@ function DealFilterContent({ active, onToggle, close }: DealFilterContentProps) 
 
 /* ------------------------ UI helpers ------------------------ */
 /* ------------------------ Page ------------------------ */
-export default function Marketplace() {
+type Crumb = { label: string; to?: string }
+type MarketplaceProps = { forcedCat?: Cat; allowedCats?: Cat[]; forcedDeal?: boolean; headingTitle?: string; breadcrumbs?: Crumb[] }
+export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headingTitle, breadcrumbs }: MarketplaceProps = {}) {
   const [searchParams, setSearchParams] = useSearchParams()
   const paramsKey = searchParams.toString()
   const filters = useMemo(() => paramsToFilters(searchParams), [paramsKey])
+  const effectiveCat: Cat = forcedCat ?? filters.cat
+  const effectiveDeal = forcedDeal ? '1' : filters.deal
 
   const [count, setCount] = useState(40)
   const sentinelRef = useRef<HTMLDivElement | null>(null)
@@ -571,9 +593,13 @@ export default function Marketplace() {
   }, [])
 
   const categoryFiltered = useMemo(() => {
-    if (filters.cat === 'Todos') return listings
-    return listings.filter((listing) => listing.category === filters.cat)
-  }, [listings, filters.cat])
+    if (Array.isArray(allowedCats) && allowedCats.length) {
+      const set = new Set(allowedCats)
+      return listings.filter((listing) => set.has(listing.category as Cat))
+    }
+    if (effectiveCat === 'Todos') return listings
+    return listings.filter((listing) => listing.category === effectiveCat)
+  }, [listings, effectiveCat, allowedCats?.join(',')])
 
   const facetsData = useMemo(() => computeListingFacets(categoryFiltered), [categoryFiltered])
   const listingMetadata = facetsData.metadata
@@ -581,13 +607,14 @@ export default function Marketplace() {
   const setFilters = useCallback((patch: Partial<FiltersState>) => {
     const merged: FiltersState = {
       ...filters,
-      cat: patch.cat ?? filters.cat,
+      cat: forcedCat ?? patch.cat ?? filters.cat,
       brand: 'brand' in patch ? patch.brand ?? [] : filters.brand,
       material: 'material' in patch ? patch.material ?? [] : filters.material,
       frameSize: 'frameSize' in patch ? patch.frameSize ?? [] : filters.frameSize,
       wheelSize: 'wheelSize' in patch ? patch.wheelSize ?? [] : filters.wheelSize,
       drivetrain: 'drivetrain' in patch ? patch.drivetrain ?? [] : filters.drivetrain,
       condition: 'condition' in patch ? patch.condition ?? [] : filters.condition,
+      brake: 'brake' in patch ? patch.brake ?? [] : filters.brake,
       year: 'year' in patch ? patch.year ?? [] : filters.year,
       size: 'size' in patch ? patch.size ?? [] : filters.size,
       priceMin: 'priceMin' in patch ? patch.priceMin : filters.priceMin,
@@ -597,7 +624,7 @@ export default function Marketplace() {
     }
     const nextParams = filtersToSearchParams(searchParams, merged)
     setSearchParams(nextParams)
-  }, [filters, searchParams, setSearchParams])
+  }, [filters, searchParams, setSearchParams, forcedCat])
 
   const filtered = useMemo(() => {
     if (!categoryFiltered.length) return []
@@ -607,6 +634,7 @@ export default function Marketplace() {
     const wheelSizeSet = new Set(filters.wheelSize.map((value) => normalizeText(value)))
     const drivetrainSet = new Set(filters.drivetrain.map((value) => normalizeText(value)))
     const conditionSet = new Set(filters.condition.map((value) => normalizeText(value)))
+    const brakeSet = new Set(filters.brake.map((value) => normalizeText(value)))
     const yearSet = new Set(filters.year.map((value) => normalizeText(value)))
     const sizeSet = new Set(filters.size.map((value) => normalizeText(value)))
     const priceMin = typeof filters.priceMin === 'number' ? filters.priceMin : null
@@ -648,6 +676,10 @@ export default function Marketplace() {
         if (!derived.condition || !conditionSet.has(normalizeText(derived.condition))) return false
       }
 
+      if (brakeSet.size) {
+        if (!derived.brake || !brakeSet.has(normalizeText(derived.brake))) return false
+      }
+
       if (sizeSet.size) {
         const hasSingle = derived.apparelSize && sizeSet.has(normalizeText(derived.apparelSize))
         if (!hasSingle) {
@@ -665,7 +697,7 @@ export default function Marketplace() {
       if (priceMin !== null && listing.price < priceMin) return false
       if (priceMax !== null && listing.price > priceMax) return false
 
-      if (filters.deal === '1') {
+      if (effectiveDeal === '1') {
         const hasDeal = typeof listing.originalPrice === 'number' && listing.originalPrice > listing.price
         if (!hasDeal) return false
       }
@@ -698,7 +730,7 @@ export default function Marketplace() {
       return sorted.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
     }
     return sorted.sort((a, b) => (sortMode === 'asc' ? a.price - b.price : b.price - a.price))
-  }, [categoryFiltered, filters, sortMode, listingMetadata])
+  }, [categoryFiltered, filters, sortMode, listingMetadata, effectiveDeal])
 
   const visible = filtered.slice(0, count)
 
@@ -746,8 +778,9 @@ export default function Marketplace() {
   }, [visible.slice(0, 2).map((x) => x.id).join(',')])
 
   const handleCategory = useCallback((cat: Cat) => {
+    if (forcedCat) return
     setFilters({ cat })
-  }, [setFilters])
+  }, [setFilters, forcedCat])
 
   const handleRemoveMulti = useCallback((key: MultiFilterKey, value: string) => {
     const next = filters[key].filter((item) => normalizeText(item) !== normalizeText(value))
@@ -883,10 +916,15 @@ export default function Marketplace() {
         </div>
       </section>
 
-      <div id="listings" className="bg-[#14212e] text-white">
+      <section id="listings" className="relative isolate overflow-hidden bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] text-white">
+        <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
+          <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
+          <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
+        </div>
         <Container className="text-white">
           <div className="py-10 space-y-8">
 
+            {forcedCat || (allowedCats && allowedCats.length) ? null : (
             <div className="grid grid-cols-3 gap-2 sm:gap-4">
               {CATEGORY_CARDS.map((card) => {
                 const isActive = filters.cat === card.cat
@@ -917,6 +955,7 @@ export default function Marketplace() {
                 )
               })}
             </div>
+            )}
 
             <div className="sm:hidden">
               <div className="flex w-full overflow-hidden rounded-2xl bg-white text-[#14212e] shadow">
@@ -941,6 +980,25 @@ export default function Marketplace() {
             <div className="sm:hidden text-xs text-white/70">{filtered.length} resultados</div>
 
             <div className="space-y-4">
+              {breadcrumbs && breadcrumbs.length ? (
+                <nav aria-label="Miga de pan" className="text-xs text-white/60">
+                  <ol className="flex items-center gap-2">
+                    {breadcrumbs.map((c, idx) => (
+                      <li key={`${c.label}-${idx}`} className="flex items-center gap-2">
+                        {c.to ? (
+                          <Link to={c.to} className="hover:text-white/80">{c.label}</Link>
+                        ) : (
+                          <span className="text-white/70">{c.label}</span>
+                        )}
+                        {idx < breadcrumbs.length - 1 ? (<span className="text-white/30">›</span>) : null}
+                      </li>
+                    ))}
+                  </ol>
+                </nav>
+              ) : null}
+              {headingTitle ? (
+                <h2 className="text-xl font-semibold">{headingTitle}</h2>
+              ) : null}
               <div className="hidden flex-col gap-3 sm:flex lg:flex-row lg:items-center lg:justify-between">
                 <div className="text-sm text-white/70">{filtered.length} resultados</div>
                 <div className="flex items-center gap-2 text-sm">
@@ -959,6 +1017,7 @@ export default function Marketplace() {
               </div>
 
               <div className="hidden flex-wrap gap-2 sm:flex">
+                {forcedCat || (allowedCats && allowedCats.length) ? null : (
                 <FilterDropdown label="Categoría" summary={filters.cat}>
                   {({ close }) => (
                     <div className="flex flex-col gap-1 text-sm">
@@ -988,6 +1047,7 @@ export default function Marketplace() {
                     </div>
                   )}
                 </FilterDropdown>
+                )}
 
                 {MULTI_FILTER_ORDER.map((key) => {
                   const rawOptions = facetsData.options[key]
@@ -1025,11 +1085,11 @@ export default function Marketplace() {
                   )}
                 </FilterDropdown>
 
-                <FilterDropdown label="Promos" summary={filters.deal === '1' ? 'Activas' : 'Todas'}>
+                <FilterDropdown label="Promos" summary={effectiveDeal === '1' ? 'Activas' : 'Todas'}>
                   {({ close }) => (
                     <DealFilterContent
-                      active={filters.deal === '1'}
-                      onToggle={(active) => setFilters({ deal: active ? '1' : undefined })}
+                      active={effectiveDeal === '1'}
+                      onToggle={(active) => { if (!forcedDeal) setFilters({ deal: active ? '1' : undefined }) }}
                       close={close}
                     />
                   )}
@@ -1101,7 +1161,7 @@ export default function Marketplace() {
             )}
           </div>
         </Container>
-      </div>
+      </section>
 
       {mobileFiltersOpen ? (
         <div
@@ -1109,54 +1169,58 @@ export default function Marketplace() {
           onClick={() => setMobileFiltersOpen(false)}
         >
           <div
-            className="absolute inset-x-0 bottom-0 max-h-[90vh] rounded-t-3xl bg-[#0f1724] p-5 shadow-2xl"
+            className="absolute right-0 top-0 h-full w-full bg-[#0f1724] shadow-2xl sm:hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-semibold text-white">Filtros</h3>
-              <button
-                type="button"
-                onClick={() => setMobileFiltersOpen(false)}
-                className="rounded-full border border-white/20 px-3 py-1 text-xs text-white"
-              >
-                Cerrar
-              </button>
-            </div>
-            <div className="mt-4 space-y-3 text-white">
-              <FilterDropdown
-                label="Categoría"
-                summary={filters.cat}
-                className="w-full"
+            <div className="flex h-full flex-col">
+              <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+                <h3 className="text-base font-semibold text-white">Filtros</h3>
+                <button
+                  type="button"
+                  onClick={() => setMobileFiltersOpen(false)}
+                  className="rounded-full border border-white/20 px-3 py-1 text-xs text-white"
+                >
+                  Cerrar
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto px-5 py-4 pb-28 space-y-3 text-white">
+                {forcedCat || (allowedCats && allowedCats.length) ? null : (
+                <FilterDropdown
+                  label="Categoría"
+                  summary={filters.cat}
+                  className="w-full"
                 buttonClassName="w-full justify-between"
-              >
-                {({ close }) => (
-                  <div className="flex flex-col gap-1 text-sm">
-                    {CAT_VALUES.map((cat) => {
-                      const isActive = filters.cat === cat
-                      return (
-                        <button
-                          key={cat}
-                          type="button"
-                          onClick={() => {
-                            setFilters({ cat })
-                            close()
-                          }}
-                          className={`flex items-center justify-between rounded-xl px-3 py-2 transition hover:bg-white/10 ${
-                            isActive ? 'bg-white/15 text-white' : 'text-white/80'
-                          }`}
-                        >
-                          <span>{cat}</span>
-                          {isActive ? (
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="m5 13 4 4L19 7" />
-                            </svg>
-                          ) : null}
-                        </button>
-                      )
-                    })}
-                  </div>
+                inlineOnMobile
+                >
+                  {({ close }) => (
+                    <div className="flex flex-col gap-1 text-sm">
+                      {CAT_VALUES.map((cat) => {
+                        const isActive = filters.cat === cat
+                        return (
+                          <button
+                            key={cat}
+                            type="button"
+                            onClick={() => {
+                              setFilters({ cat })
+                              close()
+                            }}
+                            className={`flex items-center justify-between rounded-xl px-3 py-2 transition hover:bg-white/10 ${
+                              isActive ? 'bg-white/15 text-white' : 'text-white/80'
+                            }`}
+                          >
+                            <span>{cat}</span>
+                            {isActive ? (
+                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="m5 13 4 4L19 7" />
+                              </svg>
+                            ) : null}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </FilterDropdown>
                 )}
-              </FilterDropdown>
                 {MULTI_FILTER_ORDER.map((key) => {
                   const rawOptions = facetsData.options[key]
                   const options = Array.from(new Set([...rawOptions, ...filters[key]]))
@@ -1168,6 +1232,7 @@ export default function Marketplace() {
                     disabled={!options.length}
                     className="w-full"
                     buttonClassName="w-full justify-between"
+                    inlineOnMobile
                   >
                     {({ close }) => (
                       <MultiSelectContent
@@ -1186,6 +1251,7 @@ export default function Marketplace() {
                 summary={priceSummary}
                 className="w-full"
                 buttonClassName="w-full justify-between"
+                inlineOnMobile
               >
                 {({ close }) => (
                   <PriceFilterContent
@@ -1200,30 +1266,38 @@ export default function Marketplace() {
               </FilterDropdown>
               <FilterDropdown
                 label="Promos"
-                summary={filters.deal === '1' ? 'Activas' : 'Todas'}
+                summary={effectiveDeal === '1' ? 'Activas' : 'Todas'}
                 className="w-full"
                 buttonClassName="w-full justify-between"
+                inlineOnMobile
               >
                 {({ close }) => (
                   <DealFilterContent
-                    active={filters.deal === '1'}
-                    onToggle={(active) => setFilters({ deal: active ? '1' : undefined })}
+                    active={effectiveDeal === '1'}
+                    onToggle={(active) => { if (!forcedDeal) setFilters({ deal: active ? '1' : undefined }) }}
                     close={close}
                   />
                 )}
               </FilterDropdown>
-              {hasActiveFilters ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleClearFilters()
-                    setMobileFiltersOpen(false)
-                  }}
-                  className="w-full rounded-full border border-white/20 px-4 py-2 text-sm text-white hover:border-white/40 hover:bg-white/10"
-                >
-                  Limpiar filtros
-                </button>
-              ) : null}
+              </div>
+              <div className="border-t border-white/10 bg-[#0f1724] px-5 py-4">
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handleClearFilters()}
+                    className="flex-1 rounded-full border border-white/20 px-4 py-2 text-sm text-white hover:border-white/40 hover:bg-white/10"
+                  >
+                    Limpiar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMobileFiltersOpen(false)}
+                    className="flex-1 rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#14212e] hover:bg-white/90"
+                  >
+                    Aplicar
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

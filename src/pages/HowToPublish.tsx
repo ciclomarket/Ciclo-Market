@@ -2,7 +2,11 @@ import Container from '../components/Container'
 
 export default function HowToPublish() {
   return (
-    <div className="bg-[#14212e] py-12 text-white">
+    <div className="relative isolate overflow-hidden bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] py-12 text-white">
+      <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
+        <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
+        <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
+      </div>
       <Container className="mx-auto max-w-4xl space-y-10">
         <header className="space-y-4 text-center">
           <h1 className="text-3xl font-bold text-white">Cómo publicar tu bicicleta</h1>

@@ -21,10 +21,22 @@ const HowToPublish = lazyWithRetry(() => import('./pages/HowToPublish'))
 const OfficialStore = lazyWithRetry(() => import('./pages/OfficialStore'))
 const Store = lazyWithRetry(() => import('./pages/Store'))
 const Tiendas = lazyWithRetry(() => import('./pages/Tiendas'))
+const StoresLanding = lazyWithRetry(() => import('./pages/StoresLanding'))
 const FAQ = lazyWithRetry(() => import('./pages/FAQ'))
 const Terms = lazyWithRetry(() => import('./pages/Terms'))
 const Privacy = lazyWithRetry(() => import('./pages/Privacy'))
 const DataDeletion = lazyWithRetry(() => import('./pages/DataDeletion'))
+// SEO landings
+const BicicletasUsadas = lazyWithRetry(() => import('./pages/seo/BicicletasUsadas'))
+const BicicletasRuta = lazyWithRetry(() => import('./pages/seo/BicicletasRuta'))
+const BicicletasMTB = lazyWithRetry(() => import('./pages/seo/BicicletasMTB'))
+const BicicletasGravel = lazyWithRetry(() => import('./pages/seo/BicicletasGravel'))
+const Fixie = lazyWithRetry(() => import('./pages/seo/Fixie'))
+const ClasificadosBicicletas = lazyWithRetry(() => import('./pages/seo/ClasificadosBicicletas'))
+const Accesorios = lazyWithRetry(() => import('./pages/seo/Accesorios'))
+const Indumentaria = lazyWithRetry(() => import('./pages/seo/Indumentaria'))
+const BicicletasTriatlon = lazyWithRetry(() => import('./pages/seo/BicicletasTriatlon'))
+const OfertasDestacadas = lazyWithRetry(() => import('./pages/seo/OfertasDestacadas'))
 import { AuthProvider } from './context/AuthContext'
 import { CurrencyProvider } from './context/CurrencyContext'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -59,11 +71,13 @@ function resolveSeoForPath(pathname: string, search: string): SEOProps {
         'Comprá, vendé y compará bicicletas nuevas y usadas en Ciclo Market. Encontrá gravel, ruta, MTB y accesorios verificados con contacto directo al vendedor.',
       image: '/OG-Marketplace.png',
       keywords: [
-        'marketplace bicicletas',
-        'comprar bicicleta usada argentina',
-        'vender bici online',
-        'bicicletas gravel ruta mtb',
-        'ciclo market'
+        'venta de bicicletas usadas',
+        'bicicletas usadas',
+        'bicicletas de ruta',
+        'bicicletas de mtb',
+        'bicicletas de gravel',
+        'fixie',
+        'clasificados de bicicletas'
       ]
     }
   }
@@ -84,11 +98,13 @@ function resolveSeoForPath(pathname: string, search: string): SEOProps {
       url: hasFilters ? '/marketplace' : undefined,
       noIndex: hasFilters,
       keywords: [
-        'comprar bicicletas argentina',
-        'bicicletas usadas certificadas',
-        'ofertas bicicletas',
-        'gravel bike argentina',
-        'bicicletas ruta mtb marketplace'
+        'venta de bicicletas usadas',
+        'bicicletas usadas',
+        'bicicletas de ruta',
+        'bicicletas de mtb',
+        'bicicletas de gravel',
+        'fixie',
+        'clasificados de bicicletas'
       ]
     }
   }
@@ -162,6 +178,21 @@ function resolveSeoForPath(pathname: string, search: string): SEOProps {
         'tienda oficial bicicletas',
         'bicicletas certificadas',
         'ciclomarket tienda oficial'
+      ]
+    }
+  }
+
+  if (normalized.startsWith('/tiendas-oficiales')) {
+    return {
+      title: 'Tiendas oficiales: cómo funciona y beneficios',
+      description:
+        'Sumá tu local a Ciclo Market como tienda oficial: sello verificado, catálogo destacado, métricas y soporte. Solicitá prueba gratuita.',
+      image: '/hero-tiendas.webp',
+      keywords: [
+        'tiendas oficiales',
+        'sumar tienda oficial',
+        'ciclomarket tiendas',
+        'prueba gratuita tienda'
       ]
     }
   }
@@ -407,6 +438,18 @@ export default function App() {
                       <Route path="/como-publicar" element={<HowToPublish />} />
                       <Route path="/tienda-oficial" element={<OfficialStore />} />
                       <Route path="/tiendas" element={<Tiendas />} />
+                      {/* SEO landings */}
+                      <Route path="/bicicletas-usadas" element={<BicicletasUsadas />} />
+                      <Route path="/bicicletas-ruta" element={<BicicletasRuta />} />
+                      <Route path="/bicicletas-mtb" element={<BicicletasMTB />} />
+                      <Route path="/bicicletas-gravel" element={<BicicletasGravel />} />
+                      <Route path="/fixie" element={<Fixie />} />
+                      <Route path="/clasificados-bicicletas" element={<ClasificadosBicicletas />} />
+                      <Route path="/accesorios" element={<Accesorios />} />
+                      <Route path="/indumentaria" element={<Indumentaria />} />
+                      <Route path="/bicicletas-triatlon" element={<BicicletasTriatlon />} />
+                      <Route path="/ofertas-destacadas" element={<OfertasDestacadas />} />
+                      <Route path="/tiendas-oficiales" element={<StoresLanding />} />
                       <Route path="/tienda/:slug" element={<Store />} />
 
                       {/* Checkout status */}

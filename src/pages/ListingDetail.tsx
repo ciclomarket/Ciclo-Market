@@ -12,7 +12,7 @@ import useFaves from '../hooks/useFaves'
 import { fetchListing, updateListingPlan, deleteListing, setListingWhatsapp, updateListingStatus, archiveListing, reduceListingPrice, extendListingExpiryDays, updateListingFields } from '../services/listings'
 import { supabaseEnabled, getSupabaseClient } from '../services/supabase'
 import type { Listing } from '../types'
-import { formatNameWithInitial } from '../utils/user'
+import { formatNameWithInitial, computeTrustLevel, trustLabel, trustColorClasses, trustBadgeBgClasses } from '../utils/user'
 import { normaliseWhatsapp, buildWhatsappUrl } from '../utils/whatsapp'
 import { useAuth } from '../context/AuthContext'
 import { fetchUserProfile, fetchUserContactEmail, setUserVerificationStatus, type UserProfileRecord } from '../services/users'
@@ -602,6 +602,10 @@ export default function ListingDetail() {
   const sellerDisplayName = isStore
     ? (sellerProfile?.store_name || 'Tienda')
     : formatNameWithInitial(listing.sellerName, undefined)
+  const sellerTrustLevel = computeTrustLevel(
+    sellerProfile,
+    sellerRating ? { count: sellerRating.count, avgRating: sellerRating.avg } : undefined
+  )
 
   return (
     <>
@@ -710,7 +714,14 @@ export default function ListingDetail() {
                         ) : (
                           <Link to={`/vendedor/${listing.sellerId}`} className="inline-flex items-center gap-2 transition hover:text-mb-primary">
                             {sellerDisplayName}
-                            {sellerVerified && <VerifiedCheck />}
+                            {(() => {
+                              const c = trustColorClasses(sellerTrustLevel)
+                              return (
+                                <span className={`relative -top-1 inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[12px] leading-none font-semibold ${trustBadgeBgClasses(sellerTrustLevel)} text-white border-[#0f1924]`}>
+                                  {trustLabel(sellerTrustLevel, 'short')}
+                                </span>
+                              )
+                            })()}
                           </Link>
                         )}
                       </h3>

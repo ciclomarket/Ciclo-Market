@@ -11,6 +11,7 @@ import { getSupabaseClient, supabaseEnabled } from '../../services/supabase'
 import { createUserProfile } from '../../services/users'
 import { deriveProfileSlug, pickDiscipline } from '../../utils/user'
 import { useToast } from '../../context/ToastContext'
+import { trackMetaPixel } from '../../lib/metaPixel'
 
 type OAuthProvider = 'google' | 'facebook'
 export default function Register() {
@@ -106,8 +107,13 @@ export default function Register() {
       }
 
       setSuccess(true)
-      showToast('Registro completado con éxito')
-      setTimeout(() => nav('/dashboard'), 500)
+      showToast(`Te enviamos un correo a ${email.trim()}. Revisá tu bandeja y verificá tu cuenta.`)
+      // Pixel: registrar SignUp y CompleteRegistration (email)
+      try {
+        trackMetaPixel('SignUp', { method: 'email' })
+        trackMetaPixel('CompleteRegistration', { method: 'email' })
+      } catch { /* noop */ }
+      // Permanecé en esta pantalla; el usuario verá el aviso y podrá revisar su mail
     } catch (err: any) {
       console.error('Error en registro Supabase:', err)
       if (err instanceof Error) {
@@ -155,6 +161,8 @@ export default function Register() {
       })
       if (error) throw error
       if (data?.url) {
+        // Guardamos intención para enviar eventos al volver del OAuth
+        try { sessionStorage.setItem('mb_oauth_signup_intent', provider) } catch { /* noop */ }
         window.location.href = data.url
       }
     } catch (err: any) {
@@ -225,8 +233,15 @@ export default function Register() {
                 </div>
               )}
               {success && (
-                <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-600">
-                  ¡Cuenta creada! Te enviamos un mail para verificar tu dirección.
+                <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
+                  <p>
+                    Te enviamos un correo a <b>{email}</b>. Por favor, revisá tu bandeja (y spam) y verificá tu cuenta para continuar.
+                  </p>
+                  <div className="mt-2">
+                    <Link to="/verificar-email" className="font-semibold text-green-700 underline hover:text-green-800">
+                      Ver instrucciones y reenviar correo
+                    </Link>
+                  </div>
                 </div>
               )}
 

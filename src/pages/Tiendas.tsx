@@ -219,7 +219,11 @@ export default function Tiendas() {
           </Container>
         </div>
       </section>
-      <section className="bg-[#14212e] text-white overflow-x-hidden">
+      <section className="relative isolate overflow-hidden bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] text-white overflow-x-hidden">
+        <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
+          <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
+          <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
+        </div>
         <Container>
           <div className="py-10 space-y-8">
             {/* Cajas de categorías removidas */}

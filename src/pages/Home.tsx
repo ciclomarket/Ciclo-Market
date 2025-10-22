@@ -355,7 +355,11 @@ export default function Home() {
 
       {/* BICICLETAS DESTACADAS */}
       {featuredListings.length > 0 && (
-        <section className="bg-[#14212e] pt-10 pb-6" style={{ contentVisibility: 'auto' as any }}>
+        <section className="relative isolate overflow-hidden bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] pt-10 pb-6" style={{ contentVisibility: 'auto' as any }}>
+          <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
+            <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
+            <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
+          </div>
           <Container className="text-white">
             <HorizontalSlider
               title="Bicicletas destacadas"
@@ -371,7 +375,11 @@ export default function Home() {
       )}
 
       {/* OFERTAS DESTACADAS */}
-      <section className="bg-[#1d2f41] pt-8 pb-8" style={{ contentVisibility: 'auto' as any }}>
+      <section className="relative isolate overflow-hidden bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] pt-8 pb-8" style={{ contentVisibility: 'auto' as any }}>
+        <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
+          <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
+          <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
+        </div>
         <Container className="text-white">
           {offers.length ? (
             <HorizontalSlider
@@ -396,7 +404,11 @@ export default function Home() {
       </section>
 
       {/* ÚLTIMAS PUBLICADAS */}
-      <section id="explorar" className="bg-[#14212e] pt-8 pb-10" style={{ contentVisibility: 'auto' as any }}>
+      <section id="explorar" className="relative isolate overflow-hidden bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] pt-8 pb-10" style={{ contentVisibility: 'auto' as any }}>
+        <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
+          <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
+          <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
+        </div>
         <Container className="text-white">
           <div className="flex items-center justify-between mb-4 text-white">
             <h2 className="text-xl font-semibold">Últimas publicadas</h2>

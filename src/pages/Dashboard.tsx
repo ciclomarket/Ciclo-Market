@@ -12,6 +12,7 @@ import type { Listing } from '../types'
 import { usePlans } from '../context/PlanContext'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { fetchPendingShareBoosts, reviewShareBoost } from '../services/shareBoost'
+import { fetchSellerReviews, type ReviewsSummary } from '../services/reviews'
 import { uploadAvatar, uploadStoreBanner, uploadStoreAvatar } from '../services/storage'
 import { PROVINCES, OTHER_CITY_OPTION } from '../constants/locations'
 import { BIKE_CATEGORIES } from '../constants/catalog'
@@ -24,6 +25,7 @@ import useFaves from '../hooks/useFaves'
 import useUpload from '../hooks/useUpload'
 import { createGift } from '../services/gifts'
 import { fetchCreditsHistory, type Credit } from '../services/credits'
+import { trackMetaPixel } from '../lib/metaPixel'
 
 const TABS = ['Perfil', 'Publicaciones', 'Créditos', 'Favoritos', 'Notificaciones', 'Editar perfil', 'Suscripción', 'Editar tienda', 'Verificá tu perfil', 'Cerrar sesión'] as const
 type SellerTab = (typeof TABS)[number]
@@ -212,6 +214,27 @@ export default function Dashboard() {
     loadData()
   }, [loadData])
 
+  // Dispara eventos de registro y login tras volver de OAuth (si corresponde)
+  useEffect(() => {
+    try {
+      const signupKey = 'mb_oauth_signup_intent'
+      const loginKey = 'mb_oauth_login_intent'
+
+      const signupIntent = sessionStorage.getItem(signupKey)
+      if (signupIntent) {
+        trackMetaPixel('SignUp', { method: signupIntent })
+        trackMetaPixel('CompleteRegistration', { method: signupIntent })
+        sessionStorage.removeItem(signupKey)
+      }
+
+      const loginIntent = sessionStorage.getItem(loginKey)
+      if (loginIntent) {
+        trackMetaPixel('Login', { method: loginIntent })
+        sessionStorage.removeItem(loginKey)
+      }
+    } catch { /* noop */ }
+  }, [])
+
   useEffect(() => {
     if (!isMobile) {
       setMobileActiveTab(null)
@@ -286,6 +309,7 @@ export default function Dashboard() {
             isModerator={isModerator}
             lastConnectionAt={lastConnectionAt}
             latestListingAt={latestListingAt}
+            reviewsSummary={reviewsSummary}
           />
         )
       case 'Publicaciones':
@@ -336,10 +360,30 @@ export default function Dashboard() {
     return newest > 0 ? newest : null
   }, [sellerListings])
   const lastConnectionAt = user?.last_sign_in_at ?? user?.created_at ?? null
+  // Reviews summary para reputación real
+  const [reviewsSummary, setReviewsSummary] = useState<ReviewsSummary | null>(null)
+  useEffect(() => {
+    const sellerId = user?.id
+    if (!sellerId) { setReviewsSummary(null); return }
+    let active = true
+    ;(async () => {
+      try {
+        const data = await fetchSellerReviews(sellerId)
+        if (active) setReviewsSummary(data?.summary ?? { sellerId, count: 0, avgRating: 0 })
+      } catch {
+        if (active) setReviewsSummary({ sellerId, count: 0, avgRating: 0 })
+      }
+    })()
+    return () => { active = false }
+  }, [user?.id])
 
   if (loading) {
     return (
-      <div className="min-h-[calc(100vh-120px)] bg-[#101c29] py-10">
+      <div className="relative isolate overflow-hidden min-h-[calc(100vh-120px)] bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] py-10">
+        <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
+          <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
+          <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
+        </div>
         <Container>
           <div className="rounded-[28px] border border-white/10 bg-white/5 p-10 text-center text-white/80">
             Cargando tu panel de vendedor…
@@ -355,7 +399,11 @@ export default function Dashboard() {
     const displayName = profile?.full_name ?? sellerProfile?.sellerName ?? user?.email ?? 'Ciclista'
 
     return (
-      <div className="min-h-[calc(100vh-96px)] bg-[#0f1729] py-6 text-white">
+      <div className="relative isolate overflow-hidden min-h-[calc(100vh-96px)] bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] py-6 text-white">
+        <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
+          <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
+          <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
+        </div>
         <Container>
           <div className="space-y-6">
             <header className="rounded-3xl border border-white/15 bg-white/10 p-5 shadow-[0_18px_40px_rgba(6,12,24,0.35)]">
@@ -478,7 +526,11 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-120px)] bg-[#101c29] py-10">
+    <div className="relative isolate overflow-hidden min-h-[calc(100vh-120px)] bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] py-10">
+      <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
+        <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
+        <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
+      </div>
       <Container>
         <div className="overflow-visible rounded-[28px] border border-white/10 bg-white/5 backdrop-blur-xl shadow-[0_35px_80px_rgba(12,20,28,0.45)]">
           <header className="border-b border-white/10 bg-[#14212e]/90 px-6 py-6 text-white">
@@ -772,6 +824,7 @@ function ProfileView({
   isModerator,
   lastConnectionAt,
   latestListingAt,
+  reviewsSummary,
 }: {
   listing: Listing | undefined
   profile: UserProfileRecord | null
@@ -782,6 +835,7 @@ function ProfileView({
   isModerator: boolean
   lastConnectionAt?: string | null
   latestListingAt?: number | null
+  reviewsSummary?: ReviewsSummary | null
 }) {
   const displayName = profile?.full_name ?? listing?.sellerName ?? fallbackEmail ?? 'Vendedor Ciclo Market'
   const locationFromProfile = profile?.city
@@ -815,12 +869,21 @@ function ProfileView({
     ? relativeTimeFromNow((connectionDate as Date).toISOString())
     : null
 
-  const reputationScore = profile?.verified ? 5 : totalListings >= 5 ? 5 : totalListings >= 3 ? 4 : 3
-  const reputationDescription = reputationScore >= 5
-    ? 'Excelente reputación. Mantené la respuesta rápida para sostenerla.'
-    : reputationScore >= 4
-      ? 'Muy buena reputación. Seguí respondiendo a tiempo para llegar al máximo.'
-      : 'Construí tu reputación completando tu perfil y respondiendo rápido.'
+  // Reputación real según reviews (fallback a heurística si no hay summary)
+  const rawCount = (reviewsSummary?.count as any)
+  const reviewCount = Math.max(0, Number.isFinite(Number(rawCount)) ? Number(rawCount) : 0)
+  const avgRating = Math.max(0, Math.min(5, Number(reviewsSummary?.avgRating ?? 0)))
+  const hasReviews = reviewCount > 0 || avgRating > 0
+  const computedScore = hasReviews ? Math.round(avgRating) : (profile?.verified ? 5 : totalListings >= 5 ? 5 : totalListings >= 3 ? 4 : 3)
+  const reputationScore = computedScore
+  const reputationDescription = !hasReviews
+    ? 'Aún no tenés reviews.'
+    : avgRating >= 4.5
+      ? 'Excelente reputación. Mantené la respuesta rápida para sostenerla.'
+      : avgRating >= 3.5
+        ? 'Buena reputación. Seguí mejorando la atención.'
+        : 'Reputación en desarrollo. Responder rápido ayuda a mejorar.'
+  const ratingDisplay = hasReviews ? `${avgRating.toFixed(1)} / 5` : `${reputationScore} / 5`
 
   const createdAtDate = profile?.created_at ? new Date(profile.created_at) : null
   const accountAge = createdAtDate && !Number.isNaN(createdAtDate.getTime())
@@ -967,7 +1030,7 @@ function ProfileView({
                       <StarIcon key={index} filled={index < reputationScore} />
                     ))}
                   </div>
-                  <span className="text-sm font-medium text-[#14212e]">{reputationScore} / 5</span>
+                  <span className="text-sm font-medium text-[#14212e]">{ratingDisplay}</span>
                 </div>
                 <p className="mt-1 text-xs text-[#14212e]/60">{reputationDescription}</p>
               </dd>
@@ -1178,7 +1241,17 @@ function ListingsView({ listings, onRefresh }: { listings: Listing[]; onRefresh?
         {listings.map((listing) => (
           <div key={listing.id} className="space-y-3">
             <ListingCard l={listing} />
-            <div className="relative">
+            <div className="relative flex items-center gap-2">
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded-full border border-[#14212e]/20 bg-white px-3 py-1.5 text-xs font-semibold text-[#14212e] shadow-sm hover:bg-white/90"
+                onClick={() => navigate(`/publicar/nueva?id=${encodeURIComponent(listing.id)}`)}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 3.487a1.75 1.75 0 1 1 2.475 2.475L8.25 17.05l-3.5.7.7-3.5 11.412-10.763Z" />
+                </svg>
+                Editar
+              </button>
               <button
                 type="button"
                 className="inline-flex items-center gap-2 rounded-full border border-[#14212e]/20 bg-white px-3 py-1.5 text-xs font-semibold text-[#14212e] shadow-sm hover:bg-white/90"
@@ -1195,6 +1268,13 @@ function ListingsView({ listings, onRefresh }: { listings: Listing[]; onRefresh?
               {openMenuFor === listing.id && (
                 <div className="absolute left-0 bottom-full z-50 mb-2 w-full min-w-[220px] rounded-xl border border-[#14212e]/10 bg-white p-2 text-sm text-[#14212e] shadow-xl">
                   {/* 3 atajos */}
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-[#14212e]/5"
+                    onClick={() => { navigate(`/publicar/nueva?id=${encodeURIComponent(listing.id)}`); setOpenMenuFor(null) }}
+                  >
+                    Editar
+                  </button>
                   <button
                     type="button"
                     className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-[#14212e]/5"

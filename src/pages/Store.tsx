@@ -84,7 +84,7 @@ const FILTERS: FilterSection[] = [
   },
 ]
 
-type MultiFilterKey = 'brand' | 'material' | 'frameSize' | 'wheelSize' | 'drivetrain' | 'condition' | 'year' | 'size'
+type MultiFilterKey = 'brand' | 'material' | 'frameSize' | 'wheelSize' | 'drivetrain' | 'condition' | 'brake' | 'year' | 'size'
 type StoreFiltersState = {
   brand: string[]
   material: string[]
@@ -92,6 +92,7 @@ type StoreFiltersState = {
   wheelSize: string[]
   drivetrain: string[]
   condition: string[]
+  brake: string[]
   year: string[]
   size: string[]
   priceMin?: number
@@ -100,7 +101,7 @@ type StoreFiltersState = {
   q?: string
 }
 
-const MULTI_FILTER_ORDER: MultiFilterKey[] = ['brand','material','frameSize','wheelSize','drivetrain','condition','year','size']
+const MULTI_FILTER_ORDER: MultiFilterKey[] = ['brand','material','frameSize','wheelSize','drivetrain','condition','brake','year','size']
 const MULTI_FILTER_LABELS: Record<MultiFilterKey, string> = {
   brand: 'Marca',
   material: 'Material',
@@ -108,12 +109,14 @@ const MULTI_FILTER_LABELS: Record<MultiFilterKey, string> = {
   wheelSize: 'Rodado',
   drivetrain: 'Grupo transmisión',
   condition: 'Condición',
+  brake: 'Freno',
   year: 'Año',
   size: 'Talle'
 }
 
 type ListingMetadata = {
   condition?: string
+  brake?: string
   apparelSize?: string
 }
 
@@ -219,6 +222,7 @@ function computeListingFacets(listings: Listing[]): ListingFacetsResult {
     wheelSize: new Set(),
     drivetrain: new Set(),
     condition: new Set(),
+    brake: new Set(),
     year: new Set(),
     size: new Set()
   }
@@ -255,6 +259,17 @@ function computeListingFacets(listings: Listing[]): ListingFacetsResult {
     const condition = cleanValue(extractCondition(listing))
     if (condition) sets.condition.add(condition)
 
+    const brake = cleanValue((() => {
+      const extrasMap = extractExtrasMap(listing.extras)
+      if (extrasMap['tipo de freno']) return extrasMap['tipo de freno']
+      if (extrasMap.freno) return extrasMap.freno
+      const description = listing.description ?? ''
+      const match = description.match(/tipo de freno:\s*([^\n•]+)/i) || description.match(/freno:\s*([^\n•]+)/i)
+      if (match && match[1]) return match[1].trim()
+      return undefined
+    })())
+    if (brake) sets.brake.add(brake)
+
     const apparelSize = cleanValue(extractApparelSize(listing))
     if (apparelSize) sets.size.add(apparelSize)
     // Agregar todos los talles de indumentaria si vienen en "Talles"
@@ -266,6 +281,7 @@ function computeListingFacets(listings: Listing[]): ListingFacetsResult {
 
     metadata[listing.id] = {
       condition: condition || undefined,
+      brake: brake || undefined,
       apparelSize: apparelSize || undefined
     }
 
@@ -284,6 +300,7 @@ function computeListingFacets(listings: Listing[]): ListingFacetsResult {
       wheelSize: sortAlpha(sets.wheelSize),
       drivetrain: sortAlpha(sets.drivetrain),
       condition: sortAlpha(sets.condition),
+      brake: sortAlpha(sets.brake),
       year: sortYearDesc(sets.year),
       size: sortSizes(sets.size)
     },
@@ -545,6 +562,7 @@ export default function Store() {
     wheelSize: [],
     drivetrain: [],
     condition: [],
+    brake: [],
     year: [],
     size: [],
     priceMin: undefined,
@@ -671,6 +689,7 @@ export default function Store() {
     const conditionSet = new Set(filters.condition.map((value) => normalizeText(value)))
     const yearSet = new Set(filters.year.map((value) => normalizeText(value)))
     const sizeSet = new Set(filters.size.map((value) => normalizeText(value)))
+    const brakeSet = new Set(filters.brake.map((value) => normalizeText(value)))
     const priceMin = typeof filters.priceMin === 'number' ? filters.priceMin : null
     const priceMax = typeof filters.priceMax === 'number' ? filters.priceMax : null
 
@@ -708,6 +727,11 @@ export default function Store() {
 
       if (conditionSet.size) {
         if (!derived.condition || !conditionSet.has(normalizeText(derived.condition))) return false
+      }
+
+      if (brakeSet.size) {
+        const derived = listingMetadata[listing.id] ?? {}
+        if (!derived.brake || !brakeSet.has(normalizeText(derived.brake))) return false
       }
 
       if (sizeSet.size) {
@@ -861,7 +885,11 @@ export default function Store() {
   const workingHours = (profile as any).store_hours as string | null
 
   return (
-    <div className="min-h-[70vh] bg-[#14212e]">
+    <div className="min-h-[70vh] relative isolate overflow-hidden text-white bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729]">
+      <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
+        <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
+        <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
+      </div>
       <JsonLd
         data={{
           '@context': 'https://schema.org',
@@ -1105,87 +1133,98 @@ export default function Store() {
           onClick={() => setMobileFiltersOpen(false)}
         >
           <div
-            className="absolute inset-x-0 bottom-0 max-h-[90vh] rounded-t-3xl bg-[#0f1724] p-5 shadow-2xl"
+            className="absolute right-0 top-0 h-full w-full bg-[#0f1724] shadow-2xl sm:hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-semibold text-white">Filtros</h3>
-              <button
-                type="button"
-                onClick={() => setMobileFiltersOpen(false)}
-                className="rounded-full border border-white/20 px-3 py-1 text-xs text-white"
-              >
-                Cerrar
-              </button>
-            </div>
-            <div className="mt-4 space-y-3 text-white">
-              {MULTI_FILTER_ORDER.map((key) => {
-                const rawOptions = facetsData.options[key]
-                const options = Array.from(new Set([...rawOptions, ...filters[key]]))
-                return (
-                  <FilterDropdown
-                    key={`mobile-${key}`}
-                    label={MULTI_FILTER_LABELS[key]}
-                    summary={summaryFor(key)}
-                    disabled={!options.length}
-                    className="w-full"
-                    buttonClassName="w-full justify-between"
-                  >
-                    {({ close }) => (
-                      <MultiSelectContent
-                        options={options}
-                        selected={filters[key]}
-                        onChange={(next) => setFilters({ [key]: next } as Partial<StoreFiltersState>)}
-                        close={close}
-                        placeholder={`Buscar ${MULTI_FILTER_LABELS[key].toLowerCase()}`}
-                      />
-                    )}
-                  </FilterDropdown>
-                )
-              })}
-              <FilterDropdown
-                label="Precio"
-                summary={priceSummary}
-                className="w-full"
-                buttonClassName="w-full justify-between"
-              >
-                {({ close }) => (
-                  <PriceFilterContent
-                    min={filters.priceMin}
-                    max={filters.priceMax}
-                    bounds={facetsData.priceRange}
-                    onApply={({ min, max }) => setFilters({ priceMin: min, priceMax: max })}
-                    onClear={() => setFilters({ priceMin: undefined, priceMax: undefined })}
-                    close={close}
-                  />
-                )}
-              </FilterDropdown>
-              <FilterDropdown
-                label="Promos"
-                summary={filters.deal === '1' ? 'Activas' : 'Todas'}
-                className="w-full"
-                buttonClassName="w-full justify-between"
-              >
-                {({ close }) => (
-                  <DealFilterContent
-                    active={filters.deal === '1'}
-                    onToggle={(active) => setFilters({ deal: active ? '1' : undefined })}
-                    close={close}
-                  />
-                )}
-              </FilterDropdown>
-              {hasActiveFilters ? (
+            <div className="flex h-full flex-col">
+              <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+                <h3 className="text-base font-semibold text-white">Filtros</h3>
                 <button
                   type="button"
-                  onClick={() => {
-                    handleClearFilters()
-                    setMobileFiltersOpen(false)
-                  }}
-                  className="w-full rounded-full border border-white/20 px-4 py-2 text-sm text-white hover:border-white/40 hover:bg-white/10"
+                  onClick={() => setMobileFiltersOpen(false)}
+                  className="rounded-full border border-white/20 px-3 py-1 text-xs text-white"
                 >
-                  Limpiar filtros
+                  Cerrar
                 </button>
-              ) : null}
+              </div>
+              <div className="flex-1 overflow-y-auto px-5 py-4 pb-28 space-y-3 text-white">
+                {MULTI_FILTER_ORDER.map((key) => {
+                  const rawOptions = facetsData.options[key]
+                  const options = Array.from(new Set([...rawOptions, ...filters[key]]))
+                  return (
+                    <FilterDropdown
+                      key={`mobile-${key}`}
+                      label={MULTI_FILTER_LABELS[key]}
+                      summary={summaryFor(key)}
+                      disabled={!options.length}
+                      className="w-full"
+                      buttonClassName="w-full justify-between"
+                      inlineOnMobile
+                    >
+                      {({ close }) => (
+                        <MultiSelectContent
+                          options={options}
+                          selected={filters[key]}
+                          onChange={(next) => setFilters({ [key]: next } as Partial<StoreFiltersState>)}
+                          close={close}
+                          placeholder={`Buscar ${MULTI_FILTER_LABELS[key].toLowerCase()}`}
+                        />
+                      )}
+                    </FilterDropdown>
+                  )
+                })}
+                <FilterDropdown
+                  label="Precio"
+                  summary={priceSummary}
+                  className="w-full"
+                  buttonClassName="w-full justify-between"
+                  inlineOnMobile
+                >
+                  {({ close }) => (
+                    <PriceFilterContent
+                      min={filters.priceMin}
+                      max={filters.priceMax}
+                      bounds={facetsData.priceRange}
+                      onApply={({ min, max }) => setFilters({ priceMin: min, priceMax: max })}
+                      onClear={() => setFilters({ priceMin: undefined, priceMax: undefined })}
+                      close={close}
+                    />
+                  )}
+                </FilterDropdown>
+                <FilterDropdown
+                  label="Promos"
+                  summary={filters.deal === '1' ? 'Activas' : 'Todas'}
+                  className="w-full"
+                  buttonClassName="w-full justify-between"
+                  inlineOnMobile
+                >
+                  {({ close }) => (
+                    <DealFilterContent
+                      active={filters.deal === '1'}
+                      onToggle={(active) => setFilters({ deal: active ? '1' : undefined })}
+                      close={close}
+                    />
+                  )}
+                </FilterDropdown>
+              </div>
+              <div className="border-t border-white/10 bg-[#0f1724] px-5 py-4">
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handleClearFilters()}
+                    className="flex-1 rounded-full border border-white/20 px-4 py-2 text-sm text-white hover:border-white/40 hover:bg-white/10"
+                  >
+                    Limpiar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMobileFiltersOpen(false)}
+                    className="flex-1 rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#14212e] hover:bg-white/90"
+                  >
+                    Aplicar
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

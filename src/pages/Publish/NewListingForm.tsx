@@ -210,7 +210,7 @@ export default function NewListingForm() {
   const [pedalsInfo, setPedalsInfo] = useState('')
   const [chainInfo, setChainInfo] = useState('')
   const [forkInfo, setForkInfo] = useState('')
-  const [brakeType, setBrakeType] = useState<'Disco'|'Herradura'|''>('')
+  const [brakeType, setBrakeType] = useState<'Disco hidráulico'|'Disco mecánico'|'Herradura'|''>('')
   const [bikeCondition, setBikeCondition] = useState<(typeof CONDITION_OPTIONS)[number] | ''>('')
   // Específicos por categoría
   const [mtbForkModel, setMtbForkModel] = useState('')
@@ -1362,7 +1362,8 @@ export default function NewListingForm() {
                   <Field label="Tipo de freno">
                     <select className="select" value={brakeType} onChange={(e) => setBrakeType(e.target.value as any)}>
                       <option value="">Seleccionar…</option>
-                      <option value="Disco">Disco</option>
+                      <option value="Disco hidráulico">Disco hidráulico</option>
+                      <option value="Disco mecánico">Disco mecánico</option>
                       <option value="Herradura">Herradura</option>
                     </select>
                   </Field>

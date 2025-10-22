@@ -67,6 +67,19 @@ async function geocode(query: string): Promise<{ lat: number; lon: number } | nu
   }
 }
 
+function ensurePopupStyles() {
+  const id = 'cm-store-popup-style'
+  if (document.getElementById(id)) return
+  const style = document.createElement('style')
+  style.id = id
+  style.textContent = `
+    .cm-store-popup .leaflet-popup-content { margin: 0 10px 8px !important; }
+    .cm-store-popup .leaflet-popup-content > :first-child { margin-top: 0 !important; }
+    .cm-store-popup .leaflet-popup-content-wrapper { padding: 4px !important; }
+  `
+  document.head.appendChild(style)
+}
+
 export default function StoresMap({ stores, focusStoreId, onStoreClick }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [ready, setReady] = useState(false)
@@ -109,6 +122,7 @@ export default function StoresMap({ stores, focusStoreId, onStoreClick }: Props)
     markersRef.current = {}
     const map = L.map(el, { zoomControl: true }).setView([-34.6037, -58.3816], 4)
     mapRef.current = map
+    ensurePopupStyles()
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map)
@@ -143,19 +157,19 @@ export default function StoresMap({ stores, focusStoreId, onStoreClick }: Props)
         const icon = L.divIcon({ html, className: 'cm-store-marker', iconSize: [size, size], iconAnchor: [size / 2, size], popupAnchor: [0, -size / 2] })
         const marker = L.marker([coord.lat, coord.lon], { icon })
           .addTo(map) as any
-        const phoneLink = s.phone ? `<a href="tel:${s.phone}" style="padding:6px 10px;border-radius:999px;font-size:12px;text-decoration:none;border:1px solid #0f1724;color:#0f1724">Llamar</a>` : ''
-        const webLink = s.website ? `<a href="${s.website}" target="_blank" rel="noopener" style="padding:6px 10px;border-radius:999px;font-size:12px;text-decoration:none;border:1px solid #0f1724;color:#0f1724">Web</a>` : ''
+        const phoneLink = s.phone ? `<a href="tel:${s.phone}" style="padding:4px 8px;border-radius:12px;font-size:11px;text-decoration:none;border:1px solid #0f1724;color:#0f1724">Llamar</a>` : ''
+        const webLink = s.website ? `<a href="${s.website}" target="_blank" rel="noopener" style="padding:4px 8px;border-radius:12px;font-size:11px;text-decoration:none;border:1px solid #0f1724;color:#0f1724">Web</a>` : ''
         const popupHtml = `
-          <div style="min-width:200px;max-width:260px">
-            <div style="font-weight:600;color:#0f1724">${s.name}</div>
-            ${s.q ? `<div style="font-size:12px;color:#4b5563;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${s.q}</div>` : ''}
-            <div style="margin-top:8px">
-              <a href="/tienda/${encodeURIComponent(s.slug)}" style="background:#0f1724;color:#fff;padding:6px 10px;border-radius:999px;font-size:12px;text-decoration:none;margin-right:6px">Ver tienda</a>
+          <div style="min-width:200px;max-width:260px;line-height:1.25">
+            <div style="font-weight:700;color:#0f1724;font-size:14px">${s.name}</div>
+            ${s.q ? `<div style="font-size:11px;color:#4b5563;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${s.q}</div>` : ''}
+            <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+              <a href="/tienda/${encodeURIComponent(s.slug)}" style="background:#0f1724;color:#fff;padding:4px 8px;border-radius:12px;font-size:11px;text-decoration:none">Ver tienda</a>
               ${phoneLink}
               ${webLink}
             </div>
           </div>`
-        marker.bindPopup(popupHtml, { offset: [0, -size / 2] })
+        marker.bindPopup(popupHtml, { offset: [0, -size / 2], className: 'cm-store-popup', autoPan: true, autoPanPadding: [16, 56], maxWidth: 280 })
         marker.on('click', () => {
           if (onStoreClick) onStoreClick(s.id)
           marker.openPopup()

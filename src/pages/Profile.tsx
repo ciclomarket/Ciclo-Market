@@ -10,6 +10,7 @@ import { fetchListingsBySeller } from '../services/listings'
 import { supabaseEnabled } from '../services/supabase'
 import { mockListings } from '../mock/mockData'
 import type { Listing } from '../types'
+import { computeTrustLevel, trustLabel, trustColorClasses, trustDescription, trustBadgeBgClasses } from '../utils/user'
 import { useAuth } from '../context/AuthContext'
 
 const TABS = ['Perfil', 'Publicaciones', 'Reseñas', 'Intereses'] as const
@@ -261,6 +262,7 @@ export default function Profile() {
     return lastInit ? `${first} ${lastInit}.` : first
   }, [displayName])
   const avatarUrl = profile?.avatar_url || listings[0]?.sellerAvatar || null
+  const trustLevel = computeTrustLevel(profile, reviewsSummary ? { count: reviewsSummary.count, avgRating: reviewsSummary.avgRating } : undefined)
   const totalListings = listings.length
   const activeListings = useMemo(
     () => listings.filter((item) => !item.status || item.status === 'active'),
@@ -299,24 +301,34 @@ export default function Profile() {
       case 'Perfil':
         return (
           <div className="space-y-6">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-              <div className="size-28 overflow-hidden rounded-3xl border border-[#14212e]/10 bg-[#14212e]/5">
-                {avatarUrl ? (
-                  <img src={avatarUrl} alt={displayName} className="h-full w-full object-cover" />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center text-2xl font-semibold text-[#14212e]/60">
-                    {displayName.charAt(0).toUpperCase()}
-                  </div>
-                )}
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                <div className="size-28 overflow-hidden rounded-3xl border border-[#14212e]/10 bg-[#14212e]/5">
+                  {avatarUrl ? (
+                    <img src={avatarUrl} alt={displayName} className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-2xl font-semibold text-[#14212e]/60">
+                      {displayName.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                </div>
+                <div>
+                <h2 className="text-2xl font-semibold text-[#14212e] flex items-center gap-2">
+                  {displayName}
+                  {(() => {
+                    const c = trustColorClasses(trustLevel)
+                    return (
+                      <span className={`relative -top-1 inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[12px] leading-none font-semibold ${trustBadgeBgClasses(trustLevel)} text-white border-[#0f1924]`}>
+                        {trustLabel(trustLevel, 'short')}
+                      </span>
+                    )
+                  })()}
+                </h2>
+                  <p className="mt-1 text-sm text-[#14212e]/70">{locationLabel}</p>
+                  {lastUpdatedLabel && (
+                    <p className="mt-1 text-xs text-[#14212e]/50">Última actividad {lastUpdatedLabel}</p>
+                  )}
+                </div>
               </div>
-              <div>
-                <h2 className="text-2xl font-semibold text-[#14212e]">{displayName}</h2>
-                <p className="mt-1 text-sm text-[#14212e]/70">{locationLabel}</p>
-                {lastUpdatedLabel && (
-                  <p className="mt-1 text-xs text-[#14212e]/50">Última actividad {lastUpdatedLabel}</p>
-                )}
-              </div>
-            </div>
 
             <div className="grid gap-4 sm:grid-cols-3">
               <ProfileStat label="Publicaciones activas" value={activeListings.length} trend="Visibles en el marketplace" />
@@ -326,6 +338,21 @@ export default function Profile() {
                 value={reviewsSummary ? `${reviewsSummary.avgRating.toFixed(1)}★` : '—'}
                 trend={reviewsSummary ? `${reviewsSummary.count} reseñas` : 'Sin reseñas aún'}
               />
+            </div>
+
+            <div className="rounded-2xl border border-[#14212e]/10 bg-[#f2f6fb] p-4">
+              <p className="text-xs uppercase tracking-wide text-[#14212e]/50">Nivel de confianza</p>
+              <div className="mt-1 flex items-center gap-2 text-[#14212e]">
+                {(() => {
+                  const c = trustColorClasses(trustLevel)
+                  return (
+                    <span className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[12px] leading-none font-semibold ${trustBadgeBgClasses(trustLevel)} text-white border-[#0f1924]`}>
+                      {trustLabel(trustLevel, 'long')}
+                    </span>
+                  )
+                })()}
+              </div>
+              <p className="mt-1 text-sm text-[#14212e]/70">{trustDescription(trustLevel)}</p>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
@@ -548,7 +575,11 @@ export default function Profile() {
 
   if (loading) {
     return (
-      <div className="min-h-[calc(100vh-120px)] bg-[#101c29] py-10">
+      <div className="relative isolate overflow-hidden min-h-[calc(100vh-120px)] bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] py-10">
+        <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
+          <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
+          <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
+        </div>
         <Container>
           <div className="rounded-[28px] border border-white/10 bg-white/5 p-10 text-center text-white/80">
             Cargando perfil del vendedor…
@@ -560,7 +591,11 @@ export default function Profile() {
 
   if (error) {
     return (
-      <div className="min-h-[calc(100vh-120px)] bg-[#101c29] py-10">
+      <div className="relative isolate overflow-hidden min-h-[calc(100vh-120px)] bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] py-10">
+        <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
+          <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
+          <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
+        </div>
         <Container>
           <div className="rounded-[28px] border border-[#ff6b6b]/40 bg-[#ff6b6b]/10 p-10 text-center text-[#ff6b6b]">
             {error}
@@ -582,7 +617,11 @@ export default function Profile() {
 
     return (
       <>
-        <div className="min-h-[calc(100vh-96px)] bg-[#0f1729] py-6 text-white">
+        <div className="relative isolate overflow-hidden min-h-[calc(100vh-96px)] bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] py-6 text-white">
+          <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
+            <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
+            <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
+          </div>
           <Container>
             <div className="space-y-6">
               <header className="rounded-3xl border border-white/15 bg-white/10 p-5 shadow-[0_18px_40px_rgba(6,12,24,0.35)]">
@@ -727,59 +766,7 @@ export default function Profile() {
         <Container>
           <div className="overflow-visible rounded-[28px] border border-white/10 bg-white/5 backdrop-blur-xl shadow-[0_35px_80px_rgba(12,20,28,0.45)]">
             <header className="border-b border-white/10 bg-[#14212e]/90 px-6 py-6 text-white">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-start justify-between gap-3 sm:block">
-                <div className="size-16 overflow-hidden rounded-2xl border border-white/20 bg-white/10 sm:hidden">
-                    {avatarUrl ? (
-                      <img src={avatarUrl} alt={displayName} className="h-full w-full object-cover" />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center text-lg font-semibold text-white/80">
-                        {displayName.charAt(0).toUpperCase()}
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.4em] text-white/70">Perfil del vendedor</p>
-                    <h1 className="text-2xl font-semibold">
-                      <span className="inline-flex items-center gap-2">
-                        <span className="inline-flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-white/20 bg-white/10 align-middle">
-                          {avatarUrl ? (
-                            <img src={avatarUrl} alt={displayNameAbbrev} className="h-full w-full object-cover" />
-                          ) : (
-                            <span className="text-sm text-white/80">{displayNameAbbrev.charAt(0)}</span>
-                          )}
-                        </span>
-                        <span>{displayNameAbbrev}</span>
-                      </span>
-                    </h1>
-                    <p className="text-sm text-white/70">{locationLabel}</p>
-                    {reviewsSummary && reviewsSummary.count > 0 && (
-                      <div className="mt-1 flex items-center gap-2 text-xs text-white/80">
-                        <StarRating value={reviewsSummary.avgRating} />
-                        <span>({reviewsSummary.count})</span>
-                      </div>
-                    )}
-                    {memberSinceLabel && (
-                      <p className="mt-1 text-xs text-white/60">Miembro desde {memberSinceLabel}</p>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {websiteLink && (
-                    <a
-                      href={websiteLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 rounded-full border border-white/40 px-4 py-2 text-sm font-semibold text-white transition hover:border-white"
-                    >
-                      Sitio web
-                    </a>
-                  )}
-                  <Button to="/marketplace" variant="secondary" className="bg-white text-[#14212e] hover:bg-white/90">
-                    Ver marketplace
-                  </Button>
-                </div>
-              </div>
+              <h1 className="text-xl font-semibold">Perfil del vendedor</h1>
             </header>
 
             <div className="grid gap-6 p-6 lg:grid-cols-[260px_1fr]">

@@ -5,6 +5,7 @@ import Button from '../../components/Button'
 import { SocialAuthButtons } from '../../components/SocialAuthButtons'
 import { useAuth } from '../../context/AuthContext'
 import { getSupabaseClient, supabaseEnabled, setAuthPersistence } from '../../services/supabase'
+import { trackMetaPixel } from '../../lib/metaPixel'
 
 type OAuthProvider = 'google' | 'facebook'
 
@@ -37,6 +38,9 @@ export default function Login() {
         password
       })
       if (error) throw error
+      // Marca de intención para asegurar el evento luego de redirigir
+      try { sessionStorage.setItem('mb_oauth_login_intent', 'email') } catch { /* noop */ }
+      try { trackMetaPixel('Login', { method: 'email' }) } catch { /* noop */ }
       if (typeof window !== 'undefined') window.location.assign('/dashboard')
     } catch (err: any) {
       const message = err instanceof Error ? err.message : 'No pudimos iniciar sesión. Intentá nuevamente.'
@@ -66,6 +70,8 @@ export default function Login() {
       })
       if (error) throw error
       if (data?.url) {
+        // Guardamos intención para enviar evento al volver del OAuth
+        try { sessionStorage.setItem('mb_oauth_login_intent', provider) } catch { /* noop */ }
         window.location.href = data.url
       }
     } catch (err: any) {

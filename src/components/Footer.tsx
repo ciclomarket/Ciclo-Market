@@ -31,24 +31,25 @@ export default function Footer() {
               <h5 className="text-base font-semibold text-white">Explorá</h5>
               <ul className="mt-3 space-y-2">
                 <li>
-                  <Link to="/marketplace?cat=Ruta" className="transition hover:text-white">
-                    Bicis de ruta
-                  </Link>
+                  <Link to="/bicicletas-usadas" className="transition hover:text-white">Bicicletas usadas</Link>
                 </li>
                 <li>
-                  <Link to="/marketplace?cat=MTB" className="transition hover:text-white">
-                    Mountain bikes
-                  </Link>
+                  <Link to="/bicicletas-ruta" className="transition hover:text-white">Bicis de ruta</Link>
                 </li>
                 <li>
-                  <Link to="/marketplace?deal=1" className="transition hover:text-white">
-                    Ofertas destacadas
-                  </Link>
+                  <Link to="/bicicletas-mtb" className="transition hover:text-white">Mountain bikes</Link>
                 </li>
                 <li>
-                  <Link to="/tiendas" className="transition hover:text-white">
-                    Tiendas oficiales
-                  </Link>
+                  <Link to="/bicicletas-gravel" className="transition hover:text-white">Gravel</Link>
+                </li>
+                <li>
+                  <Link to="/fixie" className="transition hover:text-white">Fixie</Link>
+                </li>
+                <li>
+                  <Link to="/marketplace?deal=1" className="transition hover:text-white">Ofertas destacadas</Link>
+                </li>
+                <li>
+                  <Link to="/tiendas" className="transition hover:text-white">Tiendas oficiales</Link>
                 </li>
               </ul>
             </div>

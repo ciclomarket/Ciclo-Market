@@ -1,29 +1,52 @@
-# Build / cache
-node_modules/
-server/node_modules/
+### Build / cache
 dist/
+server/dist/
 .firebase/
 tsconfig.tsbuildinfo
+.cache/
+.parcel-cache/
+.turbo/
 
-# Env / secrets
-*.env
+### Dependencies
+node_modules/
+server/node_modules/
+
+### Env / secrets (keep only examples tracked)
+.env
+.env.*
+!.env.example
+server/.env
+server/.env.*
+!server/.env.example
 sendgrid.env
-# Ignore example envs (keep them local-only if preferred)
-.env.example
-server/.env.example
 
-# Supabase exports / backups
+### Logs / coverage
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+coverage/
+.nyc_output/
+
+### Platform / tooling
+.vercel/
+.netlify/
+
+### Supabase exports / backups
 supabase/
 ciclo-market-server.backup/
 server.tar.gz
 
-# Google Cloud SDK (ruta rara que se coló)
-exec -l /
+### Editors / OS junk
+.vscode/
+.idea/
+.history/
+*.DS_Store
+Thumbs.db
 
-# Misc
+### Misc local files
 storage.rules
 users.csv
-*.DS_Store
-gcloud auth login/
 .env.local
-node_modules/
