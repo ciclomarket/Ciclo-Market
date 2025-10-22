@@ -177,6 +177,10 @@ app.get('/sitemap.xml', async (_req, res) => {
     <lastmod>${lastmod}</lastmod>
   </sitemap>
   <sitemap>
+    <loc>${origin}/sitemap-categories.xml</loc>
+    <lastmod>${lastmod}</lastmod>
+  </sitemap>
+  <sitemap>
     <loc>${origin}/sitemap-stores.xml</loc>
     <lastmod>${lastmod}</lastmod>
   </sitemap>
@@ -201,6 +205,7 @@ app.get('/sitemap-static.xml', async (_req, res) => {
   const staticPaths = [
     '/',
     '/marketplace',
+    // Legacy ofertas path (kept to help discovery if referenced)
     '/ofertas',
     // Landings SEO
     '/bicicletas-usadas',
@@ -244,7 +249,8 @@ app.get('/sitemap-listings-:page(\\d+).xml', async (req, res) => {
     res.type('application/xml')
     const origin = (process.env.FRONTEND_URL || '').split(',')[0]?.trim() || 'https://ciclomarket.ar'
     const page = Math.max(1, parseInt(String(req.params.page || '1'), 10) || 1)
-    const PAGE_SIZE = 1000
+    // Reducimos el tamaño de página para disminuir timeouts
+    const PAGE_SIZE = 500
     const from = (page - 1) * PAGE_SIZE
     const to = from + PAGE_SIZE - 1
     const supabase = getServerSupabaseClient()
@@ -276,7 +282,15 @@ ${urls}
     res.set('Cache-Control', 'public, max-age=1800')
     return res.send(xml)
   } catch (e) {
-    return res.status(500).send('')
+    // Evitar error 5xx para Google: devolver un sitemap vacío con 200
+    try {
+      res.type('application/xml')
+      res.set('Cache-Control', 'public, max-age=600')
+      const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>`
+      return res.send(xml)
+    } catch {
+      return res.status(200).type('application/xml').send('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>')
+    }
   }
 })
 
@@ -319,12 +333,39 @@ ${urls}
 
 // Sitemap: categorías/landings curadas
 app.get('/sitemap-categories.xml', async (_req, res) => {
-  // Ya no listamos categorías como landings indexables.
-  res.type('application/xml')
-  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>`
-  res.set('Cache-Control', 'public, max-age=1800')
-  return res.send(xml)
+  try {
+    res.type('application/xml')
+    const origin = (process.env.FRONTEND_URL || '').split(',')[0]?.trim() || 'https://ciclomarket.ar'
+    const nowIso = new Date().toISOString().slice(0, 10)
+    const cats = [
+      '/bicicletas-usadas',
+      '/bicicletas-ruta',
+      '/bicicletas-mtb',
+      '/bicicletas-gravel',
+      '/bicicletas-triatlon',
+      '/fixie',
+      '/accesorios',
+      '/indumentaria',
+      '/ofertas-destacadas',
+      '/clasificados-bicicletas',
+    ]
+    const urls = cats
+      .map((p) => `\n  <url>\n    <loc>${origin}${p}</loc>\n    <lastmod>${nowIso}</lastmod>\n    <changefreq>weekly</changefreq>\n  </url>`)
+      .join('')
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>`
+    res.set('Cache-Control', 'public, max-age=1800')
+    return res.send(xml)
+  } catch {
+    return res.status(200).type('application/xml').send('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>')
+  }
 })
+
+/* -------------------------- SEO Redirects --------------------------- */
+// Rutas legacy a nuevas landings (301) para preservar señales
+app.get(['/marketplace/bicicletas-de-ruta', '/marketplace/bicicletas-ruta'], (_req, res) => res.redirect(301, '/bicicletas-ruta'))
+app.get(['/marketplace/bicicletas-de-mtb', '/marketplace/mtb'], (_req, res) => res.redirect(301, '/bicicletas-mtb'))
+app.get(['/marketplace/bicicletas-de-gravel', '/marketplace/gravel'], (_req, res) => res.redirect(301, '/bicicletas-gravel'))
+app.get(['/ofertas'], (_req, res) => res.redirect(301, '/ofertas-destacadas'))
 
 app.get('/robots.txt', (_req, res) => {
   res.type('text/plain')
