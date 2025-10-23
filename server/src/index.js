@@ -31,7 +31,8 @@ const app = express()
 app.use(express.json())
 
 /* ----------------------------- Static assets ------------------------------ */
-const publicDir = path.join(__dirname, '../public')
+// Static assets live at project-root/public (not server/public)
+const publicDir = path.join(__dirname, '..', '..', 'public')
 app.use(
   express.static(publicDir, {
     maxAge: '30d',
