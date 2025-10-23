@@ -40,6 +40,8 @@ from public.events
 where created_at >= now() - interval '90 days'
 group by 1,2
 order by 1 asc;
+-- Ensure view runs with querying user's privileges (RLS-aware)
+alter view public.admin_events_daily set (security_invoker = true);
 
 create or replace view public.admin_listing_views_daily as
 select date_trunc('day', created_at) as day, listing_id, count(*) as total
@@ -47,6 +49,7 @@ from public.events
 where type = 'listing_view' and created_at >= now() - interval '90 days'
 group by 1,2
 order by 1 asc;
+alter view public.admin_listing_views_daily set (security_invoker = true);
 
 create or replace view public.admin_store_views_daily as
 select date_trunc('day', created_at) as day, store_user_id, count(*) as total
@@ -54,6 +57,7 @@ from public.events
 where type = 'store_view' and created_at >= now() - interval '90 days'
 group by 1,2
 order by 1 asc;
+alter view public.admin_store_views_daily set (security_invoker = true);
 
 create or replace view public.admin_wa_clicks_daily as
 select date_trunc('day', created_at) as day, listing_id, count(*) as total
@@ -61,4 +65,4 @@ from public.events
 where type = 'wa_click' and created_at >= now() - interval '90 days'
 group by 1,2
 order by 1 asc;
-
+alter view public.admin_wa_clicks_daily set (security_invoker = true);

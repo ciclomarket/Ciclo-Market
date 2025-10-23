@@ -19,6 +19,7 @@ where created_at >= now() - interval '90 days'
   and store_user_id is not null
 group by 1,2,3,4
 order by 1 asc;
+alter view public.store_metrics_daily set (security_invoker = true);
 
 -- Resumen por publicación (30 días)
 create or replace view public.store_listing_summary_30d as
@@ -39,6 +40,7 @@ select
   case when views > 0 then round(100.0 * wa_clicks::numeric / views, 2) else 0 end as ctr
 from base
 order by wa_clicks desc nulls last, views desc nulls last;
+alter view public.store_listing_summary_30d set (security_invoker = true);
 
 -- Resumen global por tienda (30 días)
 create or replace view public.store_summary_30d as
@@ -51,4 +53,4 @@ from public.events
 where created_at >= now() - interval '30 days'
   and store_user_id is not null
 group by 1;
-
+alter view public.store_summary_30d set (security_invoker = true);

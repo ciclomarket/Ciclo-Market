@@ -146,6 +146,8 @@ create or replace view public.v_review_reminders_ready as
   from public.review_reminders r
   where r.ready_at <= now()
     and (not r.sent_email or not r.sent_inapp);
+-- Ensure view runs with querying user's privileges (RLS-aware)
+alter view public.v_review_reminders_ready set (security_invoker = true);
 
 -- Grants para la vista
 do $$ begin

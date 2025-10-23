@@ -46,16 +46,19 @@ async function buildForStore(supabase, userId, baseFront) {
   if (listingIds.length) {
     const { data: listings } = await supabase
       .from('listings')
-      .select('id,title,slug')
+      .select('id,title,slug,status')
       .in('id', listingIds)
+      .eq('status', 'active')
     listingMap = Object.fromEntries((listings || []).map((l) => [l.id, l]))
   }
-  const topRows = (topRowsRaw || []).map((r) => {
-    const l = listingMap[r.listing_id]
-    const slugOrId = l?.slug || r.listing_id
-    const link = `${cleanBase}/listing/${encodeURIComponent(slugOrId)}`
-    return { ...r, title: l?.title || r.listing_id, link }
-  })
+  const topRows = (topRowsRaw || [])
+    .filter((r) => Boolean(listingMap[r.listing_id]))
+    .map((r) => {
+      const l = listingMap[r.listing_id]
+      const slugOrId = l?.slug || r.listing_id
+      const link = `${cleanBase}/listing/${encodeURIComponent(slugOrId)}`
+      return { ...r, title: l?.title || r.listing_id, link }
+    })
 
   const dashboardUrl = `${cleanBase}/dashboard?tab=${encodeURIComponent('Analítica')}`
   const { html, text } = buildStoreAnalyticsHTML({
@@ -130,4 +133,3 @@ function startStoreAnalyticsDigestJob() {
 }
 
 module.exports = { startStoreAnalyticsDigestJob, runStoreAnalyticsDigestOnce }
-

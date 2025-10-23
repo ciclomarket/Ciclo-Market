@@ -1476,13 +1476,13 @@ app.post('/api/dev/store-analytics-preview', async (req, res) => {
     if (!isMailConfigured()) return res.status(503).json({ error: 'mail_not_configured' })
 
     const supabase = getServerSupabaseClient()
-    const { to = 'admin@ciclomarket.ar', storeUserId = null } = req.body || {}
+  const { to = 'admin@ciclomarket.ar', storeUserId = null } = req.body || {}
 
     const baseFront = (process.env.FRONTEND_URL || '').split(',')[0]?.trim() || 'https://ciclomarket.ar'
     const cleanBase = baseFront.replace(/\/$/, '')
     const dashboardUrl = `${cleanBase}/dashboard?tab=${encodeURIComponent('Analítica')}`
 
-    let userId = storeUserId
+    let userId = (typeof storeUserId === 'string' && storeUserId.trim()) ? storeUserId.trim() : null
     let storeName = ''
     if (!userId && to) {
       const { data: u } = await supabase.from('users').select('id, store_name').eq('email', to).maybeSingle()
@@ -1491,6 +1491,7 @@ app.post('/api/dev/store-analytics-preview', async (req, res) => {
       const { data: u } = await supabase.from('users').select('store_name').eq('id', userId).maybeSingle()
       if (u) storeName = u.store_name || ''
     }
+    if (!userId) return res.status(400).json({ error: 'store_user_id_required' })
 
     // Pull summary rows (30d)
     const { data: summary } = await supabase
@@ -1512,16 +1513,19 @@ app.post('/api/dev/store-analytics-preview', async (req, res) => {
     if (listingIds.length) {
       const { data: listings } = await supabase
         .from('listings')
-        .select('id,title,slug')
+        .select('id,title,slug,status')
         .in('id', listingIds)
+        .eq('status', 'active')
       listingMap = Object.fromEntries((listings || []).map((l) => [l.id, l]))
     }
-    const topRows = (topRowsRaw || []).map((r) => {
-      const l = listingMap[r.listing_id]
-      const slugOrId = l?.slug || r.listing_id
-      const link = `${cleanBase}/listing/${encodeURIComponent(slugOrId)}`
-      return { ...r, title: l?.title || r.listing_id, link }
-    })
+    const topRows = (topRowsRaw || [])
+      .filter((r) => Boolean(listingMap[r.listing_id]))
+      .map((r) => {
+        const l = listingMap[r.listing_id]
+        const slugOrId = l?.slug || r.listing_id
+        const link = `${cleanBase}/listing/${encodeURIComponent(slugOrId)}`
+        return { ...r, title: l?.title || r.listing_id, link }
+      })
 
     const { html, text } = buildStoreAnalyticsHTML({
       baseFront: cleanBase,

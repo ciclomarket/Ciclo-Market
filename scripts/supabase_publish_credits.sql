@@ -43,3 +43,5 @@ from public.publish_credits
 where created_at >= now() - interval '90 days'
 group by 1,2,3
 order by 1 asc;
+-- Ensure view runs with querying user's privileges (RLS-aware)
+alter view public.admin_publish_credits_daily set (security_invoker = true);
