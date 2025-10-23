@@ -1500,13 +1500,35 @@ app.post('/api/dev/store-analytics-preview', async (req, res) => {
       .eq('store_user_id', userId)
       .maybeSingle()
 
-    const { data: topRowsRaw } = await supabase
+    let { data: topRowsRaw } = await supabase
       .from('store_listing_summary_30d')
       .select('*')
       .eq('store_user_id', userId)
       .order('wa_clicks', { ascending: false, nullsFirst: false })
       .order('views', { ascending: false, nullsFirst: false })
       .limit(10)
+
+    if (!topRowsRaw || topRowsRaw.length === 0) {
+      // Fallback: computar agregados directo desde events (últimos 30 días)
+      const sinceIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+      const { data: eventsRaw } = await supabase
+        .from('events')
+        .select('listing_id,type,created_at')
+        .eq('store_user_id', userId)
+        .gte('created_at', sinceIso)
+        .in('type', ['listing_view','wa_click'])
+        .not('listing_id', 'is', null)
+      const agg = new Map()
+      for (const ev of (eventsRaw || [])) {
+        const id = ev.listing_id
+        if (!id) continue
+        const row = agg.get(id) || { listing_id: id, store_user_id: userId, views: 0, wa_clicks: 0 }
+        if (ev.type === 'listing_view') row.views += 1
+        else if (ev.type === 'wa_click') row.wa_clicks += 1
+        agg.set(id, row)
+      }
+      topRowsRaw = Array.from(agg.values()).sort((a, b) => (b.wa_clicks - a.wa_clicks) || (b.views - a.views)).slice(0, 10)
+    }
 
     const listingIds = (topRowsRaw || []).map((r) => r.listing_id).filter(Boolean)
     let listingMap = {}
