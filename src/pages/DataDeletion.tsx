@@ -9,7 +9,7 @@ export default function DataDeletion() {
           <p className="text-sm text-[#14212e]/70">
             En Ciclo Market podés solicitar la eliminación de tu cuenta y de los datos personales asociados.
           </p>
-          <p className="text-xs text-[#14212e]/50">Última actualización: abril 2025</p>
+          <p className="text-xs text-[#14212e]/50">Última actualización: 23 de octubre de 2025</p>
         </header>
 
         <section className="rounded-3xl border border-[#14212e]/10 bg-white p-6 shadow-soft">
@@ -17,7 +17,7 @@ export default function DataDeletion() {
           <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm leading-relaxed text-[#14212e]/75">
             <li>Ingresá a tu cuenta y abrí el <strong>Panel del vendedor</strong>.</li>
             <li>Eliminá tus publicaciones y datos opcionales de perfil (foto, redes, WhatsApp) si lo deseás.</li>
-            <li>Contactanos a <a className="underline" href="mailto:privacy@ciclomarket.ar">privacy@ciclomarket.ar</a> para completar la eliminación de tu cuenta.
+            <li>Contactanos a <a className="underline" href="mailto:admin@ciclomarket.ar">admin@ciclomarket.ar</a> para completar la eliminación de tu cuenta.
             </li>
           </ol>
           <p className="mt-3 text-xs text-[#14212e]/60">Nota: por normativa antifraude y contable, cierta información mínima puede conservarse por un período limitado.</p>
@@ -26,7 +26,7 @@ export default function DataDeletion() {
         <section className="rounded-3xl border border-[#14212e]/10 bg-white p-6 shadow-soft">
           <h2 className="text-lg font-semibold text-[#14212e]">Opción 2: por correo electrónico</h2>
           <p className="mt-2 text-sm leading-relaxed text-[#14212e]/75">
-            Si no podés acceder a tu cuenta, escribinos a <a className="underline" href="mailto:privacy@ciclomarket.ar">privacy@ciclomarket.ar</a> con el asunto “Eliminar datos”. Incluí:
+            Si no podés acceder a tu cuenta, escribinos a <a className="underline" href="mailto:admin@ciclomarket.ar">admin@ciclomarket.ar</a> con el asunto “Eliminar datos”. Incluí:
           </p>
           <ul className="mt-2 list-disc space-y-2 pl-5 text-sm leading-relaxed text-[#14212e]/75">
             <li>Tu correo registrado en Ciclo Market.</li>
@@ -49,11 +49,10 @@ export default function DataDeletion() {
         <section className="rounded-3xl border border-[#14212e]/10 bg-white p-6 shadow-soft">
           <h2 className="text-lg font-semibold text-[#14212e]">Solicitudes desde Facebook (Meta)</h2>
           <p className="mt-2 text-sm leading-relaxed text-[#14212e]/75">
-            Si llegaste a esta página por un requerimiento de Facebook, podés iniciar tu solicitud escribiendo a <a className="underline" href="mailto:privacy@ciclomarket.ar">privacy@ciclomarket.ar</a>. Incluí tu correo de registro y, si es posible, tu Facebook User ID.
+            Si llegaste a esta página por un requerimiento de Facebook, podés iniciar tu solicitud escribiendo a <a className="underline" href="mailto:admin@ciclomarket.ar">admin@ciclomarket.ar</a>. Incluí tu correo de registro y, si es posible, tu Facebook User ID.
           </p>
         </section>
       </Container>
     </div>
   )
 }
-

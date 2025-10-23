@@ -31,6 +31,7 @@ export interface UserProfileInput {
   storeHours?: string | null
   storeLat?: number | null
   storeLon?: number | null
+  // Removed: googlePlaceId (Google Reviews)
 }
 
 export interface UserProfileRecord {
@@ -66,6 +67,7 @@ export interface UserProfileRecord {
   store_hours?: string | null
   store_lat?: number | null
   store_lon?: number | null
+  // Removed: google_place_id (Google Reviews)
 }
 
 export async function createUserProfile(payload: UserProfileInput): Promise<boolean> {

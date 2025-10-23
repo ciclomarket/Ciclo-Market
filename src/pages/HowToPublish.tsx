@@ -32,18 +32,19 @@ export default function HowToPublish() {
 
         <section className="space-y-5 rounded-3xl border border-white/10 bg-white/10 p-6 shadow-soft backdrop-blur">
           <h2 className="text-xl font-semibold text-white">2. Elegí el plan adecuado</h2>
-          <p className="text-sm text-white/80">
-            Desde la opción <b>Publicar</b> del menú, vas a poder ver los planes disponibles:
-          </p>
+          <p className="text-sm text-white/80">Desde <b>Publicar</b> vas a ver los planes vigentes:</p>
           <ul className="space-y-3 text-sm text-white/80">
             <li>
-              <b>Plan Gratis</b>: ideal para tu primer aviso. Incluye las secciones básicas y un número limitado de fotos.
+              <b>Gratis</b>: para publicar rápido. Avisos vencen a los <b>15 días</b>. Fotos básicas, sin botón de WhatsApp.
             </li>
             <li>
-              <b>Planes Destacados</b>: ofrecen más fotos, prioridad en el marketplace y extras como botón de WhatsApp o difusión en redes.
+              <b>Básico</b> y <b>Premium</b>: más fotos, prioridad, <b>WhatsApp habilitado</b> y opciones de <b>destaque</b>/difusión en redes.
             </li>
             <li>
-              Podés cambiar de plan en cualquier momento desde el dashboard si necesitás más visibilidad.
+              <b>Pro (Tiendas verificadas)</b>: avisos sin vencimiento mientras la tienda esté activa y mayor exposición.
+            </li>
+            <li>
+              Podés cambiar de plan o destacar publicaciones desde el dashboard cuando necesites más visibilidad.
             </li>
           </ul>
         </section>
@@ -58,7 +59,7 @@ export default function HowToPublish() {
               <b>Categoría y datos principales</b>: marca, modelo, material, transmisión y talle. Elegí cada opción para ver cómo se arma la ficha técnica.
             </li>
             <li>
-              <b>Ubicación y precio</b>: definí la moneda, el valor y la ubicación exacta en la que está la bicicleta. Si tu plan lo permite, agregá tu WhatsApp.
+              <b>Ubicación y precio</b>: definí la moneda, el valor y la ubicación. Si tu plan lo permite, agregá tu WhatsApp para contacto directo.
             </li>
             <li>
               <b>Descripción y extras</b>: contá el estado general, upgrades, mantenimiento y accesorios incluidos.
@@ -67,20 +68,24 @@ export default function HowToPublish() {
               <b>Fotos</b>: subí imágenes claras y bien iluminadas. A medida que cumplís los requisitos mínimos, se habilita la subida de fotos.
             </li>
             <li>
+              <b>Moderación</b>: por seguridad no se permiten teléfonos/links de WhatsApp en descripción o preguntas. Usá el botón de contacto.
+            </li>
+            <li>
               Mientras completás cada campo, la vista previa te muestra cómo se verá la ficha técnica final para que puedas ajustar detalles al instante.
             </li>
           </ul>
         </section>
 
         <section className="space-y-5 rounded-3xl border border-white/10 bg-white/10 p-6 shadow-soft backdrop-blur">
-          <h2 className="text-xl font-semibold text-white">4. Revisá y publicá</h2>
+          <h2 className="text-xl font-semibold text-white">4. Comprá créditos y publicá</h2>
           <ul className="space-y-3 text-sm text-white/80">
             <li>
-              Antes de confirmar, verificá que las fotos se vean bien y que el precio esté correcto.
+              Podés <b>comprar créditos de publicación</b> para activar planes pagos o destacar tu aviso. El pago se procesa con nuestro proveedor y se asigna a tu cuenta.
             </li>
             <li>
-              Guardá el borrador si querés completarlo más tarde o publicá directamente para que aparezca en el marketplace.
+              Verificá fotos y precio y publicá. Si preferís, guardá como borrador para completar más tarde.
             </li>
+            <li>Los créditos pueden tener vencimiento; usalos cuando mejor te convenga.</li>
           </ul>
         </section>
 
@@ -91,16 +96,16 @@ export default function HowToPublish() {
               <b>Perfil</b>: completá tus datos, provincia, ciudad y redes sociales para generar confianza.
             </li>
             <li>
-              <b>Publicaciones</b>: editá precios, archivá avisos, destacá bicicletas y controlá el rendimiento de tus anuncios.
+              <b>Publicaciones</b>: editá precios, pausá/reactivá avisos, destacá bicicletas y controlá su rendimiento.
             </li>
             <li>
-              <b>Consultas y notificaciones</b>: respondé preguntas y ofertas desde el detalle de la publicación y recibí alertas por email.
+              <b>Preguntas</b>: respondé consultas desde el aviso; evitá compartir teléfonos fuera del botón de WhatsApp.
             </li>
             <li>
-              <b>Editar perfil</b>: actualizá tu avatar y preferencias para tener una ficha de vendedor completa.
+              <b>Reseñas</b>: recibí y respondé reseñas de compradores para construir tu reputación.
             </li>
             <li>
-              <b>Suscripción</b>: revisá el estado de tu plan, renovaciones automáticas y próximos vencimientos.
+              <b>Métricas</b>: consultá vistas y clics en WhatsApp para optimizar tu aviso. Tiendas oficiales ven métricas agregadas por tienda.
             </li>
           </ul>
         </section>

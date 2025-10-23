@@ -24,6 +24,7 @@ export default function Footer() {
               >
                 Publicar mi bici
               </Link>
+              {/* Trust badge de Google removido */}
               {/* Newsletter destacado vive antes del footer */}
             </div>
 

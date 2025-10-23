@@ -26,6 +26,7 @@ const { buildStoreAnalyticsHTML } = (() => {
   try { return require('./emails/storeAnalyticsEmail') } catch { return {} }
 })()
 const path = require('path')
+// const https = require('https') // removed: used only for Google rating proxy
 
 const app = express()
 app.use(express.json())
@@ -70,6 +71,8 @@ app.options('*', cors(corsOptions))
 // Start scheduled jobs after basic middleware is ready
 try { startNewsletterDigestJob && startNewsletterDigestJob() } catch {}
 try { startStoreAnalyticsDigestJob && startStoreAnalyticsDigestJob() } catch {}
+
+/* Google Reviews endpoints removed */
 
 /* ----------------------------- Utils OG ----------------------------------- */
 function isBot(req) {
@@ -151,6 +154,8 @@ app.post('/api/track', async (req, res) => {
     return res.sendStatus(204)
   }
 })
+
+// Per-store Google rating endpoint removed
 
 // Sitemap index que referencia sitemaps por tipo
 app.get('/sitemap.xml', async (_req, res) => {

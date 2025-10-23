@@ -90,20 +90,11 @@ export default function Help() {
               <h2 className="text-xl font-semibold">Contactos directos</h2>
               <div className="space-y-3 text-sm text-white/80">
                 <div className="flex items-center gap-3">
-                  <span className="text-2xl">📱</span>
+                  <span className="text-2xl">✉️</span>
                   <div>
-                    <div className="font-semibold">Ventas</div>
-                    <a className="underline" href="https://wa.me/5491100000000" target="_blank" rel="noopener noreferrer">
-                      +54 9 11 0000 0000 (WhatsApp)
-                    </a>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">☎️</span>
-                  <div>
-                    <div className="font-semibold">Atención al cliente</div>
-                    <a className="underline" href="https://wa.me/5491100000000" target="_blank" rel="noopener noreferrer">
-                      +54 9 11 0000 0000 (WhatsApp)
+                    <div className="font-semibold">Contacto general</div>
+                    <a className="underline" href="mailto:admin@ciclomarket.ar">
+                      admin@ciclomarket.ar
                     </a>
                   </div>
                 </div>

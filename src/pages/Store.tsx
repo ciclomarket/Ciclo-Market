@@ -10,6 +10,7 @@ import { normaliseWhatsapp, buildWhatsappUrl } from '../utils/whatsapp'
 import { fetchListingsBySeller } from '../services/listings'
 import ListingCard from '../components/ListingCard'
 import type { Listing } from '../types'
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 
 type FilterOption = { id: string; label: string; match: (l: Listing) => boolean }
 type FilterSection = { id: string; label: string; options: FilterOption[] }
@@ -884,6 +885,8 @@ export default function Store() {
   const phone = profile.store_phone || profile.whatsapp_number || ''
   const workingHours = (profile as any).store_hours as string | null
 
+  // Google Reviews integrations removidas
+
   return (
     <div className="min-h-[70vh] relative isolate overflow-hidden text-white bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729]">
       <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
@@ -920,6 +923,7 @@ export default function Store() {
           <img src={avatar} alt={storeName} className="h-24 w-24 md:h-20 md:w-20 rounded-2xl border-4 border-white object-cover shadow" />
           <div className="flex-1 min-w-0 pt-1 text-center md:text-left">
             <h1 className="text-2xl font-bold text-white truncate">{storeName}</h1>
+            {/* Rating de Google removido */}
             {profile.verified ? (
               <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-emerald-500/90 px-2.5 py-0.5 text-xs font-semibold text-white">✓ Verificado</div>
             ) : null}
@@ -960,6 +964,8 @@ export default function Store() {
             )}
           </div>
         </div>
+
+        {/* Bloque de "Dejar reseña en Google" removido */}
 
         <div className="mt-6 space-y-6">
           {workingHours && (
