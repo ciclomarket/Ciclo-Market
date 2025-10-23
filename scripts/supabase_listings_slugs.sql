@@ -1,13 +1,23 @@
 -- Slugs legibles para publicaciones (idempotente y seguro)
 -- Ejecutar en el SQL Editor de Supabase (proyecto de Ciclo Market)
 
--- 1) Extensión para quitar acentos (si está disponible)
+-- 1) Extensión para quitar acentos (mover a schema "extensions" si es posible)
 do $$ begin
+  -- asegurar schema de extensiones
   begin
-    execute 'create extension if not exists unaccent';
+    execute 'create schema if not exists extensions';
+  exception when others then null; end;
+
+  -- intentar crear en schema extensions (o mover allí si ya existe)
+  begin
+    execute 'create extension if not exists unaccent with schema extensions';
   exception when others then
-    -- si no hay permisos, seguimos sin unaccent
-    null;
+    begin
+      execute 'alter extension unaccent set schema extensions';
+    exception when others then
+      -- si no hay permisos, seguimos sin moverla
+      null;
+    end;
   end;
 end $$;
 
@@ -15,24 +25,52 @@ end $$;
 alter table if exists public.listings
   add column if not exists slug text;
 
+-- 2.1) Helper para usar unaccent de forma segura sin depender del search_path
+create or replace function public.safe_unaccent(input text)
+returns text
+language plpgsql
+set search_path = public
+as $$
+declare
+  v text;
+begin
+  -- intentar en schema extensions (preferido)
+  begin
+    select extensions.unaccent(input) into v;
+    return v;
+  exception
+    when undefined_function then
+      -- fallback: si existe en public
+      begin
+        select public.unaccent(input) into v;
+        return v;
+      exception
+        when undefined_function then
+          return input;
+        when others then
+          return input;
+      end;
+    when others then
+      return input;
+  end;
+end; $$;
+
 -- 3) Helper: normaliza texto a slug
 create or replace function public.to_slug(input text)
-returns text language sql immutable as $$
+returns text language sql immutable
+set search_path = public
+as $$
   select trim(both '-' from regexp_replace(
-    lower(
-      -- intentar unaccent si está disponible
-      coalesce(
-        (select public.unaccent(input)),
-        input
-      )
-    ),
+    lower(public.safe_unaccent(input)),
     '[^a-z0-9]+', '-', 'g'
   ));
 $$;
 
 -- 4) Genera un slug único para listings a partir de título+modelo+año
 create or replace function public.generate_listing_slug(p_title text, p_model text, p_year int, p_exclude_id text default null)
-returns text language plpgsql as $$
+returns text language plpgsql
+set search_path = public
+as $$
 declare
   base text;
   candidate text;
@@ -86,7 +124,9 @@ end $$;
 
 -- 7) Trigger para auto-generar slug al insertar si viene null
 create or replace function public.listings_slug_bi()
-returns trigger language plpgsql as $$
+returns trigger language plpgsql
+set search_path = public
+as $$
 begin
   if new.slug is null or new.slug = '' then
     new.slug := public.generate_listing_slug(new.title, new.model, new.year, null);
@@ -102,4 +142,3 @@ do $$ begin
     execute 'create trigger trg_listings_slug_bi before insert on public.listings for each row execute function public.listings_slug_bi()';
   end if;
 end $$;
-

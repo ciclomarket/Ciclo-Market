@@ -24,12 +24,13 @@ alter view public.store_metrics_daily set (security_invoker = true);
 -- Resumen por publicación (30 días)
 create or replace view public.store_listing_summary_30d as
 with base as (
-  select listing_id, store_user_id,
-    sum(case when type='listing_view' then 1 else 0 end) as views,
-    sum(case when type='wa_click' then 1 else 0 end) as wa_clicks
-  from public.events
-  where created_at >= now() - interval '30 days'
-    and store_user_id is not null
+  select e.listing_id, e.store_user_id,
+    sum(case when e.type='listing_view' then 1 else 0 end) as views,
+    sum(case when e.type='wa_click' then 1 else 0 end) as wa_clicks
+  from public.events e
+  join public.listings l on l.id = e.listing_id and coalesce(lower(l.status),'') <> 'deleted'
+  where e.created_at >= now() - interval '30 days'
+    and e.store_user_id is not null
   group by 1,2
 )
 select
@@ -45,12 +46,13 @@ alter view public.store_listing_summary_30d set (security_invoker = true);
 -- Resumen global por tienda (30 días)
 create or replace view public.store_summary_30d as
 select
-  store_user_id,
-  sum(case when type='store_view' then 1 else 0 end) as store_views,
-  sum(case when type='listing_view' then 1 else 0 end) as listing_views,
-  sum(case when type='wa_click' then 1 else 0 end) as wa_clicks
-from public.events
-where created_at >= now() - interval '30 days'
-  and store_user_id is not null
+  e.store_user_id,
+  sum(case when e.type='store_view' then 1 else 0 end) as store_views,
+  sum(case when e.type='listing_view' and coalesce(lower(l.status),'') <> 'deleted' then 1 else 0 end) as listing_views,
+  sum(case when e.type='wa_click' and coalesce(lower(l.status),'') <> 'deleted' then 1 else 0 end) as wa_clicks
+from public.events e
+left join public.listings l on l.id = e.listing_id
+where e.created_at >= now() - interval '30 days'
+  and e.store_user_id is not null
 group by 1;
 alter view public.store_summary_30d set (security_invoker = true);

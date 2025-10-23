@@ -1515,7 +1515,7 @@ app.post('/api/dev/store-analytics-preview', async (req, res) => {
         .from('listings')
         .select('id,title,slug,status')
         .in('id', listingIds)
-        .eq('status', 'active')
+        .neq('status', 'deleted')
       listingMap = Object.fromEntries((listings || []).map((l) => [l.id, l]))
     }
     const topRows = (topRowsRaw || [])

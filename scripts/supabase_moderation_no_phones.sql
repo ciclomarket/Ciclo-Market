@@ -3,7 +3,9 @@
 
 -- 1) Función que detecta patrones de teléfonos/whatsapp
 create or replace function public.contains_phone_like(txt text)
-returns boolean language plpgsql immutable as $$
+returns boolean language plpgsql immutable
+set search_path = public
+as $$
 declare
   t text := lower(coalesce(txt,''));
   digits int;
@@ -27,7 +29,9 @@ $$;
 
 -- 2) Trigger para listings (descripcion y extras)
 create or replace function public.trg_listings_no_phones()
-returns trigger language plpgsql as $$
+returns trigger language plpgsql
+set search_path = public
+as $$
 begin
   if public.contains_phone_like(new.description) or public.contains_phone_like(new.extras) then
     raise exception 'Por seguridad no se permiten teléfonos/WhatsApp en descripción o extras.' using errcode = 'P0001';
@@ -44,7 +48,9 @@ end $$;
 
 -- 3) Trigger para preguntas (listing_questions.question_body, answer_body)
 create or replace function public.trg_questions_no_phones()
-returns trigger language plpgsql as $$
+returns trigger language plpgsql
+set search_path = public
+as $$
 begin
   if public.contains_phone_like(new.question_body) or public.contains_phone_like(new.answer_body) then
     raise exception 'Por seguridad no se permiten teléfonos/WhatsApp en preguntas o respuestas.' using errcode = 'P0001';
@@ -58,4 +64,3 @@ do $$ begin
     execute 'create trigger trg_questions_no_phones_biu before insert or update on public.listing_questions for each row execute function public.trg_questions_no_phones()';
   end if;
 end $$;
-

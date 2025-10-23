@@ -4,6 +4,7 @@
 create or replace function public.enforce_free_listing_expiry()
 returns trigger
 language plpgsql
+set search_path = public
 as $$
 declare
   v_code text;
@@ -39,4 +40,3 @@ set expires_at = (now() at time zone 'utc') + interval '15 days'
 where expires_at is null
   and coalesce(lower(trim(plan_code)), lower(trim(plan)), lower(trim(seller_plan))) = 'free'
   and (status is null or lower(trim(status)) not in ('deleted','archived'));
-
