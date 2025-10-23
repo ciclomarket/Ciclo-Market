@@ -7,6 +7,7 @@ import { mockListings } from '../mock/mockData'
 import { useAuth } from '../context/AuthContext'
 import { getSupabaseClient, supabaseEnabled } from '../services/supabase'
 import { archiveListing, fetchListingsBySeller, reduceListingPrice, fetchListingsByIds, updateListingStatus, deleteListing } from '../services/listings'
+import { fetchStoreSummary30d, fetchStoreListingSummary30d } from '../services/storeAnalytics'
 import { fetchUserProfile, type UserProfileRecord, upsertUserProfile } from '../services/users'
 import type { Listing } from '../types'
 import { usePlans } from '../context/PlanContext'
@@ -27,7 +28,7 @@ import { createGift } from '../services/gifts'
 import { fetchCreditsHistory, type Credit } from '../services/credits'
 import { trackMetaPixel } from '../lib/metaPixel'
 
-const TABS = ['Perfil', 'Publicaciones', 'Créditos', 'Favoritos', 'Notificaciones', 'Editar perfil', 'Suscripción', 'Editar tienda', 'Verificá tu perfil', 'Cerrar sesión'] as const
+const TABS = ['Perfil', 'Publicaciones', 'Créditos', 'Favoritos', 'Notificaciones', 'Editar perfil', 'Editar tienda', 'Analítica', 'Verificá tu perfil', 'Cerrar sesión'] as const
 type SellerTab = (typeof TABS)[number]
 
 const TAB_METADATA: Record<SellerTab, { title: string; description: string }> = {
@@ -55,10 +56,6 @@ const TAB_METADATA: Record<SellerTab, { title: string; description: string }> = 
     title: 'Editar perfil',
     description: 'Actualizá tus datos, redes y WhatsApp',
   },
-  'Suscripción': {
-    title: 'Suscripción',
-    description: 'Gestioná tu plan y beneficios activos',
-  },
   'Editar tienda': {
     title: 'Editar tienda',
     description: 'Actualizá el banner, nombre, dirección y redes de tu tienda',
@@ -66,6 +63,10 @@ const TAB_METADATA: Record<SellerTab, { title: string; description: string }> = 
   'Verificá tu perfil': {
     title: 'Verificá tu perfil',
     description: 'Confirmá identidad para mejorar la confianza',
+  },
+  'Analítica': {
+    title: 'Analítica',
+    description: 'Vistas, clics a WhatsApp y ranking de avisos',
   },
   'Cerrar sesión': {
     title: 'Cerrar sesión',
@@ -291,6 +292,19 @@ export default function Dashboard() {
     }
   }, [isMobile])
 
+  const visibleTabs = useMemo(() => {
+    return TABS.filter((tab) => {
+      const isStore = Boolean(profile?.store_enabled)
+      if (!isStore) {
+        // Usuarios sin tienda: mostrar todo excepto "Editar tienda" y "Analítica"
+        return tab !== 'Editar tienda' && tab !== 'Analítica'
+      }
+      // Usuarios con tienda: ocultar "Editar perfil" y mostrar "Editar tienda" + "Analítica"
+      if (tab === 'Editar perfil') return false
+      return true
+    })
+  }, [profile?.store_enabled])
+
   const openEditProfile = useCallback(() => {
     handleSelectTab('Editar perfil')
   }, [handleSelectTab])
@@ -341,6 +355,8 @@ export default function Dashboard() {
             onStoreUpdated={loadData}
           />
         )
+      case 'Analítica':
+        return <StoreAnalyticsView enabled={Boolean(profile?.store_enabled)} />
       case 'Verificá tu perfil':
         return <VerifyProfileView profile={profile} userEmail={user?.email} />
       case 'Cerrar sesión':
@@ -348,6 +364,127 @@ export default function Dashboard() {
       default:
         return null
     }
+  }
+
+  function StoreAnalyticsView({ enabled }: { enabled: boolean }) {
+    const [loadingA, setLoadingA] = useState(true)
+    const [summary, setSummary] = useState<{ store_views: number; listing_views: number; wa_clicks: number } | null>(null)
+    const [top, setTop] = useState<Array<{ listing_id: string; views: number; wa_clicks: number; ctr: number }>>([])
+    const [listingMap, setListingMap] = useState<Record<string, Listing>>({})
+
+    useEffect(() => {
+      let active = true
+      const load = async () => {
+        if (!enabled || !supabaseEnabled) { setLoadingA(false); return }
+        setLoadingA(true)
+        try {
+          const uid = user?.id || undefined
+          const [s, rows] = await Promise.all([
+            fetchStoreSummary30d(uid),
+            fetchStoreListingSummary30d(10, uid)
+          ])
+          if (!active) return
+          setSummary(s ? { store_views: s.store_views || 0, listing_views: s.listing_views || 0, wa_clicks: s.wa_clicks || 0 } : { store_views: 0, listing_views: 0, wa_clicks: 0 })
+          setTop(rows)
+          const ids = rows.map((r) => r.listing_id).filter(Boolean)
+          if (ids.length) {
+            const list = await fetchListingsByIds(ids)
+            if (!active) return
+            const map: Record<string, Listing> = {}
+            for (const l of list) map[l.id] = l
+            setListingMap(map)
+          } else {
+            setListingMap({})
+          }
+        } finally {
+          if (active) setLoadingA(false)
+        }
+      }
+      void load()
+      return () => { active = false }
+    }, [enabled])
+
+    if (!enabled) {
+      return (
+        <div className="p-4 text-sm text-[#14212e]/80">
+          Activá tu tienda para ver analítica de vistas y contactos.
+        </div>
+      )
+    }
+
+    const storeViews = summary?.store_views || 0
+    const listingViews = summary?.listing_views || 0
+    const waClicks = summary?.wa_clicks || 0
+    const ctr = listingViews > 0 ? Math.round((waClicks / listingViews) * 10000) / 100 : 0
+
+    return (
+      <div className="p-4 sm:p-6">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="rounded-2xl border border-[#14212e]/10 bg-white p-4">
+            <div className="text-xs text-[#14212e]/70">Vistas a tienda (30d)</div>
+            <div className="mt-1 text-2xl font-semibold text-[#14212e]">{storeViews.toLocaleString('es-AR')}</div>
+          </div>
+          <div className="rounded-2xl border border-[#14212e]/10 bg-white p-4">
+            <div className="text-xs text-[#14212e]/70">Vistas a publicaciones (30d)</div>
+            <div className="mt-1 text-2xl font-semibold text-[#14212e]">{listingViews.toLocaleString('es-AR')}</div>
+          </div>
+          <div className="rounded-2xl border border-[#14212e]/10 bg-white p-4">
+            <div className="text-xs text-[#14212e]/70">Clicks a WhatsApp (30d)</div>
+            <div className="mt-1 text-2xl font-semibold text-[#14212e]">{waClicks.toLocaleString('es-AR')}</div>
+          </div>
+          <div className="rounded-2xl border border-[#14212e]/10 bg-white p-4">
+            <div className="text-xs text-[#14212e]/70">Conversión (WA / vistas)</div>
+            <div className="mt-1 text-2xl font-semibold text-[#14212e]">{ctr.toFixed(2)}%</div>
+          </div>
+        </div>
+
+        <div className="mt-6 rounded-2xl border border-[#14212e]/10 bg-white">
+          <div className="border-b border-[#14212e]/10 px-4 py-3">
+            <h3 className="text-sm font-semibold text-[#14212e]">Top publicaciones (30 días)</h3>
+          </div>
+          {loadingA ? (
+            <div className="px-4 py-6 text-sm text-[#14212e]/70">Cargando…</div>
+          ) : top.length === 0 ? (
+            <div className="px-4 py-6 text-sm text-[#14212e]/70">Sin datos aún.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-[#14212e]/10 text-sm">
+                <thead className="bg-[#14212e]/5">
+                  <tr>
+                    <th className="px-4 py-2 text-left font-semibold text-[#14212e]/80">Publicación</th>
+                    <th className="px-4 py-2 text-right font-semibold text-[#14212e]/80">Vistas</th>
+                    <th className="px-4 py-2 text-right font-semibold text-[#14212e]/80">WA</th>
+                    <th className="px-4 py-2 text-right font-semibold text-[#14212e]/80">CTR</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#14212e]/10">
+                  {top.map((row) => {
+                    const l = listingMap[row.listing_id]
+                    const href = l ? `/listing/${l.slug ?? l.id}` : undefined
+                    return (
+                      <tr key={row.listing_id} className="hover:bg-[#14212e]/5">
+                        <td className="px-4 py-2">
+                          {href ? (
+                            <a className="text-[#14212e] underline" href={href} target="_blank" rel="noreferrer">
+                              {l?.title || row.listing_id}
+                            </a>
+                          ) : (
+                            <span className="text-[#14212e]">{l?.title || row.listing_id}</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2 text-right text-[#14212e]">{(row.views || 0).toLocaleString('es-AR')}</td>
+                        <td className="px-4 py-2 text-right text-[#14212e]">{(row.wa_clicks || 0).toLocaleString('es-AR')}</td>
+                        <td className="px-4 py-2 text-right text-[#14212e]">{Number(row.ctr || 0).toFixed(2)}%</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    )
   }
 
   const sellerProfile = sellerListings[0]
@@ -479,7 +616,7 @@ export default function Dashboard() {
                   </div>
                 )}
                 <div className="grid gap-3">
-                  {TABS.map((tab) => {
+                  {visibleTabs.map((tab) => {
                     const meta = TAB_METADATA[tab]
                     const badge = tab === 'Notificaciones' ? unreadNotifications : tab === 'Favoritos' ? favouritesCount : 0
                     return (
@@ -610,7 +747,7 @@ export default function Dashboard() {
           <div className="grid gap-6 p-6 lg:grid-cols-[260px_1fr]">
             <nav className="hidden rounded-3xl border border-white/10 bg-white/[0.08] p-3 text-sm text-white/80 md:block">
               <ul className="grid gap-1">
-                {TABS.filter((tab) => tab !== 'Editar tienda' || Boolean(profile?.store_enabled)).map((tab) => (
+                {visibleTabs.map((tab) => (
                   <li key={tab}>
                     <button
                       type="button"
@@ -665,7 +802,7 @@ export default function Dashboard() {
                 </button>
               </div>
               <ul className="mt-4 grid gap-2">
-                {TABS.filter((tab) => tab !== 'Editar tienda' || Boolean(profile?.store_enabled)).map((tab) => (
+                {visibleTabs.map((tab) => (
                   <li key={`mobile-${tab}`}>
                     <button
                       type="button"
@@ -1545,10 +1682,11 @@ function TabIcon({ tab }: { tab: SellerTab }) {
           <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5v6a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 16.5V8.25A2.25 2.25 0 016.75 6h6" />
         </svg>
       )
-    case 'Suscripción':
+    case 'Analítica':
       return (
         <svg {...common}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6l1.902 3.855 4.258.62-3.08 3.002.727 4.237L12 15.75l-3.807 2.002.727-4.237-3.08-3.001 4.258-.62L12 6z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l3-3 3 3 6-6 3 3" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 19.5h16.5M3.75 4.5h16.5M4.5 4.5v15M19.5 4.5v15" />
         </svg>
       )
     case 'Cerrar sesión':
@@ -1928,14 +2066,18 @@ function EditProfileView({
         {/* WhatsApp — único input */}
         <label className="text-sm font-medium text-[#14212e]">
           WhatsApp (privado)
-          <div className="mt-1 flex items-stretch gap-2">
-            <select className="select basis-1/4 sm:w-[8.5rem]" value={whatsappDial} onChange={(e) => setWhatsappDial(e.target.value)}>
+          <div className="mt-1 flex items-center gap-1 sm:gap-2">
+            <select
+              className="select basis-[30%] w-full sm:w-28 sm:basis-auto shrink-0 text-center"
+              value={whatsappDial}
+              onChange={(e) => setWhatsappDial(e.target.value)}
+            >
               {COUNTRY_CODES.map((c) => (
                 <option key={c.cc} value={c.dial}>{`${c.flag} +${c.dial}`}</option>
               ))}
             </select>
             <input
-              className="input basis-3/4 sm:flex-1"
+              className="input basis-[70%] w-full sm:min-w-0 sm:flex-1 sm:max-w-[15ch]"
               inputMode="numeric"
               pattern="[0-9]*"
               value={whatsappLocal}
@@ -1971,6 +2113,9 @@ function EditStoreView({ profile, userId, onStoreUpdated }: { profile: UserProfi
   const [storeSlug, setStoreSlug] = useState(profile?.store_slug ?? '')
   const [storeAddress, setStoreAddress] = useState(profile?.store_address ?? '')
   const [storePhone, setStorePhone] = useState(profile?.store_phone ?? '')
+  const [province, setProvince] = useState(profile?.province ?? '')
+  const [city, setCity] = useState(profile?.city ?? '')
+  const [cityOther, setCityOther] = useState('')
   const [storeInstagram, setStoreInstagram] = useState(profile?.store_instagram ?? '')
   const [storeFacebook, setStoreFacebook] = useState(profile?.store_facebook ?? '')
   const [storeWebsite, setStoreWebsite] = useState(profile?.store_website ?? '')
@@ -1980,6 +2125,18 @@ function EditStoreView({ profile, userId, onStoreUpdated }: { profile: UserProfi
   const [storeHours, setStoreHours] = useState(profile?.store_hours ?? '')
   const [storeLat, setStoreLat] = useState<number | null>(typeof profile?.store_lat === 'number' ? profile.store_lat : null)
   const [storeLon, setStoreLon] = useState<number | null>(typeof profile?.store_lon === 'number' ? profile.store_lon : null)
+  const COUNTRY_CODES = [
+    { cc: 'AR', dial: '54', label: 'Argentina', flag: '🇦🇷' },
+    { cc: 'PY', dial: '595', label: 'Paraguay', flag: '🇵🇾' },
+    { cc: 'BR', dial: '55', label: 'Brasil', flag: '🇧🇷' },
+    { cc: 'CL', dial: '56', label: 'Chile', flag: '🇨🇱' },
+    { cc: 'UY', dial: '598', label: 'Uruguay', flag: '🇺🇾' },
+    { cc: 'PE', dial: '51', label: 'Perú', flag: '🇵🇪' },
+    { cc: 'VE', dial: '58', label: 'Venezuela', flag: '🇻🇪' },
+    { cc: 'US', dial: '1', label: 'Estados Unidos', flag: '🇺🇸' },
+  ] as const
+  const [whatsappDial, setWhatsappDial] = useState<string>('54')
+  const [whatsappLocal, setWhatsappLocal] = useState(() => sanitizeLocalWhatsappInput(extractLocalWhatsapp(profile?.whatsapp_number ?? '')))
   const [addressSuggestions, setAddressSuggestions] = useState<PlaceSuggestion[]>([])
   const [addressFocused, setAddressFocused] = useState(false)
   const [addressError, setAddressError] = useState<string | null>(null)
@@ -2004,6 +2161,8 @@ function EditStoreView({ profile, userId, onStoreUpdated }: { profile: UserProfi
     setStoreSlug(profile?.store_slug ?? '')
     setStoreAddress(profile?.store_address ?? '')
     setStorePhone(profile?.store_phone ?? '')
+    setProvince(profile?.province ?? '')
+    setCity(profile?.city ?? '')
     setStoreInstagram(profile?.store_instagram ?? '')
     setStoreFacebook(profile?.store_facebook ?? '')
     setStoreWebsite(profile?.store_website ?? '')
@@ -2016,6 +2175,22 @@ function EditStoreView({ profile, userId, onStoreUpdated }: { profile: UserProfi
     lastResolvedAddressRef.current = profile?.store_address ?? null
     setAddressSuggestions([])
     setAddressError(null)
+    // Prefill WhatsApp breakdown
+    const digits = String(profile?.whatsapp_number || '').replace(/[^0-9]/g, '')
+    if (digits) {
+      const sorted = [...COUNTRY_CODES].sort((a, b) => b.dial.length - a.dial.length)
+      const match = sorted.find((c) => digits.startsWith(c.dial))
+      if (match) {
+        setWhatsappDial(match.dial)
+        setWhatsappLocal(sanitizeLocalWhatsappInput(digits.slice(match.dial.length)))
+      } else {
+        setWhatsappDial('54')
+        setWhatsappLocal(sanitizeLocalWhatsappInput(extractLocalWhatsapp(digits)))
+      }
+    } else {
+      setWhatsappDial('54')
+      setWhatsappLocal('')
+    }
   }, [profile])
 
   useEffect(() => {
@@ -2221,8 +2396,13 @@ function EditStoreView({ profile, userId, onStoreUpdated }: { profile: UserProfi
         lastResolvedAddressRef.current = null
       }
 
+      const finalCity = city === OTHER_CITY_OPTION ? cityOther.trim() : city
+      const formattedWhatsapp = whatsappLocal ? `${whatsappDial}${sanitizeLocalWhatsappInput(whatsappLocal)}` : null
       const { success: ok, error: err } = await upsertUserProfile({
         id: userId,
+        province,
+        city: finalCity,
+        whatsapp: formattedWhatsapp,
         storeName: storeName.trim() || null,
         storeSlug: slugSanitized,
         storeAddress: trimmedAddress || null,
@@ -2258,6 +2438,33 @@ function EditStoreView({ profile, userId, onStoreUpdated }: { profile: UserProfi
         Nombre de la tienda
         <input className="input mt-1" value={storeName} onChange={(e) => setStoreName(e.target.value)} placeholder="Mi Bici Shop" />
       </label>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="text-sm font-medium text-[#14212e]">
+          Provincia
+          <select className="select mt-1" value={province} onChange={(e) => { setProvince(e.target.value); setCity(''); setCityOther('') }}>
+            <option value="">Seleccioná provincia</option>
+            {PROVINCES.map((prov) => (
+              <option key={prov.name} value={prov.name}>{prov.name}</option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm font-medium text-[#14212e]">
+          Ciudad
+          <select className="select mt-1" value={city} onChange={(e) => setCity(e.target.value)} disabled={!province}>
+            <option value="">{province ? 'Seleccioná ciudad' : 'Elegí provincia primero'}</option>
+            {(province ? (PROVINCES.find((p) => p.name === province)?.cities ?? []) : []).map((item) => (
+              <option key={item} value={item}>{item}</option>
+            ))}
+            <option value={OTHER_CITY_OPTION}>{OTHER_CITY_OPTION}</option>
+          </select>
+        </label>
+      </div>
+      {city === OTHER_CITY_OPTION && (
+        <label className="text-sm font-medium text-[#14212e]">
+          Ciudad (especificar)
+          <input className="input mt-1" value={cityOther} onChange={(e) => setCityOther(e.target.value)} placeholder="Ingresá la ciudad" />
+        </label>
+      )}
       <label className="text-sm font-medium text-[#14212e]">
         Slug
         <input className="input mt-1" value={storeSlug} onChange={(e) => setStoreSlug(e.target.value)} placeholder="mi-bici-shop" />
@@ -2311,8 +2518,30 @@ function EditStoreView({ profile, userId, onStoreUpdated }: { profile: UserProfi
           <input className="input mt-1" value={storePhone} onChange={(e) => setStorePhone(e.target.value)} placeholder="+54 11 5555-5555" />
         </label>
         <label className="text-sm font-medium text-[#14212e]">
-          Logo / Avatar (URL)
-          <input className="input mt-1" value={storeAvatarUrl} onChange={(e) => setStoreAvatarUrl(e.target.value)} placeholder="https://.../logo.png" />
+          WhatsApp
+          <div className="mt-1 flex items-center gap-1 sm:gap-2">
+            <select
+              className="select basis-[30%] w-full sm:w-28 sm:basis-auto shrink-0 text-center"
+              value={whatsappDial}
+              onChange={(e) => setWhatsappDial(e.target.value)}
+            >
+              {COUNTRY_CODES.map((c) => (
+                <option key={c.cc} value={c.dial}>{`${c.flag} +${c.dial}`}</option>
+              ))}
+            </select>
+            <input
+              className="input basis-[70%] w-full sm:min-w-0 sm:flex-1 sm:max-w-[15ch]"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={whatsappLocal}
+              onChange={(e) => setWhatsappLocal(sanitizeLocalWhatsappInput(e.target.value))}
+              placeholder="11 1234 5678"
+            />
+          </div>
+          <span className="text-xs text-[#14212e]/60">Elegí el prefijo y escribí tu número sin el signo +.</span>
+        </label>
+        <label className="text-sm font-medium text-[#14212e]">
+          Logo / Avatar
           <div className="mt-2 flex items-center gap-2">
             <button
               type="button"
@@ -2342,8 +2571,7 @@ function EditStoreView({ profile, userId, onStoreUpdated }: { profile: UserProfi
           </div>
         </label>
         <label className="text-sm font-medium text-[#14212e]">
-          Banner (URL)
-          <input className="input mt-1" value={storeBannerUrl} onChange={(e) => setStoreBannerUrl(e.target.value)} placeholder="https://.../banner.jpg" />
+          Banner
           <div className="mt-2 flex items-center gap-2">
             <button
               type="button"

@@ -557,7 +557,7 @@ export default function ListingDetail() {
                     if (item.id === 'whatsapp') {
                       trackMetaPixel('Contact', { method: 'whatsapp', content_ids: [listing.id], content_type: 'product' })
                       logContactEvent({ sellerId: listing.sellerId, listingId: listing.id, buyerId: user?.id || null, type: 'whatsapp' })
-                      track('wa_click', { listing_id: listing.id })
+                      track('wa_click', { listing_id: listing.id, store_user_id: listing.sellerId || null })
                     } else if (item.id === 'email') {
                       trackMetaPixel('Contact', { method: 'email', content_ids: [listing.id], content_type: 'product' })
                       logContactEvent({ sellerId: listing.sellerId, listingId: listing.id, buyerId: user?.id || null, type: 'email' })

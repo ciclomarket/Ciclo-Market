@@ -30,6 +30,8 @@ type FiltersState = {
   priceMax?: number
   deal?: '1'
   q?: string
+  /** Subcategoría/tipo dentro de la categoría (p.ej. Accesorios → Ruedas y cubiertas) */
+  subcat?: string
 }
 
 const CAT_VALUES: Cat[] = ['Todos','Ruta','MTB','Gravel','Urbana','Fixie','Accesorios','Indumentaria','E-Bike','Niños','Pista','Triatlón']
@@ -125,6 +127,9 @@ function paramsToFilters(params: URLSearchParams): FiltersState {
   const q = params.get('q')
   if (q) base.q = q
 
+  const subcat = params.get('subcat')
+  if (subcat) base.subcat = subcat
+
   base.priceMin = parseNumericParam(params.get('price_min'))
   base.priceMax = parseNumericParam(params.get('price_max'))
 
@@ -142,6 +147,9 @@ function filtersToSearchParams(current: URLSearchParams, filters: FiltersState) 
 
   params.delete('q')
   if (filters.q) params.set('q', filters.q)
+
+  params.delete('subcat')
+  if (filters.subcat) params.set('subcat', filters.subcat)
 
   for (const key of MULTI_PARAM_KEYS) {
     params.delete(key)
@@ -164,6 +172,7 @@ type ListingMetadata = {
   condition?: string
   brake?: string
   apparelSize?: string
+  accessoryType?: string
 }
 
 type ListingFacetsResult = {
@@ -303,10 +312,19 @@ function computeListingFacets(listings: Listing[]): ListingFacetsResult {
       multiSizes.split(',').map((s) => s.trim()).filter(Boolean).forEach((s) => sets.size.add(s))
     }
 
+    // Derivar tipo de accesorio desde extras cuando aplique
+    let accessoryType: string | undefined
+    if ((listing.category as any) === 'Accesorios') {
+      const extrasMap2 = extractExtrasMap(listing.extras)
+      const typeValue = cleanValue(extrasMap2.tipo)
+      if (typeValue) accessoryType = typeValue
+    }
+
     metadata[listing.id] = {
       condition: condition || undefined,
       brake: brake || undefined,
-      apparelSize: apparelSize || undefined
+      apparelSize: apparelSize || undefined,
+      accessoryType
     }
 
     const price = Number(listing.price)
@@ -608,6 +626,7 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
     const merged: FiltersState = {
       ...filters,
       cat: forcedCat ?? patch.cat ?? filters.cat,
+      subcat: 'subcat' in patch ? patch.subcat : filters.subcat,
       brand: 'brand' in patch ? patch.brand ?? [] : filters.brand,
       material: 'material' in patch ? patch.material ?? [] : filters.material,
       frameSize: 'frameSize' in patch ? patch.frameSize ?? [] : filters.frameSize,
@@ -646,7 +665,15 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
       return activeSet.has(normalizeText(value))
     }
 
+    const normalizedSubcat = normalizeText(filters.subcat || '')
     const filteredList = categoryFiltered.filter((listing) => {
+      if (normalizedSubcat && effectiveCat === 'Accesorios') {
+        const listingSub = normalizeText(listing.subcategory || '')
+        const derived = listingMetadata[listing.id]
+        const derivedType = normalizeText(derived?.accessoryType || '')
+        const matchesSub = listingSub === normalizedSubcat || derivedType === normalizedSubcat
+        if (!matchesSub) return false
+      }
       if (!matchesValue(listing.brand, brandSet)) return false
       if (!matchesValue(listing.material, materialSet)) return false
       if (frameSizeSet.size) {
@@ -790,6 +817,7 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
   const handleClearFilters = useCallback(() => {
     const reset: Partial<FiltersState> = {
       cat: 'Todos',
+      subcat: undefined,
       priceMin: undefined,
       priceMax: undefined,
       deal: undefined,
@@ -839,6 +867,13 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
       key: 'cat',
       label: `Categoría: ${filters.cat}`,
       onRemove: () => setFilters({ cat: 'Todos' })
+    })
+  }
+  if (filters.subcat) {
+    activeFilterChips.push({
+      key: 'subcat',
+      label: `Tipo: ${filters.subcat}`,
+      onRemove: () => setFilters({ subcat: undefined })
     })
   }
   for (const key of MULTI_FILTER_ORDER) {

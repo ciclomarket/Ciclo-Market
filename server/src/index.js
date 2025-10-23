@@ -19,6 +19,12 @@ const { startRenewalNotificationJob } = (() => {
 const { startNewsletterDigestJob, runDigestOnce } = (() => {
   try { return require('./jobs/newsletterDigest') } catch { return {} }
 })()
+const { startStoreAnalyticsDigestJob, runStoreAnalyticsDigestOnce } = (() => {
+  try { return require('./jobs/storeAnalyticsDigest') } catch { return {} }
+})()
+const { buildStoreAnalyticsHTML } = (() => {
+  try { return require('./emails/storeAnalyticsEmail') } catch { return {} }
+})()
 const path = require('path')
 
 const app = express()
@@ -58,6 +64,11 @@ const corsOptions = {
 
 app.use(cors(corsOptions))
 app.options('*', cors(corsOptions))
+
+/* ----------------------------- Cron jobs ---------------------------------- */
+// Start scheduled jobs after basic middleware is ready
+try { startNewsletterDigestJob && startNewsletterDigestJob() } catch {}
+try { startStoreAnalyticsDigestJob && startStoreAnalyticsDigestJob() } catch {}
 
 /* ----------------------------- Utils OG ----------------------------------- */
 function isBot(req) {
@@ -1454,6 +1465,85 @@ app.post('/api/dev/renewal-preview', async (req, res) => {
     return res.json({ ok: true })
   } catch (e) {
     console.error('[dev] renewal-preview failed', e)
+    return res.status(500).json({ error: 'unexpected_error' })
+  }
+})
+
+// Preview: store analytics email (weekly summary for stores)
+app.post('/api/dev/store-analytics-preview', async (req, res) => {
+  try {
+    if (process.env.ENABLE_DEV_ENDPOINTS !== 'true') return res.status(403).json({ error: 'forbidden' })
+    if (!isMailConfigured()) return res.status(503).json({ error: 'mail_not_configured' })
+
+    const supabase = getServerSupabaseClient()
+    const { to = 'admin@ciclomarket.ar', storeUserId = null } = req.body || {}
+
+    const baseFront = (process.env.FRONTEND_URL || '').split(',')[0]?.trim() || 'https://ciclomarket.ar'
+    const cleanBase = baseFront.replace(/\/$/, '')
+    const dashboardUrl = `${cleanBase}/dashboard?tab=${encodeURIComponent('Analítica')}`
+
+    let userId = storeUserId
+    let storeName = ''
+    if (!userId && to) {
+      const { data: u } = await supabase.from('users').select('id, store_name').eq('email', to).maybeSingle()
+      if (u?.id) { userId = u.id; storeName = u.store_name || '' }
+    } else if (userId) {
+      const { data: u } = await supabase.from('users').select('store_name').eq('id', userId).maybeSingle()
+      if (u) storeName = u.store_name || ''
+    }
+
+    // Pull summary rows (30d)
+    const { data: summary } = await supabase
+      .from('store_summary_30d')
+      .select('*')
+      .eq('store_user_id', userId)
+      .maybeSingle()
+
+    const { data: topRowsRaw } = await supabase
+      .from('store_listing_summary_30d')
+      .select('*')
+      .eq('store_user_id', userId)
+      .order('wa_clicks', { ascending: false, nullsFirst: false })
+      .order('views', { ascending: false, nullsFirst: false })
+      .limit(10)
+
+    const listingIds = (topRowsRaw || []).map((r) => r.listing_id).filter(Boolean)
+    let listingMap = {}
+    if (listingIds.length) {
+      const { data: listings } = await supabase
+        .from('listings')
+        .select('id,title,slug')
+        .in('id', listingIds)
+      listingMap = Object.fromEntries((listings || []).map((l) => [l.id, l]))
+    }
+    const topRows = (topRowsRaw || []).map((r) => {
+      const l = listingMap[r.listing_id]
+      const slugOrId = l?.slug || r.listing_id
+      const link = `${cleanBase}/listing/${encodeURIComponent(slugOrId)}`
+      return { ...r, title: l?.title || r.listing_id, link }
+    })
+
+    const { html, text } = buildStoreAnalyticsHTML({
+      baseFront: cleanBase,
+      storeName,
+      periodLabel: 'últimos 30 días',
+      summary: summary || { store_views: 0, listing_views: 0, wa_clicks: 0 },
+      topListings: topRows,
+      dashboardUrl,
+      unsubscribeLink: `${cleanBase}/ayuda`,
+    })
+
+    await sendMail({
+      from: process.env.SMTP_FROM || `Ciclo Market <${process.env.SMTP_USER || 'no-reply@ciclomarket.ar'}>`,
+      to,
+      subject: 'Resumen de tu tienda (30 días) · Ciclo Market',
+      html,
+      text,
+    })
+
+    return res.json({ ok: true, html, text })
+  } catch (e) {
+    console.error('[dev] store-analytics-preview failed', e)
     return res.status(500).json({ error: 'unexpected_error' })
   }
 })

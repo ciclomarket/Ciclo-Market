@@ -52,6 +52,14 @@ services:
       - key: REVIEW_REMINDER_BATCH_LIMIT
         value: "200"
 
+      # Store analytics weekly digest (emails to stores)
+      - key: STORE_ANALYTICS_DIGEST_ENABLED
+        value: "false"
+      - key: STORE_ANALYTICS_DIGEST_TZ
+        value: America/Argentina/Buenos_Aires
+      - key: STORE_ANALYTICS_DIGEST_CRON
+        value: "0 10 * * 1"   # lunes 10:00
+
       # Optional
       - key: SHARE_FALLBACK_IMAGE
         value: https://your-domain.com/og-preview.png

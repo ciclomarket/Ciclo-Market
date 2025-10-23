@@ -100,42 +100,14 @@ const MEGA: MegaItem[] = [
     ],
   },
   {
-    label: 'Partes',
-    cols: [
-      { title: 'Accesorios (todos) →', links: [ { label: 'Ver todos', to: '/accesorios' } ] },
-      { title: 'Componentes y partes', links: [ { label: 'Ver componentes', to: '/marketplace?cat=Accesorios&q=componentes%20partes' } ] },
-      { title: 'Ruedas y cubiertas', links: [ { label: 'Ver ruedas/cubiertas', to: '/marketplace?cat=Accesorios&q=ruedas%20cubiertas' } ] },
-      { title: 'Herramientas y mantenimiento', links: [ { label: 'Ver herramientas', to: '/marketplace?cat=Accesorios&q=herramientas%20mantenimiento' } ] },
-      { title: 'Electrónica y sensores', links: [ { label: 'Ver electrónica', to: '/marketplace?cat=Accesorios&q=gps%20sensor%20ciclocomputadora' } ] },
-      { title: 'Bikepacking y transporte', links: [ { label: 'Ver bikepacking', to: '/marketplace?cat=Accesorios&q=bikepacking%20bolsos%20alforjas' } ] },
-      { title: 'Lubricantes y limpieza', links: [ { label: 'Ver limpieza', to: '/marketplace?cat=Accesorios&q=lubricantes%20limpieza' } ] },
-    ],
-  },
-  {
     label: 'Accesorios',
     cols: [
-      {
-        title: 'Electrónica',
-        links: [
-          { label: 'Ciclocomputadoras', to: '/marketplace?cat=Accesorios&q=gps%20ciclocomputadora' },
-          { label: 'Rodillos', to: '/marketplace?cat=Accesorios&q=rodillo' },
-          { label: 'Luces', to: '/marketplace?cat=Accesorios&q=luces' },
-        ],
-      },
-      {
-        title: 'Hidratación y porta',
-        links: [
-          { label: 'Caramagnolas', to: '/marketplace?cat=Accesorios&q=caramañola%20caramagnola' },
-          { label: 'Porta caramañola', to: '/marketplace?cat=Accesorios&q=porta%20caramañola' },
-        ],
-      },
-      {
-        title: 'Seguridad',
-        links: [
-          { label: 'Cascos', to: '/marketplace?cat=Indumentaria&q=casco' },
-          { label: 'Cámaras & Tubeless', to: '/marketplace?cat=Accesorios&q=camaras%20tubeless' },
-        ],
-      },
+      { title: 'Componentes y partes', links: [ { label: 'Ver componentes', to: '/marketplace?cat=Accesorios&subcat=Componentes%20y%20partes' } ] },
+      { title: 'Ruedas y cubiertas', links: [ { label: 'Ver ruedas/cubiertas', to: '/marketplace?cat=Accesorios&subcat=Ruedas%20y%20cubiertas' } ] },
+      { title: 'Herramientas y mantenimiento', links: [ { label: 'Ver herramientas', to: '/marketplace?cat=Accesorios&subcat=Herramientas%20y%20mantenimiento' } ] },
+      { title: 'Electrónica y sensores', links: [ { label: 'Ver electrónica', to: '/marketplace?cat=Accesorios&subcat=Electr%C3%B3nica%20y%20sensores' } ] },
+      { title: 'Bikepacking y transporte', links: [ { label: 'Ver bikepacking', to: '/marketplace?cat=Accesorios&subcat=Bikepacking%20y%20transporte' } ] },
+      { title: 'Lubricantes y limpieza', links: [ { label: 'Ver limpieza', to: '/marketplace?cat=Accesorios&subcat=Lubricantes%20y%20limpieza' } ] },
     ],
   },
   {
