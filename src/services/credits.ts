@@ -65,3 +65,18 @@ export async function attachCreditToListing(userId: string, creditId: string, li
     return false
   }
 }
+
+export async function grantCredit(userId: string, planCode: 'basic' | 'premium'): Promise<{ ok: boolean; creditId?: string }> {
+  if (!API_BASE) return { ok: false }
+  try {
+    const res = await fetch(`${API_BASE}/api/credits/grant`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, planCode })
+    })
+    const data = await res.json().catch(() => ({}))
+    return { ok: Boolean(res.ok && data?.ok), creditId: data?.creditId }
+  } catch {
+    return { ok: false }
+  }
+}

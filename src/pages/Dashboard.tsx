@@ -24,7 +24,7 @@ import { useNotifications } from '../context/NotificationContext'
 import { useToast } from '../context/ToastContext'
 import useFaves from '../hooks/useFaves'
 import useUpload from '../hooks/useUpload'
-import { createGift } from '../services/gifts'
+import { createGift, claimGift } from '../services/gifts'
 import { fetchCreditsHistory, type Credit } from '../services/credits'
 import { trackMetaPixel } from '../lib/metaPixel'
 
@@ -235,6 +235,8 @@ export default function Dashboard() {
       }
     } catch { /* noop */ }
   }, [])
+
+  // (Promo redirections removidas)
 
   useEffect(() => {
     if (!isMobile) {
@@ -669,6 +671,30 @@ export default function Dashboard() {
         <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
       </div>
       <Container>
+        {sellerListings.length === 0 && availableBasic > 0 && (
+          <div className="mb-4 rounded-2xl border border-emerald-300 bg-emerald-50 p-4 text-emerald-900 shadow">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2 font-semibold">
+                  <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2}>
+                    <path d="m5 13 4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  Crédito Básico disponible
+                </div>
+                <p className="mt-1 text-sm">Podés usar este crédito para crear una publicación Básica sin costo.</p>
+              </div>
+              <Link
+                to="/publicar/nueva?type=bike&plan=basic&credit=1"
+                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+              >
+                Usar mi crédito
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14m-6-6 6 6-6 6" />
+                </svg>
+              </Link>
+            </div>
+          </div>
+        )}
         <div className="overflow-visible rounded-[28px] border border-white/10 bg-white/5 backdrop-blur-xl shadow-[0_35px_80px_rgba(12,20,28,0.45)]">
           <header className="border-b border-white/10 bg-[#14212e]/90 px-6 py-6 text-white">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

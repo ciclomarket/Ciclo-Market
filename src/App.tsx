@@ -124,6 +124,8 @@ function resolveSeoForPath(pathname: string, search: string): SEOProps {
     }
   }
 
+  
+
   if (normalized.startsWith('/comparar') || normalized.startsWith('/compare')) {
     return {
       title: 'Comparar bicicletas',
@@ -402,6 +404,8 @@ export default function App() {
 
                       {/* Publicar */}
                       <Route path="/publicar" element={<Plans />} />
+                      {/* Campaña: Publicá gratis */}
+                      
                       <Route
                         path="/publicar/nueva"
                         element={

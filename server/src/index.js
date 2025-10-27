@@ -2468,6 +2468,49 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
 })
 
 /* ----------------------------- Credits API -------------------------------- */
+// Grant a welcome credit (idempotent per user/provider)
+app.post('/api/credits/grant', async (req, res) => {
+  try {
+    if (!supabaseService) return res.status(500).json({ ok: false, error: 'service_unavailable' })
+    const userId = String(req.body?.userId || '').trim()
+    const planCodeRaw = String(req.body?.planCode || req.body?.plan || 'basic').trim().toLowerCase()
+    const planCode = planCodeRaw === 'premium' ? 'premium' : 'basic'
+    if (!userId) return res.status(400).json({ ok: false, error: 'invalid_params' })
+
+    // Idempotencia: si ya existe un crédito de bienvenida para este usuario, devolver ok
+    const { data: existing } = await supabaseService
+      .from('publish_credits')
+      .select('id, status')
+      .eq('user_id', userId)
+      .eq('provider', 'welcome')
+      .limit(1)
+    if (Array.isArray(existing) && existing[0]?.id) {
+      return res.json({ ok: true, creditId: existing[0].id })
+    }
+
+    // Crear crédito disponible, opcional: expira en 180 días
+    const expiresAt = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString()
+    const payload = {
+      user_id: userId,
+      plan_code: planCode,
+      status: 'available',
+      provider: 'welcome',
+      provider_ref: null,
+      preference_id: null,
+      expires_at: expiresAt,
+    }
+    const { data: inserted, error } = await supabaseService
+      .from('publish_credits')
+      .insert([payload])
+      .select('id')
+      .single()
+    if (error || !inserted) return res.status(500).json({ ok: false, error: 'insert_failed' })
+    return res.json({ ok: true, creditId: inserted.id })
+  } catch (err) {
+    console.error('[credits/grant] failed', err)
+    return res.status(500).json({ ok: false, error: 'unexpected_error' })
+  }
+})
 // List available credits for a user
 app.get('/api/credits/me', async (req, res) => {
   try {

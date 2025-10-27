@@ -15,7 +15,7 @@ import { canonicalPlanCode, normalisePlanText, resolvePlanCode, type PlanCode } 
 import { formatNameWithInitial } from '../../utils/user'
 import { normaliseWhatsapp, extractLocalWhatsapp, sanitizeLocalWhatsappInput } from '../../utils/whatsapp'
 import { fetchListing } from '../../services/listings'
-import { validateGift, redeemGift } from '../../services/gifts'
+import { validateGift, redeemGift, claimGift } from '../../services/gifts'
 import { fetchUserProfile, type UserProfileRecord } from '../../services/users'
 import { redeemCredit, attachCreditToListing } from '../../services/credits'
 import { useToast } from '../../context/ToastContext'
@@ -60,7 +60,7 @@ const APPAREL_SHOE_SIZES = Array.from({ length: 50 }, (_, index) => String(index
 const APPAREL_FIT_OPTIONS = ['Unisex', 'Hombre', 'Mujer'] as const
 
 export default function NewListingForm() {
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const { fx } = useCurrency()
   const { uploadFiles, uploading, progress } = useUpload()
@@ -84,6 +84,7 @@ export default function NewListingForm() {
   const [giftPlan, setGiftPlan] = useState<PlanCode | null>(null)
   const [giftValidating, setGiftValidating] = useState(false)
   const [giftError, setGiftError] = useState<string | null>(null)
+  const [giftClaimedAsCredit, setGiftClaimedAsCredit] = useState(false)
   const [profile, setProfile] = useState<UserProfileRecord | null>(null)
 
   /** 1) Plan seleccionado por query (?plan=free|basic|premium) */
@@ -127,6 +128,19 @@ export default function NewListingForm() {
           setGiftCode(code)
           setGiftPlan(res.plan as PlanCode)
           setPlanOverride(res.plan as PlanCode)
+          // Intentar convertir a crédito si el usuario está logueado
+          try {
+            if (user?.id && !giftClaimedAsCredit) {
+              const claim = await claimGift(code, user.id)
+              if (claim?.ok) {
+                setGiftClaimedAsCredit(true)
+                const next = new URLSearchParams(searchParams)
+                next.delete('gift')
+                next.set('credit', '1')
+                setSearchParams(next, { replace: true })
+              }
+            }
+          } catch { /* noop */ }
         } else {
           setGiftError('El código de regalo no es válido o está vencido.')
           setGiftCode(null)
@@ -140,7 +154,7 @@ export default function NewListingForm() {
     })()
 
     return () => { active = false }
-  }, [searchParams])
+  }, [searchParams, user?.id, setSearchParams, giftClaimedAsCredit])
 
   // Canonizamos el código de plan (lo usa la DB y el backend)
   const resolvedPlanCode = selectedPlan ? resolvePlanCode(selectedPlan) : null
@@ -1032,6 +1046,18 @@ export default function NewListingForm() {
           </p>
         </div>
         <div className="min-w-0 rounded-xl border border-white/30 bg-white/10 px-4 py-3 text-sm text-white max-w-full md:max-w-sm">
+          {/* Badge destacado de crédito/cortesía aplicada */}
+          {((searchParams.get('credit') === '1') || (giftCode && giftPlan)) && (
+            <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-emerald-500 px-3 py-1 text-xs font-bold text-white shadow">
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2}>
+                <path d="m5 13 4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              {searchParams.get('credit') === '1' ? 'Crédito aplicado' : `Cortesía aplicada: ${giftPlan === 'basic' ? 'Básico' : 'Premium'}`}
+            </div>
+          )}
+          {searchParams.get('credit') === '1' && (
+            <div className="-mt-1 mb-2 text-xs text-white/90">Tenés un crédito Básico bonificado. Podés usarlo para crear una publicación Básica sin costo.</div>
+          )}
           <div className="font-semibold text-white">{isEditing ? `Plan en uso: ${planName}` : `Plan seleccionado: ${planName}`}</div>
           <div className="text-xs font-semibold text-white/90">
             {isStore ? 'Tienda verificada (sin costo)' : (isEditing ? 'Podés cambiar de plan desde tu panel de vendedor.' : effectivePlanLabel)}
@@ -1041,7 +1067,7 @@ export default function NewListingForm() {
           )}
           {giftCode && giftPlan && (
             <div className="mt-2 rounded-lg border border-white/20 bg-white/10 p-2 text-xs">
-              Cortesía aplicada: plan {giftPlan === 'basic' ? 'Básico' : 'Premium'} (código {giftCode}).
+              Código aplicado: {giftCode}
             </div>
           )}
           {giftError && (

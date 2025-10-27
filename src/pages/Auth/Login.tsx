@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import Container from '../../components/Container'
 import Button from '../../components/Button'
 import { SocialAuthButtons } from '../../components/SocialAuthButtons'
@@ -15,7 +15,9 @@ export default function Login() {
   const [rememberMe, setRememberMe] = useState(true)
   const [loadingProvider, setLoadingProvider] = useState<Partial<Record<OAuthProvider, boolean>>>({})
   const navigate = useNavigate()
+  const location = useLocation() as any
   const { enabled } = useAuth()
+  // (Promo next removido)
 
   const setProviderLoading = (provider: OAuthProvider, value: boolean) => {
     setLoadingProvider((prev) => ({ ...prev, [provider]: value }))
@@ -61,10 +63,11 @@ export default function Login() {
       const scopes = provider === 'facebook'
         ? 'public_profile,email'
         : undefined
+      const redirect = `${window.location.origin}/dashboard`
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
-          redirectTo: `${window.location.origin}/dashboard`,
+          redirectTo: redirect,
           scopes
         }
       })

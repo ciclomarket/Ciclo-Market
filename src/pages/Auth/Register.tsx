@@ -2,8 +2,8 @@
 import Container from '../../components/Container'
 import Button from '../../components/Button'
 import { SocialAuthButtons } from '../../components/SocialAuthButtons'
-import { useMemo, useState, type ReactNode } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useNavigate, Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { PROVINCES, OTHER_CITY_OPTION } from '../../constants/locations'
 import { BIKE_CATEGORIES } from '../../constants/catalog'
@@ -11,6 +11,7 @@ import { getSupabaseClient, supabaseEnabled } from '../../services/supabase'
 import { createUserProfile } from '../../services/users'
 import { deriveProfileSlug, pickDiscipline } from '../../utils/user'
 import { useToast } from '../../context/ToastContext'
+import { grantCredit } from '../../services/credits'
 import { trackMetaPixel } from '../../lib/metaPixel'
 
 type OAuthProvider = 'google' | 'facebook'
@@ -30,6 +31,7 @@ export default function Register() {
   const [success, setSuccess] = useState(false)
   const [socialLoading, setSocialLoading] = useState<Partial<Record<OAuthProvider, boolean>>>({})
   const nav = useNavigate()
+  const loc = useLocation() as any
   const { enabled } = useAuth()
   const { show: showToast } = useToast()
 
@@ -97,6 +99,8 @@ export default function Register() {
           bikePreferences: bikePrefs,
           profileSlug,
         })
+        // Grant welcome basic credit (idempotente en backend)
+        try { await grantCredit(data.user.id, 'basic') } catch { /* noop */ }
         // Newsletter opt-in (Resend audience)
         if (newsletterOptIn) {
           try {
@@ -152,10 +156,14 @@ export default function Register() {
       const scopes = provider === 'facebook'
         ? 'public_profile,email'
         : undefined
+      const fromState = loc?.state?.from
+      const redirect = fromState
+        ? `${window.location.origin}${fromState.pathname || ''}${fromState.search || ''}`
+        : `${window.location.origin}/dashboard`
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
-          redirectTo: `${window.location.origin}/dashboard`,
+          redirectTo: redirect,
           scopes
         }
       })

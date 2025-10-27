@@ -1,10 +1,11 @@
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { KEYWORDS } from '../data/keywords'
 import { useAuth } from '../context/AuthContext'
 import { getSupabaseClient, supabaseEnabled, setAuthPersistence } from '../services/supabase'
 import { fetchStores, type StoreSummary } from '../services/users'
+import { fetchMyCredits } from '../services/credits'
 import { SocialAuthButtons } from './SocialAuthButtons'
 
 type MegaCol = { title: string; links: Array<{ label: string; to: string }> }
@@ -269,6 +270,7 @@ export default function Header() {
   const hoverTimer = useRef<number | null>(null)
   const [stores, setStores] = useState<StoreSummary[]>([])
   const [storesOpen, setStoresOpen] = useState(false)
+  const [creditCount, setCreditCount] = useState<number>(0)
 
   useEffect(() => {
     if (user) {
@@ -319,6 +321,21 @@ export default function Header() {
     })()
     return () => { mounted = false }
   }, [])
+
+  // Cargar créditos disponibles para badge en header
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      try {
+        if (!user?.id) { if (active) setCreditCount(0); return }
+        const credits = await fetchMyCredits(user.id)
+        if (active) setCreditCount(Array.isArray(credits) ? credits.length : 0)
+      } catch {
+        if (active) setCreditCount(0)
+      }
+    })()
+    return () => { active = false }
+  }, [user?.id])
 
   const megaItems: MegaItem[] = useMemo(() => {
     if (!stores || stores.length === 0) return MEGA
@@ -400,10 +417,11 @@ export default function Header() {
       // Aplicar preferencia de persistencia antes de iniciar sesión
       setAuthPersistence(Boolean(rememberMe))
       const supabase = getSupabaseClient()
+      const redirect = `${window.location.origin}/dashboard`
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/dashboard`
+          redirectTo: redirect
         }
       })
       if (error) throw error
@@ -432,10 +450,11 @@ export default function Header() {
       // Aplicar preferencia de persistencia antes de iniciar sesión
       setAuthPersistence(Boolean(rememberMe))
       const supabase = getSupabaseClient()
+      const redirect = `${window.location.origin}/dashboard`
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'facebook',
         options: {
-          redirectTo: `${window.location.origin}/dashboard`,
+          redirectTo: redirect,
           scopes: 'public_profile,email'
         }
       })
@@ -474,7 +493,7 @@ export default function Header() {
             <Link
               to="/dashboard"
               aria-label="Ir a mi cuenta"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-black/10 hover:border-black/20 text-sm"
+              className="relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-black/10 hover:border-black/20 text-sm"
             >
               <span className="sr-only">Mi cuenta</span>
               <svg
@@ -487,6 +506,11 @@ export default function Header() {
               >
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm0 2c-3.1 0-6 1.57-6 4v.25a.75.75 0 0 0 .75.75h10.5a.75.75 0 0 0 .75-.75V18c0-2.43-2.9-4-6-4Z" />
               </svg>
+              {creditCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] rounded-full bg-emerald-500 px-1 text-center text-[10px] font-bold leading-[18px] text-white">
+                  {creditCount > 9 ? '9+' : creditCount}
+                </span>
+              )}
             </Link>
           ) : (
             <div className="relative">
@@ -702,12 +726,39 @@ export default function Header() {
               {/* Bloque destacado (primeras filas) */}
               <div className="rounded-2xl bg-[#0c1723] text-white p-4">
                 {user ? (
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <Link to="/dashboard" className="btn bg-white text-[#14212e] hover:bg-white/90" onClick={closeMobileMenu}>Mi cuenta</Link>
+                  <>
+                    {creditCount > 0 && (
+                      <div className="mb-3 flex items-center justify-between rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm">
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                          Créditos disponibles: <b>{creditCount}</b>
+                        </div>
+                        <Link
+                          to="/publicar/nueva?type=bike&plan=basic&credit=1"
+                          className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
+                          onClick={closeMobileMenu}
+                        >
+                          Usar
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14m-6-6 6 6-6 6" />
+                          </svg>
+                        </Link>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                    <Link to="/dashboard" className="btn relative bg-white text-[#14212e] hover:bg-white/90" onClick={closeMobileMenu}>
+                      Mi cuenta
+                      {creditCount > 0 && (
+                        <span className="absolute -top-2 -right-2 min-w-[18px] h-[18px] rounded-full bg-emerald-500 px-1 text-center text-[10px] font-bold leading-[18px] text-white">
+                          {creditCount > 9 ? '9+' : creditCount}
+                        </span>
+                      )}
+                    </Link>
                     <Link to="/publicar" className="btn bg-gradient-to-r from-[#0ea5e9] via-[#2563eb] to-[#1d4ed8] text-white hover:brightness-110" onClick={closeMobileMenu}>Vender</Link>
                     <Link to="/marketplace" className="btn border border-white/30 bg-transparent text-white hover:bg-white/10" onClick={closeMobileMenu}>Marketplace</Link>
                     <Link to={`/dashboard?tab=${encodeURIComponent('Cerrar sesión')}`} className="btn border border-white/30 bg-transparent text-white hover:bg-white/10" onClick={closeMobileMenu}>Cerrar sesión</Link>
-                  </div>
+                    </div>
+                  </>
                 ) : (
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     <button type="button" className="btn bg-white text-[#14212e] hover:bg-white/90" onClick={() => { setLoginOpen(true); closeMobileMenu() }}>Ingresar</button>
