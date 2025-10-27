@@ -11,6 +11,7 @@ import { fetchListingsBySeller } from '../services/listings'
 import ListingCard from '../components/ListingCard'
 import type { Listing } from '../types'
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+import { transformSupabasePublicUrl } from '../utils/supabaseImage'
 
 type FilterOption = { id: string; label: string; match: (l: Listing) => boolean }
 type FilterSection = { id: string; label: string; options: FilterOption[] }

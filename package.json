@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "prebuild": "node scripts/optimize-public-images.mjs",
     "start": "npm run server",
     "dev": "vite",
     "dev:admin": "vite --config admin/vite.config.ts",
