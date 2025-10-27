@@ -26,6 +26,7 @@ import ListingQuestionsSection from '../components/ListingQuestionsSection'
 import { submitShareBoost } from '../services/shareBoost'
 import useUpload from '../hooks/useUpload'
 import { FALLBACK_PLANS } from '../services/plans'
+import { transformSupabasePublicUrl } from '../utils/supabaseImage'
 import { canonicalPlanCode } from '../utils/planCodes'
 
 export default function ListingDetail() {
@@ -694,7 +695,11 @@ export default function ListingDetail() {
                   <div className="flex items-center gap-3 min-w-0">
                     {sellerAvatarUrl && (
                       <img
-                        src={sellerAvatarUrl}
+                        src={transformSupabasePublicUrl(sellerAvatarUrl, { width: 96, quality: 78, format: 'webp' })}
+                        srcSet={[64, 80, 96]
+                          .map((w) => `${transformSupabasePublicUrl(sellerAvatarUrl, { width: w, quality: 78, format: 'webp' })} ${w}w`)
+                          .join(', ')}
+                        sizes="40px"
                         alt={formatNameWithInitial(listing.sellerName, 'Vendedor')}
                         className="h-10 w-10 rounded-full object-cover border border-[#14212e]/10"
                         loading="lazy"

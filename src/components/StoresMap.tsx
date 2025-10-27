@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { transformSupabasePublicUrl } from '../utils/supabaseImage'
 
 declare global {
   interface Window { L?: any }
@@ -151,8 +152,9 @@ export default function StoresMap({ stores, focusStoreId, onStoreClick }: Props)
         }
         if (!coord) continue
         const size = 54
-        const html = s.avatarUrl
-          ? `<div style="width:${size}px;height:${size}px;border-radius:50%;border:3px solid #fff;background:#fff;box-shadow:0 12px 24px rgba(10,20,35,0.42);overflow:hidden;display:flex;align-items:center;justify-content:center;"><img src="${s.avatarUrl}" style="width:100%;height:100%;object-fit:cover;" alt="${s.name}" /></div>`
+        const avatar = s.avatarUrl ? transformSupabasePublicUrl(s.avatarUrl, { width: 160, quality: 78, format: 'webp' }) : null
+        const html = avatar
+          ? `<div style="width:${size}px;height:${size}px;border-radius:50%;border:3px solid #fff;background:#fff;box-shadow:0 12px 24px rgba(10,20,35,0.42);overflow:hidden;display:flex;align-items:center;justify-content:center;"><img src="${avatar}" style="width:100%;height:100%;object-fit:cover;" alt="${s.name}" /></div>`
           : `<div style="width:${size}px;height:${size}px;border-radius:50%;border:3px solid #fff;background:#0f1724;color:#fff;font-weight:600;font-size:18px;display:flex;align-items:center;justify-content:center;box-shadow:0 12px 24px rgba(10,20,35,0.42);">${(s.name || '?').trim().charAt(0).toUpperCase()}</div>`
         const icon = L.divIcon({ html, className: 'cm-store-marker', iconSize: [size, size], iconAnchor: [size / 2, size], popupAnchor: [0, -size / 2] })
         const marker = L.marker([coord.lat, coord.lon], { icon })

@@ -911,7 +911,16 @@ export default function Store() {
         }}
       />
       <div className="relative h-48 md:h-64 w-full overflow-hidden bg-[#14212e]">
-        <img src={banner} alt="Banner" className="h-full w-full object-cover" style={{ objectPosition: `center ${bannerPosY}%` }} />
+        <img
+          src={transformSupabasePublicUrl(banner, { width: 1280, quality: 78, format: 'webp' })}
+          srcSet={[640, 960, 1280, 1600]
+            .map((w) => `${transformSupabasePublicUrl(banner, { width: w, quality: 78, format: 'webp' })} ${w}w`)
+            .join(', ')}
+          sizes="(max-width: 767px) 100vw, 100vw"
+          alt="Banner"
+          className="h-full w-full object-cover"
+          style={{ objectPosition: `center ${bannerPosY}%` }}
+        />
         {/* Fade inferior sutil en todos los tamaños para legibilidad del título */}
         <div
           className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-20 md:h-28 bg-gradient-to-t from-[#14212e]/80 via-transparent to-transparent"
@@ -920,7 +929,17 @@ export default function Store() {
       </div>
       <Container>
         <div className="relative z-20 -mt-14 md:-mt-10 flex flex-col items-center gap-3 md:flex-row md:items-end md:gap-4">
-          <img src={avatar} alt={storeName} className="h-24 w-24 md:h-20 md:w-20 rounded-2xl border-4 border-white object-cover shadow" />
+          <img
+            src={transformSupabasePublicUrl(avatar, { width: 256, quality: 80, format: 'webp' })}
+            srcSet={[128, 160, 192, 256]
+              .map((w) => `${transformSupabasePublicUrl(avatar, { width: w, quality: 80, format: 'webp' })} ${w}w`)
+              .join(', ')}
+            sizes="(max-width: 767px) 96px, 128px"
+            alt={storeName}
+            className="h-24 w-24 md:h-20 md:w-20 rounded-2xl border-4 border-white object-cover shadow"
+            loading="eager"
+            decoding="async"
+          />
           <div className="flex-1 min-w-0 pt-1 text-center md:text-left">
             <h1 className="text-2xl font-bold text-white truncate">{storeName}</h1>
             {/* Rating de Google removido */}

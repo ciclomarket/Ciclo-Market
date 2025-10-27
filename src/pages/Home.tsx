@@ -121,10 +121,14 @@ function OfferCard({ l }: { l: any }) {
       <div className="relative">
         <div className="aspect-video overflow-hidden bg-[#0b131c]/20">
           <img
-            src={l.images?.[0]}
+            src={transformSupabasePublicUrl(l.images?.[0] || '', { width: 640, quality: 72, format: 'webp' })}
+            srcSet={l.images && l.images[0] ? [320, 480, 640, 768, 960]
+              .map((w) => `${transformSupabasePublicUrl(l.images[0], { width: w, quality: 72, format: 'webp' })} ${w}w`).join(', ') : undefined}
+            sizes="(max-width: 1023px) 100vw, 33vw"
             alt={l.title}
             className="w-full h-full object-cover group-hover:scale-105 transition"
             loading="lazy"
+            decoding="async"
           />
         </div>
         {hasOriginal && (

@@ -87,7 +87,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     init()
 
-    const { data } = client.auth.onAuthStateChange((_event, session) => {
+    const { data } = client.auth.onAuthStateChange(async (_event, session) => {
       const newUser = session?.user ?? null
       setUser(newUser)
       setLoading(false)
@@ -98,8 +98,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         try {
           const flag = window.localStorage.getItem('mb_welcome_credit_checked')
           if (!flag) {
-            void grantCredit(newUser.id, 'basic')
-            window.localStorage.setItem('mb_welcome_credit_checked', '1')
+            const res = await grantCredit(newUser.id, 'basic')
+            if (res?.ok) {
+              try { window.dispatchEvent(new CustomEvent('mb_credits_updated')) } catch { /* noop */ }
+              window.localStorage.setItem('mb_welcome_credit_checked', '1')
+            }
           }
         } catch { /* noop */ }
       }

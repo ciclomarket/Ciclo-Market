@@ -684,7 +684,7 @@ export default function Dashboard() {
                 <p className="mt-1 text-sm">Podés usar este crédito para crear una publicación Básica sin costo.</p>
               </div>
               <Link
-                to="/publicar/nueva?type=bike&plan=basic&credit=1"
+                to="/publicar"
                 className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
               >
                 Usar mi crédito

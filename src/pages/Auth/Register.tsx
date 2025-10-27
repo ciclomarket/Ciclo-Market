@@ -100,7 +100,13 @@ export default function Register() {
           profileSlug,
         })
         // Grant welcome basic credit (idempotente en backend)
-        try { await grantCredit(data.user.id, 'basic') } catch { /* noop */ }
+        try {
+          const res = await grantCredit(data.user.id, 'basic')
+          if (res?.ok) {
+            try { window.dispatchEvent(new CustomEvent('mb_credits_updated')) } catch { /* noop */ }
+            try { showToast('Te otorgamos un crédito Básico de bienvenida ✨', { variant: 'success' }) } catch { /* noop */ }
+          }
+        } catch { /* noop */ }
         // Newsletter opt-in (Resend audience)
         if (newsletterOptIn) {
           try {

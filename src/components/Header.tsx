@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext'
 import { getSupabaseClient, supabaseEnabled, setAuthPersistence } from '../services/supabase'
 import { fetchStores, type StoreSummary } from '../services/users'
 import { fetchMyCredits } from '../services/credits'
+import { useToast } from '../context/ToastContext'
 import { SocialAuthButtons } from './SocialAuthButtons'
 
 type MegaCol = { title: string; links: Array<{ label: string; to: string }> }
@@ -271,6 +272,7 @@ export default function Header() {
   const [stores, setStores] = useState<StoreSummary[]>([])
   const [storesOpen, setStoresOpen] = useState(false)
   const [creditCount, setCreditCount] = useState<number>(0)
+  const { show: showToast } = useToast()
 
   useEffect(() => {
     if (user) {
@@ -302,7 +304,7 @@ export default function Header() {
 
   const scheduleCloseMega = () => {
     if (hoverTimer.current) window.clearTimeout(hoverTimer.current)
-    hoverTimer.current = window.setTimeout(() => setOpenIdx(null), 120)
+    hoverTimer.current = window.setTimeout(() => { setOpenIdx(null); setStoresOpen(false) }, 280)
   }
 
   const cancelCloseMega = () => {
@@ -322,10 +324,10 @@ export default function Header() {
     return () => { mounted = false }
   }, [])
 
-  // Cargar créditos disponibles para badge en header
+  // Cargar créditos disponibles para badge en header (con refresco tras evento global)
   useEffect(() => {
     let active = true
-    ;(async () => {
+    const load = async () => {
       try {
         if (!user?.id) { if (active) setCreditCount(0); return }
         const credits = await fetchMyCredits(user.id)
@@ -333,9 +335,29 @@ export default function Header() {
       } catch {
         if (active) setCreditCount(0)
       }
-    })()
-    return () => { active = false }
+    }
+    void load()
+    const onUpdated = () => { void load() }
+    window.addEventListener('mb_credits_updated', onUpdated as any)
+    // Retry breve por si el grant tarda en materializarse
+    const retry = window.setTimeout(() => { void load() }, 800)
+    return () => { active = false; window.removeEventListener('mb_credits_updated', onUpdated as any); window.clearTimeout(retry) }
   }, [user?.id])
+
+  // Toast al actualizar créditos (bienvenida) — se muestra una vez por sesión
+  useEffect(() => {
+    const key = 'mb_toast_welcome_shown'
+    const handler = () => {
+      try {
+        if (!sessionStorage.getItem(key)) {
+          showToast('Crédito disponible en tu cuenta 🎉', { variant: 'success' })
+          sessionStorage.setItem(key, '1')
+        }
+      } catch { /* noop */ }
+    }
+    window.addEventListener('mb_credits_updated', handler as any)
+    return () => window.removeEventListener('mb_credits_updated', handler as any)
+  }, [showToast])
 
   const megaItems: MegaItem[] = useMemo(() => {
     if (!stores || stores.length === 0) return MEGA
@@ -617,7 +639,7 @@ export default function Header() {
         <div
           className="max-w-6xl mx-auto px-4 flex items-center gap-6 text-sm font-medium"
           onMouseEnter={cancelCloseMega}
-          onMouseLeave={() => { scheduleCloseMega(); setStoresOpen(false) }}
+          onMouseLeave={() => { scheduleCloseMega() }}
         >
           {MEGA.map((item, idx) => {
             const first = item.cols?.[0]?.links?.[0]?.to || '/marketplace'
@@ -651,7 +673,7 @@ export default function Header() {
         </div>
 
         {openIdx !== null && (
-          <div className="absolute inset-x-0 top-full bg-white border-b border-black/10 shadow-lg" onMouseEnter={cancelCloseMega} onMouseLeave={() => { scheduleCloseMega(); setStoresOpen(false) }}>
+          <div className="absolute inset-x-0 top-full bg-white border-b border-black/10 shadow-lg" onMouseEnter={cancelCloseMega} onMouseLeave={() => { scheduleCloseMega() }}>
             <div className="max-w-6xl mx-auto px-6 py-6 grid grid-cols-1 sm:grid-cols-3 gap-6">
               {MEGA[openIdx].cols.map((col, i) => (
                 <div key={i}>
@@ -672,7 +694,7 @@ export default function Header() {
         )}
 
         {storesOpen && (
-          <div className="absolute inset-x-0 top-full bg-white border-b border-black/10 shadow-lg" onMouseEnter={cancelCloseMega} onMouseLeave={() => { scheduleCloseMega(); setStoresOpen(false) }}>
+          <div className="absolute inset-x-0 top-full bg-white border-b border-black/10 shadow-lg" onMouseEnter={cancelCloseMega} onMouseLeave={() => { scheduleCloseMega() }}>
             <div className="max-w-6xl mx-auto px-6 py-6 grid grid-cols-1 sm:grid-cols-3 gap-6">
               {[0,1,2].map((colIdx) => {
                 const items = stores.slice(0, 9).slice(colIdx * 3, colIdx * 3 + 3)
@@ -734,7 +756,7 @@ export default function Header() {
                           Créditos disponibles: <b>{creditCount}</b>
                         </div>
                         <Link
-                          to="/publicar/nueva?type=bike&plan=basic&credit=1"
+                          to="/publicar"
                           className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
                           onClick={closeMobileMenu}
                         >
