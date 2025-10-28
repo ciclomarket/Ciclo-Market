@@ -2861,7 +2861,7 @@ app.post('/api/listings/:id/apply-plan', async (req, res) => {
     const planCodeRaw = String(req.body?.planCode || '').trim().toLowerCase()
     const planCode = normalisePlanCode(planCodeRaw)
     const listingDays = Number(req.body?.listingDays || 0)
-    const includedHighlightDays = Number(req.body?.includedHighlightDays || 0)
+    let includedHighlightDays = Number(req.body?.includedHighlightDays || 0)
     if (!planCode || !listingDays || listingDays <= 0) return res.status(400).json({ error: 'invalid_params' })
 
     const { data: listing, error } = await supabase
@@ -2877,6 +2877,13 @@ app.post('/api/listings/:id/apply-plan', async (req, res) => {
     const currentExpires = listing.expires_at ? new Date(listing.expires_at).getTime() : now
     const baseExpires = Math.max(currentExpires, now)
     const nextExpires = new Date(baseExpires + listingDays * 24 * 60 * 60 * 1000).toISOString()
+
+    // Regla especial: tiendas oficiales (plan 'pro') obtienen al menos 14 días de destaque
+    try {
+      if (planCode === 'pro' && (!Number.isFinite(includedHighlightDays) || includedHighlightDays < 14)) {
+        includedHighlightDays = 14
+      }
+    } catch {}
 
     // Sumar destaque incluido sobre highlight_expires (independiente del plan)
     let nextHighlight = listing.highlight_expires ? new Date(listing.highlight_expires).getTime() : now

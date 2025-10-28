@@ -33,6 +33,7 @@ type FiltersState = {
   priceMin?: number
   priceMax?: number
   deal?: '1'
+  store?: '1'
   q?: string
   /** Subcategoría/tipo dentro de la categoría (p.ej. Accesorios → Ruedas y cubiertas) */
   subcat?: string
@@ -141,6 +142,9 @@ function paramsToFilters(params: URLSearchParams): FiltersState {
   const cur = params.get('price_cur')
   if (cur === 'USD' || cur === 'ARS') base.priceCur = cur
 
+  const store = params.get('store')
+  if (store === '1') base.store = '1'
+
   return base
 }
 
@@ -175,6 +179,9 @@ function filtersToSearchParams(current: URLSearchParams, filters: FiltersState) 
 
   if (filters.priceCur === 'USD' || filters.priceCur === 'ARS') params.set('price_cur', filters.priceCur)
   else params.delete('price_cur')
+
+  if (filters.store === '1') params.set('store', '1')
+  else params.delete('store')
 
   return params
 }
@@ -635,6 +642,41 @@ function DealFilterContent({ active, onToggle, close }: DealFilterContentProps) 
   )
 }
 
+type StoreFilterContentProps = {
+  active: boolean
+  onToggle: (nextActive: boolean) => void
+  close: () => void
+}
+
+function StoreFilterContent({ active, onToggle, close }: StoreFilterContentProps) {
+  return (
+    <div className="flex flex-col gap-3 text-sm">
+      <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2 hover:border-white/30">
+        <input
+          type="checkbox"
+          checked={active}
+          onChange={(event) => onToggle(event.target.checked)}
+          className="h-4 w-4 accent-white"
+        />
+        <div>
+          <div className="font-medium text-white">Solo tiendas oficiales</div>
+          <div className="text-xs text-white/60 whitespace-normal break-words leading-snug">Ver solo publicaciones de tiendas verificadas.</div>
+        </div>
+      </label>
+      <button
+        type="button"
+        onClick={() => {
+          onToggle(false)
+          close()
+        }}
+        className="self-end rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#14212e] hover:bg-white/90"
+      >
+        Listo
+      </button>
+    </div>
+  )
+}
+
 /* ------------------------ UI helpers ------------------------ */
 /* ------------------------ Page ------------------------ */
 type Crumb = { label: string; to?: string }
@@ -832,15 +874,31 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
       return true
     })
 
-    const sorted = [...filteredList]
+    // Filtro: solo tiendas oficiales
+    const filteredByStore = (() => {
+      if (filters.store === '1') {
+        return filteredList.filter((l) => Boolean(l.sellerId && storeLogos[l.sellerId]))
+      }
+      return filteredList
+    })()
+
+    const sorted = [...filteredByStore]
     if (sortMode === 'relevance') {
       return sorted.sort((a, b) => {
-        const bFeatured = hasPaidPlan(b.sellerPlan ?? (b.plan as any), b.sellerPlanExpires) ? 1 : 0
-        const aFeatured = hasPaidPlan(a.sellerPlan ?? (a.plan as any), a.sellerPlanExpires) ? 1 : 0
-        if (bFeatured !== aFeatured) return bFeatured - aFeatured
-        const bExpires = b.sellerPlanExpires ?? 0
-        const aExpires = a.sellerPlanExpires ?? 0
-        if (bExpires !== aExpires) return bExpires - aExpires
+        const now = Date.now()
+        const aHl = (a.highlightExpires ?? 0) > now ? 1 : 0
+        const bHl = (b.highlightExpires ?? 0) > now ? 1 : 0
+        if (bHl !== aHl) return bHl - aHl
+        const aStore = a.sellerId ? (storeLogos[a.sellerId] ? 1 : 0) : 0
+        const bStore = b.sellerId ? (storeLogos[b.sellerId] ? 1 : 0) : 0
+        if (bStore !== aStore) return bStore - aStore
+        // Dentro del grupo destacado, ordenar por vencimiento de destaque (más reciente primero)
+        if (aHl === 1 && bHl === 1) {
+          const aHex = a.highlightExpires ?? 0
+          const bHex = b.highlightExpires ?? 0
+          if (bHex !== aHex) return bHex - aHex
+        }
+        // Resto: más recientes primero
         return (b.createdAt ?? 0) - (a.createdAt ?? 0)
       })
     }
@@ -857,7 +915,7 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
       const pb = toSelected(b)
       return sortMode === 'asc' ? pa - pb : pb - pa
     })
-  }, [categoryFiltered, filters, sortMode, listingMetadata, effectiveDeal])
+  }, [categoryFiltered, filters, sortMode, listingMetadata, effectiveDeal, storeLogos])
 
   const visible = filtered.slice(0, count)
 

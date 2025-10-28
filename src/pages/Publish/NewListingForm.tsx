@@ -956,7 +956,7 @@ export default function NewListingForm() {
               body: JSON.stringify({
                 planCode: effectivePlanCode,
                 listingDays: listingDuration,
-                includedHighlightDays: selectedPlan?.featuredDays || 0,
+                includedHighlightDays: isStore ? 14 : (selectedPlan?.featuredDays || 0),
               })
             })
           }
@@ -1020,7 +1020,7 @@ export default function NewListingForm() {
             body: JSON.stringify({
               planCode: effectivePlanCode,
               listingDays: listingDuration,
-              includedHighlightDays: selectedPlan?.featuredDays || 0,
+              includedHighlightDays: isStore ? 14 : (selectedPlan?.featuredDays || 0),
             })
           })
         }
