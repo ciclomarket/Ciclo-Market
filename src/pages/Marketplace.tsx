@@ -10,11 +10,13 @@ import { mockListings } from '../mock/mockData'
 import { fetchListings } from '../services/listings'
 import { supabaseEnabled } from '../services/supabase'
 import type { Listing } from '../types'
+import { useCurrency } from '../context/CurrencyContext'
 import { hasPaidPlan } from '../utils/plans'
 import FilterDropdown from '../components/FilterDropdown'
+import { fetchLikeCounts } from '../services/likes'
 
 type Cat = 'Todos' | 'Ruta' | 'MTB' | 'Gravel' | 'Urbana' | 'Fixie' | 'Accesorios' | 'Indumentaria' | 'E-Bike' | 'Niños' | 'Pista' | 'Triatlón'
-type MultiFilterKey = 'brand' | 'material' | 'frameSize' | 'wheelSize' | 'drivetrain' | 'condition' | 'brake' | 'year' | 'size'
+type MultiFilterKey = 'brand' | 'material' | 'frameSize' | 'wheelSize' | 'drivetrain' | 'condition' | 'brake' | 'year' | 'size' | 'location'
 type FiltersState = {
   cat: Cat
   brand: string[]
@@ -26,6 +28,8 @@ type FiltersState = {
   brake: string[]
   year: string[]
   size: string[]
+  location: string[]
+  priceCur?: 'USD' | 'ARS'
   priceMin?: number
   priceMax?: number
   deal?: '1'
@@ -35,8 +39,8 @@ type FiltersState = {
 }
 
 const CAT_VALUES: Cat[] = ['Todos','Ruta','MTB','Gravel','Urbana','Fixie','Accesorios','Indumentaria','E-Bike','Niños','Pista','Triatlón']
-const MULTI_PARAM_KEYS: MultiFilterKey[] = ['brand','material','frameSize','wheelSize','drivetrain','condition','brake','year','size']
-const MULTI_FILTER_ORDER: MultiFilterKey[] = ['brand','material','frameSize','wheelSize','drivetrain','condition','brake','year','size']
+const MULTI_PARAM_KEYS: MultiFilterKey[] = ['brand','material','frameSize','wheelSize','drivetrain','condition','brake','year','size','location']
+const MULTI_FILTER_ORDER: MultiFilterKey[] = ['brand','material','frameSize','wheelSize','drivetrain','condition','brake','year','size','location']
 const MULTI_FILTER_LABELS: Record<MultiFilterKey, string> = {
   brand: 'Marca',
   material: 'Material',
@@ -47,6 +51,7 @@ const MULTI_FILTER_LABELS: Record<MultiFilterKey, string> = {
   brake: 'Freno',
   year: 'Año',
   size: 'Talle'
+  , location: 'Ubicación'
 }
 const CATEGORY_CARDS: Array<{ cat: Cat; label: string; description: string; image: string; imageMobile: string }> = [
   {
@@ -113,7 +118,8 @@ function paramsToFilters(params: URLSearchParams): FiltersState {
     condition: [],
     brake: [],
     year: [],
-    size: []
+    size: [],
+    location: []
   }
 
   for (const key of MULTI_PARAM_KEYS) {
@@ -132,6 +138,8 @@ function paramsToFilters(params: URLSearchParams): FiltersState {
 
   base.priceMin = parseNumericParam(params.get('price_min'))
   base.priceMax = parseNumericParam(params.get('price_max'))
+  const cur = params.get('price_cur')
+  if (cur === 'USD' || cur === 'ARS') base.priceCur = cur
 
   return base
 }
@@ -165,6 +173,9 @@ function filtersToSearchParams(current: URLSearchParams, filters: FiltersState) 
   if (typeof filters.priceMax === 'number') params.set('price_max', String(Math.round(filters.priceMax)))
   else params.delete('price_max')
 
+  if (filters.priceCur === 'USD' || filters.priceCur === 'ARS') params.set('price_cur', filters.priceCur)
+  else params.delete('price_cur')
+
   return params
 }
 
@@ -178,6 +189,7 @@ type ListingMetadata = {
 type ListingFacetsResult = {
   options: Record<MultiFilterKey, string[]>
   priceRange: { min: number; max: number }
+  priceRangeByCur: { USD: { min: number; max: number } | null; ARS: { min: number; max: number } | null }
   metadata: Record<string, ListingMetadata>
 }
 
@@ -257,11 +269,16 @@ function computeListingFacets(listings: Listing[]): ListingFacetsResult {
     condition: new Set(),
     brake: new Set(),
     year: new Set(),
-    size: new Set()
+    size: new Set(),
+    location: new Set()
   }
   const metadata: Record<string, ListingMetadata> = {}
   let minPrice = Number.POSITIVE_INFINITY
   let maxPrice = 0
+  let minUSD = Number.POSITIVE_INFINITY
+  let maxUSD = 0
+  let minARS = Number.POSITIVE_INFINITY
+  let maxARS = 0
 
   for (const listing of listings) {
     const brand = cleanValue(listing.brand)
@@ -327,10 +344,25 @@ function computeListingFacets(listings: Listing[]): ListingFacetsResult {
       accessoryType
     }
 
+    // Ubicación: agregar ciudad y provincia si están presentes
+    const loc = (listing.sellerLocation || listing.location || '').toString()
+    if (loc) {
+      const parts = loc.split(',').map((s) => s.trim()).filter(Boolean)
+      for (const p of parts) sets.location.add(p)
+    }
+
     const price = Number(listing.price)
     if (Number.isFinite(price) && price > 0) {
       if (price < minPrice) minPrice = price
       if (price > maxPrice) maxPrice = price
+      const cur = (listing.priceCurrency || 'ARS') as 'USD' | 'ARS'
+      if (cur === 'USD') {
+        if (price < minUSD) minUSD = price
+        if (price > maxUSD) maxUSD = price
+      } else {
+        if (price < minARS) minARS = price
+        if (price > maxARS) maxARS = price
+      }
     }
   }
 
@@ -344,11 +376,16 @@ function computeListingFacets(listings: Listing[]): ListingFacetsResult {
       condition: sortAlpha(sets.condition),
       brake: sortAlpha(sets.brake),
       year: sortYearDesc(sets.year),
-      size: sortSizes(sets.size)
+      size: sortSizes(sets.size),
+      location: sortAlpha(sets.location)
     },
     priceRange: {
       min: Number.isFinite(minPrice) ? Math.floor(minPrice) : 0,
       max: Number.isFinite(maxPrice) ? Math.ceil(maxPrice) : 0
+    },
+    priceRangeByCur: {
+      USD: Number.isFinite(minUSD) && Number.isFinite(maxUSD) && maxUSD > 0 ? { min: Math.floor(minUSD), max: Math.ceil(maxUSD) } : null,
+      ARS: Number.isFinite(minARS) && Number.isFinite(maxARS) && maxARS > 0 ? { min: Math.floor(minARS), max: Math.ceil(maxARS) } : null,
     },
     metadata
   }
@@ -388,7 +425,7 @@ function MultiSelectContent({ options, selected, onChange, close, placeholder = 
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder={placeholder}
-          className="input h-10 w-full rounded-full border border-white/10 bg-[#0a101a] px-4 text-sm text-white placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-white/40"
+          className="input h-10 w-full rounded-full border border-white/10 bg-white px-4 text-sm text-[#14212e] placeholder:text-[#14212e]/60 focus:outline-none focus:ring-2 focus:ring-[#14212e]/20"
         />
       ) : null}
       <div className="max-h-56 overflow-y-auto pr-1">
@@ -439,14 +476,19 @@ type PriceFilterContentProps = {
   min?: number
   max?: number
   bounds: { min: number; max: number }
+  currency?: 'USD' | 'ARS'
+  boundsByCur?: { USD: { min: number; max: number } | null; ARS: { min: number; max: number } | null }
+  onCurrencyChange?: (cur?: 'USD' | 'ARS') => void
   onApply: (range: { min?: number; max?: number }) => void
   onClear: () => void
   close: () => void
 }
 
-function PriceFilterContent({ min, max, bounds, onApply, onClear, close }: PriceFilterContentProps) {
+function PriceFilterContent({ min, max, bounds, currency, boundsByCur, onCurrencyChange, onApply, onClear, close }: PriceFilterContentProps) {
   const [minValue, setMinValue] = useState(min ? String(min) : '')
   const [maxValue, setMaxValue] = useState(max ? String(max) : '')
+  const [localCur, setLocalCur] = useState<'USD' | 'ARS' | undefined>(currency)
+  const { fx } = useCurrency()
 
   useEffect(() => {
     setMinValue(min ? String(min) : '')
@@ -469,11 +511,40 @@ function PriceFilterContent({ min, max, bounds, onApply, onClear, close }: Price
     close()
   }
 
+  useEffect(() => { setLocalCur(currency) }, [currency])
+
+  const symbol = localCur === 'USD' ? 'USD ' : '$'
+  const effBounds = (() => {
+    if (localCur && boundsByCur) {
+      const b = boundsByCur[localCur]
+      if (b) return b
+    }
+    return bounds
+  })()
+
   return (
     <div className="flex flex-col gap-3 text-sm">
+      <div className="flex items-center justify-end gap-2">
+        {onCurrencyChange ? (
+          <div className="inline-flex items-center rounded-full border border-white/15 bg-white/5 p-0.5">
+            {(['ARS','USD'] as const).map((cur) => (
+              <button
+                key={cur}
+                type="button"
+                onClick={() => { const next = localCur === cur ? undefined : cur; setLocalCur(next); onCurrencyChange(next) }}
+                className={`px-2 py-1 text-xs rounded-full ${localCur === cur ? 'bg-white text-[#14212e]' : 'text-white/70 hover:text-white'}`}
+              >
+                {cur}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
       <div className="text-xs text-white/60">
-        Rango disponible: {bounds.min ? `$${bounds.min.toLocaleString('es-AR')}` : '—'} –{' '}
-        {bounds.max ? `$${bounds.max.toLocaleString('es-AR')}` : '—'}
+        Rango disponible: {effBounds.min ? `${symbol}${localCur === 'USD' ? effBounds.min.toLocaleString('en-US') : effBounds.min.toLocaleString('es-AR')}` : '—'} – {effBounds.max ? `${symbol}${localCur === 'USD' ? effBounds.max.toLocaleString('en-US') : effBounds.max.toLocaleString('es-AR')}` : '—'}
+      </div>
+      <div className="text-[11px] text-white/50">
+        Conversión: 1 USD = {fx.toLocaleString('es-AR')} ARS
       </div>
       <div className="grid grid-cols-2 gap-3">
         <label className="flex flex-col gap-1">
@@ -483,7 +554,7 @@ function PriceFilterContent({ min, max, bounds, onApply, onClear, close }: Price
             min={0}
             value={minValue}
             onChange={(event) => setMinValue(event.target.value)}
-            className="input h-10 rounded-full border border-white/10 bg-[#0a101a] px-3 text-white focus:outline-none focus:ring-2 focus:ring-white/40"
+            className="input h-10 rounded-full border border-white/10 bg-white px-3 text-[#14212e] focus:outline-none focus:ring-2 focus:ring-[#14212e]/20"
           />
         </label>
         <label className="flex flex-col gap-1">
@@ -493,7 +564,7 @@ function PriceFilterContent({ min, max, bounds, onApply, onClear, close }: Price
             min={0}
             value={maxValue}
             onChange={(event) => setMaxValue(event.target.value)}
-            className="input h-10 rounded-full border border-white/10 bg-[#0a101a] px-3 text-white focus:outline-none focus:ring-2 focus:ring-white/40"
+            className="input h-10 rounded-full border border-white/10 bg-white px-3 text-[#14212e] focus:outline-none focus:ring-2 focus:ring-[#14212e]/20"
           />
         </label>
       </div>
@@ -547,7 +618,7 @@ function DealFilterContent({ active, onToggle, close }: DealFilterContentProps) 
         />
         <div>
           <div className="font-medium text-white">Solo con descuento</div>
-          <div className="text-xs text-white/60">Publicaciones con precio rebajado sobre el original.</div>
+          <div className="text-xs text-white/60 whitespace-normal break-words leading-snug">Publicaciones con precio rebajado sobre el original.</div>
         </div>
       </label>
       <button
@@ -569,6 +640,7 @@ function DealFilterContent({ active, onToggle, close }: DealFilterContentProps) 
 type Crumb = { label: string; to?: string }
 type MarketplaceProps = { forcedCat?: Cat; allowedCats?: Cat[]; forcedDeal?: boolean; headingTitle?: string; breadcrumbs?: Crumb[] }
 export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headingTitle, breadcrumbs }: MarketplaceProps = {}) {
+  const { fx } = useCurrency()
   const [searchParams, setSearchParams] = useSearchParams()
   const paramsKey = searchParams.toString()
   const filters = useMemo(() => paramsToFilters(searchParams), [paramsKey])
@@ -583,6 +655,7 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
   const [storeLogos, setStoreLogos] = useState<Record<string, string | null>>({})
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [mobileSortOpen, setMobileSortOpen] = useState(false)
+  const [likeCounts, setLikeCounts] = useState<Record<string, number>>({})
 
   useEffect(() => {
     let active = true
@@ -636,6 +709,7 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
       brake: 'brake' in patch ? patch.brake ?? [] : filters.brake,
       year: 'year' in patch ? patch.year ?? [] : filters.year,
       size: 'size' in patch ? patch.size ?? [] : filters.size,
+      priceCur: 'priceCur' in patch ? patch.priceCur : filters.priceCur,
       priceMin: 'priceMin' in patch ? patch.priceMin : filters.priceMin,
       priceMax: 'priceMax' in patch ? patch.priceMax : filters.priceMax,
       deal: 'deal' in patch ? patch.deal : filters.deal,
@@ -656,6 +730,7 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
     const brakeSet = new Set(filters.brake.map((value) => normalizeText(value)))
     const yearSet = new Set(filters.year.map((value) => normalizeText(value)))
     const sizeSet = new Set(filters.size.map((value) => normalizeText(value)))
+    const locationSet = new Set(filters.location.map((value) => normalizeText(value)))
     const priceMin = typeof filters.priceMin === 'number' ? filters.priceMin : null
     const priceMax = typeof filters.priceMax === 'number' ? filters.priceMax : null
 
@@ -721,8 +796,24 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
         }
       }
 
-      if (priceMin !== null && listing.price < priceMin) return false
-      if (priceMax !== null && listing.price > priceMax) return false
+      // Ubicación: match si cualquier token seleccionado aparece en la ubicación del listing
+      if (locationSet.size) {
+        const rawLoc = (listing.sellerLocation || listing.location || '').toString()
+        const parts = rawLoc.split(',').map((s) => normalizeText(s.trim())).filter(Boolean)
+        const hasAny = parts.some((p) => locationSet.has(p))
+        if (!hasAny) return false
+      }
+
+      // Precio: si hay moneda elegida, convertir y comparar en esa moneda (fx oficial del día)
+      const listCur = (String(listing.priceCurrency || 'ARS').toUpperCase() as 'USD' | 'ARS')
+      const toSelected = (value: number): number => {
+        if (!filters.priceCur) return value
+        if (filters.priceCur === listCur) return value
+        return filters.priceCur === 'USD' ? value / fx : value * fx
+      }
+      const priceInSelected = toSelected(listing.price)
+      if (priceMin !== null && priceInSelected < priceMin) return false
+      if (priceMax !== null && priceInSelected > priceMax) return false
 
       if (effectiveDeal === '1') {
         const hasDeal = typeof listing.originalPrice === 'number' && listing.originalPrice > listing.price
@@ -756,10 +847,33 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
     if (sortMode === 'newest') {
       return sorted.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
     }
-    return sorted.sort((a, b) => (sortMode === 'asc' ? a.price - b.price : b.price - a.price))
+      const toSelected = (l: Listing) => {
+      if (!filters.priceCur) return l.price
+      const cur = (String(l.priceCurrency || 'ARS').toUpperCase() as 'USD' | 'ARS')
+      return filters.priceCur === cur ? l.price : (filters.priceCur === 'USD' ? l.price / fx : l.price * fx)
+    }
+    return sorted.sort((a, b) => {
+      const pa = toSelected(a)
+      const pb = toSelected(b)
+      return sortMode === 'asc' ? pa - pb : pb - pa
+    })
   }, [categoryFiltered, filters, sortMode, listingMetadata, effectiveDeal])
 
   const visible = filtered.slice(0, count)
+
+  // Batch-like counts for visible listings
+  useEffect(() => {
+    const ids = visible.map((l) => l.id)
+    if (!ids.length) { setLikeCounts({}); return }
+    let active = true
+    ;(async () => {
+      try {
+        const map = await fetchLikeCounts(ids)
+        if (active) setLikeCounts(map)
+      } catch { /* noop */ }
+    })()
+    return () => { active = false }
+  }, [visible.map((l) => l.id).join(',')])
 
   useEffect(() => {
     // Menor carga inicial para mejorar LCP en mobile
@@ -837,13 +951,14 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
   }
 
   const priceSummary = (() => {
-    const { priceMin, priceMax } = filters
+    const { priceMin, priceMax, priceCur } = filters
+    const symbol = priceCur === 'USD' ? 'USD ' : '$'
     if (typeof priceMin === 'number' || typeof priceMax === 'number') {
-      const minLabel = typeof priceMin === 'number' ? `$${priceMin.toLocaleString('es-AR')}` : 'Min'
-      const maxLabel = typeof priceMax === 'number' ? `$${priceMax.toLocaleString('es-AR')}` : 'Max'
+      const minLabel = typeof priceMin === 'number' ? `${symbol}${priceCur === 'USD' ? priceMin.toLocaleString('en-US') : priceMin.toLocaleString('es-AR')}` : 'Min'
+      const maxLabel = typeof priceMax === 'number' ? `${symbol}${priceCur === 'USD' ? priceMax.toLocaleString('en-US') : priceMax.toLocaleString('es-AR')}` : 'Max'
       return `${minLabel} – ${maxLabel}`
     }
-    return 'Todos'
+    return priceCur ? `${priceCur}` : 'Todos'
   })()
 
   const sortSummary = (() => {
@@ -885,14 +1000,16 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
       })
     }
   }
-  if (typeof filters.priceMin === 'number' || typeof filters.priceMax === 'number') {
+  if (typeof filters.priceMin === 'number' || typeof filters.priceMax === 'number' || filters.priceCur) {
     const parts: string[] = []
-    if (typeof filters.priceMin === 'number') parts.push(`desde $${filters.priceMin.toLocaleString('es-AR')}`)
-    if (typeof filters.priceMax === 'number') parts.push(`hasta $${filters.priceMax.toLocaleString('es-AR')}`)
+    const symbol = filters.priceCur === 'USD' ? 'USD ' : '$'
+    if (typeof filters.priceMin === 'number') parts.push(`desde ${symbol}${filters.priceCur === 'USD' ? filters.priceMin.toLocaleString('en-US') : filters.priceMin.toLocaleString('es-AR')}`)
+    if (typeof filters.priceMax === 'number') parts.push(`hasta ${symbol}${filters.priceCur === 'USD' ? filters.priceMax.toLocaleString('en-US') : filters.priceMax.toLocaleString('es-AR')}`)
+    if (!parts.length && filters.priceCur) parts.push(filters.priceCur)
     activeFilterChips.push({
       key: 'price',
       label: `Precio ${parts.join(' ')}`,
-      onRemove: () => setFilters({ priceMin: undefined, priceMax: undefined })
+      onRemove: () => setFilters({ priceMin: undefined, priceMax: undefined, priceCur: undefined })
     })
   }
   if (filters.deal === '1') {
@@ -1051,9 +1168,10 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
                 </div>
               </div>
 
-              <div className="hidden flex-wrap gap-2 sm:flex">
+              <div className="hidden sm:flex flex-wrap items-center text-sm gap-y-2">
                 {forcedCat || (allowedCats && allowedCats.length) ? null : (
-                <FilterDropdown label="Categoría" summary={filters.cat}>
+                <div className="px-3 first:pl-0 border-l border-white/20 first:border-l-0 whitespace-nowrap">
+                <FilterDropdown label="Categoría" summary={filters.cat} variant="inline">
                   {({ close }) => (
                     <div className="flex flex-col gap-1 text-sm">
                       {CAT_VALUES.map((cat) => {
@@ -1082,45 +1200,54 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
                     </div>
                   )}
                 </FilterDropdown>
+                </div>
                 )}
 
                 {MULTI_FILTER_ORDER.map((key) => {
                   const rawOptions = facetsData.options[key]
                   const options = Array.from(new Set([...rawOptions, ...filters[key]]))
                   return (
-                    <FilterDropdown
-                      key={key}
-                      label={MULTI_FILTER_LABELS[key]}
-                      summary={summaryFor(key)}
-                      disabled={!options.length}
-                    >
-                      {({ close }) => (
-                        <MultiSelectContent
-                          options={options}
-                          selected={filters[key]}
-                          onChange={(next) => setFilters({ [key]: next } as Partial<FiltersState>)}
-                          close={close}
-                          placeholder={`Buscar ${MULTI_FILTER_LABELS[key].toLowerCase()}`}
-                        />
-                      )}
-                    </FilterDropdown>
+                    <div key={key} className="px-3 border-l border-white/20 first:border-l-0 whitespace-nowrap">
+                      <FilterDropdown
+                        label={MULTI_FILTER_LABELS[key]}
+                        summary={summaryFor(key)}
+                        disabled={!options.length}
+                        variant="inline"
+                      >
+                        {({ close }) => (
+                          <MultiSelectContent
+                            options={options}
+                            selected={filters[key]}
+                            onChange={(next) => setFilters({ [key]: next } as Partial<FiltersState>)}
+                            close={close}
+                            placeholder={`Buscar ${MULTI_FILTER_LABELS[key].toLowerCase()}`}
+                          />
+                        )}
+                      </FilterDropdown>
+                    </div>
                   )
                 })}
 
-                <FilterDropdown label="Precio" summary={priceSummary}>
+                <div className="px-3 border-l border-white/20 first:border-l-0 whitespace-nowrap">
+                <FilterDropdown label="Precio" summary={priceSummary} variant="inline">
                   {({ close }) => (
                     <PriceFilterContent
                       min={filters.priceMin}
                       max={filters.priceMax}
                       bounds={facetsData.priceRange}
+                      currency={filters.priceCur}
+                      boundsByCur={facetsData.priceRangeByCur}
+                      onCurrencyChange={(cur) => setFilters({ priceCur: cur })}
                       onApply={({ min, max }) => setFilters({ priceMin: min, priceMax: max })}
                       onClear={() => setFilters({ priceMin: undefined, priceMax: undefined })}
                       close={close}
                     />
                   )}
                 </FilterDropdown>
+                </div>
 
-                <FilterDropdown label="Promos" summary={effectiveDeal === '1' ? 'Activas' : 'Todas'}>
+                <div className="px-3 border-l border-white/20 first:border-l-0 whitespace-nowrap">
+                <FilterDropdown label="Promos" summary={effectiveDeal === '1' ? 'Activas' : 'Todas'} variant="inline">
                   {({ close }) => (
                     <DealFilterContent
                       active={effectiveDeal === '1'}
@@ -1129,30 +1256,13 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
                     />
                   )}
                 </FilterDropdown>
+                </div>
               </div>
 
               {hasActiveFilters ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  {activeFilterChips.map((chip) => (
-                    <button
-                      key={chip.key}
-                      type="button"
-                      onClick={chip.onRemove}
-                      className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs text-white transition hover:border-white/40 hover:bg-white/20"
-                    >
-                      <span>{chip.label}</span>
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6m0 12L6 6" />
-                      </svg>
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={handleClearFilters}
-                    className="text-xs text-white/70 underline-offset-2 hover:text-white hover:underline"
-                  >
-                    Limpiar todo
-                  </button>
+                <div className="text-xs text-white/70">
+                  Filtros activos: {activeFilterChips.map((c) => c.label).join(', ')}{' '}
+                  <button type="button" onClick={handleClearFilters} className="underline hover:text-white">Limpiar</button>
                 </div>
               ) : null}
             </div>
@@ -1170,7 +1280,7 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
                 <div className="grid -mx-2 grid-cols-1 gap-0 sm:mx-0 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">
                   {visible.map((listing, idx) => (
                     <div key={listing.id} className="p-2 sm:p-0">
-                      <ListingCard l={listing} storeLogoUrl={storeLogos[listing.sellerId] || null} priority={idx < 4} />
+                      <ListingCard l={listing} storeLogoUrl={storeLogos[listing.sellerId] || null} priority={idx < 4} likeCount={likeCounts[listing.id]} />
                     </div>
                   ))}
                 </div>
@@ -1224,8 +1334,9 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
                   label="Categoría"
                   summary={filters.cat}
                   className="w-full"
-                buttonClassName="w-full justify-between"
-                inlineOnMobile
+                  buttonClassName="w-full justify-between"
+                  inlineOnMobile
+                  variant="inline"
                 >
                   {({ close }) => (
                     <div className="flex flex-col gap-1 text-sm">
@@ -1264,10 +1375,11 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
                       key={`mobile-${key}`}
                       label={MULTI_FILTER_LABELS[key]}
                       summary={summaryFor(key)}
-                    disabled={!options.length}
-                    className="w-full"
-                    buttonClassName="w-full justify-between"
-                    inlineOnMobile
+                      disabled={!options.length}
+                      className="w-full"
+                      buttonClassName="w-full justify-between"
+                      inlineOnMobile
+                      variant="inline"
                   >
                     {({ close }) => (
                       <MultiSelectContent
@@ -1287,12 +1399,16 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
                 className="w-full"
                 buttonClassName="w-full justify-between"
                 inlineOnMobile
+                variant="inline"
               >
                 {({ close }) => (
                   <PriceFilterContent
                     min={filters.priceMin}
                     max={filters.priceMax}
                     bounds={facetsData.priceRange}
+                    currency={filters.priceCur}
+                    boundsByCur={facetsData.priceRangeByCur}
+                    onCurrencyChange={(cur) => setFilters({ priceCur: cur })}
                     onApply={({ min, max }) => setFilters({ priceMin: min, priceMax: max })}
                     onClear={() => setFilters({ priceMin: undefined, priceMax: undefined })}
                     close={close}
@@ -1305,6 +1421,7 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
                 className="w-full"
                 buttonClassName="w-full justify-between"
                 inlineOnMobile
+                variant="inline"
               >
                 {({ close }) => (
                   <DealFilterContent

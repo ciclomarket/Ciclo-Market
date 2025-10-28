@@ -13,6 +13,7 @@ import HorizontalSlider from '../components/HorizontalSlider'
 import { transformSupabasePublicUrl } from '../utils/supabaseImage'
 import { fetchListings } from '../services/listings'
 import { supabaseEnabled } from '../services/supabase'
+import { fetchLikeCounts } from '../services/likes'
 import type { Listing } from '../types'
 import { buildListingSlug } from '../utils/slug'
 import { hasPaidPlan } from '../utils/plans'
@@ -302,6 +303,41 @@ export default function Home() {
     }
   }, [filtered.slice(0, 2).map((x) => (x as any).id).join(',')])
 
+  // Like counts (batch) for sections
+  const [likesFeatured, setLikesFeatured] = useState<Record<string, number>>({})
+  const [likesOffers, setLikesOffers] = useState<Record<string, number>>({})
+  const [likesRecent, setLikesRecent] = useState<Record<string, number>>({})
+
+  useEffect(() => {
+    const ids = featuredListings.slice(0, 24).map((l) => l.id)
+    if (!ids.length) { setLikesFeatured({}); return }
+    let active = true
+    ;(async () => {
+      try { const map = await fetchLikeCounts(ids); if (active) setLikesFeatured(map) } catch {}
+    })()
+    return () => { active = false }
+  }, [featuredListings.map((l) => l.id).join(',')])
+
+  useEffect(() => {
+    const ids = offers.slice(0, 20).map((l: any) => l.id)
+    if (!ids.length) { setLikesOffers({}); return }
+    let active = true
+    ;(async () => {
+      try { const map = await fetchLikeCounts(ids); if (active) setLikesOffers(map) } catch {}
+    })()
+    return () => { active = false }
+  }, [offers.map((l: any) => l.id).join(',')])
+
+  useEffect(() => {
+    const ids = filtered.slice(0, 20).map((l) => l.id)
+    if (!ids.length) { setLikesRecent({}); return }
+    let active = true
+    ;(async () => {
+      try { const map = await fetchLikeCounts(ids); if (active) setLikesRecent(map) } catch {}
+    })()
+    return () => { active = false }
+  }, [filtered.slice(0, 20).map((l) => l.id).join(',')])
+
   return (
     <div
       className="relative isolate overflow-hidden text-white"
@@ -371,7 +407,7 @@ export default function Home() {
               items={featuredListings}
               maxItems={24}
               initialLoad={8}
-              renderCard={(l: any, idx?: number) => <ListingCard l={l} priority={(idx ?? 0) < 4} />}
+              renderCard={(l: any, idx?: number) => <ListingCard l={l} priority={(idx ?? 0) < 4} likeCount={likesFeatured[l.id]} />}
               tone="dark"
             />
           </Container>
@@ -392,7 +428,7 @@ export default function Home() {
               items={offers}
               maxItems={20}
               initialLoad={8}
-              renderCard={(l:any, idx?: number) => <ListingCard l={l} priority={(idx ?? 0) < 4} />}
+              renderCard={(l:any, idx?: number) => <ListingCard l={l} priority={(idx ?? 0) < 4} likeCount={likesOffers[l.id]} />}
               tone="dark"
             />
           ) : (
@@ -428,7 +464,7 @@ export default function Home() {
               items={filtered}
               maxItems={20}
               initialLoad={8}
-              renderCard={(l:any, idx?: number) => <ListingCard l={l} priority={(idx ?? 0) < 4} />}
+              renderCard={(l:any, idx?: number) => <ListingCard l={l} priority={(idx ?? 0) < 4} likeCount={likesRecent[l.id]} />}
               tone="dark"
             />
           ) : (

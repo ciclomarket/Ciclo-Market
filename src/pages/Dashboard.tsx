@@ -23,10 +23,12 @@ import { normaliseWhatsapp, extractLocalWhatsapp, sanitizeLocalWhatsappInput } f
 import { useNotifications } from '../context/NotificationContext'
 import { useToast } from '../context/ToastContext'
 import useFaves from '../hooks/useFaves'
+import { useLikedIds } from '../hooks/useServerLikes'
 import useUpload from '../hooks/useUpload'
 import { createGift, claimGift } from '../services/gifts'
 import { fetchCreditsHistory, type Credit } from '../services/credits'
 import { trackMetaPixel } from '../lib/metaPixel'
+import AdminFxPanel from '../components/AdminFxPanel'
 
 const TABS = ['Perfil', 'Publicaciones', 'Créditos', 'Favoritos', 'Notificaciones', 'Editar perfil', 'Editar tienda', 'Analítica', 'Verificá tu perfil', 'Cerrar sesión'] as const
 type SellerTab = (typeof TABS)[number]
@@ -165,7 +167,9 @@ export default function Dashboard() {
   const isMobile = useIsMobile()
   const [mobileActiveTab, setMobileActiveTab] = useState<SellerTab | null>(null)
   const { unreadCount: unreadNotifications } = useNotifications()
-  const { ids: favouriteIds } = useFaves()
+  const { ids: favouriteIdsLocal } = useFaves()
+  const favouriteIdsRemote = useLikedIds()
+  const favouriteIds = favouriteIdsRemote.length ? favouriteIdsRemote : favouriteIdsLocal
   const favouritesCount = favouriteIds.length
   const [credits, setCredits] = useState<Credit[]>([])
   const availableCredits = useMemo(() => credits.filter((c) => c.status === 'available').length, [credits])
@@ -335,7 +339,7 @@ export default function Dashboard() {
       case 'Créditos':
         return <CreditsView credits={credits} />
       case 'Favoritos':
-        return <FavoritesView favouriteIds={favouriteIds} />
+        return <FavoritesView favouriteIds={favouriteIdsRemote.length ? favouriteIdsRemote : favouriteIdsLocal} />
       case 'Editar perfil':
         return (
           <EditProfileView
@@ -1062,6 +1066,7 @@ function ProfileView({
   const trustTrend = `Antigüedad: ${accountAge} • ${profile?.whatsapp_number ? 'WhatsApp cargado' : 'Sin WhatsApp'}`
   return (
     <div className="space-y-6">
+      <AdminFxPanel />
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
         <div className="size-24 overflow-hidden rounded-3xl bg-[#14212e]/10">
           {avatarUrl ? (
@@ -1529,7 +1534,7 @@ function FavoritesView({ favouriteIds }: { favouriteIds: string[] }) {
       <div className="flex flex-col items-center justify-center gap-4 py-10 text-center">
         <h3 className="text-lg font-semibold text-[#14212e]">Todavía no guardaste bicicletas</h3>
         <p className="max-w-md text-sm text-[#14212e]/70">
-          Buscá modelos en el marketplace y marcá con ★ tus preferidas para compararlas más tarde.
+          Buscá modelos en el marketplace y marcá con ❤️ tus preferidas para compararlas más tarde.
         </p>
         <Button to="/marketplace" className="bg-[#14212e] text-white hover:bg-[#1b2f3f]">
           Explorar marketplace

@@ -2456,6 +2456,75 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
             }
           }
         }
+
+        // Auto-aplicar destaque para pagos de "Highlight" (idempotente)
+        try {
+          if (supabaseService && status === 'succeeded') {
+            const listingSlug = typeof meta?.listingSlug === 'string' ? meta.listingSlug : null
+            const highlightDays = Number(meta?.highlightDays || 0)
+
+            if (listingSlug && Number.isFinite(highlightDays) && highlightDays > 0) {
+              // Evitar aplicar más de una vez por pago
+              let alreadyApplied = false
+              try {
+                const { data: appliedRow } = await supabaseService
+                  .from('publish_credits')
+                  .select('id, applied')
+                  .eq('provider', 'mercadopago')
+                  .eq('provider_ref', String(paymentId))
+                  .maybeSingle()
+                alreadyApplied = Boolean(appliedRow?.applied)
+              } catch {}
+
+              if (!alreadyApplied) {
+                // Buscar listing por slug o id
+                const { data: listingBySlug } = await supabaseService
+                  .from('listings')
+                  .select('id, highlight_expires')
+                  .eq('slug', listingSlug)
+                  .maybeSingle()
+                let listing = listingBySlug
+                if (!listing) {
+                  const { data: listingById } = await supabaseService
+                    .from('listings')
+                    .select('id, highlight_expires')
+                    .eq('id', listingSlug)
+                    .maybeSingle()
+                  listing = listingById || null
+                }
+
+                if (listing && listing.id) {
+                  const now = Date.now()
+                  const base = listing.highlight_expires ? Math.max(new Date(listing.highlight_expires).getTime(), now) : now
+                  const next = new Date(base + highlightDays * 24 * 60 * 60 * 1000).toISOString()
+                  const { error: upd } = await supabaseService
+                    .from('listings')
+                    .update({ highlight_expires: next })
+                    .eq('id', listing.id)
+                  if (upd) {
+                    console.error('[webhook/highlight] failed to update listing', upd)
+                  } else {
+                    // Marcar crédito como aplicado (si existe)
+                    try {
+                      const nowIso = new Date().toISOString()
+                      await supabaseService
+                        .from('publish_credits')
+                        .update({ applied: true, applied_at: nowIso })
+                        .eq('provider', 'mercadopago')
+                        .eq('provider_ref', String(paymentId))
+                    } catch (e3) {
+                      console.warn('[webhook/highlight] mark applied failed', e3?.message || e3)
+                    }
+                  }
+                } else {
+                  console.warn('[webhook/highlight] listing not found for', listingSlug)
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('[webhook/highlight] handler error', e?.message || e)
+        }
       } catch (err) {
         console.error('[MP webhook] payment fetch/record failed', err)
       }
@@ -2762,22 +2831,106 @@ app.post('/api/listings/:id/highlight', async (req, res) => {
     if (!user) return res.status(401).json({ error: 'unauthorized' })
     const { data: listing, error } = await supabase
       .from('listings')
-      .select('id,seller_id,seller_plan_expires')
+      .select('id,seller_id,highlight_expires')
       .eq('id', id)
       .single()
     if (error || !listing) return res.status(404).json({ error: 'not_found' })
     if (listing.seller_id !== user.id) return res.status(403).json({ error: 'forbidden' })
     const now = Date.now()
-    const base = listing.seller_plan_expires ? Math.max(new Date(listing.seller_plan_expires).getTime(), now) : now
+    const base = listing.highlight_expires ? Math.max(new Date(listing.highlight_expires).getTime(), now) : now
     const next = new Date(base + days * 24 * 60 * 60 * 1000).toISOString()
     const { error: upd } = await supabase
       .from('listings')
-      .update({ seller_plan: 'featured', seller_plan_expires: next })
+      .update({ highlight_expires: next })
       .eq('id', id)
     if (upd) return res.status(500).json({ error: 'update_failed' })
     return res.json({ ok: true, sellerPlan: 'featured', sellerPlanExpires: next })
   } catch (err) {
     console.error('[highlight] failed', err)
     return res.status(500).json({ error: 'unexpected_error' })
+  }
+})
+
+// Aplicar plan + destaque incluido en un paso atómico
+app.post('/api/listings/:id/apply-plan', async (req, res) => {
+  try {
+    const { id } = req.params
+    const supabase = getServerSupabaseClient()
+    const user = await getAuthUser(req, supabase)
+    if (!user) return res.status(401).json({ error: 'unauthorized' })
+    const planCodeRaw = String(req.body?.planCode || '').trim().toLowerCase()
+    const planCode = normalisePlanCode(planCodeRaw)
+    const listingDays = Number(req.body?.listingDays || 0)
+    const includedHighlightDays = Number(req.body?.includedHighlightDays || 0)
+    if (!planCode || !listingDays || listingDays <= 0) return res.status(400).json({ error: 'invalid_params' })
+
+    const { data: listing, error } = await supabase
+      .from('listings')
+      .select('id,seller_id,expires_at,highlight_expires')
+      .eq('id', id)
+      .single()
+    if (error || !listing) return res.status(404).json({ error: 'not_found' })
+    if (listing.seller_id !== user.id) return res.status(403).json({ error: 'forbidden' })
+
+    const now = Date.now()
+    // Renovar expires_at desde el vencimiento actual o desde ahora
+    const currentExpires = listing.expires_at ? new Date(listing.expires_at).getTime() : now
+    const baseExpires = Math.max(currentExpires, now)
+    const nextExpires = new Date(baseExpires + listingDays * 24 * 60 * 60 * 1000).toISOString()
+
+    // Sumar destaque incluido sobre highlight_expires (independiente del plan)
+    let nextHighlight = listing.highlight_expires ? new Date(listing.highlight_expires).getTime() : now
+    if (includedHighlightDays && includedHighlightDays > 0) {
+      const baseHighlight = Math.max(nextHighlight, now)
+      nextHighlight = baseHighlight + includedHighlightDays * 24 * 60 * 60 * 1000
+    }
+    const nextHighlightIso = new Date(nextHighlight).toISOString()
+
+    const { data: updated, error: upd } = await supabase
+      .from('listings')
+      .update({
+        plan: planCode,
+        plan_code: planCode,
+        expires_at: nextExpires,
+        highlight_expires: nextHighlightIso,
+      })
+      .eq('id', id)
+      .select('*')
+      .maybeSingle()
+    if (upd || !updated) return res.status(500).json({ error: 'update_failed' })
+    return res.json({ ok: true, plan: planCode, expiresAt: nextExpires, highlightExpires: nextHighlightIso })
+  } catch (err) {
+    console.error('[apply-plan] failed', err)
+    return res.status(500).json({ error: 'unexpected_error' })
+  }
+})
+/* ----------------------------- FX (admin) ---------------------------------- */
+// In-memory override (lost on restart). For persistence, store in DB or KV.
+let fxOverride = null
+
+app.get('/api/fx', (_req, res) => {
+  const envFx = Number(process.env.USD_ARS_FX || process.env.VITE_USD_ARS_FX)
+  const fx = Number.isFinite(fxOverride) && fxOverride > 0
+    ? fxOverride
+    : (Number.isFinite(envFx) && envFx > 0 ? envFx : 1000)
+  res.json({ fx, source: fxOverride ? 'override' : (envFx ? 'env' : 'default') })
+})
+
+app.post('/api/admin/fx', (req, res) => {
+  try {
+    const key = req.headers['x-admin-key'] || req.headers['x-cron-secret']
+    const allowed = process.env.FX_ADMIN_KEY || process.env.CRON_SECRET
+    if (!allowed || !key || String(key) !== String(allowed)) {
+      return res.status(401).json({ ok: false, error: 'unauthorized' })
+    }
+    const { fx } = req.body || {}
+    const n = Number(fx)
+    if (!Number.isFinite(n) || n <= 0) {
+      return res.status(400).json({ ok: false, error: 'invalid_fx' })
+    }
+    fxOverride = n
+    return res.json({ ok: true, fx: fxOverride })
+  } catch (e) {
+    return res.status(500).json({ ok: false })
   }
 })

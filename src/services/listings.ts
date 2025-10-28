@@ -23,6 +23,7 @@ type ListingRow = {
   seller_name?: string | null
   seller_plan?: string | null
   seller_plan_expires?: string | null
+  highlight_expires?: string | null
   seller_location?: string | null
   seller_whatsapp?: string | null
   seller_email?: string | null
@@ -68,6 +69,7 @@ const normalizeListing = (row: ListingRow): Listing => {
     sellerPlan: normalizedSellerPlan as Listing['sellerPlan'],
     plan: (normalizedPlan ?? row.plan ?? row.plan_code ?? undefined) as Listing['plan'],
     sellerPlanExpires: row.seller_plan_expires ? Date.parse(row.seller_plan_expires) : undefined,
+    highlightExpires: row.highlight_expires ? Date.parse(row.highlight_expires) : undefined,
     sellerLocation: row.seller_location ?? undefined,
     sellerWhatsapp: row.seller_whatsapp ?? undefined,
     sellerEmail: row.seller_email ?? undefined,

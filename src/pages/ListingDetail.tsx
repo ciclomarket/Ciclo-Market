@@ -8,7 +8,7 @@ import { useCurrency } from '../context/CurrencyContext'
 import { formatListingPrice } from '../utils/pricing'
 import { getPlanLabel, hasPaidPlan, isPlanVerified } from '../utils/plans'
 import { useCompare } from '../context/CompareContext'
-import useFaves from '../hooks/useFaves'
+import { useListingLike } from '../hooks/useServerLikes'
 import { fetchListing, updateListingPlan, deleteListing, setListingWhatsapp, updateListingStatus, archiveListing, reduceListingPrice, extendListingExpiryDays, updateListingFields } from '../services/listings'
 import { supabaseEnabled, getSupabaseClient } from '../services/supabase'
 import type { Listing } from '../types'
@@ -67,7 +67,7 @@ export default function ListingDetail() {
     setEditFieldOpen(true)
   }
   const { ids: compareIds, toggle: toggleCompare } = useCompare()
-  const { has: hasFav, toggle: toggleFav } = useFaves()
+  const { liked: isFav, count: likeCount, toggle: toggleFav, canLike } = useListingLike(listing?.id || '')
   const listingKey = params.slug ?? params.id ?? ''
   // Necesario antes de efectos que lo usan
   const isOwner = Boolean(user?.id && listing?.sellerId && user.id === listing.sellerId)
@@ -272,7 +272,6 @@ export default function ListingDetail() {
   const hadBasicOrPremium = effectivePlan === 'basic' || effectivePlan === 'premium'
   const verifiedVendor = sellerVerified
   const inCompare = compareIds.includes(listing.id)
-  const isFav = hasFav(listing.id)
   const isFeaturedListing = hasPaidPlan(effectivePlan, listing.sellerPlanExpires)
   const listingSold = listing.status === 'sold'
   const listingUnavailable = listingSold || listing.status === 'archived' || listing.status === 'paused' || listing.status === 'expired'
@@ -652,18 +651,33 @@ export default function ListingDetail() {
                     )}
                   </div>
                   <p className="mt-2 lg:mt-1 text-sm text-[#14212e]/70">{listing.location}</p>
-                  {isFeaturedListing && (
-                    <span className="mt-3 lg:mt-2 inline-flex items-center gap-2 rounded-full bg-[#14212e] px-3 py-1 text-xs font-semibold text-white">
-                      Destacada 🔥
-                    </span>
-                  )}
+                  {/* Badge de destacada removido */}
                 </div>
                 <div className="flex items-center gap-2">
-                  <IconButton label={isFav ? 'Quitar de favoritos' : 'Agregar a favoritos'} onClick={() => toggleFav(listing.id)}>
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
-                      <path d="M12 21.35s-6.63-4.35-9.33-8.35C-0.03 9.78.36 5.96 3.05 4.04 5.06 2.62 7.92 3 9.7 4.79L12 7.1l2.3-2.31c1.78-1.78 4.64-2.17 6.65-.75 2.69 1.92 3.08 5.74.38 8.96C18.63 17 12 21.35 12 21.35Z" />
-                    </svg>
-                  </IconButton>
+                  {(() => {
+                    const displayCount = likeCount > 0 ? likeCount : (isFav ? 1 : 0)
+                    const content = displayCount > 0 ? `❤️ ${displayCount}` : '🤍'
+                    if (canLike) {
+                      return (
+                        <button
+                          type="button"
+                          className={`rounded-full px-2 py-1 text-xs ${isFav ? 'bg-white/90 text-[#14212e]' : 'bg-[#14212e]/70 text-white/80'} border border-white/20`}
+                          aria-label={isFav ? 'Quitar me gusta' : 'Me gusta'}
+                          onClick={() => toggleFav()}
+                        >
+                          {content}
+                        </button>
+                      )
+                    }
+                    return (
+                      <span
+                        className={`rounded-full px-2 py-1 text-xs ${displayCount > 0 ? 'bg-white/90 text-[#14212e]' : 'bg-[#14212e]/70 text-white/80'} border border-white/20`}
+                        aria-label={`Me gusta: ${displayCount}`}
+                      >
+                        {content}
+                      </span>
+                    )
+                  })()}
                   <IconButton label={inCompare ? 'Quitar de comparativa' : 'Agregar a comparativa'} onClick={() => toggleCompare(listing.id)}>
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
                       <path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4V4Zm2 0v16h6a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-6Z" />
@@ -840,7 +854,7 @@ export default function ListingDetail() {
                       {(() => {
                         const now = Date.now()
                         const expiresAt = listing.expiresAt || null
-                        const planExpires = listing.sellerPlanExpires || null
+                        const highlightExpires = listing.highlightExpires || listing.sellerPlanExpires || null
                         const fmt = (ms: number) => {
                           const days = Math.ceil((ms - now) / (24*60*60*1000))
                           return days <= 0 ? 'vencido' : `${days} día${days===1?'':'s'}`
@@ -855,7 +869,7 @@ export default function ListingDetail() {
                             {planDuration ? (
                               <div>Plan: {planCode ? (planDef?.name || planCode) : 'Estándar'} · {planDuration} días</div>
                             ) : null}
-                            <div>Destaque: {hasHighlight ? (planExpires ? fmt(planExpires) : 'activo') : 'sin destaque'}</div>
+                            <div>Destaque (restante): {highlightExpires ? fmt(highlightExpires) : 'sin destaque'}</div>
                           </>
                         )
                       })()}

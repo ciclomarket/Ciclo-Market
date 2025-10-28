@@ -3,19 +3,19 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Listing } from '../types'
 import { transformSupabasePublicUrl } from '../utils/supabaseImage'
-import useFaves from '../hooks/useFaves'
+import { useListingLike } from '../hooks/useServerLikes'
 import { useCurrency } from '../context/CurrencyContext'
 import { formatListingPrice } from '../utils/pricing'
 import { useCompare } from '../context/CompareContext'
 import { buildListingSlug } from '../utils/slug'
 import { hasPaidPlan } from '../utils/plans'
 
-export default function ListingCard({ l, storeLogoUrl, priority = false }: { l: Listing; storeLogoUrl?: string | null; priority?: boolean }) {
+export default function ListingCard({ l, storeLogoUrl, priority = false, likeCount }: { l: Listing; storeLogoUrl?: string | null; priority?: boolean; likeCount?: number }) {
   const [imageLoaded, setImageLoaded] = useState(false)
-  const { has, toggle } = useFaves()
+  const { liked, count, toggle, canLike } = useListingLike(l.id, likeCount)
   const { ids: compareIds, toggle: toggleCompare } = useCompare()
   const { format, fx } = useCurrency()
-  const fav = has(l.id)
+  const fav = liked
   const inCompare = compareIds.includes(l.id)
   const priceLabel = formatListingPrice(l.price, l.priceCurrency, format, fx)
   const hasOffer = typeof l.originalPrice === 'number' && l.originalPrice > l.price && l.originalPrice > 0
@@ -118,13 +118,29 @@ export default function ListingCard({ l, storeLogoUrl, priority = false }: { l: 
           >
             ⇄
           </button>
-          <button
-            onClick={() => toggle(l.id)}
-            aria-label="Favorito"
-            className={`rounded-full px-2 py-1 text-xs ${fav ? 'bg-white/90 text-[#14212e]' : 'bg-[#14212e]/70 text-white/80'} border border-white/20 backdrop-blur`}
-          >
-            {fav ? '★' : '☆'}
-          </button>
+          {(() => {
+            const displayCount = count > 0 ? count : (liked ? 1 : 0)
+            const content = displayCount > 0 ? `❤️ ${displayCount}` : '🤍'
+            if (canLike) {
+              return (
+                <button
+                  onClick={() => toggle()}
+                  aria-label={fav ? 'Quitar me gusta' : 'Me gusta'}
+                  className={`rounded-full px-2 py-1 text-xs ${fav ? 'bg-white/90 text-[#14212e]' : 'bg-[#14212e]/70 text-white/80'} border border-white/20 backdrop-blur`}
+                >
+                  {content}
+                </button>
+              )
+            }
+            return (
+              <span
+                className={`rounded-full px-2 py-1 text-xs ${displayCount > 0 ? 'bg-white/90 text-[#14212e]' : 'bg-[#14212e]/70 text-white/80'} border border-white/20 backdrop-blur`}
+                aria-label={`Me gusta: ${displayCount}`}
+              >
+                {content}
+              </span>
+            )
+          })()}
         </div>
         <div className="flex items-center gap-2">
           {statusLabel && (

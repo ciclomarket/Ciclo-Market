@@ -943,6 +943,25 @@ export default function NewListingForm() {
         alert('No pudimos actualizar la publicación. Intentá nuevamente.')
         return
       }
+      // Aplicar destaque incluido de forma atómica en backend (plan + highlight)
+      try {
+        const { data: session } = await client.auth.getSession()
+        const token = session.session?.access_token
+        if (token) {
+          const apiBase = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+          if (apiBase) {
+            await fetch(`${apiBase}/api/listings/${updated.id}/apply-plan`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+              body: JSON.stringify({
+                planCode: effectivePlanCode,
+                listingDays: listingDuration,
+                includedHighlightDays: selectedPlan?.featuredDays || 0,
+              })
+            })
+          }
+        }
+      } catch { /* noop */ }
       clearDraft()
       navigate(`/listing/${updated.slug ?? updated.id}`)
       return
@@ -987,6 +1006,26 @@ export default function NewListingForm() {
     if (giftCode && user?.id && !wantsToUseCredit) {
       try { await redeemGift(giftCode, user.id) } catch { void 0 }
     }
+
+    // 3.e Aplicar plan + destaque incluido (atómico en backend)
+    try {
+      const { data: session } = await client.auth.getSession()
+      const token = session.session?.access_token
+      if (token) {
+        const apiBase = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+        if (apiBase) {
+          await fetch(`${apiBase}/api/listings/${inserted.id}/apply-plan`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({
+              planCode: effectivePlanCode,
+              listingDays: listingDuration,
+              includedHighlightDays: selectedPlan?.featuredDays || 0,
+            })
+          })
+        }
+      }
+    } catch { /* noop */ }
 
     // Ya pagaste tu plan (si correspondía). Redirigimos al detalle del aviso.
     clearDraft()

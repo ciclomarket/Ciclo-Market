@@ -6,12 +6,14 @@ import JsonLd from '../components/JsonLd'
 import FilterDropdown from '../components/FilterDropdown'
 import { fetchUserProfile, fetchStoreProfileBySlug, fetchUserContactEmail, type UserProfileRecord } from '../services/users'
 import { track, trackOncePerSession } from '../services/track'
+import { useCurrency } from '../context/CurrencyContext'
 import { normaliseWhatsapp, buildWhatsappUrl } from '../utils/whatsapp'
 import { fetchListingsBySeller } from '../services/listings'
 import ListingCard from '../components/ListingCard'
 import type { Listing } from '../types'
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 import { transformSupabasePublicUrl } from '../utils/supabaseImage'
+import { fetchLikeCounts } from '../services/likes'
 
 type FilterOption = { id: string; label: string; match: (l: Listing) => boolean }
 type FilterSection = { id: string; label: string; options: FilterOption[] }
@@ -97,6 +99,7 @@ type StoreFiltersState = {
   brake: string[]
   year: string[]
   size: string[]
+  priceCur?: 'USD' | 'ARS'
   priceMin?: number
   priceMax?: number
   deal?: '1'
@@ -125,6 +128,7 @@ type ListingMetadata = {
 type ListingFacetsResult = {
   options: Record<MultiFilterKey, string[]>
   priceRange: { min: number; max: number }
+  priceRangeByCur: { USD: { min: number; max: number } | null; ARS: { min: number; max: number } | null }
   metadata: Record<string, ListingMetadata>
 }
 
@@ -231,6 +235,10 @@ function computeListingFacets(listings: Listing[]): ListingFacetsResult {
   const metadata: Record<string, ListingMetadata> = {}
   let minPrice = Number.POSITIVE_INFINITY
   let maxPrice = 0
+  let minUSD = Number.POSITIVE_INFINITY
+  let maxUSD = 0
+  let minARS = Number.POSITIVE_INFINITY
+  let maxARS = 0
 
   for (const listing of listings) {
     const brand = cleanValue(listing.brand)
@@ -291,6 +299,14 @@ function computeListingFacets(listings: Listing[]): ListingFacetsResult {
     if (Number.isFinite(price) && price > 0) {
       if (price < minPrice) minPrice = price
       if (price > maxPrice) maxPrice = price
+      const cur = (listing.priceCurrency || 'ARS') as 'USD' | 'ARS'
+      if (cur === 'USD') {
+        if (price < minUSD) minUSD = price
+        if (price > maxUSD) maxUSD = price
+      } else {
+        if (price < minARS) minARS = price
+        if (price > maxARS) maxARS = price
+      }
     }
   }
 
@@ -309,6 +325,10 @@ function computeListingFacets(listings: Listing[]): ListingFacetsResult {
     priceRange: {
       min: Number.isFinite(minPrice) ? Math.floor(minPrice) : 0,
       max: Number.isFinite(maxPrice) ? Math.ceil(maxPrice) : 0
+    },
+    priceRangeByCur: {
+      USD: Number.isFinite(minUSD) && Number.isFinite(maxUSD) && maxUSD > 0 ? { min: Math.floor(minUSD), max: Math.ceil(maxUSD) } : null,
+      ARS: Number.isFinite(minARS) && Number.isFinite(maxARS) && maxARS > 0 ? { min: Math.floor(minARS), max: Math.ceil(maxARS) } : null,
     },
     metadata
   }
@@ -348,7 +368,7 @@ function MultiSelectContent({ options, selected, onChange, close, placeholder = 
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder={placeholder}
-          className="input h-10 w-full rounded-full border border-white/10 bg-[#0a101a] px-4 text-sm text-white placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-white/40"
+          className="input h-10 w-full rounded-full border border-white/10 bg-white px-4 text-sm text-[#14212e] placeholder:text-[#14212e]/60 focus:outline-none focus:ring-2 focus:ring-[#14212e]/20"
         />
       ) : null}
       <div className="max-h-56 overflow-y-auto pr-1">
@@ -399,14 +419,19 @@ type PriceFilterContentProps = {
   min?: number
   max?: number
   bounds: { min: number; max: number }
+  currency?: 'USD' | 'ARS'
+  boundsByCur?: { USD: { min: number; max: number } | null; ARS: { min: number; max: number } | null }
+  onCurrencyChange?: (cur?: 'USD' | 'ARS') => void
   onApply: (range: { min?: number; max?: number }) => void
   onClear: () => void
   close: () => void
 }
 
-function PriceFilterContent({ min, max, bounds, onApply, onClear, close }: PriceFilterContentProps) {
+function PriceFilterContent({ min, max, bounds, currency, boundsByCur, onCurrencyChange, onApply, onClear, close }: PriceFilterContentProps) {
   const [minValue, setMinValue] = useState(min ? String(min) : '')
   const [maxValue, setMaxValue] = useState(max ? String(max) : '')
+  const [localCur, setLocalCur] = useState<'USD' | 'ARS' | undefined>(currency)
+  const { fx } = useCurrency()
 
   useEffect(() => {
     setMinValue(min ? String(min) : '')
@@ -429,10 +454,40 @@ function PriceFilterContent({ min, max, bounds, onApply, onClear, close }: Price
     close()
   }
 
+  useEffect(() => { setLocalCur(currency) }, [currency])
+
+  const symbol = localCur === 'USD' ? 'USD ' : '$'
+  const effBounds = (() => {
+    if (localCur && boundsByCur) {
+      const b = boundsByCur[localCur]
+      if (b) return b
+    }
+    return bounds
+  })()
+
   return (
     <div className="flex flex-col gap-3 text-sm">
+      <div className="flex items-center justify-end gap-2">
+        {onCurrencyChange ? (
+          <div className="inline-flex items-center rounded-full border border-white/15 bg-white/5 p-0.5">
+            {(['ARS','USD'] as const).map((cur) => (
+              <button
+                key={cur}
+                type="button"
+                onClick={() => { const next = localCur === cur ? undefined : cur; setLocalCur(next); onCurrencyChange(next) }}
+                className={`px-2 py-1 text-xs rounded-full ${localCur === cur ? 'bg-white text-[#14212e]' : 'text-white/70 hover:text-white'}`}
+              >
+                {cur}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
       <div className="text-xs text-white/60">
-        Rango disponible: {bounds.min ? `$${bounds.min.toLocaleString('es-AR')}` : '—'} – {bounds.max ? `$${bounds.max.toLocaleString('es-AR')}` : '—'}
+        Rango disponible: {effBounds.min ? `${symbol}${localCur === 'USD' ? effBounds.min.toLocaleString('en-US') : effBounds.min.toLocaleString('es-AR')}` : '—'} – {effBounds.max ? `${symbol}${localCur === 'USD' ? effBounds.max.toLocaleString('en-US') : effBounds.max.toLocaleString('es-AR')}` : '—'}
+      </div>
+      <div className="text-[11px] text-white/50">
+        Conversión: 1 USD = {fx.toLocaleString('es-AR')} ARS
       </div>
       <div className="grid grid-cols-2 gap-3">
         <label className="flex flex-col gap-1">
@@ -442,7 +497,7 @@ function PriceFilterContent({ min, max, bounds, onApply, onClear, close }: Price
             min={0}
             value={minValue}
             onChange={(event) => setMinValue(event.target.value)}
-            className="input h-10 rounded-full border border-white/10 bg-[#0a101a] px-3 text-white focus:outline-none focus:ring-2 focus:ring-white/40"
+            className="input h-10 rounded-full border border-white/10 bg-white px-3 text-[#14212e] focus:outline-none focus:ring-2 focus:ring-[#14212e]/20"
           />
         </label>
         <label className="flex flex-col gap-1">
@@ -452,7 +507,7 @@ function PriceFilterContent({ min, max, bounds, onApply, onClear, close }: Price
             min={0}
             value={maxValue}
             onChange={(event) => setMaxValue(event.target.value)}
-            className="input h-10 rounded-full border border-white/10 bg-[#0a101a] px-3 text-white focus:outline-none focus:ring-2 focus:ring-white/40"
+            className="input h-10 rounded-full border border-white/10 bg-white px-3 text-[#14212e] focus:outline-none focus:ring-2 focus:ring-[#14212e]/20"
           />
         </label>
       </div>
@@ -506,7 +561,7 @@ function DealFilterContent({ active, onToggle, close }: DealFilterContentProps) 
         />
         <div>
           <div className="font-medium text-white">Solo con descuento</div>
-          <div className="text-xs text-white/60">Productos con precio rebajado sobre el original.</div>
+          <div className="text-xs text-white/60 whitespace-normal break-words leading-snug">Productos con precio rebajado sobre el original.</div>
         </div>
       </label>
       <button
@@ -550,6 +605,7 @@ const STORE_CATEGORY_BANNERS: Array<{ key: 'all' | 'acc' | 'app'; label: string;
 ]
 
 export default function Store() {
+  const { fx } = useCurrency()
   const params = useParams()
   const [search, setSearch] = useSearchParams()
   // filtros de sidebar removidos
@@ -567,6 +623,7 @@ export default function Store() {
     brake: [],
     year: [],
     size: [],
+    priceCur: undefined,
     priceMin: undefined,
     priceMax: undefined,
     deal: undefined,
@@ -599,8 +656,10 @@ export default function Store() {
       wheelSize: 'wheelSize' in patch ? patch.wheelSize ?? [] : prev.wheelSize,
       drivetrain: 'drivetrain' in patch ? patch.drivetrain ?? [] : prev.drivetrain,
       condition: 'condition' in patch ? patch.condition ?? [] : prev.condition,
+      brake: 'brake' in patch ? patch.brake ?? [] : prev.brake,
       year: 'year' in patch ? patch.year ?? [] : prev.year,
       size: 'size' in patch ? patch.size ?? [] : prev.size,
+      priceCur: 'priceCur' in patch ? patch.priceCur : prev.priceCur,
       priceMin: 'priceMin' in patch ? patch.priceMin : prev.priceMin,
       priceMax: 'priceMax' in patch ? patch.priceMax : prev.priceMax,
       deal: 'deal' in patch ? patch.deal : prev.deal,
@@ -750,8 +809,16 @@ export default function Store() {
         }
       }
 
-      if (priceMin !== null && listing.price < priceMin) return false
-      if (priceMax !== null && listing.price > priceMax) return false
+      // Precio: convertir a moneda seleccionada usando fx y aplicar rango
+      const listCur = (String(listing.priceCurrency || 'ARS').toUpperCase() as 'USD' | 'ARS')
+      const toSelected = (value: number): number => {
+        if (!filters.priceCur) return value
+        if (filters.priceCur === listCur) return value
+        return filters.priceCur === 'USD' ? value / fx : value * fx
+      }
+      const priceInSelected = toSelected(listing.price)
+      if (priceMin !== null && priceInSelected < priceMin) return false
+      if (priceMax !== null && priceInSelected > priceMax) return false
 
       if (filters.deal === '1') {
         const hasDeal = typeof listing.originalPrice === 'number' && listing.originalPrice > listing.price
@@ -780,13 +847,40 @@ export default function Store() {
       return arr.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
     }
     if (sortMode === 'asc') {
-      return arr.sort((a, b) => (a.price ?? 0) - (b.price ?? 0))
+      const toSelected = (l: Listing) => {
+        if (!filters.priceCur) return l.price ?? 0
+        const cur = (String(l.priceCurrency || 'ARS').toUpperCase() as 'USD' | 'ARS')
+        const base = l.price ?? 0
+        return filters.priceCur === cur ? base : (filters.priceCur === 'USD' ? base / fx : base * fx)
+      }
+      return arr.sort((a, b) => toSelected(a) - toSelected(b))
     }
     if (sortMode === 'desc') {
-      return arr.sort((a, b) => (b.price ?? 0) - (a.price ?? 0))
+      const toSelected = (l: Listing) => {
+        if (!filters.priceCur) return l.price ?? 0
+        const cur = (String(l.priceCurrency || 'ARS').toUpperCase() as 'USD' | 'ARS')
+        const base = l.price ?? 0
+        return filters.priceCur === cur ? base : (filters.priceCur === 'USD' ? base / fx : base * fx)
+      }
+      return arr.sort((a, b) => toSelected(b) - toSelected(a))
     }
     return arr
   }, [filtered, sortMode])
+
+  // Batch-like counts for visible final list
+  const [likeCounts, setLikeCounts] = useState<Record<string, number>>({})
+  useEffect(() => {
+    const ids = finalList.map((l) => l.id)
+    if (!ids.length) { setLikeCounts({}); return }
+    let active = true
+    ;(async () => {
+      try {
+        const map = await fetchLikeCounts(ids)
+        if (active) setLikeCounts(map)
+      } catch { /* noop */ }
+    })()
+    return () => { active = false }
+  }, [finalList.map((l) => l.id).join(',')])
 
   const summaryFor = (key: MultiFilterKey) => {
     const values = filters[key]
@@ -796,13 +890,14 @@ export default function Store() {
   }
 
   const priceSummary = (() => {
-    const { priceMin, priceMax } = filters
+    const { priceMin, priceMax, priceCur } = filters
+    const symbol = priceCur === 'USD' ? 'USD ' : '$'
     if (typeof priceMin === 'number' || typeof priceMax === 'number') {
-      const minLabel = typeof priceMin === 'number' ? `$${priceMin.toLocaleString('es-AR')}` : 'Min'
-      const maxLabel = typeof priceMax === 'number' ? `$${priceMax.toLocaleString('es-AR')}` : 'Max'
+      const minLabel = typeof priceMin === 'number' ? `${symbol}${priceCur === 'USD' ? priceMin.toLocaleString('en-US') : priceMin.toLocaleString('es-AR')}` : 'Min'
+      const maxLabel = typeof priceMax === 'number' ? `${symbol}${priceCur === 'USD' ? priceMax.toLocaleString('en-US') : priceMax.toLocaleString('es-AR')}` : 'Max'
       return `${minLabel} – ${maxLabel}`
     }
-    return 'Todos'
+    return priceCur ? `${priceCur}` : 'Todos'
   })()
 
   const sortSummary = (() => {
@@ -842,14 +937,16 @@ export default function Store() {
       })
     }
   }
-  if (typeof filters.priceMin === 'number' || typeof filters.priceMax === 'number') {
+  if (typeof filters.priceMin === 'number' || typeof filters.priceMax === 'number' || filters.priceCur) {
     const parts: string[] = []
-    if (typeof filters.priceMin === 'number') parts.push(`desde $${filters.priceMin.toLocaleString('es-AR')}`)
-    if (typeof filters.priceMax === 'number') parts.push(`hasta $${filters.priceMax.toLocaleString('es-AR')}`)
+    const symbol = filters.priceCur === 'USD' ? 'USD ' : '$'
+    if (typeof filters.priceMin === 'number') parts.push(`desde ${symbol}${filters.priceCur === 'USD' ? filters.priceMin.toLocaleString('en-US') : filters.priceMin.toLocaleString('es-AR')}`)
+    if (typeof filters.priceMax === 'number') parts.push(`hasta ${symbol}${filters.priceCur === 'USD' ? filters.priceMax.toLocaleString('en-US') : filters.priceMax.toLocaleString('es-AR')}`)
+    if (!parts.length && filters.priceCur) parts.push(filters.priceCur)
     activeFilterChips.push({
       key: 'price',
       label: `Precio ${parts.join(' ')}`,
-      onRemove: () => setFilters({ priceMin: undefined, priceMax: undefined })
+      onRemove: () => setFilters({ priceMin: undefined, priceMax: undefined, priceCur: undefined })
     })
   }
   if (filters.deal === '1') {
@@ -1068,42 +1165,51 @@ export default function Store() {
               </div>
             </div>
 
-            <div className="hidden flex-wrap gap-2 sm:flex">
+            {/* Filtros (desktop): estilo inline con separadores y wrap a 2+ filas */}
+            <div className="hidden sm:flex flex-wrap items-center text-sm gap-y-2">
               {MULTI_FILTER_ORDER.map((key) => {
                 const rawOptions = facetsData.options[key]
                 const options = Array.from(new Set([...rawOptions, ...filters[key]]))
                 return (
-                  <FilterDropdown
-                    key={key}
-                    label={MULTI_FILTER_LABELS[key]}
-                    summary={summaryFor(key)}
-                    disabled={!options.length}
-                  >
-                    {({ close }) => (
-                      <MultiSelectContent
-                        options={options}
-                        selected={filters[key]}
-                        onChange={(next) => setFilters({ [key]: next } as Partial<StoreFiltersState>)}
-                        close={close}
-                        placeholder={`Buscar ${MULTI_FILTER_LABELS[key].toLowerCase()}`}
-                      />
-                    )}
-                  </FilterDropdown>
+                  <div key={key} className="px-3 border-l border-white/20 first:border-l-0 whitespace-nowrap">
+                    <FilterDropdown
+                      label={MULTI_FILTER_LABELS[key]}
+                      summary={summaryFor(key)}
+                      disabled={!options.length}
+                      variant="inline"
+                    >
+                      {({ close }) => (
+                        <MultiSelectContent
+                          options={options}
+                          selected={filters[key]}
+                          onChange={(next) => setFilters({ [key]: next } as Partial<StoreFiltersState>)}
+                          close={close}
+                          placeholder={`Buscar ${MULTI_FILTER_LABELS[key].toLowerCase()}`}
+                        />
+                      )}
+                    </FilterDropdown>
+                  </div>
                 )
               })}
-              <FilterDropdown label="Precio" summary={priceSummary}>
+              <div className="px-3 border-l border-white/20 first:border-l-0 whitespace-nowrap">
+              <FilterDropdown label="Precio" summary={priceSummary} variant="inline">
                 {({ close }) => (
                   <PriceFilterContent
                     min={filters.priceMin}
                     max={filters.priceMax}
                     bounds={facetsData.priceRange}
+                    currency={filters.priceCur}
+                    boundsByCur={facetsData.priceRangeByCur}
+                    onCurrencyChange={(cur) => setFilters({ priceCur: cur })}
                     onApply={({ min, max }) => setFilters({ priceMin: min, priceMax: max })}
                     onClear={() => setFilters({ priceMin: undefined, priceMax: undefined })}
                     close={close}
                   />
                 )}
               </FilterDropdown>
-              <FilterDropdown label="Promos" summary={filters.deal === '1' ? 'Activas' : 'Todas'}>
+              </div>
+              <div className="px-3 border-l border-white/20 first:border-l-0 whitespace-nowrap">
+              <FilterDropdown label="Promos" summary={filters.deal === '1' ? 'Activas' : 'Todas'} variant="inline">
                 {({ close }) => (
                   <DealFilterContent
                     active={filters.deal === '1'}
@@ -1112,37 +1218,20 @@ export default function Store() {
                   />
                 )}
               </FilterDropdown>
+              </div>
             </div>
 
             {hasActiveFilters ? (
-              <div className="flex flex-wrap items-center gap-2">
-                {activeFilterChips.map((chip) => (
-                  <button
-                    key={chip.key}
-                    type="button"
-                    onClick={chip.onRemove}
-                    className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs text-white transition hover:border-white/40 hover:bg-white/20"
-                  >
-                    <span>{chip.label}</span>
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6m0 12L6 6" />
-                    </svg>
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  onClick={handleClearFilters}
-                  className="text-xs text-white/70 underline-offset-2 hover:text-white hover:underline"
-                >
-                  Limpiar todo
-                </button>
+              <div className="text-xs text-white/70">
+                Filtros activos: {activeFilterChips.map((c) => c.label).join(', ')}{' '}
+                <button type="button" onClick={handleClearFilters} className="underline hover:text-white">Limpiar</button>
               </div>
             ) : null}
 
             <div className="grid -mx-2 grid-cols-1 gap-0 sm:mx-0 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 items-start content-start">
               {finalList.map((l, idx) => (
                 <div key={l.id} className="p-2 sm:p-0">
-                  <ListingCard l={l} storeLogoUrl={profile.store_avatar_url || profile.avatar_url || null} priority={idx < 4} />
+                  <ListingCard l={l} storeLogoUrl={profile.store_avatar_url || profile.avatar_url || null} priority={idx < 4} likeCount={likeCounts[l.id]} />
                 </div>
               ))}
               {finalList.length === 0 && (
@@ -1186,6 +1275,7 @@ export default function Store() {
                       className="w-full"
                       buttonClassName="w-full justify-between"
                       inlineOnMobile
+                      variant="inline"
                     >
                       {({ close }) => (
                         <MultiSelectContent
@@ -1205,12 +1295,16 @@ export default function Store() {
                   className="w-full"
                   buttonClassName="w-full justify-between"
                   inlineOnMobile
+                  variant="inline"
                 >
                   {({ close }) => (
                     <PriceFilterContent
                       min={filters.priceMin}
                       max={filters.priceMax}
                       bounds={facetsData.priceRange}
+                      currency={filters.priceCur}
+                      boundsByCur={facetsData.priceRangeByCur}
+                      onCurrencyChange={(cur) => setFilters({ priceCur: cur })}
                       onApply={({ min, max }) => setFilters({ priceMin: min, priceMax: max })}
                       onClear={() => setFilters({ priceMin: undefined, priceMax: undefined })}
                       close={close}
@@ -1223,6 +1317,7 @@ export default function Store() {
                   className="w-full"
                   buttonClassName="w-full justify-between"
                   inlineOnMobile
+                  variant="inline"
                 >
                   {({ close }) => (
                     <DealFilterContent

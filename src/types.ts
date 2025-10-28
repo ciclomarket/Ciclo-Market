@@ -23,6 +23,8 @@ export interface Listing {
   sellerName?: string
   sellerPlan?: SellerPlan
   sellerPlanExpires?: number
+  /** Fecha/hora de vencimiento del destaque (independiente del plan) */
+  highlightExpires?: number
   sellerLocation?: string
   sellerWhatsapp?: string
   sellerEmail?: string
