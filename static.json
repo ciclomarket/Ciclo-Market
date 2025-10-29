@@ -1,5 +1,6 @@
 {
   "redirects": [
+    { "source": "/api/*", "destination": "https://ciclo-market.onrender.com/api/:splat", "status": 200 },
     { "source": "/sitemap.xml", "destination": "https://ciclo-market.onrender.com/sitemap.xml", "status": 301 },
     { "source": "/sitemap-static.xml", "destination": "https://ciclo-market.onrender.com/sitemap-static.xml", "status": 301 },
     { "source": "/sitemap-stores.xml", "destination": "https://ciclo-market.onrender.com/sitemap-stores.xml", "status": 301 },
@@ -7,4 +8,3 @@
     { "source": "/sitemap-listings-:page.xml", "destination": "https://ciclo-market.onrender.com/sitemap-listings-:page.xml", "status": 301 }
   ]
 }
-

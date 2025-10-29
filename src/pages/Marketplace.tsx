@@ -708,89 +708,72 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
     let active = true
     const load = async () => {
       setLoading(true)
-      // Usar backend con orden y filtros (incluye avanzados)
-      if (supabaseEnabled) {
+      // 1) Intentar SIEMPRE backend /api/market/search (no depende de supabaseEnabled en el front)
+      try {
+        const { items, total } = await fetchMarket({
+          cat: effectiveCat === 'Todos' ? undefined : effectiveCat,
+          q: filters.q,
+          deal: effectiveDeal === '1',
+          store: filters.store === '1',
+          sort: sortMode,
+          priceCur: filters.priceCur,
+          priceMin: filters.priceMin,
+          priceMax: filters.priceMax,
+          fx,
+          subcat: filters.subcat,
+          brand: filters.brand,
+          material: filters.material,
+          frameSize: filters.frameSize,
+          wheelSize: filters.wheelSize,
+          drivetrain: filters.drivetrain,
+          condition: filters.condition,
+          brake: filters.brake,
+          year: filters.year,
+          size: filters.size,
+          location: filters.location,
+          limit: 300,
+          offset: 0,
+        })
+        if (!active) return
+        const mapped: Listing[] = (items || []).map((row: any) => ({
+          id: String(row.id), slug: row.slug ?? undefined, title: row.title, brand: row.brand, model: row.model,
+          year: typeof row.year === 'number' ? row.year : undefined,
+          category: row.category, subcategory: row.subcategory ?? undefined,
+          price: Number(row.price) || 0, priceCurrency: (row.price_currency || undefined),
+          originalPrice: typeof row.original_price === 'number' ? row.original_price : undefined,
+          location: row.location || '', description: row.description || '', images: Array.isArray(row.images) ? row.images : [],
+          sellerId: row.seller_id, sellerName: row.seller_name ?? undefined,
+          sellerPlan: (row.plan || undefined), plan: (row.plan || undefined),
+          sellerPlanExpires: row.seller_plan_expires ? Date.parse(row.seller_plan_expires) : undefined,
+          highlightExpires: row.highlight_expires ? Date.parse(row.highlight_expires) : undefined,
+          sellerLocation: row.seller_location ?? undefined, sellerWhatsapp: row.seller_whatsapp ?? undefined,
+          sellerEmail: row.seller_email ?? undefined, sellerAvatar: row.seller_avatar ?? undefined,
+          material: row.material ?? undefined, frameSize: row.frame_size ?? undefined, drivetrain: row.drivetrain ?? undefined,
+          drivetrainDetail: row.drivetrain_detail ?? undefined, wheelset: row.wheelset ?? undefined, wheelSize: row.wheel_size ?? undefined,
+          extras: row.extras ?? undefined, status: row.status ?? 'active',
+          expiresAt: row.expires_at ? Date.parse(row.expires_at) : null,
+          renewalNotifiedAt: row.renewal_notified_at ? Date.parse(row.renewal_notified_at) : null,
+          createdAt: row.created_at ? Date.parse(row.created_at) : Date.now(),
+        }))
+        setListings(mapped)
+        setServerMode(true)
+        setServerTotal(typeof total === 'number' ? total : null)
         try {
-          const { items, total } = await fetchMarket({
-            cat: effectiveCat === 'Todos' ? undefined : effectiveCat,
-            q: filters.q,
-            deal: effectiveDeal === '1',
-            store: filters.store === '1',
-            sort: sortMode,
-            priceCur: filters.priceCur,
-            priceMin: filters.priceMin,
-            priceMax: filters.priceMax,
-            fx,
-            subcat: filters.subcat,
-            brand: filters.brand,
-            material: filters.material,
-            frameSize: filters.frameSize,
-            wheelSize: filters.wheelSize,
-            drivetrain: filters.drivetrain,
-            condition: filters.condition,
-            brake: filters.brake,
-            year: filters.year,
-            size: filters.size,
-            location: filters.location,
-            limit: 300,
-            offset: 0,
-          })
-          if (!active) return
-          const mapped: Listing[] = (items || []).map((row: any) => ({
-            id: String(row.id),
-            slug: row.slug ?? undefined,
-            title: row.title,
-            brand: row.brand,
-            model: row.model,
-            year: typeof row.year === 'number' ? row.year : undefined,
-            category: row.category,
-            subcategory: row.subcategory ?? undefined,
-            price: Number(row.price) || 0,
-            priceCurrency: (row.price_currency || undefined),
-            originalPrice: typeof row.original_price === 'number' ? row.original_price : undefined,
-            location: row.location || '',
-            description: row.description || '',
-            images: Array.isArray(row.images) ? row.images : [],
-            sellerId: row.seller_id,
-            sellerName: row.seller_name ?? undefined,
-            sellerPlan: (row.plan || undefined),
-            plan: (row.plan || undefined),
-            sellerPlanExpires: row.seller_plan_expires ? Date.parse(row.seller_plan_expires) : undefined,
-            highlightExpires: row.highlight_expires ? Date.parse(row.highlight_expires) : undefined,
-            sellerLocation: row.seller_location ?? undefined,
-            sellerWhatsapp: row.seller_whatsapp ?? undefined,
-            sellerEmail: row.seller_email ?? undefined,
-            sellerAvatar: row.seller_avatar ?? undefined,
-            material: row.material ?? undefined,
-            frameSize: row.frame_size ?? undefined,
-            drivetrain: row.drivetrain ?? undefined,
-            drivetrainDetail: row.drivetrain_detail ?? undefined,
-            wheelset: row.wheelset ?? undefined,
-            wheelSize: row.wheel_size ?? undefined,
-            extras: row.extras ?? undefined,
-            status: row.status ?? 'active',
-            expiresAt: row.expires_at ? Date.parse(row.expires_at) : null,
-            renewalNotifiedAt: row.renewal_notified_at ? Date.parse(row.renewal_notified_at) : null,
-            createdAt: row.created_at ? Date.parse(row.created_at) : Date.now(),
-          }))
-          setListings(mapped)
-          setServerMode(true)
-          setServerTotal(typeof total === 'number' ? total : null)
-          try {
-            const sellerIds = Array.from(new Set(mapped.map((x) => x.sellerId).filter(Boolean)))
-            const logos = await fetchStoresMeta(sellerIds)
-            if (active) setStoreLogos(logos)
-          } catch { /* noop */ }
-          setLoading(false)
-          return
-        } catch { /* fallthrough */ }
+          const sellerIds = Array.from(new Set(mapped.map((x) => x.sellerId).filter(Boolean)))
+          const logos = await fetchStoresMeta(sellerIds)
+          if (active) setStoreLogos(logos)
+        } catch { /* noop */ }
+        setLoading(false)
+        return
+      } catch {
+        /* fallthrough */
       }
-      // Fallback: Supabase directo (solo si no hay backend)
-      setServerMode(false)
-      setServerTotal(null)
+      // 2) Fallback: Supabase directo si está configurado (modo cliente)
       if (supabaseEnabled) {
         const data = await fetchListings()
         if (!active) return
+        setServerMode(false)
+        setServerTotal(null)
         setListings(data)
         try {
           const sellerIds = Array.from(new Set(data.map((x) => x.sellerId).filter(Boolean)))
@@ -800,7 +783,10 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
         setLoading(false)
         return
       }
+      // 3) Último recurso: mock
       if (!active) return
+      setServerMode(false)
+      setServerTotal(null)
       setListings(mockListings)
       setLoading(false)
     }
@@ -1033,6 +1019,77 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
       }, 80)
     })
   }, [filtered.length])
+
+  // Botón "Cargar más" (modo servidor): pide siguiente página manteniendo scroll fijo
+  const handleLoadMoreServer = useCallback(async () => {
+    if (!serverMode) return
+    if (loadingMoreRef.current) return
+    const total = serverTotal ?? Infinity
+    if (listings.length >= total) return
+    const prevY = window.scrollY || window.pageYOffset || 0
+    loadingMoreRef.current = true
+    try {
+      const { items, total: t } = await fetchMarket({
+        cat: effectiveCat === 'Todos' ? undefined : effectiveCat,
+        q: filters.q,
+        deal: effectiveDeal === '1',
+        store: filters.store === '1',
+        sort: sortMode,
+        priceCur: filters.priceCur,
+        priceMin: filters.priceMin,
+        priceMax: filters.priceMax,
+        fx,
+        subcat: filters.subcat,
+        brand: filters.brand,
+        material: filters.material,
+        frameSize: filters.frameSize,
+        wheelSize: filters.wheelSize,
+        drivetrain: filters.drivetrain,
+        condition: filters.condition,
+        brake: filters.brake,
+        year: filters.year,
+        size: filters.size,
+        location: filters.location,
+        limit: 48,
+        offset: listings.length,
+      })
+      const mapped: Listing[] = (items || []).map((row: any) => ({
+        id: String(row.id), slug: row.slug ?? undefined, title: row.title, brand: row.brand, model: row.model,
+        year: typeof row.year === 'number' ? row.year : undefined,
+        category: row.category, subcategory: row.subcategory ?? undefined,
+        price: Number(row.price) || 0, priceCurrency: (row.price_currency || undefined),
+        originalPrice: typeof row.original_price === 'number' ? row.original_price : undefined,
+        location: row.location || '', description: row.description || '', images: Array.isArray(row.images) ? row.images : [],
+        sellerId: row.seller_id, sellerName: row.seller_name ?? undefined,
+        sellerPlan: (row.plan || undefined), plan: (row.plan || undefined),
+        sellerPlanExpires: row.seller_plan_expires ? Date.parse(row.seller_plan_expires) : undefined,
+        highlightExpires: row.highlight_expires ? Date.parse(row.highlight_expires) : undefined,
+        sellerLocation: row.seller_location ?? undefined, sellerWhatsapp: row.seller_whatsapp ?? undefined,
+        sellerEmail: row.seller_email ?? undefined, sellerAvatar: row.seller_avatar ?? undefined,
+        material: row.material ?? undefined, frameSize: row.frame_size ?? undefined, drivetrain: row.drivetrain ?? undefined,
+        drivetrainDetail: row.drivetrain_detail ?? undefined, wheelset: row.wheelset ?? undefined, wheelSize: row.wheel_size ?? undefined,
+        extras: row.extras ?? undefined, status: row.status ?? 'active',
+        expiresAt: row.expires_at ? Date.parse(row.expires_at) : null,
+        renewalNotifiedAt: row.renewal_notified_at ? Date.parse(row.renewal_notified_at) : null,
+        createdAt: row.created_at ? Date.parse(row.created_at) : Date.now(),
+      }))
+      setListings((prev) => {
+        const byId = new Map(prev.map((x) => [x.id, x]))
+        const next: Listing[] = [...prev]
+        for (const m of mapped) {
+          if (!byId.has(m.id)) next.push(m)
+        }
+        return next
+      })
+      if (typeof t === 'number') setServerTotal(t)
+    } finally {
+      loadingMoreRef.current = false
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: prevY, left: 0, behavior: 'auto' })
+        setTimeout(() => window.scrollTo({ top: prevY, left: 0, behavior: 'auto' }), 80)
+      })
+    }
+  }, [serverMode, serverTotal, listings.length, effectiveCat, filters, sortMode, fx])
 
   // Batch-like counts for visible listings
   useEffect(() => {
@@ -1565,12 +1622,28 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
                       className="p-2 sm:p-0"
                       data-listing-id={listing.id}
                     >
-                      <ListingCard l={listing} storeLogoUrl={storeLogos[listing.sellerId] || null} priority={idx < 4} likeCount={likeCounts[listing.id]} />
+                      <ListingCard
+                        l={listing}
+                        storeLogoUrl={storeLogos[listing.sellerId] || null}
+                        priority={idx < 4}
+                        likeCount={likeCounts[listing.id]}
+                        showSweepstakeBadge
+                      />
                     </div>
                   ))}
                 </div>
                 <div ref={sentinelRef} className="h-12" />
-                {visible.length < filtered.length ? (
+                {serverMode && (serverTotal == null || listings.length < serverTotal) ? (
+                  <div ref={loadMoreRef} className="flex justify-center">
+                    <button
+                      onClick={handleLoadMoreServer}
+                      className="btn mt-4 bg-white text-[#14212e] hover:bg-white/90"
+                    >
+                      Cargar más
+                    </button>
+                  </div>
+                ) : null}
+                {!serverMode && visible.length < filtered.length ? (
                   <div ref={loadMoreRef} className="flex justify-center">
                     <button
                       onClick={handleLoadMoreClient}

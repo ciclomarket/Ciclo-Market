@@ -2,6 +2,9 @@ import { useMemo, useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import Container from '../components/Container'
 import Button from '../components/Button'
+import ListingCard from '../components/ListingCard'
+import { mockListings } from '../mock/mockData'
+import { useReveal } from '../hooks/useReveal'
 import { useSweepstakes } from '../context/SweepstakesContext'
 
 type CountdownParts = {
@@ -80,15 +83,29 @@ const steps = [
   },
 ]
 
+function computeFallbackEnd(): number {
+  const now = new Date()
+  const y = now.getFullYear()
+  // 15 de noviembre (hora local 23:59:59)
+  const end = new Date(y, 10, 15, 23, 59, 59)
+  if (end.getTime() < now.getTime()) {
+    // si ya pasó, usar el año próximo
+    return new Date(y + 1, 10, 15, 23, 59, 59).getTime()
+  }
+  return end.getTime()
+}
+
 export default function SweepstakeStrava() {
   const { active, loading } = useSweepstakes()
   const startAt = active?.startAt ?? null
-  const endAt = active?.endAt ?? null
+  const endAt = active?.endAt ?? computeFallbackEnd()
   const countdown = useCountdown(endAt)
   const activeRangeLabel = useMemo(() => formatDateRange(startAt, endAt), [startAt, endAt])
   const fallbackRangeLabel = 'Hoy al 15 de noviembre'
   const displayRange = activeRangeLabel ?? fallbackRangeLabel
-  const isActive = Boolean(active && countdown.parts && !countdown.ended)
+  const isActive = Boolean(countdown.parts && !countdown.ended)
+  const [timelineRef, timelineVisible] = useReveal()
+  const [previewRef, previewVisible] = useReveal()
 
   const statusText = useMemo(() => {
     if (loading) return 'Cargando fechas del sorteo…'
@@ -145,15 +162,9 @@ export default function SweepstakeStrava() {
                     ))}
                   </div>
                 </div>
-              ) : (
-                <p className="mt-8 text-sm text-white/60">
-                  {activeRangeLabel
-                    ? 'El reloj del sorteo se actualiza automáticamente mientras dure la campaña.'
-                    : 'El cronómetro empieza a correr en cuanto confirmemos la fecha final del sorteo.'}
-                </p>
-              )}
+              ) : null}
 
-              <Button to="/publicar" className="mt-10 inline-flex items-center gap-2 px-6 py-3 text-lg">
+              <Button to="/publicar" variant="accent" className="mt-10 inline-flex items-center gap-2 px-7 py-3.5 text-lg rounded-2xl">
                 Publicá tu bici ahora
               </Button>
               <p className="mt-3 text-sm text-white/70">
@@ -192,20 +203,21 @@ export default function SweepstakeStrava() {
       <Container className="py-16 md:py-20">
         <div className="mx-auto max-w-4xl text-center">
           <h2 className="text-3xl font-bold text-white">Cómo participar</h2>
-          <p className="mt-4 text-base text-white/70">
-            Publicás, completás tus datos y listo. Nada de formularios eternos ni pedirte publicaciones en redes.
-          </p>
+          <p className="mt-4 text-base text-white/70">Publicás, completás tus datos y listo. Sin fricción.</p>
         </div>
-        <div className="mt-10 grid gap-6 md:grid-cols-3">
-          {steps.map((step, idx) => (
-            <div key={step.title} className="rounded-3xl bg-white p-8 text-left shadow-lg shadow-[#14212e]/10">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#14212e]/90 text-xl font-semibold text-white shadow">
-                {String(idx + 1).padStart(2, '0')}
-              </div>
-              <h3 className="mt-6 text-xl font-semibold text-[#14212e]">{step.title}</h3>
-              <p className="mt-3 text-sm text-[#14212e]/70">{step.description}</p>
-            </div>
-          ))}
+        <div className="mt-12 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)]">
+          <ol ref={timelineRef as any} className={`relative mx-auto w-full max-w-3xl border-l border-white/15 pl-6 transition duration-700 ${timelineVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'}`}>
+            {steps.map((step, idx) => (
+              <li key={step.title} className="group relative mb-10 last:mb-0">
+                <span className="absolute -left-[9px] mt-1 h-4 w-4 rounded-full bg-[#ff6b00] ring-4 ring-[#14212e] transition-transform group-hover:scale-110" />
+                <div className="rounded-2xl bg-white/5 p-5 backdrop-blur transition-all duration-300 group-hover:bg-white/10 group-hover:translate-x-1">
+                  <p className="text-xs font-semibold uppercase tracking-[0.3em] text-white/60">Paso {String(idx + 1).padStart(2, '0')}</p>
+                  <h3 className="mt-1 text-lg font-semibold text-white">{step.title}</h3>
+                  <p className="mt-2 text-sm text-white/70">{step.description}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
         </div>
       </Container>
 
@@ -225,26 +237,11 @@ export default function SweepstakeStrava() {
               Ver bases y condiciones →
             </Link>
           </div>
-          <div className="rounded-3xl border border-[#14212e]/10 bg-white p-8 shadow-xl shadow-[#14212e]/10">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h4 className="text-base font-semibold text-[#14212e]">Publicación ejemplo</h4>
-                <span className="text-xs font-medium uppercase tracking-wider text-[#14212e]/50">Vista previa</span>
-              </div>
-              <div className="flex items-center justify-between rounded-2xl bg-[#14212e]/5 px-5 py-4">
-                <div className="flex flex-col gap-1">
-                  <span className="text-sm font-semibold text-[#14212e]">Gravel Argon 18</span>
-                  <span className="text-xs text-[#14212e]/60">ARS 1.450.000</span>
-                </div>
-                <span className="inline-flex items-center gap-2 rounded-full bg-[#ff6b00] px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-[#ff6b00]/30">
-                  <span aria-hidden="true">🏆</span>
-                  <span>Participa por 1 año de Strava Premium</span>
-                </span>
-              </div>
-              <p className="text-xs text-[#14212e]/50">
-                * Las publicaciones creadas entre el {displayRange} muestran este sello dentro del marketplace.
-              </p>
+          <div ref={previewRef as any} className={`rounded-3xl border border-white/10 bg-white/5 p-4 shadow-xl shadow-black/20 backdrop-blur transition duration-700 ${previewVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'}`}>
+            <div className="mx-auto max-w-[420px]">
+              <ListingCard l={mockListings[0]} likeCount={12} />
             </div>
+            <p className="mt-3 text-center text-xs text-white/70">* Vista de ejemplo. El badge se muestra en publicaciones creadas entre {displayRange}.</p>
           </div>
         </div>
       </Container>

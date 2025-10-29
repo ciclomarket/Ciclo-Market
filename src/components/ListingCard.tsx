@@ -11,7 +11,7 @@ import { buildListingSlug } from '../utils/slug'
 import { hasPaidPlan } from '../utils/plans'
 import { useSweepstakes } from '../context/SweepstakesContext'
 
-export default function ListingCard({ l, storeLogoUrl, priority = false, likeCount }: { l: Listing; storeLogoUrl?: string | null; priority?: boolean; likeCount?: number }) {
+export default function ListingCard({ l, storeLogoUrl, priority = false, likeCount, showSweepstakeBadge: showBadgeProp = false }: { l: Listing; storeLogoUrl?: string | null; priority?: boolean; likeCount?: number; showSweepstakeBadge?: boolean }) {
   const [imageLoaded, setImageLoaded] = useState(false)
   const { liked, count, toggle, canLike } = useListingLike(l.id, likeCount)
   const { ids: compareIds, toggle: toggleCompare } = useCompare()
@@ -113,11 +113,22 @@ export default function ListingCard({ l, storeLogoUrl, priority = false, likeCou
   const metaClass = (isArchived || isExpired)
     ? 'mt-1 text-xs text-[#14212e]/50 line-clamp-1 sm:line-clamp-2'
     : 'mt-1 text-xs text-[#14212e]/70 line-clamp-1 sm:line-clamp-2'
+  // Mostrar badge si la publicación cae dentro del rango del sorteo.
+  // Si no hay sorteo activo desde backend, usamos un fallback local: hoy → 15 de noviembre.
+  const computeFallbackEnd = () => {
+    const now = new Date()
+    const y = now.getFullYear()
+    const end = new Date(y, 10, 15, 23, 59, 59).getTime()
+    return end > now.getTime() ? end : new Date(y + 1, 10, 15, 23, 59, 59).getTime()
+  }
+  const computeFallbackStart = () => {
+    const now = new Date()
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0).getTime()
+  }
+  const windowStart = activeSweepstake?.startAt ?? computeFallbackStart()
+  const windowEnd = activeSweepstake?.endAt ?? computeFallbackEnd()
   const showSweepstakeBadge =
-    Boolean(activeSweepstake) &&
-    typeof l.createdAt === 'number' &&
-    l.createdAt >= (activeSweepstake?.startAt ?? 0) &&
-    l.createdAt <= (activeSweepstake?.endAt ?? 0)
+    showBadgeProp && typeof l.createdAt === 'number' && l.createdAt >= windowStart && l.createdAt <= windowEnd
   // Descripción debajo del título: mostramos siempre los metadatos pedidos
   return (
     <div className="relative h-full">
@@ -169,12 +180,6 @@ export default function ListingCard({ l, storeLogoUrl, priority = false, likeCou
               -{discountPct}%
             </span>
           )}
-          {showSweepstakeBadge && (
-            <span className="inline-flex max-w-[220px] items-center gap-1 rounded-full bg-[#ff6b00] px-3 py-1 text-xs font-semibold text-white shadow shadow-[#ff6b00]/30">
-              <span aria-hidden="true">🏆</span>
-              <span className="whitespace-normal text-left leading-tight">Participa por 1 año de Strava Premium</span>
-            </span>
-          )}
           {storeLogoUrl ? (
             <span className="rounded-full px-2 py-1 text-xs bg-[#14212e]/70 text-white/80 border border-white/20 backdrop-blur">
               Tienda oficial
@@ -222,6 +227,14 @@ export default function ListingCard({ l, storeLogoUrl, priority = false, likeCou
               <span className="block sm:inline text-xs text-[#14212e]/50 line-through">{originalPriceLabel}</span>
             )}
           </div>
+          {showSweepstakeBadge && (
+            <div className="mt-2">
+              <span className="inline-flex items-center gap-2 rounded-full bg-[#ff6b00] px-3 py-1 text-[12px] font-semibold text-white shadow shadow-[#ff6b00]/30">
+                <span aria-hidden="true">🏆</span>
+                <span>Participa por 1 año de Strava Premium</span>
+              </span>
+            </div>
+          )}
           {metaDisplay.length ? (
             <p className={metaClass}>{metaDisplay.join(' • ')}</p>
           ) : null}
