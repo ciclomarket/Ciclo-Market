@@ -35,7 +35,7 @@ export default function GoogleStoresMap({ stores, focusStoreId }: Props) {
     const mapId = (import.meta as any).env?.VITE_GOOGLE_MAPS_MAP_ID as string | undefined
     if (!ref.current || !apiKey) return
     let map: any | null = null
-    let markers: any[] = []
+    const markers: any[] = []
     let active = true
     const init = async () => {
       const libs = mapId ? ['places', 'marker'] : ['places']
@@ -134,10 +134,28 @@ export default function GoogleStoresMap({ stores, focusStoreId }: Props) {
           ;(marker as any).__store = s
           marker.addListener('click', () => {
             const address = [s.address, s.city, s.province].filter(Boolean).join(', ')
-            const phoneBtn = s.phone ? `<a href=\"tel:${s.phone}\" style=\"padding:6px 10px;border-radius:999px;font-size:12px;text-decoration:none;border:1px solid #0f1724;color:#0f1724;margin-left:6px\">Llamar</a>` : ''
-            const webBtn = s.website ? `<a href=\"${s.website}\" target=\"_blank\" rel=\"noopener\" style=\"padding:6px 10px;border-radius:999px;font-size:12px;text-decoration:none;border:1px solid #0f1724;color:#0f1724;margin-left:6px\">Web</a>` : ''
+            const phoneBtn = s.phone
+              ? `<a href="tel:${s.phone}" style="padding:6px 10px;border-radius:999px;font-size:12px;text-decoration:none;border:1px solid #0f1724;color:#0f1724;margin-left:6px">Llamar</a>`
+              : ''
+            const webBtn = s.website
+              ? `<a href="${s.website}" target="_blank" rel="noopener" style="padding:6px 10px;border-radius:999px;font-size:12px;text-decoration:none;border:1px solid #0f1724;color:#0f1724;margin-left:6px">Web</a>`
+              : ''
             const html = `
-              <div style=\"min-width:220px;max-width:260px;line-height:1.25\">\n                <div style=\"font-weight:700;color:#0f1724;font-size:14px;margin:0\">${s.name}</div>\n                ${address ? `<div style=\\\"font-size:11px;color:#4b5563;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\\\">${address}</div>` : ''}\n                <div style=\"margin-top:6px\">\n                  <a href=\"/tienda/${encodeURIComponent(s.slug)}\" style=\"background:#0f1724;color:#fff;padding:4px 8px;border-radius:12px;font-size:11px;text-decoration:none\">Ver tienda</a>\n                  ${phoneBtn}\n                  ${webBtn}\n                </div>\n              </div>`
+              <div style="min-width:220px;max-width:260px;line-height:1.25">
+                <div style="font-weight:700;color:#0f1724;font-size:14px;margin:0">${s.name}</div>
+                ${
+                  address
+                    ? `<div style="font-size:11px;color:#4b5563;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${address}</div>`
+                    : ''
+                }
+                <div style="margin-top:6px">
+                  <a href="/tienda/${encodeURIComponent(
+                    s.slug
+                  )}" style="background:#0f1724;color:#fff;padding:4px 8px;border-radius:12px;font-size:11px;text-decoration:none">Ver tienda</a>
+                  ${phoneBtn}
+                  ${webBtn}
+                </div>
+              </div>`
             info.setContent(html)
             info.open({ map, anchor: marker })
           })
@@ -160,10 +178,28 @@ export default function GoogleStoresMap({ stores, focusStoreId }: Props) {
           ;(marker as any).__store = s
           marker.addListener('click', () => {
             const address = [s.address, s.city, s.province].filter(Boolean).join(', ')
-            const phoneBtn = s.phone ? `<a href=\"tel:${s.phone}\" style=\"padding:6px 10px;border-radius:999px;font-size:12px;text-decoration:none;border:1px solid #0f1724;color:#0f1724;margin-left:6px\">Llamar</a>` : ''
-            const webBtn = s.website ? `<a href=\"${s.website}\" target=\"_blank\" rel=\"noopener\" style=\"padding:6px 10px;border-radius:999px;font-size:12px;text-decoration:none;border:1px solid #0f1724;color:#0f1724;margin-left:6px\">Web</a>` : ''
+            const phoneBtn = s.phone
+              ? `<a href="tel:${s.phone}" style="padding:6px 10px;border-radius:999px;font-size:12px;text-decoration:none;border:1px solid #0f1724;color:#0f1724;margin-left:6px">Llamar</a>`
+              : ''
+            const webBtn = s.website
+              ? `<a href="${s.website}" target="_blank" rel="noopener" style="padding:6px 10px;border-radius:999px;font-size:12px;text-decoration:none;border:1px solid #0f1724;color:#0f1724;margin-left:6px">Web</a>`
+              : ''
             const html = `
-              <div style=\"min-width:220px;max-width:260px;line-height:1.25\">\n                <div style=\"font-weight:700;color:#0f1724;font-size:14px;margin:0\">${s.name}</div>\n                ${address ? `<div style=\\\"font-size:11px;color:#4b5563;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\\\">${address}</div>` : ''}\n                <div style=\"margin-top:6px\">\n                  <a href=\"/tienda/${encodeURIComponent(s.slug)}\" style=\"background:#0f1724;color:#fff;padding:4px 8px;border-radius:12px;font-size:11px;text-decoration:none\">Ver tienda</a>\n                  ${phoneBtn}\n                  ${webBtn}\n                </div>\n              </div>`
+              <div style="min-width:220px;max-width:260px;line-height:1.25">
+                <div style="font-weight:700;color:#0f1724;font-size:14px;margin:0">${s.name}</div>
+                ${
+                  address
+                    ? `<div style="font-size:11px;color:#4b5563;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${address}</div>`
+                    : ''
+                }
+                <div style="margin-top:6px">
+                  <a href="/tienda/${encodeURIComponent(
+                    s.slug
+                  )}" style="background:#0f1724;color:#fff;padding:4px 8px;border-radius:12px;font-size:11px;text-decoration:none">Ver tienda</a>
+                  ${phoneBtn}
+                  ${webBtn}
+                </div>
+              </div>`
             info.setContent(html)
             info.open(map, marker)
           })
@@ -196,10 +232,28 @@ export default function GoogleStoresMap({ stores, focusStoreId }: Props) {
     const s = (marker as any).__store as GoogleStorePin | undefined
     if (s) {
       const address = [s.address, s.city, s.province].filter(Boolean).join(', ')
-      const phoneBtn = s.phone ? `<a href=\"tel:${s.phone}\" style=\"padding:6px 10px;border-radius:999px;font-size:12px;text-decoration:none;border:1px solid #0f1724;color:#0f1724;margin-left:6px\">Llamar</a>` : ''
-      const webBtn = s.website ? `<a href=\"${s.website}\" target=\"_blank\" rel=\"noopener\" style=\"padding:6px 10px;border-radius:999px;font-size:12px;text-decoration:none;border:1px solid #0f1724;color:#0f1724;margin-left:6px\">Web</a>` : ''
+      const phoneBtn = s.phone
+        ? `<a href="tel:${s.phone}" style="padding:6px 10px;border-radius:999px;font-size:12px;text-decoration:none;border:1px solid #0f1724;color:#0f1724;margin-left:6px">Llamar</a>`
+        : ''
+      const webBtn = s.website
+        ? `<a href="${s.website}" target="_blank" rel="noopener" style="padding:6px 10px;border-radius:999px;font-size:12px;text-decoration:none;border:1px solid #0f1724;color:#0f1724;margin-left:6px">Web</a>`
+        : ''
       const html = `
-        <div style=\"min-width:220px;max-width:260px;line-height:1.25\">\n          <div style=\"font-weight:700;color:#0f1724;font-size:14px;margin:0\">${s.name}</div>\n          ${address ? `<div style=\\\"font-size:11px;color:#4b5563;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\\\">${address}</div>` : ''}\n          <div style=\"margin-top:6px\">\n            <a href=\"/tienda/${encodeURIComponent(s.slug)}\" style=\"background:#0f1724;color:#fff;padding:4px 8px;border-radius:12px;font-size:11px;text-decoration:none\">Ver tienda</a>\n            ${phoneBtn}\n            ${webBtn}\n          </div>\n        </div>`
+        <div style="min-width:220px;max-width:260px;line-height:1.25">
+          <div style="font-weight:700;color:#0f1724;font-size:14px;margin:0">${s.name}</div>
+          ${
+            address
+              ? `<div style="font-size:11px;color:#4b5563;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${address}</div>`
+              : ''
+          }
+          <div style="margin-top:6px">
+            <a href="/tienda/${encodeURIComponent(
+              s.slug
+            )}" style="background:#0f1724;color:#fff;padding:4px 8px;border-radius:12px;font-size:11px;text-decoration:none">Ver tienda</a>
+            ${phoneBtn}
+            ${webBtn}
+          </div>
+        </div>`
       info.setContent(html)
     }
     try {

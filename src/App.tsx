@@ -37,6 +37,7 @@ const Accesorios = lazyWithRetry(() => import('./pages/seo/Accesorios'))
 const Indumentaria = lazyWithRetry(() => import('./pages/seo/Indumentaria'))
 const BicicletasTriatlon = lazyWithRetry(() => import('./pages/seo/BicicletasTriatlon'))
 const OfertasDestacadas = lazyWithRetry(() => import('./pages/seo/OfertasDestacadas'))
+const SweepstakeStrava = lazyWithRetry(() => import('./pages/SweepstakeStrava'))
 import { AuthProvider } from './context/AuthContext'
 import { CurrencyProvider } from './context/CurrencyContext'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -47,6 +48,7 @@ import CompareTray from './components/CompareTray'
 import { PlanProvider } from './context/PlanContext'
 import { NotificationsProvider } from './context/NotificationContext'
 import { ToastProvider } from './context/ToastContext'
+import { SweepstakesProvider } from './context/SweepstakesContext'
 const CheckoutSuccess = lazy(() => import('./pages/Checkout/Success'))
 const CheckoutFailure = lazy(() => import('./pages/Checkout/Failure'))
 const CheckoutPending = lazy(() => import('./pages/Checkout/Pending'))
@@ -124,7 +126,20 @@ function resolveSeoForPath(pathname: string, search: string): SEOProps {
     }
   }
 
-  
+  if (normalized.startsWith('/sorteo-strava')) {
+    return {
+      title: 'Sorteo Strava Premium · Ciclo Market',
+      description:
+        'Publicá tu bici durante la campaña Sorteo Strava Premium y participá automáticamente por 1 año de Strava Premium sin pasos extra.',
+      image: '/og-preview.png',
+      keywords: [
+        'sorteo strava premium',
+        'strava ciclomarket',
+        'sorteo publicar bicicleta',
+        'strava argentina'
+      ]
+    }
+  }
 
   if (normalized.startsWith('/comparar') || normalized.startsWith('/compare')) {
     return {
@@ -377,8 +392,9 @@ export default function App() {
         <NotificationsProvider>
           <CurrencyProvider>
             <ToastProvider>
-            <CompareProvider>
-                <div className="min-h-screen flex flex-col">
+              <SweepstakesProvider>
+                <CompareProvider>
+                  <div className="min-h-screen flex flex-col">
                   <SEO {...seoConfig} />
                   <GlobalJsonLd />
                   <Header />
@@ -455,6 +471,7 @@ export default function App() {
                       <Route path="/ofertas-destacadas" element={<OfertasDestacadas />} />
                       <Route path="/tiendas-oficiales" element={<StoresLanding />} />
                       <Route path="/tienda/:slug" element={<Store />} />
+                      <Route path="/sorteo-strava" element={<SweepstakeStrava />} />
 
                       {/* Checkout status */}
                       <Route path="/checkout/success" element={<CheckoutSuccess />} />
@@ -480,7 +497,8 @@ export default function App() {
                   <CookieConsent />
                   <Footer />
                 </div>
-            </CompareProvider>
+                </CompareProvider>
+              </SweepstakesProvider>
             </ToastProvider>
           </CurrencyProvider>
         </NotificationsProvider>

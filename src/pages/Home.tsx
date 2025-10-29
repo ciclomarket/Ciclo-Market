@@ -313,7 +313,12 @@ export default function Home() {
     if (!ids.length) { setLikesFeatured({}); return }
     let active = true
     ;(async () => {
-      try { const map = await fetchLikeCounts(ids); if (active) setLikesFeatured(map) } catch {}
+      try {
+        const map = await fetchLikeCounts(ids)
+        if (active) setLikesFeatured(map)
+      } catch (error) {
+        console.warn('[home] featured likes fetch failed', error)
+      }
     })()
     return () => { active = false }
   }, [featuredListings.map((l) => l.id).join(',')])
@@ -323,7 +328,12 @@ export default function Home() {
     if (!ids.length) { setLikesOffers({}); return }
     let active = true
     ;(async () => {
-      try { const map = await fetchLikeCounts(ids); if (active) setLikesOffers(map) } catch {}
+      try {
+        const map = await fetchLikeCounts(ids)
+        if (active) setLikesOffers(map)
+      } catch (error) {
+        console.warn('[home] offers likes fetch failed', error)
+      }
     })()
     return () => { active = false }
   }, [offers.map((l: any) => l.id).join(',')])
@@ -333,7 +343,12 @@ export default function Home() {
     if (!ids.length) { setLikesRecent({}); return }
     let active = true
     ;(async () => {
-      try { const map = await fetchLikeCounts(ids); if (active) setLikesRecent(map) } catch {}
+      try {
+        const map = await fetchLikeCounts(ids)
+        if (active) setLikesRecent(map)
+      } catch (error) {
+        console.warn('[home] recent likes fetch failed', error)
+      }
     })()
     return () => { active = false }
   }, [filtered.slice(0, 20).map((l) => l.id).join(',')])

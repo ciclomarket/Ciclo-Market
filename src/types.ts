@@ -104,3 +104,12 @@ export interface Subscription {
   plan?: Plan
   autoRenew?: boolean
 }
+
+export interface Sweepstake {
+  id: string
+  slug: string
+  title: string
+  startAt: number
+  endAt: number
+  createdAt?: number | null
+}

@@ -9,12 +9,14 @@ import { formatListingPrice } from '../utils/pricing'
 import { useCompare } from '../context/CompareContext'
 import { buildListingSlug } from '../utils/slug'
 import { hasPaidPlan } from '../utils/plans'
+import { useSweepstakes } from '../context/SweepstakesContext'
 
 export default function ListingCard({ l, storeLogoUrl, priority = false, likeCount }: { l: Listing; storeLogoUrl?: string | null; priority?: boolean; likeCount?: number }) {
   const [imageLoaded, setImageLoaded] = useState(false)
   const { liked, count, toggle, canLike } = useListingLike(l.id, likeCount)
   const { ids: compareIds, toggle: toggleCompare } = useCompare()
   const { format, fx } = useCurrency()
+  const { active: activeSweepstake } = useSweepstakes()
   const fav = liked
   const inCompare = compareIds.includes(l.id)
   const priceLabel = formatListingPrice(l.price, l.priceCurrency, format, fx)
@@ -47,13 +49,18 @@ export default function ListingCard({ l, storeLogoUrl, priority = false, likeCou
     return token.split(':').slice(1).join(':').trim() || null
   }
 
-  // Nueva línea descriptiva estándar: Talle, Año y Grupo transmisión
-  const sizeValue = (getExtraValue('Talles') || getExtraValue('Talle') || l.frameSize || '')
+  // Meta igual que en Store: Talle • Año • Grupo transmisión • Ciudad
+  // Talle: Talles|Talle (primero si lista) -> frameSize
+  const rawTalles = getExtraValue('Talles')
+  const tallesFirst = rawTalles ? rawTalles.split(',').map((s) => s.trim()).filter(Boolean)[0] || null : null
+  const sizeValue = (tallesFirst || getExtraValue('Talle') || l.frameSize || '')
     .toString()
     .trim() || null
   const yearValue = (typeof l.year === 'number' && l.year > 0) ? String(l.year) : null
-  const drivetrainValue = l.drivetrain?.trim() || null
-  // Mostrar valores sin etiquetas. Por defecto: "Talle • Año • Grupo • Ciudad"
+  // Grupo transmisión: drivetrain -> drivetrain_detail -> extras (Grupo|Transmisión)
+  const drivetrainFromExtras = getExtraValue('Grupo') || getExtraValue('Transmisión') || getExtraValue('Transmision') || null
+  const drivetrainValue = (l.drivetrain?.trim() || l.drivetrainDetail?.trim() || drivetrainFromExtras || '') || null
+  // Mostrar valores sin etiquetas
   let metaDisplay = [
     sizeValue || null,
     yearValue || null,
@@ -106,6 +113,11 @@ export default function ListingCard({ l, storeLogoUrl, priority = false, likeCou
   const metaClass = (isArchived || isExpired)
     ? 'mt-1 text-xs text-[#14212e]/50 line-clamp-1 sm:line-clamp-2'
     : 'mt-1 text-xs text-[#14212e]/70 line-clamp-1 sm:line-clamp-2'
+  const showSweepstakeBadge =
+    Boolean(activeSweepstake) &&
+    typeof l.createdAt === 'number' &&
+    l.createdAt >= (activeSweepstake?.startAt ?? 0) &&
+    l.createdAt <= (activeSweepstake?.endAt ?? 0)
   // Descripción debajo del título: mostramos siempre los metadatos pedidos
   return (
     <div className="relative h-full">
@@ -155,6 +167,12 @@ export default function ListingCard({ l, storeLogoUrl, priority = false, likeCou
           {discountPct !== null && discountPct > 0 && (
             <span className="rounded-full bg-mb-secondary px-3 py-1 text-xs font-semibold text-white shadow">
               -{discountPct}%
+            </span>
+          )}
+          {showSweepstakeBadge && (
+            <span className="inline-flex max-w-[220px] items-center gap-1 rounded-full bg-[#ff6b00] px-3 py-1 text-xs font-semibold text-white shadow shadow-[#ff6b00]/30">
+              <span aria-hidden="true">🏆</span>
+              <span className="whitespace-normal text-left leading-tight">Participa por 1 año de Strava Premium</span>
             </span>
           )}
           {storeLogoUrl ? (

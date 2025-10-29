@@ -1153,7 +1153,7 @@ export default function ListingDetail() {
                 className="rounded-full bg-[#14212e] px-3 py-1.5 text-sm font-semibold text-white"
                 onClick={async () => {
                   if (!listing) return
-                  let patch: Partial<Listing> = {}
+                  const patch: Partial<Listing> = {}
                   const val = editFieldValue
                   switch (editFieldName) {
                     case 'brand': patch.brand = val; break
