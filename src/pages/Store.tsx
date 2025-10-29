@@ -142,6 +142,13 @@ const normalizeText = (value: string) => value
       .toLowerCase()
   : ''
 
+const isListingPubliclyVisible = (listing: Listing): boolean => {
+  const status = (listing.status || '').toLowerCase()
+  if (status === 'archived' || status === 'deleted' || status === 'draft' || status === 'expired') return false
+  if (typeof listing.expiresAt === 'number' && listing.expiresAt > 0 && listing.expiresAt < Date.now()) return false
+  return true
+}
+
 const uniqueInsensitive = (values: string[]) => {
   const seen = new Set<string>()
   const output: string[] = []
@@ -705,7 +712,7 @@ export default function Store() {
       if (!sellerId) { setListings([]); return }
       const rows = await fetchListingsBySeller(sellerId)
       if (!mounted) return
-      setListings(rows)
+      setListings(rows.filter(isListingPubliclyVisible))
     }
     void load()
     return () => { mounted = false }

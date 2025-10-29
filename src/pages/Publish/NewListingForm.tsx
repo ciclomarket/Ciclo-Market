@@ -86,6 +86,7 @@ export default function NewListingForm() {
   const [giftError, setGiftError] = useState<string | null>(null)
   const [giftClaimedAsCredit, setGiftClaimedAsCredit] = useState(false)
   const [profile, setProfile] = useState<UserProfileRecord | null>(null)
+  const [submitting, setSubmitting] = useState(false)
 
   /** 1) Plan seleccionado por query (?plan=free|basic|premium) */
   const selectedPlan = useMemo(() => {
@@ -730,6 +731,7 @@ export default function NewListingForm() {
 
   /** 3) Submit: inserta listing o actualiza si corresponde */
   const submit = async () => {
+    if (submitting) return
     if (!enabled || !supabaseEnabled) return alert('Publicar deshabilitado: configurá Supabase en .env')
     if (!user) return alert('Iniciá sesión para crear una publicación')
     if (!planCode) return alert('No se detectó el plan seleccionado')
@@ -750,18 +752,20 @@ export default function NewListingForm() {
     // (Opcional) límite de publicaciones activas por usuario según plan visible en UI
     const client = getSupabaseClient()
 
-    // Límite de publicaciones activas por plan: solo aplica a Gratis (1 activa)
-    if (!editingListing && supabaseEnabled && planCode === 'free') {
-      const { count } = await client
-        .from('listings')
-        .select('id', { count: 'exact', head: true })
-        .eq('seller_id', user.id)
-        .eq('status', 'active')
-      if (typeof count === 'number' && count >= 1) {
-        alert('El plan Gratis permite una publicación activa a la vez.')
-        return
+    setSubmitting(true)
+    try {
+      // Límite de publicaciones activas por plan: solo aplica a Gratis (1 activa)
+      if (!editingListing && supabaseEnabled && planCode === 'free') {
+        const { count } = await client
+          .from('listings')
+          .select('id', { count: 'exact', head: true })
+          .eq('seller_id', user.id)
+          .eq('status', 'active')
+        if (typeof count === 'number' && count >= 1) {
+          alert('El plan Gratis permite una publicación activa a la vez.')
+          return
+        }
       }
-    }
 
     // Guardamos el precio tal cual lo ingresó el usuario según la moneda seleccionada
     const priceForStorage = priceNumber
@@ -894,7 +898,7 @@ export default function NewListingForm() {
       }
     }
 
-    const payload = {
+      const payload = {
       title: autoTitle,
       brand: brand.trim(),
       model: model.trim(),
@@ -925,7 +929,11 @@ export default function NewListingForm() {
       renewal_notified_at: null
     }
 
-    if (editingListing) {
+      const originalPlanCode = canonicalPlanCode(editingListing?.plan ?? editingListing?.sellerPlan ?? editingListing?.sellerPlan)
+      const planChanged = editingListing ? canonicalPlanCode(planCode) !== originalPlanCode : true
+      const shouldApplyPlan = !editingListing || planChanged
+
+      if (editingListing) {
       const { data: updated, error: updateError } = await client
         .from('listings')
         .update(payload)
@@ -943,38 +951,40 @@ export default function NewListingForm() {
         alert('No pudimos actualizar la publicación. Intentá nuevamente.')
         return
       }
-      // Aplicar destaque incluido de forma atómica en backend (plan + highlight)
-      try {
-        const { data: session } = await client.auth.getSession()
-        const token = session.session?.access_token
-        if (token) {
-          const apiBase = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
-          if (apiBase) {
-            await fetch(`${apiBase}/api/listings/${updated.id}/apply-plan`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-              body: JSON.stringify({
-                planCode: effectivePlanCode,
-                listingDays: listingDuration,
-                includedHighlightDays: isStore ? 14 : (selectedPlan?.featuredDays || 0),
+      // Aplicar destaque incluido de forma atómica en backend (plan + highlight) solo si hay cambio de plan o es nuevo
+      if (shouldApplyPlan) {
+        try {
+          const { data: session } = await client.auth.getSession()
+          const token = session.session?.access_token
+          if (token) {
+            const apiBase = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+            if (apiBase) {
+              await fetch(`${apiBase}/api/listings/${updated.id}/apply-plan`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({
+                  planCode: effectivePlanCode,
+                  listingDays: listingDuration,
+                  includedHighlightDays: isStore ? 14 : (selectedPlan?.featuredDays || 0),
+                })
               })
-            })
+            }
           }
-        }
-      } catch { /* noop */ }
-      clearDraft()
-      navigate(`/listing/${updated.slug ?? updated.id}`)
-      return
-    }
+        } catch { /* noop */ }
+      }
+        clearDraft()
+        navigate(`/listing/${updated.slug ?? updated.id}`)
+        return
+      }
 
-    /** 3.a Inserta listing (dispara trigger de snapshot por plan_code) */
-    const { data: inserted, error: insertErr } = await client
-      .from('listings')
-      .insert([{ seller_id: user.id, ...payload, images: [] }])
-      .select()
-      .single()
+      /** 3.a Inserta listing (dispara trigger de snapshot por plan_code) */
+      const { data: inserted, error: insertErr } = await client
+        .from('listings')
+        .insert([{ seller_id: user.id, ...payload, images: [] }])
+        .select()
+        .single()
 
-    if (insertErr || !inserted) {
+      if (insertErr || !inserted) {
       const msg = String(insertErr?.message || '').toLowerCase()
       if (msg.includes('whatsapp') || msg.includes('tel') || msg.includes('telefono') || msg.includes('teléfono')) {
         showToast('Evitá publicar teléfonos o WhatsApp en descripción o extras. Para WhatsApp elegí un plan Básico o Premium.', { variant: 'error' } as any)
@@ -985,52 +995,57 @@ export default function NewListingForm() {
       return
     }
 
-    /** 3.b Guardar URLs de imágenes (respetar límite en el front ya lo hicimos) */
-    const { error: updErr } = await client
-      .from('listings')
-      .update({ images })
-      .eq('id', inserted.id)
+      /** 3.b Guardar URLs de imágenes (respetar límite en el front ya lo hicimos) */
+      const { error: updErr } = await client
+        .from('listings')
+        .update({ images })
+        .eq('id', inserted.id)
 
-    if (updErr) {
-      console.error('Error update images:', updErr)
-      alert('Creaste la publicación pero falló al guardar imágenes. Intentá editar y volver a subir.')
-      return
-    }
-
-    // 3.c Asociar crédito al listing (best-effort)
-    if (redeemedCreditId && inserted?.id && user?.id) {
-      try { await attachCreditToListing(user.id, redeemedCreditId, inserted.id) } catch { /* noop */ }
-    }
-
-    // 3.d Redimir gift si corresponde (best-effort) – solo si NO usamos crédito
-    if (giftCode && user?.id && !wantsToUseCredit) {
-      try { await redeemGift(giftCode, user.id) } catch { void 0 }
-    }
-
-    // 3.e Aplicar plan + destaque incluido (atómico en backend)
-    try {
-      const { data: session } = await client.auth.getSession()
-      const token = session.session?.access_token
-      if (token) {
-        const apiBase = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
-        if (apiBase) {
-          await fetch(`${apiBase}/api/listings/${inserted.id}/apply-plan`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-            body: JSON.stringify({
-              planCode: effectivePlanCode,
-              listingDays: listingDuration,
-              includedHighlightDays: isStore ? 14 : (selectedPlan?.featuredDays || 0),
-            })
-          })
-        }
+      if (updErr) {
+        console.error('Error update images:', updErr)
+        alert('Creaste la publicación pero falló al guardar imágenes. Intentá editar y volver a subir.')
+        return
       }
-    } catch { /* noop */ }
 
-    // Ya pagaste tu plan (si correspondía). Redirigimos al detalle del aviso.
-    clearDraft()
-    showToast(isEditing ? 'Publicación actualizada con éxito' : 'Publicación creada con éxito')
-    navigate(`/listing/${inserted.slug ?? inserted.id}`)
+      // 3.c Asociar crédito al listing (best-effort)
+      if (redeemedCreditId && inserted?.id && user?.id) {
+        try { await attachCreditToListing(user.id, redeemedCreditId, inserted.id) } catch { /* noop */ }
+      }
+
+      // 3.d Redimir gift si corresponde (best-effort) – solo si NO usamos crédito
+      if (giftCode && user?.id && !wantsToUseCredit) {
+        try { await redeemGift(giftCode, user.id) } catch { void 0 }
+      }
+
+      // 3.e Aplicar plan + destaque incluido (atómico en backend)
+      if (shouldApplyPlan) {
+        try {
+          const { data: session } = await client.auth.getSession()
+          const token = session.session?.access_token
+          if (token) {
+            const apiBase = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+            if (apiBase) {
+              await fetch(`${apiBase}/api/listings/${inserted.id}/apply-plan`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({
+                  planCode: effectivePlanCode,
+                  listingDays: listingDuration,
+                  includedHighlightDays: isStore ? 14 : (selectedPlan?.featuredDays || 0),
+                })
+              })
+            }
+          }
+        } catch { /* noop */ }
+      }
+
+      // Ya pagaste tu plan (si correspondía). Redirigimos al detalle del aviso.
+      clearDraft()
+      showToast(isEditing ? 'Publicación actualizada con éxito' : 'Publicación creada con éxito')
+      navigate(`/listing/${inserted.slug ?? inserted.id}`)
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const formattedPreviewPrice = () => {
@@ -1629,7 +1644,9 @@ export default function NewListingForm() {
             )}
           </section>
 
-          <Button onClick={submit} className="w-full">Publicar</Button>
+          <Button onClick={submit} className="w-full" disabled={submitting}>
+            {submitting ? 'Publicando…' : 'Publicar'}
+          </Button>
         </div>
 
         <aside className="card w-full max-w-full min-w-0 overflow-hidden p-6 space-y-5 md:sticky md:top-6 h-fit text-[#14212e]">

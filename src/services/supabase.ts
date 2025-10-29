@@ -5,7 +5,19 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
 const appScope = import.meta.env.VITE_APP_SCOPE || 'web'
 const AUTH_STORAGE_KEY = appScope === 'admin' ? 'mb_admin_auth' : 'mb_web_auth'
 
-export const supabaseEnabled = Boolean(supabaseUrl && supabaseAnonKey)
+const looksLikePlaceholderUrl = supabaseUrl
+  ? /your[-_]project\.supabase\.co/i.test(supabaseUrl)
+  : false
+const looksLikePlaceholderKey = supabaseAnonKey
+  ? /YOUR_SUPABASE_ANON_PUBLIC_KEY/i.test(supabaseAnonKey)
+  : false
+
+export const supabaseEnabled = Boolean(
+  supabaseUrl &&
+  supabaseAnonKey &&
+  !looksLikePlaceholderUrl &&
+  !looksLikePlaceholderKey,
+)
 
 // Persist preference key. 'local' means localStorage (mantenerme conectado), 'session' means sessionStorage
 const PERSIST_KEY = 'mb_auth_persist'
@@ -63,6 +75,10 @@ function createSupabase(): SupabaseClient {
 // Initialize immediately if enabled
 if (supabaseEnabled) {
   supabase = createSupabase()
+} else if (import.meta.env.DEV && (looksLikePlaceholderUrl || looksLikePlaceholderKey)) {
+  console.warn(
+    '[supabase] Disabled: using placeholder env vars. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY with real project values.',
+  )
 }
 
 export const supabaseStorageBucket = import.meta.env.VITE_SUPABASE_STORAGE_BUCKET || 'listings'

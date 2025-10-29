@@ -3523,9 +3523,12 @@ app.post('/api/listings/:id/apply-plan', async (req, res) => {
     if (listing.seller_id !== user.id) return res.status(403).json({ error: 'forbidden' })
 
     const now = Date.now()
-    // Renovar expires_at desde el vencimiento actual o desde ahora
-    const currentExpires = listing.expires_at ? new Date(listing.expires_at).getTime() : now
-    const baseExpires = Math.max(currentExpires, now)
+    // Renovar expires_at: para planes pagos extendemos desde el vencimiento actual, para Gratis reiniciamos a partir de hoy
+    const currentExpires = listing.expires_at ? new Date(listing.expires_at).getTime() : null
+    const baseExpires =
+      planCode === 'free' || planCode === 'basic' || planCode === 'premium'
+        ? now
+        : Math.max(currentExpires ?? now, now)
     const nextExpires = new Date(baseExpires + listingDays * 24 * 60 * 60 * 1000).toISOString()
 
     // Regla especial: tiendas oficiales (plan 'pro') obtienen al menos 14 días de destaque

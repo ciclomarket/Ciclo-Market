@@ -97,9 +97,13 @@ export async function fetchListings(): Promise<Listing[]> {
       .select('*')
       .order('created_at', { ascending: false })
     if (error || !data) return []
+    const now = Date.now()
     const filtered = data.filter((row: any) => {
       const status = typeof row?.status === 'string' ? row.status.trim().toLowerCase() : 'active'
-      return status !== 'draft' && status !== 'deleted' && status !== 'archived'
+      if (status === 'draft' || status === 'deleted' || status === 'archived' || status === 'expired') return false
+      const expiresAt = row?.expires_at ? Date.parse(row.expires_at) : null
+      if (typeof expiresAt === 'number' && !Number.isNaN(expiresAt) && expiresAt > 0 && expiresAt < now) return false
+      return true
     })
     return filtered.map((row: any) => normalizeListing(row as ListingRow))
   } catch {

@@ -1,5 +1,12 @@
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 
+function guessApiBase(): string | '' {
+  if (typeof window === 'undefined') return ''
+  const host = window.location?.hostname ?? ''
+  if (/ciclomarket\.ar$/i.test(host)) return 'https://ciclo-market.onrender.com'
+  return ''
+}
+
 export type MarketSearchParams = {
   cat?: string
   q?: string
@@ -26,7 +33,7 @@ export type MarketSearchParams = {
 }
 
 export async function fetchMarket(params: MarketSearchParams): Promise<{ items: any[]; total?: number }> {
-  const base = API_BASE || ''
+  const base = API_BASE || guessApiBase()
   const endpoint = base ? `${base}/api/market/search` : '/api/market/search'
   const url = new URL(endpoint, window.location.origin)
   const set = (k: string, v: any) => { if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, String(v)) }
@@ -57,9 +64,11 @@ export async function fetchMarket(params: MarketSearchParams): Promise<{ items: 
   appendAll('location', params.location)
 
   const res = await fetch(url.toString())
-  if (!res.ok) return { items: [] }
-  const data = await res.json().catch(() => ({ items: [] }))
-  const items = Array.isArray(data?.items) ? data.items : []
+  if (!res.ok) throw new Error(`market_search_http_${res.status}`)
+  const ct = (res.headers.get('content-type') || '').toLowerCase()
+  if (!ct.includes('application/json')) throw new Error('market_search_not_json')
+  const data = await res.json()
+  const items = Array.isArray(data?.items) ? data.items : (() => { throw new Error('market_search_invalid_payload') })()
   const total = typeof data?.total === 'number' ? data.total : undefined
   return { items, total }
 }

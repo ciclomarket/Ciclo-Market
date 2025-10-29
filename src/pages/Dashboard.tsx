@@ -7,6 +7,7 @@ import { mockListings } from '../mock/mockData'
 import { useAuth } from '../context/AuthContext'
 import { getSupabaseClient, supabaseEnabled } from '../services/supabase'
 import { archiveListing, fetchListingsBySeller, reduceListingPrice, fetchListingsByIds, updateListingStatus, deleteListing } from '../services/listings'
+import { FALLBACK_PLANS } from '../services/plans'
 import { fetchStoreSummary30d, fetchStoreListingSummary30d } from '../services/storeAnalytics'
 import { fetchUserProfile, type UserProfileRecord, upsertUserProfile } from '../services/users'
 import type { Listing } from '../types'
@@ -28,6 +29,7 @@ import useUpload from '../hooks/useUpload'
 import { createGift, claimGift } from '../services/gifts'
 import { fetchCreditsHistory, type Credit } from '../services/credits'
 import { trackMetaPixel } from '../lib/metaPixel'
+import { canonicalPlanCode } from '../utils/planCodes'
 import AdminFxPanel from '../components/AdminFxPanel'
 
 const TABS = ['Perfil', 'Publicaciones', 'Créditos', 'Favoritos', 'Notificaciones', 'Editar perfil', 'Editar tienda', 'Analítica', 'Verificá tu perfil', 'Cerrar sesión'] as const
@@ -1409,6 +1411,12 @@ function ListingsView({ listings, onRefresh }: { listings: Listing[]; onRefresh?
         {listings.map((listing) => (
           <div key={listing.id} className="space-y-3">
             <ListingCard l={listing} />
+            <div className="rounded-2xl border border-[#14212e]/10 bg-white/80 px-3 py-2 text-xs text-[#14212e]/70">
+              <p className="font-semibold uppercase tracking-[0.25em] text-[#14212e]/60">Estado</p>
+              <div className="mt-1 space-y-0.5">
+                <ListingExpiryMeta listing={listing} />
+              </div>
+            </div>
             <div className="relative flex items-center gap-2">
               <button
                 type="button"
@@ -1465,6 +1473,13 @@ function ListingsView({ listings, onRefresh }: { listings: Listing[]; onRefresh?
                   >
                     Archivar
                   </button>
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-red-600 hover:bg-red-50"
+                    onClick={() => { void handleDelete(listing.id); setOpenMenuFor(null) }}
+                  >
+                    Eliminar
+                  </button>
                   {/* Link a más acciones */}
                   <button
                     type="button"
@@ -1484,6 +1499,36 @@ function ListingsView({ listings, onRefresh }: { listings: Listing[]; onRefresh?
         ))}
       </div>
     </div>
+  )
+}
+
+function ListingExpiryMeta({ listing }: { listing: Listing }) {
+  const now = Date.now()
+  const expiresAt = typeof listing.expiresAt === 'number' ? listing.expiresAt : null
+  const highlightSource = typeof listing.highlightExpires === 'number'
+    ? listing.highlightExpires
+    : typeof listing.sellerPlanExpires === 'number'
+      ? listing.sellerPlanExpires
+      : null
+  const formatRemaining = (ms: number) => {
+    const days = Math.ceil((ms - now) / (24 * 60 * 60 * 1000))
+    return days <= 0 ? 'vencido' : `${days} día${days === 1 ? '' : 's'}`
+  }
+  const publicationLabel = expiresAt ? formatRemaining(expiresAt) : 'sin vencimiento'
+  const highlightLabel = highlightSource ? formatRemaining(highlightSource) : 'sin destaque'
+
+  const resolvedPlan = canonicalPlanCode(listing.plan ?? listing.sellerPlan ?? undefined)
+  const planDef = FALLBACK_PLANS.find((plan) => canonicalPlanCode(plan.code ?? plan.id ?? plan.name) === resolvedPlan)
+  const planDuration = planDef?.listingDurationDays ?? planDef?.periodDays ?? undefined
+  const planName = planDef?.name ?? resolvedPlan ?? 'Plan'
+  const planLabel = planDuration ? `${planName} · ${planDuration} días` : planName
+
+  return (
+    <>
+      <div>Publicación: {publicationLabel}</div>
+      <div>Plan: {planLabel}</div>
+      <div>Destaque: {highlightLabel}</div>
+    </>
   )
 }
 

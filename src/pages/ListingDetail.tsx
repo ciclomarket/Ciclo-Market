@@ -22,6 +22,7 @@ import JsonLd from '../components/JsonLd'
 import { trackMetaPixel } from '../lib/metaPixel'
 import { track, trackOncePerSession } from '../services/track'
 import { useToast } from '../context/ToastContext'
+import { useSweepstakes } from '../context/SweepstakesContext'
 import ListingQuestionsSection from '../components/ListingQuestionsSection'
 import { submitShareBoost } from '../services/shareBoost'
 import useUpload from '../hooks/useUpload'
@@ -36,6 +37,7 @@ export default function ListingDetail() {
   const { user, isModerator } = useAuth()
   const { format, fx } = useCurrency()
   const { show: showToast } = useToast()
+  const { active: activeSweepstake } = useSweepstakes()
   const [listing, setListing] = useState<Listing | null>(null)
   const [loading, setLoading] = useState(true)
   // Oferta deshabilitada
@@ -227,6 +229,23 @@ export default function ListingDetail() {
   if (loading) return <Container>Cargando publicación…</Container>
   if (!listing) return <Container>Publicación no encontrada.</Container>
 
+  const computeSweepstakeFallbackEnd = () => {
+    const now = new Date()
+    const year = now.getFullYear()
+    const end = new Date(year, 10, 15, 23, 59, 59).getTime()
+    return end > now.getTime() ? end : new Date(year + 1, 10, 15, 23, 59, 59).getTime()
+  }
+  const computeSweepstakeFallbackStart = () => {
+    const now = new Date()
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0).getTime()
+  }
+  const sweepstakeWindowStart = activeSweepstake?.startAt ?? computeSweepstakeFallbackStart()
+  const sweepstakeWindowEnd = activeSweepstake?.endAt ?? computeSweepstakeFallbackEnd()
+  const showSweepstakeBadge =
+    typeof listing.createdAt === 'number' &&
+    listing.createdAt >= sweepstakeWindowStart &&
+    listing.createdAt <= sweepstakeWindowEnd
+
   const listingSlugOrId = listing.slug ?? listing.id
   const listingPath = `/listing/${listingSlugOrId}`
   const envFrontendOrigin = (import.meta.env.VITE_FRONTEND_URL || '').trim()
@@ -281,6 +300,24 @@ export default function ListingDetail() {
   const shareDescription = listing.description?.slice(0, 120) ?? 'Encontrá esta bicicleta en Ciclo Market.'
   const shareImage = listing.images?.[0]
   const shareText = `${shareTitle} - ${shareDescription}`
+
+  const nowMs = Date.now()
+  const expiresAtMs = typeof listing.expiresAt === 'number' ? listing.expiresAt : null
+  const highlightExpiresMs = typeof listing.highlightExpires === 'number'
+    ? listing.highlightExpires
+    : typeof listing.sellerPlanExpires === 'number'
+      ? listing.sellerPlanExpires
+      : null
+  const computeRemainingLabel = (target: number) => {
+    const diffDays = Math.ceil((target - nowMs) / (24 * 60 * 60 * 1000))
+    return diffDays <= 0 ? 'vencido' : `${diffDays} día${diffDays === 1 ? '' : 's'}`
+  }
+  const publicationRemainingLabel = expiresAtMs ? computeRemainingLabel(expiresAtMs) : null
+  const highlightRemainingLabel = highlightExpiresMs ? computeRemainingLabel(highlightExpiresMs) : null
+  const listingPlanCode = canonicalPlanCode(listing.plan ?? undefined)
+  const listingPlanDef = FALLBACK_PLANS.find((plan) => canonicalPlanCode(plan.code ?? plan.id ?? plan.name) === listingPlanCode)
+  const listingPlanDuration = listingPlanDef?.listingDurationDays ?? listingPlanDef?.periodDays ?? undefined
+  const listingPlanName = listingPlanDef?.name ?? listingPlanCode ?? null
 
   // Extraer specs desde description/extras (tokens "Clave: Valor")
   const extractToken = (label: string): string | null => {
@@ -699,6 +736,26 @@ export default function ListingDetail() {
                   </button>
                 )}
               </div>
+              {isOwner && (
+                <div className="mt-4 rounded-2xl border border-[#14212e]/10 bg-white/80 px-4 py-3 text-xs text-[#14212e]/80">
+                  <p className="font-semibold uppercase tracking-[0.3em] text-[#14212e]/60">Tu publicación</p>
+                  <div className="mt-2 space-y-1">
+                    <div>Publicación: {publicationRemainingLabel ?? 'sin vencimiento'}</div>
+                    {listingPlanName ? (
+                      <div>Plan: {listingPlanDuration ? `${listingPlanName} · ${listingPlanDuration} días` : listingPlanName}</div>
+                    ) : null}
+                    <div>Destaque: {highlightRemainingLabel ?? 'sin destaque'}</div>
+                  </div>
+                </div>
+              )}
+              {showSweepstakeBadge && (
+                <div className="mt-3">
+                  <span className="inline-flex items-center gap-2 rounded-full bg-[#ff6b00] px-3 py-1 text-[12px] font-semibold text-white shadow shadow-[#ff6b00]/30">
+                    <span aria-hidden="true">🏆</span>
+                    <span>Participa por 1 año de Strava Premium</span>
+                  </span>
+                </div>
+              )}
               {/* Sección de información de la tienda (teléfono/dirección) removida a pedido */}
               <p className="mt-4 text-xs text-[#14212e]/60 lg:hidden">
                 Guardá o compará esta bici para decidir más tarde.
@@ -851,28 +908,11 @@ export default function ListingDetail() {
                     <p className="text-xs uppercase tracking-wide text-[#14212e]/60">Acciones de moderador</p>
                     {/* Info de vigencias */}
                     <div className="text-xs text-[#14212e]/70">
-                      {(() => {
-                        const now = Date.now()
-                        const expiresAt = listing.expiresAt || null
-                        const highlightExpires = listing.highlightExpires || listing.sellerPlanExpires || null
-                        const fmt = (ms: number) => {
-                          const days = Math.ceil((ms - now) / (24*60*60*1000))
-                          return days <= 0 ? 'vencido' : `${days} día${days===1?'':'s'}`
-                        }
-                        const planCode = canonicalPlanCode(listing.plan ?? undefined)
-                        const planDef = FALLBACK_PLANS.find((p) => canonicalPlanCode(p.code || undefined) === planCode)
-                        const planDuration = planDef?.listingDurationDays ?? planDef?.periodDays ?? undefined
-                        const hasHighlight = hasPaidPlan(listing.sellerPlan ?? (listing.plan as any), listing.sellerPlanExpires)
-                        return (
-                          <>
-                            <div>Publicación (restante): {expiresAt ? fmt(expiresAt) : 'sin fecha'}</div>
-                            {planDuration ? (
-                              <div>Plan: {planCode ? (planDef?.name || planCode) : 'Estándar'} · {planDuration} días</div>
-                            ) : null}
-                            <div>Destaque (restante): {highlightExpires ? fmt(highlightExpires) : 'sin destaque'}</div>
-                          </>
-                        )
-                      })()}
+                      <div>Publicación (restante): {publicationRemainingLabel ?? 'sin fecha'}</div>
+                      {listingPlanDuration ? (
+                        <div>Plan: {listingPlanName ?? 'Estándar'} · {listingPlanDuration} días</div>
+                      ) : null}
+                      <div>Destaque (restante): {highlightRemainingLabel ?? 'sin destaque'}</div>
                     </div>
                     {/* Botón primario dinámico (sólo mod) */}
                     {(() => {
