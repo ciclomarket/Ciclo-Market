@@ -2602,6 +2602,242 @@ app.get('/api/credits/me', async (req, res) => {
   }
 })
 
+/* ----------------------------- Market search (server-ordered) ------------- */
+// GET /api/market/search
+// Query params (subset used by Marketplace):
+// - cat: category exact match (optional)
+// - q: free-text contains in title/brand/model/description (optional)
+// - deal=1: only discounted (original_price > price)
+// - store=1: only official stores (users.store_enabled=true)
+// - limit (default 48, max 200), offset (default 0)
+// Returns: { items: Listing[], total?: number } with likes_count and storeEnabled flags
+app.get('/api/market/search', async (req, res) => {
+  try {
+    const supabase = supabaseService || getServerSupabaseClient()
+    const limit = Math.min(Math.max(Number(req.query.limit || 48), 1), 200)
+    const offset = Math.max(Number(req.query.offset || 0), 0)
+    const onlyStore = String(req.query.store || '') === '1'
+    const cat = (req.query.cat ? String(req.query.cat) : '').trim()
+    const q = (req.query.q ? String(req.query.q) : '').trim().toLowerCase()
+    const deal = String(req.query.deal || '') === '1'
+    const sort = (() => {
+      const v = String(req.query.sort || 'relevance')
+      return v === 'newest' || v === 'asc' || v === 'desc' ? v : 'relevance'
+    })()
+    const priceCur = (() => {
+      const c = String(req.query.price_cur || '').toUpperCase()
+      return c === 'USD' || c === 'ARS' ? c : undefined
+    })()
+    const priceMinRaw = Number(req.query.price_min)
+    const priceMaxRaw = Number(req.query.price_max)
+    const priceMin = Number.isFinite(priceMinRaw) ? priceMinRaw : undefined
+    const priceMax = Number.isFinite(priceMaxRaw) ? priceMaxRaw : undefined
+    // FX: query param > env > DB app_settings > default
+    let fx = (() => {
+      const envFx = Number(process.env.USD_ARS_FX || process.env.VITE_USD_ARS_FX)
+      const fxOverride = Number(req.query.fx)
+      return Number.isFinite(fxOverride) && fxOverride > 0
+        ? fxOverride
+        : (Number.isFinite(envFx) && envFx > 0 ? envFx : NaN)
+    })()
+    if (!Number.isFinite(fx) || fx <= 0) {
+      try {
+        const { data: fxRow } = await supabase
+          .from('app_settings')
+          .select('value')
+          .eq('key', 'usd_ars_fx')
+          .maybeSingle()
+        if (fxRow && typeof fxRow.value !== 'undefined') {
+          const n = Number(fxRow.value)
+          if (Number.isFinite(n) && n > 0) fx = n
+        }
+      } catch {}
+      if (!Number.isFinite(fx) || fx <= 0) fx = 1000
+    }
+
+    // Advanced filters (multi)
+    const toArray = (v) => Array.isArray(v) ? v : (v ? [v] : [])
+    const fBrand = toArray(req.query.brand).map((s) => String(s))
+    const fMaterial = toArray(req.query.material).map((s) => String(s))
+    const fFrameSize = toArray(req.query.frameSize).map((s) => String(s))
+    const fWheelSize = toArray(req.query.wheelSize).map((s) => String(s))
+    const fDrivetrain = toArray(req.query.drivetrain).map((s) => String(s))
+    const fYear = toArray(req.query.year).map((s) => Number(s)).filter((n) => Number.isFinite(n))
+    const fLocation = toArray(req.query.location).map((s) => String(s))
+    const fCondition = toArray(req.query.condition).map((s) => String(s))
+    const fBrake = toArray(req.query.brake).map((s) => String(s))
+    const fSize = toArray(req.query.size).map((s) => String(s))
+    const subcat = (req.query.subcat ? String(req.query.subcat) : '').trim()
+
+    // Base: publicaciones activas
+    let query = supabase
+      .from('listings')
+      .select('*')
+      .eq('status', 'active')
+
+    if (cat) query = query.eq('category', cat)
+    if (subcat) query = query.eq('subcategory', subcat)
+    if (deal) query = query.gt('original_price', 0).gt('original_price', 'price')
+    if (fBrand.length) query = query.in('brand', fBrand)
+    if (fMaterial.length) query = query.in('material', fMaterial)
+    if (fFrameSize.length) query = query.in('frame_size', fFrameSize)
+    if (fWheelSize.length) query = query.in('wheel_size', fWheelSize)
+    if (fDrivetrain.length) query = query.in('drivetrain', fDrivetrain)
+    if (fYear.length) query = query.in('year', fYear)
+
+    // Nota: filtro de texto y de tienda se aplican en servidor (post-query)
+    // Orden preliminar por campos útiles para luego reordenar de forma estable
+    // Primero destacados por fecha, luego recientes
+    query = query
+      .order('highlight_expires', { ascending: false, nullsFirst: true })
+      .order('created_at', { ascending: false })
+
+    const { data: rows, error } = await query.limit(1000) // recuperar un pool suficiente para ordenar y paginar
+    if (error) return res.status(500).json({ ok: false, error: 'query_failed' })
+    const listings = Array.isArray(rows) ? rows : []
+    if (!listings.length) return res.json({ items: [] })
+
+    // Filtro por tienda oficial (y metadata de tiendas)
+    const sellerIds = Array.from(new Set(listings.map((r) => r.seller_id).filter(Boolean)))
+    const storeMap = {}
+    if (sellerIds.length) {
+      try {
+        const { data: stores } = await supabase
+          .from('users')
+          .select('id, store_enabled')
+          .in('id', sellerIds)
+        for (const row of stores || []) {
+          storeMap[String(row.id)] = Boolean(row.store_enabled)
+        }
+      } catch {}
+    }
+
+    // Filtro de texto + precio + tienda
+    let filtered = listings.filter((l) => {
+      if (onlyStore && !storeMap[String(l.seller_id)]) return false
+      if (q) {
+        const bucket = [l.title, l.brand, l.model, l.description].filter(Boolean).join(' ').toLowerCase()
+        if (!bucket.includes(q)) return false
+      }
+      // location contains any token
+      if (fLocation.length) {
+        const needle = fLocation.map((s) => s.toLowerCase())
+        const hay = [l.seller_location || '', l.location || ''].join(',').toLowerCase()
+        if (!needle.some((n) => hay.includes(n))) return false
+      }
+      // extras/description contains conditions
+      if (fCondition.length || fBrake.length || fSize.length) {
+        const text = [l.extras || '', l.description || ''].join(' \n ').toLowerCase()
+        if (fCondition.length && !fCondition.some((n) => text.includes(String(n).toLowerCase()))) return false
+        if (fBrake.length && !fBrake.some((n) => text.includes(String(n).toLowerCase()))) return false
+        if (fSize.length && !fSize.some((n) => text.includes(String(n).toLowerCase()))) return false
+      }
+      if (priceCur && (typeof priceMin === 'number' || typeof priceMax === 'number')) {
+        const cur = String(l.price_currency || 'ARS').toUpperCase()
+        const price = Number(l.price) || 0
+        const toSelected = (value) => {
+          if (priceCur === cur) return value
+          return priceCur === 'USD' ? value / fx : value * fx
+        }
+        const p = toSelected(price)
+        if (typeof priceMin === 'number' && p < priceMin) return false
+        if (typeof priceMax === 'number' && p > priceMax) return false
+      }
+      return true
+    })
+
+    // Likes count por lote
+    const idMap = new Map()
+    const ids = filtered.map((l) => String(l.id))
+    const likeCounts = {}
+    if (ids.length) {
+      try {
+        const { data: likes } = await supabase
+          .from('listing_likes')
+          .select('listing_id')
+          .in('listing_id', ids)
+        for (const row of likes || []) {
+          const id = String(row.listing_id)
+          likeCounts[id] = (likeCounts[id] || 0) + 1
+        }
+      } catch {}
+    }
+
+    // Orden final
+    const now = Date.now()
+    filtered.sort((a, b) => {
+      if (sort === 'newest') {
+        const aCr = a.created_at ? new Date(a.created_at).getTime() : 0
+        const bCr = b.created_at ? new Date(b.created_at).getTime() : 0
+        return bCr - aCr
+      }
+      if (sort === 'asc' || sort === 'desc') {
+        const toSelected = (row) => {
+          const cur = String(row.price_currency || 'ARS').toUpperCase()
+          const price = Number(row.price) || 0
+          return priceCur && priceCur !== cur
+            ? (priceCur === 'USD' ? price / fx : price * fx)
+            : price
+        }
+        const pa = toSelected(a)
+        const pb = toSelected(b)
+        return sort === 'asc' ? (pa - pb) : (pb - pa)
+      }
+      // Relevancia: destacadas -> tiendas -> resto; dentro likes desc, luego recientes y vencimiento de destaque
+      const aHl = a.highlight_expires ? new Date(a.highlight_expires).getTime() > now : false
+      const bHl = b.highlight_expires ? new Date(b.highlight_expires).getTime() > now : false
+      const aStore = storeMap[String(a.seller_id)] ? 1 : 0
+      const bStore = storeMap[String(b.seller_id)] ? 1 : 0
+      const rA = aHl ? 2 : (aStore ? 1 : 0)
+      const rB = bHl ? 2 : (bStore ? 1 : 0)
+      if (rB !== rA) return rB - rA
+      const la = likeCounts[String(a.id)] || 0
+      const lb = likeCounts[String(b.id)] || 0
+      if (lb !== la) return lb - la
+      if (rA === 2) {
+        const aHex = a.highlight_expires ? new Date(a.highlight_expires).getTime() : 0
+        const bHex = b.highlight_expires ? new Date(b.highlight_expires).getTime() : 0
+        if (bHex !== aHex) return bHex - aHex
+      }
+      const aCr = a.created_at ? new Date(a.created_at).getTime() : 0
+      const bCr = b.created_at ? new Date(b.created_at).getTime() : 0
+      return bCr - aCr
+    })
+
+    const total = filtered.length
+    const slice = filtered.slice(offset, offset + limit)
+    const items = slice.map((row) => ({
+      id: row.id,
+      slug: row.slug,
+      title: row.title,
+      brand: row.brand,
+      model: row.model,
+      category: row.category,
+      subcategory: row.subcategory,
+      price: row.price,
+      price_currency: row.price_currency,
+      original_price: row.original_price,
+      images: row.images,
+      location: row.location,
+      description: row.description,
+      seller_id: row.seller_id,
+      seller_name: row.seller_name,
+      seller_location: row.seller_location,
+      plan: row.plan || row.plan_code || row.seller_plan,
+      highlight_expires: row.highlight_expires,
+      seller_plan_expires: row.seller_plan_expires,
+      status: row.status,
+      created_at: row.created_at,
+      likes_count: likeCounts[String(row.id)] || 0,
+      store_enabled: storeMap[String(row.seller_id)] || false,
+    }))
+    return res.json({ items, total })
+  } catch (err) {
+    console.error('[market/search] failed', err)
+    return res.status(500).json({ ok: false, error: 'unexpected_error' })
+  }
+})
+
 // Redeem one available credit for the given plan
 app.post('/api/credits/redeem', async (req, res) => {
   try {

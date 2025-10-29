@@ -8,6 +8,7 @@ import EmptyState from '../components/EmptyState'
 import SkeletonCard from '../components/SkeletonCard'
 import { mockListings } from '../mock/mockData'
 import { fetchListings } from '../services/listings'
+import { fetchMarket } from '../services/market'
 import { supabaseEnabled } from '../services/supabase'
 import type { Listing } from '../types'
 import { useCurrency } from '../context/CurrencyContext'
@@ -691,8 +692,12 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
 
   const [count, setCount] = useState(40)
   const sentinelRef = useRef<HTMLDivElement | null>(null)
+  const loadMoreRef = useRef<HTMLDivElement | null>(null)
+  const loadingMoreRef = useRef<boolean>(false)
   const [sortMode, setSortMode] = useState<'relevance' | 'newest' | 'asc' | 'desc'>('relevance')
   const [listings, setListings] = useState<Listing[]>([])
+  const [serverMode, setServerMode] = useState(false)
+  const [serverTotal, setServerTotal] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [storeLogos, setStoreLogos] = useState<Record<string, string | null>>({})
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
@@ -703,6 +708,86 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
     let active = true
     const load = async () => {
       setLoading(true)
+      // Usar backend con orden y filtros (incluye avanzados)
+      if (supabaseEnabled) {
+        try {
+          const { items, total } = await fetchMarket({
+            cat: effectiveCat === 'Todos' ? undefined : effectiveCat,
+            q: filters.q,
+            deal: effectiveDeal === '1',
+            store: filters.store === '1',
+            sort: sortMode,
+            priceCur: filters.priceCur,
+            priceMin: filters.priceMin,
+            priceMax: filters.priceMax,
+            fx,
+            subcat: filters.subcat,
+            brand: filters.brand,
+            material: filters.material,
+            frameSize: filters.frameSize,
+            wheelSize: filters.wheelSize,
+            drivetrain: filters.drivetrain,
+            condition: filters.condition,
+            brake: filters.brake,
+            year: filters.year,
+            size: filters.size,
+            location: filters.location,
+            limit: 300,
+            offset: 0,
+          })
+          if (!active) return
+          const mapped: Listing[] = (items || []).map((row: any) => ({
+            id: String(row.id),
+            slug: row.slug ?? undefined,
+            title: row.title,
+            brand: row.brand,
+            model: row.model,
+            year: typeof row.year === 'number' ? row.year : undefined,
+            category: row.category,
+            subcategory: row.subcategory ?? undefined,
+            price: Number(row.price) || 0,
+            priceCurrency: (row.price_currency || undefined),
+            originalPrice: typeof row.original_price === 'number' ? row.original_price : undefined,
+            location: row.location || '',
+            description: row.description || '',
+            images: Array.isArray(row.images) ? row.images : [],
+            sellerId: row.seller_id,
+            sellerName: row.seller_name ?? undefined,
+            sellerPlan: (row.plan || undefined),
+            plan: (row.plan || undefined),
+            sellerPlanExpires: row.seller_plan_expires ? Date.parse(row.seller_plan_expires) : undefined,
+            highlightExpires: row.highlight_expires ? Date.parse(row.highlight_expires) : undefined,
+            sellerLocation: row.seller_location ?? undefined,
+            sellerWhatsapp: row.seller_whatsapp ?? undefined,
+            sellerEmail: row.seller_email ?? undefined,
+            sellerAvatar: row.seller_avatar ?? undefined,
+            material: row.material ?? undefined,
+            frameSize: row.frame_size ?? undefined,
+            drivetrain: row.drivetrain ?? undefined,
+            drivetrainDetail: row.drivetrain_detail ?? undefined,
+            wheelset: row.wheelset ?? undefined,
+            wheelSize: row.wheel_size ?? undefined,
+            extras: row.extras ?? undefined,
+            status: row.status ?? 'active',
+            expiresAt: row.expires_at ? Date.parse(row.expires_at) : null,
+            renewalNotifiedAt: row.renewal_notified_at ? Date.parse(row.renewal_notified_at) : null,
+            createdAt: row.created_at ? Date.parse(row.created_at) : Date.now(),
+          }))
+          setListings(mapped)
+          setServerMode(true)
+          setServerTotal(typeof total === 'number' ? total : null)
+          try {
+            const sellerIds = Array.from(new Set(mapped.map((x) => x.sellerId).filter(Boolean)))
+            const logos = await fetchStoresMeta(sellerIds)
+            if (active) setStoreLogos(logos)
+          } catch { /* noop */ }
+          setLoading(false)
+          return
+        } catch { /* fallthrough */ }
+      }
+      // Fallback: Supabase directo (solo si no hay backend)
+      setServerMode(false)
+      setServerTotal(null)
       if (supabaseEnabled) {
         const data = await fetchListings()
         if (!active) return
@@ -723,16 +808,17 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
     return () => {
       active = false
     }
-  }, [])
+  }, [paramsKey, sortMode, fx])
 
   const categoryFiltered = useMemo(() => {
+    if (serverMode) return listings
     if (Array.isArray(allowedCats) && allowedCats.length) {
       const set = new Set(allowedCats)
       return listings.filter((listing) => set.has(listing.category as Cat))
     }
     if (effectiveCat === 'Todos') return listings
     return listings.filter((listing) => listing.category === effectiveCat)
-  }, [listings, effectiveCat, allowedCats?.join(',')])
+  }, [listings, serverMode, effectiveCat, allowedCats?.join(',')])
 
   const facetsData = useMemo(() => computeListingFacets(categoryFiltered), [categoryFiltered])
   const listingMetadata = facetsData.metadata
@@ -762,6 +848,10 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
   }, [filters, searchParams, setSearchParams, forcedCat])
 
   const filtered = useMemo(() => {
+    if (serverMode) {
+      // El backend ya aplicó orden, cat/q/deal/store/price. Mantener order para 'relevance'/'newest'/'precio'
+      return listings
+    }
     if (!categoryFiltered.length) return []
     const brandSet = new Set(filters.brand.map((value) => normalizeText(value)))
     const materialSet = new Set(filters.material.map((value) => normalizeText(value)))
@@ -886,19 +976,29 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
     if (sortMode === 'relevance') {
       return sorted.sort((a, b) => {
         const now = Date.now()
-        const aHl = (a.highlightExpires ?? 0) > now ? 1 : 0
-        const bHl = (b.highlightExpires ?? 0) > now ? 1 : 0
-        if (bHl !== aHl) return bHl - aHl
-        const aStore = a.sellerId ? (storeLogos[a.sellerId] ? 1 : 0) : 0
-        const bStore = b.sellerId ? (storeLogos[b.sellerId] ? 1 : 0) : 0
-        if (bStore !== aStore) return bStore - aStore
-        // Dentro del grupo destacado, ordenar por vencimiento de destaque (más reciente primero)
-        if (aHl === 1 && bHl === 1) {
+        const aHl = (a.highlightExpires ?? 0) > now
+        const bHl = (b.highlightExpires ?? 0) > now
+        const aStore = a.sellerId ? Boolean(storeLogos[a.sellerId]) : false
+        const bStore = b.sellerId ? Boolean(storeLogos[b.sellerId]) : false
+
+        const rank = (hl: boolean, st: boolean) => (hl ? 2 : (st ? 1 : 0))
+        const rA = rank(aHl, aStore)
+        const rB = rank(bHl, bStore)
+        if (rB !== rA) return rB - rA
+
+        // Dentro del mismo grupo, más likes primero (si no hay datos, 0)
+        const aLikes = likeCounts[a.id] || 0
+        const bLikes = likeCounts[b.id] || 0
+        if (bLikes !== aLikes) return bLikes - aLikes
+
+        // Si ambos están destacados, desempatar por vencimiento del destaque (más lejano primero)
+        if (rA === 2) {
           const aHex = a.highlightExpires ?? 0
           const bHex = b.highlightExpires ?? 0
           if (bHex !== aHex) return bHex - aHex
         }
-        // Resto: más recientes primero
+
+        // Fallback general: más recientes primero
         return (b.createdAt ?? 0) - (a.createdAt ?? 0)
       })
     }
@@ -915,9 +1015,24 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
       const pb = toSelected(b)
       return sortMode === 'asc' ? pa - pb : pb - pa
     })
-  }, [categoryFiltered, filters, sortMode, listingMetadata, effectiveDeal, storeLogos])
+  }, [categoryFiltered, filters, sortMode, listingMetadata, effectiveDeal, storeLogos, likeCounts, serverMode, listings])
 
-  const visible = filtered.slice(0, count)
+  const visible = serverMode ? filtered : filtered.slice(0, count)
+
+  // Botón "Cargar más" (modo cliente): agrega más items sin mover el viewport hacia arriba
+  const handleLoadMoreClient = useCallback(() => {
+    // Método robusto: conservar scrollY exacto antes y después
+    const prevY = window.scrollY || window.pageYOffset || 0
+    setCount((c) => Math.min(c + 40, filtered.length))
+    // Reinstate exact same scroll position after render
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: prevY, left: 0, behavior: 'auto' })
+      // Una segunda pasada por posibles reflows de imágenes
+      setTimeout(() => {
+        window.scrollTo({ top: prevY, left: 0, behavior: 'auto' })
+      }, 80)
+    })
+  }, [filtered.length])
 
   // Batch-like counts for visible listings
   useEffect(() => {
@@ -934,7 +1049,7 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
   }, [visible.map((l) => l.id).join(',')])
 
   useEffect(() => {
-    // Menor carga inicial para mejorar LCP en mobile
+    // Menor carga inicial para mejorar LCP en mobile (sólo modo cliente)
     setCount(12)
   }, [paramsKey])
 
@@ -943,13 +1058,102 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
     const el = sentinelRef.current
     const io = new IntersectionObserver((entries) => {
       const entry = entries[0]
-      if (entry.isIntersecting) {
-        setCount((c) => (c + 24 <= filtered.length ? c + 24 : filtered.length))
+      if (!entry.isIntersecting) return
+      if (serverMode) {
+        // Cargar siguiente página desde el backend
+        if (loadingMoreRef.current) return
+        const total = serverTotal ?? Infinity
+        if (listings.length >= total) return
+        loadingMoreRef.current = true
+        ;(async () => {
+          try {
+            const { items, total: t } = await fetchMarket({
+              cat: effectiveCat === 'Todos' ? undefined : effectiveCat,
+              q: filters.q,
+              deal: effectiveDeal === '1',
+              store: filters.store === '1',
+              sort: sortMode,
+              priceCur: filters.priceCur,
+              priceMin: filters.priceMin,
+              priceMax: filters.priceMax,
+              fx,
+              subcat: filters.subcat,
+              brand: filters.brand,
+              material: filters.material,
+              frameSize: filters.frameSize,
+              wheelSize: filters.wheelSize,
+              drivetrain: filters.drivetrain,
+              condition: filters.condition,
+              brake: filters.brake,
+              year: filters.year,
+              size: filters.size,
+              location: filters.location,
+              limit: 48,
+              offset: listings.length,
+            })
+            const mapped: Listing[] = (items || []).map((row: any) => ({
+              id: String(row.id),
+              slug: row.slug ?? undefined,
+              title: row.title,
+              brand: row.brand,
+              model: row.model,
+              year: typeof row.year === 'number' ? row.year : undefined,
+              category: row.category,
+              subcategory: row.subcategory ?? undefined,
+              price: Number(row.price) || 0,
+              priceCurrency: (row.price_currency || undefined),
+              originalPrice: typeof row.original_price === 'number' ? row.original_price : undefined,
+              location: row.location || '',
+              description: row.description || '',
+              images: Array.isArray(row.images) ? row.images : [],
+              sellerId: row.seller_id,
+              sellerName: row.seller_name ?? undefined,
+              sellerPlan: (row.plan || undefined),
+              plan: (row.plan || undefined),
+              sellerPlanExpires: row.seller_plan_expires ? Date.parse(row.seller_plan_expires) : undefined,
+              highlightExpires: row.highlight_expires ? Date.parse(row.highlight_expires) : undefined,
+              sellerLocation: row.seller_location ?? undefined,
+              sellerWhatsapp: row.seller_whatsapp ?? undefined,
+              sellerEmail: row.seller_email ?? undefined,
+              sellerAvatar: row.seller_avatar ?? undefined,
+              material: row.material ?? undefined,
+              frameSize: row.frame_size ?? undefined,
+              drivetrain: row.drivetrain ?? undefined,
+              drivetrainDetail: row.drivetrain_detail ?? undefined,
+              wheelset: row.wheelset ?? undefined,
+              wheelSize: row.wheel_size ?? undefined,
+              extras: row.extras ?? undefined,
+              status: row.status ?? 'active',
+              expiresAt: row.expires_at ? Date.parse(row.expires_at) : null,
+              renewalNotifiedAt: row.renewal_notified_at ? Date.parse(row.renewal_notified_at) : null,
+              createdAt: row.created_at ? Date.parse(row.created_at) : Date.now(),
+            }))
+            setListings((prev) => {
+              const byId = new Map(prev.map((x) => [x.id, x]))
+              const next: Listing[] = [...prev]
+              for (const m of mapped) {
+                if (!byId.has(m.id)) next.push(m)
+              }
+              return next
+            })
+            if (typeof t === 'number') setServerTotal(t)
+            // Actualizar logos para nuevos sellers
+            try {
+              const sellerIds = Array.from(new Set(mapped.map((x) => x.sellerId).filter(Boolean)))
+              if (sellerIds.length) {
+                const logos = await fetchStoresMeta(sellerIds)
+                setStoreLogos((prev) => ({ ...prev, ...logos }))
+              }
+            } catch { /* noop */ }
+          } finally {
+            loadingMoreRef.current = false
+          }
+        })()
       }
     }, { rootMargin: '600px 0px' })
     io.observe(el)
     return () => io.disconnect()
-  }, [filtered.length])
+  }, [serverMode, serverTotal, listings.length, paramsKey, sortMode, fx])
 
   // Preload estratégico: primeras 2 imágenes visibles
   useEffect(() => {
@@ -1077,6 +1281,13 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
       onRemove: () => setFilters({ deal: undefined })
     })
   }
+  if (filters.store === '1') {
+    activeFilterChips.push({
+      key: 'store',
+      label: 'Tiendas oficiales',
+      onRemove: () => setFilters({ store: undefined })
+    })
+  }
 
   const hasActiveFilters = activeFilterChips.length > 0
 
@@ -1187,7 +1398,7 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
               </div>
             </div>
 
-            <div className="sm:hidden text-xs text-white/70">{filtered.length} resultados</div>
+            <div className="sm:hidden text-xs text-white/70">{(serverMode && serverTotal != null) ? serverTotal : filtered.length} resultados</div>
 
             <div className="space-y-4">
               {breadcrumbs && breadcrumbs.length ? (
@@ -1210,7 +1421,7 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
                 <h2 className="text-xl font-semibold">{headingTitle}</h2>
               ) : null}
               <div className="hidden flex-col gap-3 sm:flex lg:flex-row lg:items-center lg:justify-between">
-                <div className="text-sm text-white/70">{filtered.length} resultados</div>
+                <div className="text-sm text-white/70">{(serverMode && serverTotal != null) ? serverTotal : filtered.length} resultados</div>
                 <div className="flex items-center gap-2 text-sm">
                   <span className="text-white/60">Ordenar</span>
                   <select
@@ -1315,6 +1526,18 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
                   )}
                 </FilterDropdown>
                 </div>
+
+                <div className="px-3 border-l border-white/20 first:border-l-0 whitespace-nowrap">
+                <FilterDropdown label="Tiendas oficiales" summary={filters.store === '1' ? 'Solo tiendas' : 'Todas'} variant="inline">
+                  {({ close }) => (
+                    <StoreFilterContent
+                      active={filters.store === '1'}
+                      onToggle={(active) => setFilters({ store: active ? '1' : undefined })}
+                      close={close}
+                    />
+                  )}
+                </FilterDropdown>
+                </div>
               </div>
 
               {hasActiveFilters ? (
@@ -1335,18 +1558,22 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
               </div>
             ) : visible.length ? (
               <>
-                <div className="grid -mx-2 grid-cols-1 gap-0 sm:mx-0 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">
+                <div className="grid -mx-2 grid-cols-1 gap-0 sm:mx-0 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3" style={{ overflowAnchor: 'none' } as any}>
                   {visible.map((listing, idx) => (
-                    <div key={listing.id} className="p-2 sm:p-0">
+                    <div
+                      key={listing.id}
+                      className="p-2 sm:p-0"
+                      data-listing-id={listing.id}
+                    >
                       <ListingCard l={listing} storeLogoUrl={storeLogos[listing.sellerId] || null} priority={idx < 4} likeCount={likeCounts[listing.id]} />
                     </div>
                   ))}
                 </div>
                 <div ref={sentinelRef} className="h-12" />
                 {visible.length < filtered.length ? (
-                  <div className="flex justify-center">
+                  <div ref={loadMoreRef} className="flex justify-center">
                     <button
-                      onClick={() => setCount((c) => Math.min(c + 40, filtered.length))}
+                      onClick={handleLoadMoreClient}
                       className="btn mt-4 bg-white text-[#14212e] hover:bg-white/90"
                     >
                       Cargar más
@@ -1485,6 +1712,22 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
                   <DealFilterContent
                     active={effectiveDeal === '1'}
                     onToggle={(active) => { if (!forcedDeal) setFilters({ deal: active ? '1' : undefined }) }}
+                    close={close}
+                  />
+                )}
+              </FilterDropdown>
+              <FilterDropdown
+                label="Tiendas oficiales"
+                summary={filters.store === '1' ? 'Solo tiendas' : 'Todas'}
+                className="w-full"
+                buttonClassName="w-full justify-between"
+                inlineOnMobile
+                variant="inline"
+              >
+                {({ close }) => (
+                  <StoreFilterContent
+                    active={filters.store === '1'}
+                    onToggle={(active) => setFilters({ store: active ? '1' : undefined })}
                     close={close}
                   />
                 )}
