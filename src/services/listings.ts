@@ -5,6 +5,8 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { extractListingId, slugify } from '../utils/slug'
 import { canonicalPlanCode } from '../utils/planCodes'
 
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+
 type ListingRow = {
   id: string
   title: string
@@ -42,6 +44,7 @@ type ListingRow = {
   renewal_notified_at?: string | null
   created_at?: string | null
   slug?: string | null
+  contact_methods?: string[] | null
 }
 
 const normalizeListing = (row: ListingRow): Listing => {
@@ -86,6 +89,29 @@ const normalizeListing = (row: ListingRow): Listing => {
     renewalNotifiedAt: row.renewal_notified_at ? Date.parse(row.renewal_notified_at) : null,
     createdAt: row.created_at ? Date.parse(row.created_at) : Date.now()
   }
+}
+
+const PHONE_REGEX = /\d+/g
+
+const normalizeWhatsappForStorage = (raw: string | null | undefined): string | null => {
+  if (!raw) return null
+  const digits = String(raw).match(PHONE_REGEX)
+  if (!digits) return null
+  let normalized = digits.join('')
+  normalized = normalized.replace(/^00+/, '')
+  normalized = normalized.replace(/^0+/, '')
+  if (!normalized) return null
+  if (!normalized.startsWith('54')) normalized = `54${normalized}`
+  return normalized
+}
+
+const ensureWhatsappInMethods = (methods: unknown): string[] => {
+  const base = Array.isArray(methods) ? methods.filter(Boolean).map((m) => String(m)) : []
+  const set = new Set(base)
+  if (!set.has('email')) set.add('email')
+  if (!set.has('chat')) set.add('chat')
+  set.add('whatsapp')
+  return Array.from(set)
 }
 
 export async function fetchListings(): Promise<Listing[]> {
@@ -277,7 +303,6 @@ export async function deleteListing(id: string): Promise<boolean> {
     }
     // Intentar limpiar imágenes en el backend (best-effort)
     try {
-      const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
       const endpoint = API_BASE ? `${API_BASE}/api/listings/${id}/cleanup-images` : `/api/listings/${id}/cleanup-images`
       await fetch(endpoint, { method: 'POST' })
     } catch (e) {
@@ -375,6 +400,148 @@ export async function setListingWhatsapp(id: string, value: string | null): Prom
   } catch (err) {
     console.warn('[listings] set whatsapp exception', err)
     return null
+  }
+}
+
+type UpgradeParams = {
+  id: string
+  planCode: 'basic' | 'premium'
+  useCredit?: boolean
+  allowClientFallback?: boolean
+}
+
+export async function upgradeListingPlan({ id, planCode, useCredit = false, allowClientFallback = false }: UpgradeParams): Promise<{ ok: boolean; listing?: Listing; error?: string }> {
+  if (!supabaseEnabled) return { ok: false, error: 'supabase_disabled' }
+  try {
+    const supabase = getSupabaseClient()
+    const { data } = await supabase.auth.getSession()
+    const token = data.session?.access_token || null
+    if (!token) return { ok: false, error: 'not_authenticated' }
+    const path = `/api/listings/${encodeURIComponent(id)}/upgrade`
+    const endpoints = API_BASE ? [path, `${API_BASE}${path}`] : [path]
+    let lastError: string | undefined
+    for (const endpoint of endpoints) {
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ planCode, useCredit }),
+        })
+        const payload = await res.json().catch(() => ({}))
+        if (!res.ok || !payload?.ok) {
+          lastError = payload?.error || `upgrade_failed_${res.status}`
+          if (res.status === 404 && endpoint !== path) {
+            // Intentar endpoint relativo si el remoto todavía no expone la ruta
+            continue
+          }
+          return { ok: false, error: lastError }
+        }
+        const listing = payload?.listing ? normalizeListing(payload.listing as ListingRow) : undefined
+        return { ok: true, listing }
+      } catch (err) {
+        lastError = (err as Error)?.message || 'network_error'
+      }
+    }
+    if (allowClientFallback && !useCredit) {
+      const fallback = await tryClientModeratorUpgrade({ supabase, id, planCode })
+      if (fallback.ok) return fallback
+      if (fallback.error) return fallback
+    }
+    return { ok: false, error: lastError || 'network_error' }
+  } catch (err) {
+    console.warn('[listings] upgrade failed', err)
+    return { ok: false, error: 'network_error' }
+  }
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
+async function tryClientModeratorUpgrade({
+  supabase,
+  id,
+  planCode
+}: {
+  supabase: SupabaseClient
+  id: string
+  planCode: 'basic' | 'premium'
+}): Promise<{ ok: boolean; listing?: Listing; error?: string }> {
+  try {
+    const { data: listing, error } = await supabase
+      .from('listings')
+      .select('id,seller_id,plan,plan_code,seller_plan,seller_whatsapp,contact_methods,expires_at,highlight_expires')
+      .eq('id', id)
+      .maybeSingle()
+
+    if (error || !listing || !listing?.seller_id) {
+      return { ok: false, error: 'not_found' }
+    }
+
+    const ownerId = String(listing.seller_id)
+
+    const { data: planRow } = await supabase
+      .from('plans')
+      .select('code,listing_duration_days,period_days,featured_days,featured_slots')
+      .eq('code', planCode)
+      .maybeSingle()
+
+    const defaultDuration = planCode === 'premium' ? 60 : 60
+    const listingDays = Number(planRow?.listing_duration_days ?? planRow?.period_days ?? defaultDuration) || defaultDuration
+    const defaultHighlight = planCode === 'premium' ? 14 : 7
+    const includedHighlightDays = Number(planRow?.featured_days ?? planRow?.featured_slots ?? defaultHighlight) || 0
+
+    const now = Date.now()
+    const nextExpires = new Date(now + listingDays * DAY_MS).toISOString()
+
+    let nextHighlightIso: string | null = listing.highlight_expires ?? null
+    if (includedHighlightDays > 0) {
+      const base = listing.highlight_expires ? Math.max(new Date(listing.highlight_expires).getTime(), now) : now
+      nextHighlightIso = new Date(base + includedHighlightDays * DAY_MS).toISOString()
+    }
+
+    let sellerWhatsapp = normalizeWhatsappForStorage((listing as any).seller_whatsapp || '')
+    if (!sellerWhatsapp) {
+      const { data: profile } = await supabase
+        .from('users')
+        .select('whatsapp_number,store_phone')
+        .eq('id', ownerId)
+        .maybeSingle()
+      const candidate = profile?.whatsapp_number || profile?.store_phone || ''
+      sellerWhatsapp = normalizeWhatsappForStorage(candidate)
+    }
+
+    if (!sellerWhatsapp) {
+      return { ok: false, error: 'missing_whatsapp' }
+    }
+
+    const contactMethods = ensureWhatsappInMethods((listing as any).contact_methods)
+
+    const { data: updated, error: updateErr } = await supabase
+      .from('listings')
+      .update({
+        plan: planCode,
+        plan_code: planCode,
+        seller_plan: planCode,
+        seller_whatsapp: sellerWhatsapp,
+        contact_methods: contactMethods,
+        expires_at: nextExpires,
+        highlight_expires: nextHighlightIso,
+        status: 'active'
+      })
+      .eq('id', id)
+      .select('*')
+      .maybeSingle()
+
+    if (updateErr || !updated) {
+      return { ok: false, error: 'update_failed' }
+    }
+
+    return { ok: true, listing: normalizeListing(updated as ListingRow) }
+  } catch (err) {
+    console.warn('[listings] moderator upgrade fallback failed', err)
+    return { ok: false, error: 'network_error' }
   }
 }
 

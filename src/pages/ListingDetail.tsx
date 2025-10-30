@@ -9,7 +9,7 @@ import { formatListingPrice } from '../utils/pricing'
 import { getPlanLabel, hasPaidPlan, isPlanVerified } from '../utils/plans'
 import { useCompare } from '../context/CompareContext'
 import { useListingLike } from '../hooks/useServerLikes'
-import { fetchListing, updateListingPlan, deleteListing, setListingWhatsapp, updateListingStatus, archiveListing, reduceListingPrice, extendListingExpiryDays, updateListingFields } from '../services/listings'
+import { fetchListing, updateListingPlan, deleteListing, setListingWhatsapp, updateListingStatus, archiveListing, reduceListingPrice, extendListingExpiryDays, updateListingFields, upgradeListingPlan } from '../services/listings'
 import { supabaseEnabled, getSupabaseClient } from '../services/supabase'
 import type { Listing } from '../types'
 import { formatNameWithInitial, computeTrustLevel, trustLabel, trustColorClasses, trustBadgeBgClasses } from '../utils/user'
@@ -474,6 +474,29 @@ export default function ListingDetail() {
     }
   }
 
+  const handleModeratorUpgrade = async (plan: 'basic' | 'premium') => {
+    if (!listing) return
+    setModeratorUpdating(true)
+    try {
+      const result = await upgradeListingPlan({ id: listing.id, planCode: plan, useCredit: false, allowClientFallback: true })
+      if (!result.ok) {
+        if (result.error === 'missing_whatsapp') {
+          alert('El vendedor no tiene un número de WhatsApp cargado. Agregalo desde su perfil antes de aplicar el plan.')
+        } else {
+          alert('No pudimos aplicar el plan. Intentá nuevamente.')
+        }
+        return
+      }
+      if (result.listing) setListing(result.listing)
+      showToast(`Aplicamos el plan ${plan === 'premium' ? 'Premium' : 'Básica'} a la publicación.`)
+    } catch (err) {
+      console.error('[listing-detail] moderator upgrade failed', err)
+      alert('No pudimos aplicar el plan. Intentá nuevamente.')
+    } finally {
+      setModeratorUpdating(false)
+    }
+  }
+
   const runModeratorAction = async () => {
     if (!modAction) return
     const confirmAll = ['delete'].includes(modAction) ? window.confirm('Confirmá la acción seleccionada.') : true
@@ -485,6 +508,8 @@ export default function ListingDetail() {
     if (modAction === 'unverify') return void handleModeratorVerify(false)
     if (modAction === 'enable_wa') return void handleModeratorWhatsapp(true)
     if (modAction === 'disable_wa') return void handleModeratorWhatsapp(false)
+    if (modAction === 'upgrade_basic') return void handleModeratorUpgrade('basic')
+    if (modAction === 'upgrade_premium') return void handleModeratorUpgrade('premium')
     if (modAction === 'delete') return void handleModeratorDelete()
     if (modAction === 'mark_sold') {
       if (!listing) return
@@ -918,6 +943,8 @@ export default function ListingDetail() {
                     {(() => {
                       const hasHighlight = hasPaidPlan(listing.sellerPlan ?? (listing.plan as any), listing.sellerPlanExpires)
                       const isSold = listing.status === 'sold'
+                      const modBasicLabel = listingPlanCode === 'basic' ? 'Renovar plan Básica' : 'Aplicar plan Básica'
+                      const modPremiumLabel = listingPlanCode === 'premium' ? 'Renovar plan Premium' : 'Aplicar plan Premium'
                       return (
                         <div className="mb-2 flex flex-wrap gap-2">
                           {!hasHighlight && listing.status !== 'archived' && (
@@ -925,6 +952,12 @@ export default function ListingDetail() {
                               Destacar 7 días 🔥
                             </Button>
                           )}
+                          <Button variant="ghost" disabled={moderatorUpdating} onClick={() => { setModAction('upgrade_basic'); void runModeratorAction() }}>
+                            {modBasicLabel}
+                          </Button>
+                          <Button variant="ghost" disabled={moderatorUpdating} onClick={() => { setModAction('upgrade_premium'); void runModeratorAction() }}>
+                            {modPremiumLabel}
+                          </Button>
                           {!isSold ? (
                             <Button variant="ghost" disabled={moderatorUpdating} onClick={() => { setModAction('mark_sold'); void runModeratorAction() }}>
                               Marcar vendida
@@ -948,6 +981,8 @@ export default function ListingDetail() {
                         <option value="highlight7">Destacar 7 días</option>
                         <option value="highlight14">Destacar 14 días</option>
                         <option value="unhighlight">Quitar destaque</option>
+                        <option value="upgrade_basic">Aplicar plan Básica</option>
+                        <option value="upgrade_premium">Aplicar plan Premium</option>
                         <option value="verify">Verificar vendedor</option>
                         <option value="unverify">Quitar verificación</option>
                         <option value="enable_wa">Habilitar WhatsApp</option>

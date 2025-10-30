@@ -173,11 +173,24 @@ export default function SweepstakeStrava() {
               ))}
             </ul>
             <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:items-center">
-              <Button to="/publicar" variant="accent" className="inline-flex items-center gap-2 rounded-2xl px-8 py-3 text-base font-semibold shadow-lg shadow-[#ff6b00]/30">
-                Publicá tu bici ahora
+              <Button
+                to="/register"
+                variant="accent"
+                className="inline-flex items-center gap-2 rounded-2xl px-8 py-3 text-base font-semibold shadow-lg shadow-[#ff6b00]/30"
+              >
+                Registrate y publicá gratis
               </Button>
-              <p className="text-xs text-white/60">Participás automáticamente. Sin historias ni comprobantes.</p>
+              <Button
+                to="/publicar"
+                variant="secondary"
+                className="inline-flex items-center gap-2 rounded-2xl border border-white/30 bg-white/10 px-8 py-3 text-base font-semibold text-white hover:bg-white/20"
+              >
+                Ya tengo cuenta
+              </Button>
             </div>
+            <p className="mt-3 text-sm text-white/70">
+              ¿No tenés cuenta? Al registrarte te regalamos un crédito para publicar y participar sin pagar. Si ya sos usuario, publicá tu bici y sumate automáticamente al sorteo.
+            </p>
           </div>
           <div className="relative flex justify-center">
             <div className="pointer-events-none absolute inset-x-10 top-[-10%] h-[260px] rounded-[200px] bg-gradient-to-br from-[#ff6b00]/40 via-transparent to-[#4f8cff]/30 blur-3xl" aria-hidden="true" />

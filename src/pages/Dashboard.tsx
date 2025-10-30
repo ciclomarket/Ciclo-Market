@@ -6,7 +6,7 @@ import ListingCard from '../components/ListingCard'
 import { mockListings } from '../mock/mockData'
 import { useAuth } from '../context/AuthContext'
 import { getSupabaseClient, supabaseEnabled } from '../services/supabase'
-import { archiveListing, fetchListingsBySeller, reduceListingPrice, fetchListingsByIds, updateListingStatus, deleteListing } from '../services/listings'
+import { archiveListing, fetchListingsBySeller, reduceListingPrice, fetchListingsByIds, updateListingStatus, deleteListing, upgradeListingPlan } from '../services/listings'
 import { FALLBACK_PLANS } from '../services/plans'
 import { fetchStoreSummary30d, fetchStoreListingSummary30d } from '../services/storeAnalytics'
 import { fetchUserProfile, type UserProfileRecord, upsertUserProfile } from '../services/users'
@@ -335,7 +335,7 @@ export default function Dashboard() {
           />
         )
       case 'Publicaciones':
-        return <ListingsView listings={sellerListings} onRefresh={loadData} />
+        return <ListingsView listings={sellerListings} credits={credits} profile={profile} onRefresh={loadData} />
       case 'Notificaciones':
         return <NotificationsView />
       case 'Créditos':
@@ -1227,15 +1227,81 @@ function ProfileView({
   )
 }
 
-function ListingsView({ listings, onRefresh }: { listings: Listing[]; onRefresh?: () => Promise<void> | void }) {
+function ListingsView({ listings, credits, profile, onRefresh }: { listings: Listing[]; credits: Credit[]; profile?: UserProfileRecord | null; onRefresh?: () => Promise<void> | void }) {
   const navigate = useNavigate()
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const { show: showToast } = useToast()
   const [openMenuFor, setOpenMenuFor] = useState<string | null>(null)
+  const [upgradingKey, setUpgradingKey] = useState<string | null>(null)
   const now = Date.now()
   const expiredList = useMemo(() =>
     listings.filter((l) => l.status === 'expired' || (typeof l.expiresAt === 'number' && l.expiresAt > 0 && l.expiresAt < now)),
   [listings, now])
+  const availableCredits = useMemo(() => {
+    const summary: Record<'basic' | 'premium', number> = { basic: 0, premium: 0 }
+    credits.forEach((credit) => {
+      if (credit.status === 'available') {
+        if (credit.plan_code === 'basic') summary.basic += 1
+        if (credit.plan_code === 'premium') summary.premium += 1
+      }
+    })
+    return summary
+  }, [credits])
+  const hasProfileWhatsapp = Boolean(profile?.whatsapp_number && profile.whatsapp_number.trim())
+  const creditAvailable = useCallback((plan: 'basic' | 'premium') => availableCredits[plan] > 0, [availableCredits])
+  const getUpgradeLabel = useCallback((currentPlan: string | null, targetPlan: 'basic' | 'premium') => {
+    const targetLabel = targetPlan === 'premium' ? 'Premium' : 'Básica'
+    if (!currentPlan || currentPlan === 'free') return `Mejorar a ${targetLabel} con crédito`
+    if (currentPlan === targetPlan) return `Renovar plan ${targetLabel} con crédito`
+    if (currentPlan === 'basic' && targetPlan === 'premium') return 'Subir a Premium con crédito'
+    return `Cambiar a plan ${targetLabel} con crédito`
+  }, [])
+
+  const handleUpgrade = useCallback(async (listing: Listing, targetPlan: 'basic' | 'premium') => {
+    if (!creditAvailable(targetPlan)) {
+      showToast('No tenés créditos disponibles para ese plan.', { variant: 'error' })
+      return
+    }
+    if (!hasProfileWhatsapp && (!listing.sellerWhatsapp || !listing.sellerWhatsapp.trim())) {
+      showToast('Agregá tu número de WhatsApp en tu perfil antes de mejorar la publicación.', { variant: 'error' })
+      return
+    }
+    const key = `${listing.id}-${targetPlan}`
+    setUpgradingKey(key)
+    try {
+      const result = await upgradeListingPlan({ id: listing.id, planCode: targetPlan, useCredit: true })
+      if (!result.ok) {
+        const error = result.error
+        if (error === 'no_available_credit' || error === 'credit_required') {
+          showToast('Necesitás un crédito disponible para realizar esta mejora.', { variant: 'error' })
+        } else if (error === 'missing_whatsapp') {
+          showToast('Agregá tu número de WhatsApp desde tu perfil y volvé a intentar.', { variant: 'error' })
+        } else if (error === 'credit_conflict') {
+          showToast('No pudimos usar el crédito. Recargá la página e intentá de nuevo.', { variant: 'error' })
+        } else {
+          showToast('No pudimos actualizar la publicación. Intentá nuevamente.', { variant: 'error' })
+        }
+        return
+      }
+      if (onRefresh) await onRefresh()
+      const currentPlan = canonicalPlanCode(listing.plan ?? listing.sellerPlan ?? undefined)
+      const targetLabel = targetPlan === 'premium' ? 'Premium' : 'Básica'
+      const message = currentPlan === targetPlan
+        ? `Renovamos tu publicación con el plan ${targetLabel}.`
+        : `Tu publicación ahora está en el plan ${targetLabel}.`
+      setSuccessMessage(message)
+      showToast(message, { variant: 'success' })
+      if (typeof window !== 'undefined') {
+        try { window.dispatchEvent(new CustomEvent('mb_credits_updated')) } catch { /* noop */ }
+      }
+      setOpenMenuFor(null)
+    } catch (err) {
+      console.warn('[dashboard] upgrade failed', err)
+      showToast('No pudimos actualizar la publicación. Intentá nuevamente.', { variant: 'error' })
+    } finally {
+      setUpgradingKey(null)
+    }
+  }, [creditAvailable, hasProfileWhatsapp, onRefresh, showToast])
 
   useEffect(() => {
     if (!successMessage || typeof window === 'undefined') return
@@ -1408,95 +1474,133 @@ function ListingsView({ listings, onRefresh }: { listings: Listing[]; onRefresh?
         {openMenuFor && (
           <div className="fixed inset-0 z-40" onClick={() => setOpenMenuFor(null)} aria-hidden />
         )}
-        {listings.map((listing) => (
-          <div key={listing.id} className="space-y-3">
-            <ListingCard l={listing} />
-            <div className="rounded-2xl border border-[#14212e]/10 bg-white/80 px-3 py-2 text-xs text-[#14212e]/70">
-              <p className="font-semibold uppercase tracking-[0.25em] text-[#14212e]/60">Estado</p>
-              <div className="mt-1 space-y-0.5">
-                <ListingExpiryMeta listing={listing} />
+        {listings.map((listing) => {
+          const listingPlanCode = canonicalPlanCode(listing.plan ?? listing.sellerPlan ?? undefined)
+          const basicOptionKey = `${listing.id}-basic`
+          const premiumOptionKey = `${listing.id}-premium`
+          const showBasicCreditOption = creditAvailable('basic') && listingPlanCode !== 'premium'
+          const showPremiumCreditOption = creditAvailable('premium')
+          const basicUpgradeLabel = getUpgradeLabel(listingPlanCode, 'basic')
+          const premiumUpgradeLabel = getUpgradeLabel(listingPlanCode, 'premium')
+          return (
+            <div key={listing.id} className="space-y-3">
+              <ListingCard l={listing} />
+              <div className="rounded-2xl border border-[#14212e]/10 bg-white/80 px-3 py-2 text-xs text-[#14212e]/70">
+                <p className="font-semibold uppercase tracking-[0.25em] text-[#14212e]/60">Estado</p>
+                <div className="mt-1 space-y-0.5">
+                  <ListingExpiryMeta listing={listing} />
+                </div>
+              </div>
+              <div className="relative flex items-center gap-2">
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-2 rounded-full border border-[#14212e]/20 bg-white px-3 py-1.5 text-xs font-semibold text-[#14212e] shadow-sm hover:bg-white/90"
+                  onClick={() => navigate(`/publicar/nueva?id=${encodeURIComponent(listing.id)}`)}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 3.487a1.75 1.75 0 1 1 2.475 2.475L8.25 17.05l-3.5.7.7-3.5 11.412-10.763Z" />
+                  </svg>
+                  Editar
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-2 rounded-full border border-[#14212e]/20 bg-white px-3 py-1.5 text-xs font-semibold text-[#14212e] shadow-sm hover:bg-white/90"
+                  onClick={() => setOpenMenuFor((prev) => (prev === listing.id ? null : listing.id))}
+                  aria-haspopup="menu"
+                  aria-expanded={openMenuFor === listing.id}
+                >
+                  Opciones
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden>
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                </button>
+
+                {openMenuFor === listing.id && (
+                  <div className="absolute left-0 bottom-full z-50 mb-2 w-full min-w-[220px] rounded-xl border border-[#14212e]/10 bg-white p-2 text-sm text-[#14212e] shadow-xl">
+                    {/* 3 atajos */}
+                    <button
+                      type="button"
+                      className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-[#14212e]/5"
+                      onClick={() => { navigate(`/publicar/nueva?id=${encodeURIComponent(listing.id)}`); setOpenMenuFor(null) }}
+                    >
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-[#14212e]/5"
+                      onClick={() => { void handleToggleSold(listing); setOpenMenuFor(null) }}
+                    >
+                      {listing.status === 'sold' ? 'Marcar disponible' : 'Marcar vendida'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={listing.status === 'sold'}
+                      className={`flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-[#14212e]/5 ${listing.status === 'sold' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      onClick={() => { void handleReducePrice(listing); setOpenMenuFor(null) }}
+                    >
+                      Reducir precio
+                    </button>
+                    {showBasicCreditOption && (
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-[#14212e]/5"
+                        disabled={upgradingKey === basicOptionKey}
+                        onClick={() => { void handleUpgrade(listing, 'basic') }}
+                      >
+                        {upgradingKey === basicOptionKey ? 'Aplicando…' : basicUpgradeLabel}
+                      </button>
+                    )}
+                    {showPremiumCreditOption && (
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-[#14212e]/5"
+                        disabled={upgradingKey === premiumOptionKey}
+                        onClick={() => { void handleUpgrade(listing, 'premium') }}
+                      >
+                        {upgradingKey === premiumOptionKey ? 'Aplicando…' : premiumUpgradeLabel}
+                      </button>
+                    )}
+                    {!showBasicCreditOption && !showPremiumCreditOption && (
+                      <Link
+                        to="/publicar"
+                        className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-[#14212e] hover:bg-[#14212e]/5"
+                        onClick={() => setOpenMenuFor(null)}
+                      >
+                        Comprar crédito
+                      </Link>
+                    )}
+                    <button
+                      type="button"
+                      className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-[#14212e]/5"
+                      onClick={() => { void handleArchive(listing.id); setOpenMenuFor(null) }}
+                    >
+                      Archivar
+                    </button>
+                    <button
+                      type="button"
+                      className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-red-600 hover:bg-red-50"
+                      onClick={() => { void handleDelete(listing.id); setOpenMenuFor(null) }}
+                    >
+                      Eliminar
+                    </button>
+                    {/* Link a más acciones */}
+                    <button
+                      type="button"
+                      className="mt-1 flex w-full items-center justify-between rounded-lg bg-[#14212e]/90 px-3 py-2 text-white hover:bg-[#14212e]"
+                      onClick={() => {
+                        const path = `/listing/${listing.slug || listing.id}`
+                        navigate(path)
+                        setOpenMenuFor(null)
+                      }}
+                    >
+                      Más acciones…
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
-            <div className="relative flex items-center gap-2">
-              <button
-                type="button"
-                className="inline-flex items-center gap-2 rounded-full border border-[#14212e]/20 bg-white px-3 py-1.5 text-xs font-semibold text-[#14212e] shadow-sm hover:bg-white/90"
-                onClick={() => navigate(`/publicar/nueva?id=${encodeURIComponent(listing.id)}`)}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 3.487a1.75 1.75 0 1 1 2.475 2.475L8.25 17.05l-3.5.7.7-3.5 11.412-10.763Z" />
-                </svg>
-                Editar
-              </button>
-              <button
-                type="button"
-                className="inline-flex items-center gap-2 rounded-full border border-[#14212e]/20 bg-white px-3 py-1.5 text-xs font-semibold text-[#14212e] shadow-sm hover:bg-white/90"
-                onClick={() => setOpenMenuFor((prev) => (prev === listing.id ? null : listing.id))}
-                aria-haspopup="menu"
-                aria-expanded={openMenuFor === listing.id}
-              >
-                Opciones
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden>
-                  <path d="M6 9l6 6 6-6" />
-                </svg>
-              </button>
-
-              {openMenuFor === listing.id && (
-                <div className="absolute left-0 bottom-full z-50 mb-2 w-full min-w-[220px] rounded-xl border border-[#14212e]/10 bg-white p-2 text-sm text-[#14212e] shadow-xl">
-                  {/* 3 atajos */}
-                  <button
-                    type="button"
-                    className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-[#14212e]/5"
-                    onClick={() => { navigate(`/publicar/nueva?id=${encodeURIComponent(listing.id)}`); setOpenMenuFor(null) }}
-                  >
-                    Editar
-                  </button>
-                  <button
-                    type="button"
-                    className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-[#14212e]/5"
-                    onClick={() => { void handleToggleSold(listing); setOpenMenuFor(null) }}
-                  >
-                    {listing.status === 'sold' ? 'Marcar disponible' : 'Marcar vendida'}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={listing.status === 'sold'}
-                    className={`flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-[#14212e]/5 ${listing.status === 'sold' ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    onClick={() => { void handleReducePrice(listing); setOpenMenuFor(null) }}
-                  >
-                    Reducir precio
-                  </button>
-                  <button
-                    type="button"
-                    className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-[#14212e]/5"
-                    onClick={() => { void handleArchive(listing.id); setOpenMenuFor(null) }}
-                  >
-                    Archivar
-                  </button>
-                  <button
-                    type="button"
-                    className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-red-600 hover:bg-red-50"
-                    onClick={() => { void handleDelete(listing.id); setOpenMenuFor(null) }}
-                  >
-                    Eliminar
-                  </button>
-                  {/* Link a más acciones */}
-                  <button
-                    type="button"
-                    className="mt-1 flex w-full items-center justify-between rounded-lg bg-[#14212e]/90 px-3 py-2 text-white hover:bg-[#14212e]"
-                    onClick={() => {
-                      const path = `/listing/${listing.slug || listing.id}`
-                      navigate(path)
-                      setOpenMenuFor(null)
-                    }}
-                  >
-                    Más acciones…
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

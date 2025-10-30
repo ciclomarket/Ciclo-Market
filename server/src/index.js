@@ -2698,6 +2698,50 @@ function fallbackPriceFor(code) {
   return 0
 }
 
+async function userIsModerator(userId, clientOverride) {
+  if (!userId) return false
+  let client = clientOverride || null
+  if (!client) {
+    try {
+      client = supabaseService || getServerSupabaseClient()
+    } catch {
+      return false
+    }
+  }
+  try {
+    const { data, error } = await client
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', userId)
+      .maybeSingle()
+    if (error) return false
+    return data?.role === 'moderator' || data?.role === 'admin'
+  } catch {
+    return false
+  }
+}
+
+function normalizeWhatsappForStorage(raw) {
+  if (!raw) return null
+  const digits = String(raw).match(/\d+/g)
+  if (!digits) return null
+  let normalized = digits.join('')
+  normalized = normalized.replace(/^00+/, '')
+  normalized = normalized.replace(/^0+/, '')
+  if (!normalized) return null
+  if (!normalized.startsWith('54')) normalized = `54${normalized}`
+  return normalized
+}
+
+function ensureWhatsappInContactMethods(methods) {
+  const base = Array.isArray(methods) ? methods.filter(Boolean).map((m) => String(m)) : []
+  const set = new Set(base)
+  if (!set.has('email')) set.add('email')
+  if (!set.has('chat')) set.add('chat')
+  set.add('whatsapp')
+  return Array.from(set)
+}
+
 app.post('/api/checkout', async (req, res) => {
   const startedAt = Date.now()
   try {
@@ -3497,6 +3541,148 @@ app.post('/api/listings/:id/highlight', async (req, res) => {
     return res.json({ ok: true, sellerPlan: 'featured', sellerPlanExpires: next })
   } catch (err) {
     console.error('[highlight] failed', err)
+    return res.status(500).json({ error: 'unexpected_error' })
+  }
+})
+
+// Upgrade or renew a publication to a paid plan (owner with credit or moderator)
+app.post('/api/listings/:id/upgrade', async (req, res) => {
+  try {
+    const { id } = req.params
+    const supabase = getServerSupabaseClient()
+    const user = await getAuthUser(req, supabase)
+    if (!user) return res.status(401).json({ error: 'unauthorized' })
+
+    const { data: listing, error: listingError } = await supabase
+      .from('listings')
+      .select('id,seller_id,plan,plan_code,seller_plan,expires_at,highlight_expires,seller_whatsapp,contact_methods')
+      .eq('id', id)
+      .maybeSingle()
+    if (listingError || !listing) return res.status(404).json({ error: 'not_found' })
+
+    const isOwner = listing.seller_id === user.id
+    let isModeratorUser = false
+    if (!isOwner) {
+      isModeratorUser = await userIsModerator(user.id, supabase)
+    }
+    if (!isOwner && !isModeratorUser) return res.status(403).json({ error: 'forbidden' })
+
+    const planCode = normalisePlanCode(req.body?.planCode || req.body?.plan)
+    if (!planCode || (planCode !== 'basic' && planCode !== 'premium')) {
+      return res.status(400).json({ error: 'invalid_plan' })
+    }
+
+    const useCredit = Boolean(req.body?.useCredit)
+    if (useCredit && !supabaseService) return res.status(500).json({ error: 'service_unavailable' })
+
+    let creditId = null
+    const ownerId = listing.seller_id
+    if (useCredit) {
+      const nowIso = new Date().toISOString()
+      const { data: creditRows, error: creditErr } = await supabaseService
+        .from('publish_credits')
+        .select('id')
+        .eq('user_id', ownerId)
+        .eq('plan_code', planCode)
+        .eq('status', 'available')
+        .gte('expires_at', nowIso)
+        .order('created_at', { ascending: true })
+        .limit(1)
+      if (creditErr) return res.status(500).json({ error: 'credit_lookup_failed' })
+      const credit = Array.isArray(creditRows) && creditRows[0] ? creditRows[0] : null
+      if (!credit?.id) return res.status(409).json({ error: 'no_available_credit' })
+      const { data: creditUpdate, error: creditUseErr } = await supabaseService
+        .from('publish_credits')
+        .update({ status: 'used', used_at: nowIso })
+        .eq('id', credit.id)
+        .eq('status', 'available')
+        .select('id')
+        .maybeSingle()
+      if (creditUseErr || !creditUpdate) return res.status(409).json({ error: 'credit_conflict' })
+      creditId = creditUpdate.id
+    } else if (!isModeratorUser) {
+      return res.status(409).json({ error: 'credit_required' })
+    }
+
+    let planRow = null
+    if (supabaseService) {
+      const { data: row } = await supabaseService
+        .from('plans')
+        .select('code, listing_duration_days, period_days, featured_days, featured_slots, whatsapp_enabled')
+        .eq('code', planCode)
+        .maybeSingle()
+      planRow = row
+    }
+    const listingDays = Number(planRow?.listing_duration_days || planRow?.period_days || 60)
+    let includedHighlightDays = Number(planRow?.featured_days || planRow?.featured_slots || 0)
+    const now = Date.now()
+    const nextExpires = new Date(now + listingDays * 24 * 60 * 60 * 1000).toISOString()
+    let nextHighlightIso = listing.highlight_expires || null
+    if (includedHighlightDays > 0) {
+      const baseHighlight = listing.highlight_expires ? Math.max(new Date(listing.highlight_expires).getTime(), now) : now
+      nextHighlightIso = new Date(baseHighlight + includedHighlightDays * 24 * 60 * 60 * 1000).toISOString()
+    }
+
+    let sellerWhatsapp = normalizeWhatsappForStorage(listing.seller_whatsapp || '')
+    if (!sellerWhatsapp && supabaseService) {
+      const { data: profile } = await supabaseService
+        .from('users')
+        .select('whatsapp_number, store_phone')
+        .eq('id', ownerId)
+        .maybeSingle()
+      const candidate = profile?.whatsapp_number || profile?.store_phone || null
+      sellerWhatsapp = normalizeWhatsappForStorage(candidate || '')
+    }
+    if (!sellerWhatsapp) {
+      if (creditId && supabaseService) {
+        await supabaseService
+          .from('publish_credits')
+          .update({ status: 'available', used_at: null })
+          .eq('id', creditId)
+      }
+      return res.status(409).json({ error: 'missing_whatsapp' })
+    }
+
+    const contactMethods = Array.isArray(listing.contact_methods)
+      ? ensureWhatsappInContactMethods(listing.contact_methods)
+      : ensureWhatsappInContactMethods(['email', 'chat'])
+
+    const { data: updatedListing, error: updateErr } = await supabase
+      .from('listings')
+      .update({
+        plan: planCode,
+        plan_code: planCode,
+        seller_plan: planCode,
+        seller_whatsapp: sellerWhatsapp,
+        contact_methods: contactMethods,
+        expires_at: nextExpires,
+        highlight_expires: nextHighlightIso,
+        status: 'active',
+      })
+      .eq('id', id)
+      .select('*')
+      .maybeSingle()
+
+    if (updateErr || !updatedListing) {
+      if (creditId && supabaseService) {
+        await supabaseService
+          .from('publish_credits')
+          .update({ status: 'available', used_at: null })
+          .eq('id', creditId)
+      }
+      return res.status(500).json({ error: 'update_failed' })
+    }
+
+    if (creditId && supabaseService) {
+      await supabaseService
+        .from('publish_credits')
+        .update({ listing_id: id })
+        .eq('id', creditId)
+    }
+
+    return res.json({ ok: true, listing: updatedListing })
+  } catch (err) {
+    console.error('[upgrade] failed', err)
     return res.status(500).json({ error: 'unexpected_error' })
   }
 })

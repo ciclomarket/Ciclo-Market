@@ -929,8 +929,9 @@ export default function NewListingForm() {
       renewal_notified_at: null
     }
 
-      const originalPlanCode = canonicalPlanCode(editingListing?.plan ?? editingListing?.sellerPlan ?? editingListing?.sellerPlan)
-      const planChanged = editingListing ? canonicalPlanCode(planCode) !== originalPlanCode : true
+      const currentPlanCode = editingListing ? canonicalPlanCode(editingListing.plan ?? editingListing.sellerPlan ?? undefined) : null
+      const nextPlanCode = canonicalPlanCode(planCode)
+      const planChanged = editingListing ? nextPlanCode !== currentPlanCode : true
       const shouldApplyPlan = !editingListing || planChanged
 
       if (editingListing) {
