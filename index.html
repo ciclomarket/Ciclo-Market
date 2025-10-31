@@ -34,18 +34,20 @@
     <meta name="twitter:image" content="https://ciclomarket.ar/logo-azul.png" />
     <!-- fb:app_id removido para evitar warnings si no está configurado -->
     <meta name="facebook-domain-verification" content="41vv7fzi6iagjgk62frhdk0t4ottbq" />
+    <!-- Google Analytics 4 -->
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){window.dataLayer.push(arguments);}
+      gtag('consent','default',{ analytics_storage:'granted' });
+    </script>
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-9PZQB9FK57"></script>
+    <script>
+      gtag('js', new Date());
+      gtag('config', 'G-9PZQB9FK57', { send_page_view: false });
+    </script>
   </head>
   <body class="bg-mb-bg text-mb-ink">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-    <!-- Consent Mode default (antes de cargar GA). Iniciamos GA de forma diferida desde la app tras consentimiento -->
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){window.dataLayer.push(arguments);}
-      gtag('consent','default',{
-        analytics_storage:'denied',
-        wait_for_update: 500
-      });
-    </script>

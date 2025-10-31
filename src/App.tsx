@@ -372,11 +372,7 @@ function ScrollToTop() {
 export default function App() {
   const location = useLocation()
   const seoConfig = useMemo(() => resolveSeoForPath(location.pathname, location.search), [location.pathname, location.search])
-  const first = useRef(true)
-  // Pixel se inicializa desde CookieConsent tras consentimiento
   useEffect(() => {
-    // Tras la carga inicial, GA ya envió page_view automáticamente desde index.html
-    if (first.current) { first.current = false; return }
     const gtag = (window as any).gtag as ((...args: any[]) => void) | undefined
     if (typeof gtag === 'function') {
       const pagePath = location.pathname + location.search
