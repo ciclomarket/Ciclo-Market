@@ -64,8 +64,22 @@ const app = express()
 app.use(express.json())
 
 /* ----------------------------- Static assets ------------------------------ */
+const distDir = path.join(__dirname, '..', '..', 'dist')
 // Static assets live at project-root/public (not server/public)
 const publicDir = path.join(__dirname, '..', '..', 'public')
+
+app.use(
+  express.static(distDir, {
+    fallthrough: true,
+    setHeaders(res, filePath) {
+      if (filePath.endsWith('index.html')) {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+      } else if (/\.(?:js|css|png|jpe?g|webp|avif|svg|ico|gif|woff2?)$/i.test(filePath)) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+      }
+    },
+  })
+)
 app.use(
   express.static(publicDir, {
     maxAge: '30d',
@@ -3444,6 +3458,19 @@ app.post('/api/payments/confirm', async (req, res) => {
     console.error('[payments/confirm] failed', err)
     return res.status(500).json({ ok: false, error: 'unexpected_error' })
   }
+})
+
+/* ----------------------------- SPA fallback ------------------------------ */
+app.get('*', (req, res, next) => {
+  if (req.method !== 'GET') return next()
+  const route = req.path || ''
+  if (route.startsWith('/api') || route.startsWith('/sitemap') || route.startsWith('/share')) {
+    return next()
+  }
+  // Static middleware will have served assets; remaining GETs render SPA shell
+  return res.sendFile(path.join(distDir, 'index.html'), (err) => {
+    if (err) next(err)
+  })
 })
 
 /* ------------------------------- Start ------------------------------------- */
