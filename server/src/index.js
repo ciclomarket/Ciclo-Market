@@ -45,6 +45,21 @@ const {
 const path = require('path')
 // const https = require('https') // removed: used only for Google rating proxy
 
+function normalizeOrigin(frontendUrlEnv) {
+  const raw = (frontendUrlEnv || '').split(',')[0]?.trim()
+  if (!raw) return 'https://www.ciclomarket.ar'
+  try {
+    const url = new URL(raw.startsWith('http') ? raw : `https://${raw}`)
+    const host = url.hostname.startsWith('www.') ? url.hostname : `www.${url.hostname}`
+    url.protocol = 'https:'
+    url.hostname = host.replace(/^www\.www\./, 'www.')
+    url.pathname = ''
+    return url.toString().replace(/\/$/, '')
+  } catch {
+    return raw.startsWith('http') ? raw.replace(/\/$/, '') : `https://${raw.replace(/\/$/, '')}`
+  }
+}
+
 const app = express()
 app.use(express.json())
 
@@ -166,9 +181,7 @@ function buildParticipantsCsv(rows) {
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 function getFrontendBaseUrl() {
-  const raw = process.env.FRONTEND_URL || ''
-  const first = raw.split(',')[0]?.trim() || ''
-  return first ? first.replace(/\/$/, '') : 'https://ciclomarket.ar'
+  return normalizeOrigin(process.env.FRONTEND_URL)
 }
 
 function fallbackNameFromEmail(email) {
@@ -574,7 +587,7 @@ app.post('/api/sweepstakes/:slug/winner', async (req, res) => {
 app.get('/sitemap.xml', async (_req, res) => {
   try {
     res.type('application/xml')
-    const origin = (process.env.FRONTEND_URL || '').split(',')[0]?.trim() || 'https://ciclomarket.ar'
+    const origin = normalizeOrigin(process.env.FRONTEND_URL)
 
     // Calcular cantidad de páginas para listings
     let pages = 1
@@ -630,7 +643,7 @@ app.get('/sitemap.xml', async (_req, res) => {
 // Sitemap: páginas estáticas
 app.get('/sitemap-static.xml', async (_req, res) => {
   res.type('application/xml')
-  const origin = (process.env.FRONTEND_URL || '').split(',')[0]?.trim() || 'https://ciclomarket.ar'
+  const origin = normalizeOrigin(process.env.FRONTEND_URL)
   const nowIso = new Date().toISOString().slice(0, 10)
   const staticPaths = [
     '/',
@@ -678,7 +691,7 @@ ${urls}
 app.get('/sitemap-listings-:page(\\d+).xml', async (req, res) => {
   try {
     res.type('application/xml')
-    const origin = (process.env.FRONTEND_URL || '').split(',')[0]?.trim() || 'https://ciclomarket.ar'
+    const origin = normalizeOrigin(process.env.FRONTEND_URL)
     const page = Math.max(1, parseInt(String(req.params.page || '1'), 10) || 1)
     // Reducimos el tamaño de página para disminuir timeouts
     const PAGE_SIZE = 500

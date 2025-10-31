@@ -6,6 +6,8 @@ import { SocialAuthButtons } from '../../components/SocialAuthButtons'
 import { useAuth } from '../../context/AuthContext'
 import { getSupabaseClient, supabaseEnabled, setAuthPersistence } from '../../services/supabase'
 import { trackMetaPixel } from '../../lib/metaPixel'
+import { detectInAppBrowser, canUseOAuthInContext } from '../../utils/inAppBrowser'
+import InAppBrowserWarning from '../../components/InAppBrowserWarning'
 
 type OAuthProvider = 'google' | 'facebook'
 
@@ -17,6 +19,8 @@ export default function Login() {
   const navigate = useNavigate()
   const location = useLocation() as any
   const { enabled } = useAuth()
+  const [inApp, setInApp] = useState<{ isInApp: boolean; agent: string | null }>({ isInApp: false, agent: null })
+  useEffect(() => { setInApp(detectInAppBrowser()) }, [])
   // (Promo next removido)
 
   const setProviderLoading = (provider: OAuthProvider, value: boolean) => {
@@ -51,6 +55,10 @@ export default function Login() {
   }
 
   const buildOAuthHandler = (provider: OAuthProvider) => async () => {
+    if (!canUseOAuthInContext()) {
+      alert('Para continuar con Google/Facebook, abrí este link en Chrome o Safari (no dentro de Instagram/Messenger).')
+      return
+    }
     const providerName = provider === 'google' ? 'Google' : 'Facebook'
     if (!enabled || !supabaseEnabled) {
       alert(`Login con ${providerName} deshabilitado: configurá Supabase en .env`)
@@ -88,6 +96,9 @@ export default function Login() {
 
   return (
     <div className="relative isolate min-h-[calc(100vh-140px)] overflow-hidden bg-[#0c1723] py-14 text-white">
+      {inApp.isInApp && (
+        <InAppBrowserWarning />
+      )}
       <div className="absolute inset-0 -z-10 bg-[radial-gradient(1200px_520px_at_-10%_0%,rgba(255,255,255,0.12),transparent_70%)] opacity-70" />
       <div className="absolute inset-0 -z-20 bg-[radial-gradient(900px_520px_at_110%_20%,rgba(14,26,38,0.26),transparent_75%)]" />
       <Container>

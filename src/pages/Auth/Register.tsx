@@ -13,6 +13,8 @@ import { deriveProfileSlug, pickDiscipline } from '../../utils/user'
 import { useToast } from '../../context/ToastContext'
 import { grantCredit } from '../../services/credits'
 import { trackMetaPixel } from '../../lib/metaPixel'
+import { detectInAppBrowser, canUseOAuthInContext } from '../../utils/inAppBrowser'
+import InAppBrowserWarning from '../../components/InAppBrowserWarning'
 
 type OAuthProvider = 'google' | 'facebook'
 export default function Register() {
@@ -34,6 +36,8 @@ export default function Register() {
   const loc = useLocation() as any
   const { enabled } = useAuth()
   const { show: showToast } = useToast()
+  const [inApp, setInApp] = useState<{ isInApp: boolean; agent: string | null }>({ isInApp: false, agent: null })
+  useEffect(() => { setInApp(detectInAppBrowser()) }, [])
 
   const setProviderLoading = (provider: OAuthProvider, value: boolean) => {
     setSocialLoading((prev) => ({ ...prev, [provider]: value }))
@@ -150,6 +154,10 @@ export default function Register() {
   }
 
   const loginWithProvider = async (provider: OAuthProvider) => {
+    if (!canUseOAuthInContext()) {
+      setError('Abrí este enlace en Chrome o Safari para continuar con Google/Facebook.')
+      return
+    }
     setError(null)
     const providerName = provider === 'google' ? 'Google' : 'Facebook'
     if (!enabled || !supabaseEnabled) {
@@ -194,6 +202,9 @@ export default function Register() {
   const selectClass = 'select mt-1 bg-white text-[#14212e] border border-white/20 focus:border-white/60'
   return (
     <div className="relative isolate min-h-[calc(100vh-140px)] overflow-hidden bg-[#09121b] py-14 text-white">
+      {inApp.isInApp && (
+        <InAppBrowserWarning />
+      )}
       <div className="absolute inset-0 -z-10 bg-[radial-gradient(1100px_520px_at_-10%_0%,rgba(255,255,255,0.14),transparent_70%)] opacity-70" />
       <div className="absolute inset-0 -z-20 bg-[radial-gradient(960px_540px_at_120%_15%,rgba(17,30,44,0.3),transparent_75%)]" />
       <Container>
