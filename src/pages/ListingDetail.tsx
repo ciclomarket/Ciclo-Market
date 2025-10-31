@@ -9,7 +9,7 @@ import { formatListingPrice } from '../utils/pricing'
 import { getPlanLabel, hasPaidPlan, isPlanVerified } from '../utils/plans'
 import { useCompare } from '../context/CompareContext'
 import { useListingLike } from '../hooks/useServerLikes'
-import { fetchListing, updateListingPlan, deleteListing, setListingWhatsapp, updateListingStatus, archiveListing, reduceListingPrice, extendListingExpiryDays, updateListingFields, upgradeListingPlan } from '../services/listings'
+import { fetchListing, updateListingPlan, deleteListing, setListingWhatsapp, updateListingStatus, archiveListing, reduceListingPrice, extendListingExpiryDays, updateListingFields, upgradeListingPlan, setListingHighlightDays } from '../services/listings'
 import { supabaseEnabled, getSupabaseClient } from '../services/supabase'
 import type { Listing } from '../types'
 import { formatNameWithInitial, computeTrustLevel, trustLabel, trustColorClasses, trustBadgeBgClasses } from '../utils/user'
@@ -409,7 +409,8 @@ export default function ListingDetail() {
     if (!listing) return
     setModeratorUpdating(true)
     try {
-      const updated = await updateListingPlan({ id: listing.id, plan, durationDays })
+      // Para destaque, actualizar highlight_expires (plan se ignora para este caso)
+      const updated = await setListingHighlightDays(listing.id, durationDays)
       if (updated) {
         setListing(updated)
       }
@@ -483,7 +484,8 @@ export default function ListingDetail() {
         if (result.error === 'missing_whatsapp') {
           alert('El vendedor no tiene un número de WhatsApp cargado. Agregalo desde su perfil antes de aplicar el plan.')
         } else {
-          alert('No pudimos aplicar el plan. Intentá nuevamente.')
+          const detail = result.error ? ` (${result.error})` : ''
+          alert(`No pudimos aplicar el plan. Intentá nuevamente.${detail}`)
         }
         return
       }

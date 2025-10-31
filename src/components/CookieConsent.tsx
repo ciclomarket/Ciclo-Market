@@ -24,6 +24,18 @@ export default function CookieConsent() {
         const gtag = (window as any).gtag as ((...args: any[]) => void) | undefined
         if (typeof gtag === 'function') {
           gtag('consent', 'update', { analytics_storage: choice })
+          if (String(import.meta.env.VITE_GA_DEBUG || '').toLowerCase() === 'true') {
+            console.info('[GA] consent restored', { choice })
+          }
+          // Si ya estaba concedido antes de cargar, enviar un page_view inicial
+          if (choice === 'granted') {
+            const pagePath = window.location.pathname + window.location.search
+            const payload = { page_path: pagePath, page_location: `${window.location.origin}${pagePath}` }
+            if (String(import.meta.env.VITE_GA_DEBUG || '').toLowerCase() === 'true') {
+              console.info('[GA] initial page_view (restored consent)', payload)
+            }
+            gtag('event', 'page_view', payload)
+          }
         }
         // Meta Pixel: inicializar y aplicar consentimiento si está concedido
         const pixelId = (import.meta.env.VITE_META_PIXEL_ID || '').trim()
@@ -57,10 +69,17 @@ export default function CookieConsent() {
     const gtag = (window as any).gtag as ((...args: any[]) => void) | undefined
     if (typeof gtag === 'function') {
       gtag('consent', 'update', { analytics_storage: granted ? 'granted' : 'denied' })
+      if (String(import.meta.env.VITE_GA_DEBUG || '').toLowerCase() === 'true') {
+        console.info('[GA] consent set', { granted })
+      }
       if (granted) {
         // Enviar page_view inicial tras aceptar
         const pagePath = window.location.pathname + window.location.search
-        gtag('event', 'page_view', { page_path: pagePath, page_location: `${window.location.origin}${pagePath}` })
+        const payload = { page_path: pagePath, page_location: `${window.location.origin}${pagePath}` }
+        if (String(import.meta.env.VITE_GA_DEBUG || '').toLowerCase() === 'true') {
+          console.info('[GA] initial page_view (accept)', payload)
+        }
+        gtag('event', 'page_view', payload)
       }
     }
     // Meta Pixel: inicializar y aplicar consentimiento sólo si fue concedido

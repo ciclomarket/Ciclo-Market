@@ -342,6 +342,34 @@ export async function extendListingExpiryDays(id: string, days: number): Promise
   }
 }
 
+export async function setListingHighlightDays(id: string, days: number | null): Promise<Listing | null> {
+  if (!supabaseEnabled) return null
+  try {
+    const supabase = getSupabaseClient()
+    let nextIso: string | null = null
+    if (typeof days === 'number' && days > 0) {
+      const { data: row } = await supabase.from('listings').select('highlight_expires').eq('id', id).maybeSingle()
+      const now = Date.now()
+      const baseMs = row?.highlight_expires ? Math.max(new Date(row.highlight_expires).getTime(), now) : now
+      nextIso = new Date(baseMs + days * 24 * 60 * 60 * 1000).toISOString()
+    }
+    const { data, error } = await supabase
+      .from('listings')
+      .update({ highlight_expires: nextIso })
+      .eq('id', id)
+      .select('*')
+      .maybeSingle()
+    if (error) {
+      console.warn('[listings] set highlight error', error)
+      return null
+    }
+    return data ? normalizeListing(data as ListingRow) : null
+  } catch (err) {
+    console.warn('[listings] set highlight exception', err)
+    return null
+  }
+}
+
 export async function updateListingFields(id: string, patch: Partial<Listing>): Promise<Listing | null> {
   if (!supabaseEnabled) return null
   try {
@@ -420,7 +448,8 @@ export async function upgradeListingPlan({ id, planCode, useCredit = false, allo
     const path = `/api/listings/${encodeURIComponent(id)}/upgrade`
     const endpoints = API_BASE ? [path, `${API_BASE}${path}`] : [path]
     let lastError: string | undefined
-    for (const endpoint of endpoints) {
+    for (let index = 0; index < endpoints.length; index += 1) {
+      const endpoint = endpoints[index]
       try {
         const res = await fetch(endpoint, {
           method: 'POST',
@@ -433,16 +462,15 @@ export async function upgradeListingPlan({ id, planCode, useCredit = false, allo
         const payload = await res.json().catch(() => ({}))
         if (!res.ok || !payload?.ok) {
           lastError = payload?.error || `upgrade_failed_${res.status}`
-          if (res.status === 404 && endpoint !== path) {
-            // Intentar endpoint relativo si el remoto todavía no expone la ruta
-            continue
-          }
-          return { ok: false, error: lastError }
+          if (index < endpoints.length - 1) continue
+          break
         }
         const listing = payload?.listing ? normalizeListing(payload.listing as ListingRow) : undefined
         return { ok: true, listing }
       } catch (err) {
         lastError = (err as Error)?.message || 'network_error'
+        if (index < endpoints.length - 1) continue
+        break
       }
     }
     if (allowClientFallback && !useCredit) {
@@ -450,6 +478,7 @@ export async function upgradeListingPlan({ id, planCode, useCredit = false, allo
       if (fallback.ok) return fallback
       if (fallback.error) return fallback
     }
+    if (lastError) console.warn('[listings] upgrade endpoints failed', lastError)
     return { ok: false, error: lastError || 'network_error' }
   } catch (err) {
     console.warn('[listings] upgrade failed', err)
@@ -476,6 +505,7 @@ async function tryClientModeratorUpgrade({
       .maybeSingle()
 
     if (error || !listing || !listing?.seller_id) {
+      if (error) console.warn('[listings] moderator fallback fetch error', error)
       return { ok: false, error: 'not_found' }
     }
 
@@ -535,6 +565,8 @@ async function tryClientModeratorUpgrade({
       .maybeSingle()
 
     if (updateErr || !updated) {
+      if (updateErr) console.warn('[listings] moderator fallback update error', updateErr)
+      else console.warn('[listings] moderator fallback update empty response')
       return { ok: false, error: 'update_failed' }
     }
 

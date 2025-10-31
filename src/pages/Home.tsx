@@ -253,13 +253,19 @@ export default function Home() {
     [listings]
   )
 
-  const featuredListingsRaw = useMemo(
-    () => listings.filter((l) => hasPaidPlan(l.sellerPlan ?? (l.plan as any), l.sellerPlanExpires)),
-    [listings]
-  )
-
-  const onlyBikes = (arr: Listing[]) => arr.filter((l) => l.category !== 'Accesorios' && l.category !== 'Indumentaria')
-  const featuredListings = featuredListingsRaw.length ? onlyBikes(featuredListingsRaw) : onlyBikes(listings).slice(0, 8)
+  const featuredListings = useMemo(() => {
+    const now = Date.now()
+    const isBike = (l: Listing) => l.category !== 'Accesorios' && l.category !== 'Indumentaria'
+    const highlighted = listings.filter((l) => isBike(l) && typeof l.highlightExpires === 'number' && l.highlightExpires > now)
+      .sort((a, b) => (b.highlightExpires ?? 0) - (a.highlightExpires ?? 0))
+    // Completar con pagas si hace falta
+    const paid = listings.filter((l) => isBike(l) && hasPaidPlan(l.sellerPlan ?? (l.plan as any), l.sellerPlanExpires))
+    const seen = new Set(highlighted.map((l) => l.id))
+    const merged: Listing[] = [...highlighted]
+    for (const l of paid) { if (!seen.has(l.id)) merged.push(l); if (merged.length >= 12) break }
+    if (merged.length === 0) return listings.filter(isBike).slice(0, 8)
+    return merged.slice(0, 12)
+  }, [listings])
 
   // Filtrado general
   const filtered = useMemo(
