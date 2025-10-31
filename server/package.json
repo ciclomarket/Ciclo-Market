@@ -4,7 +4,8 @@
   "main": "src/index.js",
   "type": "commonjs",
   "scripts": {
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "build": "npm install --prefix .. && npm run build --prefix .."
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.74.0",
