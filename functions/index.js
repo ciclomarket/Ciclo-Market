@@ -1,7 +1,7 @@
 const { onRequest } = require('firebase-functions/v2/https')
 
 // Render origin for backend that generates OG meta tags
-const RENDER_ORIGIN = process.env.RENDER_ORIGIN || 'https://ciclo-market.onrender.com'
+const RENDER_ORIGIN = process.env.RENDER_ORIGIN || 'https://www.ciclomarket.ar'
 
 exports.shareListing = onRequest({ region: 'us-central1', memory: '256MiB' }, async (req, res) => {
   try {

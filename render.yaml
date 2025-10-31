@@ -9,7 +9,7 @@ services:
     envVars:
       # CORS: allowed frontends (comma-separated)
       - key: FRONTEND_URL
-        value: https://ciclomarket.ar
+        value: https://www.ciclomarket.ar,https://ciclomarket.ar
 
       # Supabase server credentials
       - key: SUPABASE_URL

@@ -26,7 +26,7 @@
     "redirects": [
       {
         "source": "/share/listing/:id",
-        "destination": "https://ciclo-market.onrender.com/share/listing/:id",
+        "destination": "https://www.ciclomarket.ar/share/listing/:id",
         "type": 302
       },
       { "source": "/marketplace/bicicletas-de-ruta", "destination": "/marketplace?cat=Ruta", "type": 301 },
@@ -40,27 +40,27 @@
       { "source": "/marketplace/indumentaria", "destination": "/marketplace?cat=Indumentaria", "type": 301 },
       {
         "source": "/sitemap.xml",
-        "destination": "https://ciclo-market.onrender.com/sitemap.xml",
+        "destination": "https://www.ciclomarket.ar/sitemap.xml",
         "type": 301
       },
       {
         "source": "/sitemap-static.xml",
-        "destination": "https://ciclo-market.onrender.com/sitemap-static.xml",
+        "destination": "https://www.ciclomarket.ar/sitemap-static.xml",
         "type": 301
       },
       {
         "source": "/sitemap-stores.xml",
-        "destination": "https://ciclo-market.onrender.com/sitemap-stores.xml",
+        "destination": "https://www.ciclomarket.ar/sitemap-stores.xml",
         "type": 301
       },
       {
         "source": "/sitemap-categories.xml",
-        "destination": "https://ciclo-market.onrender.com/sitemap-categories.xml",
+        "destination": "https://www.ciclomarket.ar/sitemap-categories.xml",
         "type": 301
       },
       {
         "source": "/sitemap-listings-:page.xml",
-        "destination": "https://ciclo-market.onrender.com/sitemap-listings-:page.xml",
+        "destination": "https://www.ciclomarket.ar/sitemap-listings-:page.xml",
         "type": 301
       }
     ],

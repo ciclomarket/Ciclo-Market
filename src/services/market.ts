@@ -2,9 +2,7 @@ const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 
 function guessApiBase(): string | '' {
   if (typeof window === 'undefined') return ''
-  const host = window.location?.hostname ?? ''
-  if (/ciclomarket\.ar$/i.test(host)) return 'https://ciclo-market.onrender.com'
-  return ''
+  return window.location?.origin?.replace(/\/$/, '') || ''
 }
 
 export type MarketSearchParams = {
