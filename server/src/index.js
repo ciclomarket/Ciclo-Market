@@ -98,10 +98,33 @@ app.use(
 
 /* ----------------------------- CORS --------------------------------------- */
 // Permitir CORS amplio (ajustable por FRONTEND_URL si se quiere restringir)
-const allowed = (process.env.FRONTEND_URL || '')
-  .split(',')
-  .map((s) => s.trim())
-  .filter(Boolean)
+const allowed = (() => {
+  const raw = (process.env.FRONTEND_URL || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  if (!raw.length) return []
+  const expanded = new Set()
+  for (const entry of raw) {
+    const normalized = entry.replace(/\/$/, '')
+    if (!normalized) continue
+    expanded.add(normalized)
+    try {
+      const url = new URL(normalized.startsWith('http') ? normalized : `https://${normalized}`)
+      const host = url.hostname
+      if (host.startsWith('www.')) {
+        url.hostname = host.replace(/^www\./, '')
+        expanded.add(url.toString().replace(/\/$/, ''))
+      } else {
+        url.hostname = `www.${host}`
+        expanded.add(url.toString().replace(/\/$/, ''))
+      }
+    } catch {
+      // ignore malformed entries
+    }
+  }
+  return Array.from(expanded)
+})()
 
 const corsOptions = {
   origin: allowed.length ? allowed : (origin, cb) => cb(null, true),
