@@ -3057,35 +3057,9 @@ app.post('/api/credits/grant', async (req, res) => {
     const planCodeRaw = String(req.body?.planCode || req.body?.plan || 'basic').trim().toLowerCase()
     const planCode = planCodeRaw === 'premium' ? 'premium' : 'basic'
 
-    // Idempotencia: si ya existe un crédito de bienvenida para este usuario, devolver ok
-    const { data: existing } = await supabaseService
-      .from('publish_credits')
-      .select('id, status')
-      .eq('user_id', userId)
-      .eq('provider', 'welcome')
-      .limit(1)
-    if (Array.isArray(existing) && existing[0]?.id) {
-      return res.json({ ok: true, creditId: existing[0].id })
-    }
-
-    // Crear crédito disponible, opcional: expira en 180 días
-    const expiresAt = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString()
-    const payload = {
-      user_id: userId,
-      plan_code: planCode,
-      status: 'available',
-      provider: 'welcome',
-      provider_ref: null,
-      preference_id: null,
-      expires_at: expiresAt,
-    }
-    const { data: inserted, error } = await supabaseService
-      .from('publish_credits')
-      .insert([payload])
-      .select('id')
-      .single()
-    if (error || !inserted) return res.status(500).json({ ok: false, error: 'insert_failed' })
-    return res.json({ ok: true, creditId: inserted.id })
+    const creditId = await ensureWelcomeCredit({ userId, planCode })
+    if (!creditId) return res.status(500).json({ ok: false, error: 'insert_failed' })
+    return res.json({ ok: true, creditId })
   } catch (err) {
     console.error('[credits/grant] failed', err)
     return res.status(500).json({ ok: false, error: 'unexpected_error' })
@@ -3112,6 +3086,14 @@ app.get('/api/credits/me', async (req, res) => {
     if (!supabaseService) return res.json([])
     const userId = String(req.query.userId || req.query.user_id || '').trim()
     if (!userId) return res.json([])
+    const ensure = String(req.query.ensure || '').trim() === '1'
+    if (ensure) {
+      try {
+        await ensureWelcomeCredit({ userId })
+      } catch (err) {
+        console.warn('[credits/me] ensure welcome failed', err?.message || err)
+      }
+    }
     const nowIso = new Date().toISOString()
     const { data, error } = await supabaseService
       .from('publish_credits')
@@ -3127,6 +3109,59 @@ app.get('/api/credits/me', async (req, res) => {
     return res.json([])
   }
 })
+async function ensureWelcomeCredit({ userId, planCode = 'basic' }) {
+  if (!supabaseService) return null
+  if (!userId) return null
+  try {
+    const { data: existing, error: existingError } = await supabaseService
+      .from('publish_credits')
+      .select('id, status')
+      .eq('user_id', userId)
+      .eq('provider', 'welcome')
+      .limit(1)
+    if (!existingError && Array.isArray(existing) && existing[0]?.id) {
+      return existing[0].id
+    }
+  } catch (err) {
+    console.warn('[credits] welcome lookup failed', err?.message || err)
+    // continuar con el intento de insert
+  }
+  try {
+    const expiresAt = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString()
+    const { data: inserted, error } = await supabaseService
+      .from('publish_credits')
+      .insert([{
+        user_id: userId,
+        plan_code: planCode,
+        status: 'available',
+        provider: 'welcome',
+        provider_ref: null,
+        preference_id: null,
+        expires_at: expiresAt,
+      }])
+      .select('id')
+      .maybeSingle()
+    if (error) {
+      const code = error?.code || ''
+      if (code === '23505') {
+        // Inserción duplicada (si existiera índice único); re-leer crédito
+        const { data: existing } = await supabaseService
+          .from('publish_credits')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('provider', 'welcome')
+          .limit(1)
+        if (Array.isArray(existing) && existing[0]?.id) return existing[0].id
+      }
+      console.warn('[credits] welcome insert failed', error)
+      return null
+    }
+    return inserted?.id ?? null
+  } catch (err) {
+    console.warn('[credits] welcome insert exception', err?.message || err)
+    return null
+  }
+}
 
 /* ----------------------------- Market search (server-ordered) ------------- */
 // GET /api/market/search

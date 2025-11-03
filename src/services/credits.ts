@@ -13,8 +13,8 @@ export type Credit = {
 export async function fetchMyCredits(userId: string): Promise<Credit[]> {
   try {
     const url = API_BASE
-      ? `${API_BASE}/api/credits/me?userId=${encodeURIComponent(userId)}`
-      : `/api/credits/me?userId=${encodeURIComponent(userId)}`
+      ? `${API_BASE}/api/credits/me?userId=${encodeURIComponent(userId)}&ensure=1`
+      : `/api/credits/me?userId=${encodeURIComponent(userId)}&ensure=1`
     const res = await fetch(url)
     if (!res.ok) return []
     const data = await res.json()
