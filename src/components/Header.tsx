@@ -617,9 +617,24 @@ export default function Header() {
               )}
             </div>
           )}
-          <Link to="/publicar" className="h-9 px-4 rounded-full bg-mb-primary text-white text-sm grid place-content-center">
-            Vender
-          </Link>
+          <div className="relative">
+            <Link
+              to="/publicar"
+              className="h-9 px-4 rounded-full bg-mb-primary text-white text-sm grid place-content-center"
+              title={creditCount > 0 ? 'Tenés un crédito disponible. Publicá gratis.' : undefined}
+            >
+              Vender
+            </Link>
+            {creditCount > 0 && (
+              <span
+                className="absolute -top-1 -right-1 inline-flex h-[14px] w-[14px] items-center justify-center rounded-full bg-emerald-500 text-[10px] text-white"
+                aria-label="Crédito disponible"
+                title="Tenés un crédito disponible. Publicá gratis."
+              >
+                
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Hamburguesa a la derecha (solo mobile) */}

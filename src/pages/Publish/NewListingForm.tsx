@@ -899,35 +899,47 @@ export default function NewListingForm() {
     }
 
       const payload = {
-      title: autoTitle,
-      brand: brand.trim(),
-      model: model.trim(),
-      year: (isAccessory || isApparel) ? undefined : year ? Number(year) : undefined,
-      category: finalCategory,
-      subcategory,
-      price: priceForStorage,
-      price_currency: priceCurrency,
-      location,
-      description: safeDescription,
-      images,
-      seller_name: sellerName,
-      seller_location: sellerLocation,
-      seller_whatsapp: formattedWhatsapp,
-      seller_email: user.email,
-      seller_plan: effectivePlanCode,
-      material: (isAccessory || isApparel) ? undefined : (materialValue || undefined),
-      frame_size: (isAccessory || isApparel) ? undefined : (frameSize || undefined),
-      drivetrain: (isAccessory || isApparel) ? undefined : (drivetrain === 'Otro' ? undefined : drivetrain),
-      drivetrain_detail: (isAccessory || isApparel) ? undefined : (drivetrain === 'Otro' ? (drivetrainOther.trim() || undefined) : undefined),
-      wheelset: (isAccessory || isApparel) ? undefined : (wheelset.trim() || undefined),
-      wheel_size: (isAccessory || isApparel) ? undefined : (wheelSize || undefined),
-      extras: safeExtras,
-      plan_code: effectivePlanCode,
-      plan: effectivePlanCode,
-      status: 'active',
-      expires_at: computedExpiresAtIso,
-      renewal_notified_at: null
-    }
+        title: autoTitle,
+        brand: brand.trim(),
+        model: model.trim(),
+        year: (isAccessory || isApparel) ? undefined : year ? Number(year) : undefined,
+        category: finalCategory,
+        subcategory,
+        price: priceForStorage,
+        price_currency: priceCurrency,
+        location,
+        description: safeDescription,
+        images,
+        seller_name: sellerName,
+        seller_location: sellerLocation,
+        seller_whatsapp: formattedWhatsapp,
+        seller_email: user.email,
+        seller_plan: effectivePlanCode,
+        material: (isAccessory || isApparel) ? undefined : (materialValue || undefined),
+        frame_size: (isAccessory || isApparel) ? undefined : (frameSize || undefined),
+        drivetrain: (isAccessory || isApparel) ? undefined : (drivetrain === 'Otro' ? undefined : drivetrain),
+        drivetrain_detail: (isAccessory || isApparel) ? undefined : (drivetrain === 'Otro' ? (drivetrainOther.trim() || undefined) : undefined),
+        wheelset: (isAccessory || isApparel) ? undefined : (wheelset.trim() || undefined),
+        wheel_size: (isAccessory || isApparel) ? undefined : (wheelSize || undefined),
+        extras: safeExtras,
+        plan_code: effectivePlanCode,
+        plan: effectivePlanCode,
+        status: 'active',
+        expires_at: computedExpiresAtIso,
+        renewal_notified_at: null
+      }
+
+      // Si estamos editando una publicación que no es del usuario (moderador),
+      // no sobrescribimos los datos del vendedor para conservar al publicador original.
+      if (editingListing && user.id !== editingListing.sellerId) {
+        // Evita cambiar el nombre visible del vendedor
+        delete (payload as any).seller_name
+        // Evita mover datos de contacto del vendedor al moderador por accidente
+        delete (payload as any).seller_email
+        delete (payload as any).seller_location
+        // El whatsapp puede requerir políticas específicas; por defecto no lo tocamos
+        delete (payload as any).seller_whatsapp
+      }
 
       const currentPlanCode = editingListing ? canonicalPlanCode(editingListing.plan ?? editingListing.sellerPlan ?? undefined) : null
       const nextPlanCode = canonicalPlanCode(planCode)

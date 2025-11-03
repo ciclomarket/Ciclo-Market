@@ -3049,10 +3049,13 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
 app.post('/api/credits/grant', async (req, res) => {
   try {
     if (!supabaseService) return res.status(500).json({ ok: false, error: 'service_unavailable' })
-    const userId = String(req.body?.userId || '').trim()
+    // Requerir autenticación y usar el userId del token (ignorar body para seguridad)
+    const supabase = getServerSupabaseClient()
+    const authUser = await getAuthUser(req, supabase)
+    if (!authUser?.id) return res.status(401).json({ ok: false, error: 'unauthorized' })
+    const userId = String(authUser.id)
     const planCodeRaw = String(req.body?.planCode || req.body?.plan || 'basic').trim().toLowerCase()
     const planCode = planCodeRaw === 'premium' ? 'premium' : 'basic'
-    if (!userId) return res.status(400).json({ ok: false, error: 'invalid_params' })
 
     // Idempotencia: si ya existe un crédito de bienvenida para este usuario, devolver ok
     const { data: existing } = await supabaseService
@@ -3085,6 +3088,21 @@ app.post('/api/credits/grant', async (req, res) => {
     return res.json({ ok: true, creditId: inserted.id })
   } catch (err) {
     console.error('[credits/grant] failed', err)
+    return res.status(500).json({ ok: false, error: 'unexpected_error' })
+  }
+})
+// Simple healthcheck to validate credits infra from the server side
+app.get('/api/credits/health', async (_req, res) => {
+  try {
+    if (!supabaseService) return res.status(503).json({ ok: false, error: 'service_unavailable' })
+    const { data, error } = await supabaseService
+      .from('publish_credits')
+      .select('id')
+      .limit(1)
+    if (error) return res.status(500).json({ ok: false, error: 'db_error' })
+    return res.json({ ok: true, supabase: true, table: 'publish_credits', readable: true })
+  } catch (err) {
+    console.warn('[credits/health] failed', err)
     return res.status(500).json({ ok: false, error: 'unexpected_error' })
   }
 })

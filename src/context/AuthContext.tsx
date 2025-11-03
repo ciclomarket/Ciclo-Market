@@ -98,7 +98,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         try {
           const flag = window.localStorage.getItem('mb_welcome_credit_checked')
           if (!flag) {
-            const res = await grantCredit(newUser.id, 'basic')
+            // Enviar token para que el backend valide y use el user ID del token
+            const session = await getSupabaseClient().auth.getSession()
+            const token = session.data.session?.access_token || undefined
+            const res = await grantCredit(newUser.id, 'basic', { token })
             if (res?.ok) {
               try { window.dispatchEvent(new CustomEvent('mb_credits_updated')) } catch { /* noop */ }
               window.localStorage.setItem('mb_welcome_credit_checked', '1')

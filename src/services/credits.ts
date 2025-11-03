@@ -11,9 +11,11 @@ export type Credit = {
 }
 
 export async function fetchMyCredits(userId: string): Promise<Credit[]> {
-  if (!API_BASE) return []
   try {
-    const res = await fetch(`${API_BASE}/api/credits/me?userId=${encodeURIComponent(userId)}`)
+    const url = API_BASE
+      ? `${API_BASE}/api/credits/me?userId=${encodeURIComponent(userId)}`
+      : `/api/credits/me?userId=${encodeURIComponent(userId)}`
+    const res = await fetch(url)
     if (!res.ok) return []
     const data = await res.json()
     if (!Array.isArray(data)) return []
@@ -24,9 +26,11 @@ export async function fetchMyCredits(userId: string): Promise<Credit[]> {
 }
 
 export async function fetchCreditsHistory(userId: string): Promise<Credit[]> {
-  if (!API_BASE) return []
   try {
-    const res = await fetch(`${API_BASE}/api/credits/history?userId=${encodeURIComponent(userId)}`)
+    const url = API_BASE
+      ? `${API_BASE}/api/credits/history?userId=${encodeURIComponent(userId)}`
+      : `/api/credits/history?userId=${encodeURIComponent(userId)}`
+    const res = await fetch(url)
     if (!res.ok) return []
     const data = await res.json()
     if (!Array.isArray(data)) return []
@@ -37,9 +41,9 @@ export async function fetchCreditsHistory(userId: string): Promise<Credit[]> {
 }
 
 export async function redeemCredit(userId: string, planCode: 'basic' | 'premium'): Promise<{ ok: true; creditId: string; planCode: 'basic' | 'premium' } | { ok: false; error: string }> {
-  if (!API_BASE) return { ok: false, error: 'missing_api_base' }
   try {
-    const res = await fetch(`${API_BASE}/api/credits/redeem`, {
+    const endpoint = API_BASE ? `${API_BASE}/api/credits/redeem` : '/api/credits/redeem'
+    const res = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId, planCode })
@@ -52,9 +56,9 @@ export async function redeemCredit(userId: string, planCode: 'basic' | 'premium'
 }
 
 export async function attachCreditToListing(userId: string, creditId: string, listingId: string): Promise<boolean> {
-  if (!API_BASE) return false
   try {
-    const res = await fetch(`${API_BASE}/api/credits/attach`, {
+    const endpoint = API_BASE ? `${API_BASE}/api/credits/attach` : '/api/credits/attach'
+    const res = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId, creditId, listingId })
@@ -66,12 +70,18 @@ export async function attachCreditToListing(userId: string, creditId: string, li
   }
 }
 
-export async function grantCredit(userId: string, planCode: 'basic' | 'premium'): Promise<{ ok: boolean; creditId?: string }> {
-  if (!API_BASE) return { ok: false }
+export async function grantCredit(
+  userId: string,
+  planCode: 'basic' | 'premium',
+  options?: { token?: string }
+): Promise<{ ok: boolean; creditId?: string }> {
   try {
-    const res = await fetch(`${API_BASE}/api/credits/grant`, {
+    const endpoint = API_BASE ? `${API_BASE}/api/credits/grant` : '/api/credits/grant'
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (options?.token) headers.Authorization = `Bearer ${options.token}`
+    const res = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ userId, planCode })
     })
     const data = await res.json().catch(() => ({}))

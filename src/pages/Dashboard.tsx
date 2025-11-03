@@ -221,6 +221,17 @@ export default function Dashboard() {
     loadData()
   }, [loadData])
 
+  // Refrescar datos cuando se actualicen créditos globalmente (ej.: welcome credit otorgado)
+  useEffect(() => {
+    const onUpdated = () => {
+      void loadData()
+    }
+    if (typeof window !== 'undefined') window.addEventListener('mb_credits_updated', onUpdated as any)
+    return () => {
+      if (typeof window !== 'undefined') window.removeEventListener('mb_credits_updated', onUpdated as any)
+    }
+  }, [loadData])
+
   // Dispara eventos de registro y login tras volver de OAuth (si corresponde)
   useEffect(() => {
     try {
@@ -610,6 +621,19 @@ export default function Dashboard() {
               </div>
             ) : (
               <div className="space-y-4">
+                {availableBasic > 0 && sellerListings.length === 0 && (
+                  <div className="rounded-3xl border border-emerald-200 bg-emerald-50/95 p-4 text-emerald-900 shadow-lg">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold">Crédito Básico disponible</p>
+                        <p className="text-sm text-emerald-900/80">Usalo para crear tu primera publicación gratis. Vence a los 180 días.</p>
+                      </div>
+                      <Button to="/publicar" className="bg-emerald-600 text-white hover:bg-emerald-700">
+                        Usar mi crédito
+                      </Button>
+                    </div>
+                  </div>
+                )}
                 {profileNeedsInfo && (
                   <div className="rounded-3xl border border-amber-100 bg-amber-50/95 p-4 text-[#7c3f00] shadow-lg">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
