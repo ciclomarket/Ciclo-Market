@@ -3,7 +3,6 @@ import { createContext, useContext, useEffect, useState } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { supabaseEnabled, getSupabaseClient } from '../services/supabase'
 import { syncProfileFromAuthUser } from '../utils/authProfile'
-import { grantCredit } from '../services/credits'
 
 interface Ctx {
   user: User | null
@@ -93,22 +92,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false)
       void loadRole(newUser?.id ?? null)
       void syncProfileFromAuthUser(newUser)
-      // Intentar otorgar crédito de bienvenida (idempotente en backend)
-      if (newUser?.id) {
-        try {
-          const flag = window.localStorage.getItem('mb_welcome_credit_checked')
-          if (!flag) {
-            // Enviar token para que el backend valide y use el user ID del token
-            const session = await getSupabaseClient().auth.getSession()
-            const token = session.data.session?.access_token || undefined
-            const res = await grantCredit(newUser.id, 'basic', { token })
-            if (res?.ok) {
-              try { window.dispatchEvent(new CustomEvent('mb_credits_updated')) } catch { /* noop */ }
-              window.localStorage.setItem('mb_welcome_credit_checked', '1')
-            }
-          }
-        } catch { /* noop */ }
-      }
       // (Promo redirections removidas)
     })
     return () => {

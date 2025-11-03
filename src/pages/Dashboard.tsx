@@ -346,7 +346,15 @@ export default function Dashboard() {
           />
         )
       case 'Publicaciones':
-        return <ListingsView listings={sellerListings} credits={credits} profile={profile} onRefresh={loadData} />
+        return (
+          <ListingsView
+            listings={sellerListings}
+            credits={credits}
+            profile={profile}
+            onRefresh={loadData}
+            onRequireWhatsapp={() => handleSelectTab('Editar perfil')}
+          />
+        )
       case 'Notificaciones':
         return <NotificationsView />
       case 'Créditos':
@@ -1251,7 +1259,19 @@ function ProfileView({
   )
 }
 
-function ListingsView({ listings, credits, profile, onRefresh }: { listings: Listing[]; credits: Credit[]; profile?: UserProfileRecord | null; onRefresh?: () => Promise<void> | void }) {
+function ListingsView({
+  listings,
+  credits,
+  profile,
+  onRefresh,
+  onRequireWhatsapp,
+}: {
+  listings: Listing[]
+  credits: Credit[]
+  profile?: UserProfileRecord | null
+  onRefresh?: () => Promise<void> | void
+  onRequireWhatsapp?: () => void
+}) {
   const navigate = useNavigate()
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const { show: showToast } = useToast()
@@ -1286,8 +1306,9 @@ function ListingsView({ listings, credits, profile, onRefresh }: { listings: Lis
       showToast('No tenés créditos disponibles para ese plan.', { variant: 'error' })
       return
     }
-    if (!hasProfileWhatsapp && (!listing.sellerWhatsapp || !listing.sellerWhatsapp.trim())) {
+    if (!hasProfileWhatsapp) {
       showToast('Agregá tu número de WhatsApp en tu perfil antes de mejorar la publicación.', { variant: 'error' })
+      onRequireWhatsapp?.()
       return
     }
     const key = `${listing.id}-${targetPlan}`

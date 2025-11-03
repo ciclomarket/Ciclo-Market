@@ -13,8 +13,8 @@ export type Credit = {
 export async function fetchMyCredits(userId: string): Promise<Credit[]> {
   try {
     const url = API_BASE
-      ? `${API_BASE}/api/credits/me?userId=${encodeURIComponent(userId)}&ensure=1`
-      : `/api/credits/me?userId=${encodeURIComponent(userId)}&ensure=1`
+      ? `${API_BASE}/api/credits/me?userId=${encodeURIComponent(userId)}`
+      : `/api/credits/me?userId=${encodeURIComponent(userId)}`
     const res = await fetch(url)
     if (!res.ok) return []
     const data = await res.json()
@@ -67,26 +67,5 @@ export async function attachCreditToListing(userId: string, creditId: string, li
     return Boolean(res.ok && data?.ok)
   } catch {
     return false
-  }
-}
-
-export async function grantCredit(
-  userId: string,
-  planCode: 'basic' | 'premium',
-  options?: { token?: string }
-): Promise<{ ok: boolean; creditId?: string }> {
-  try {
-    const endpoint = API_BASE ? `${API_BASE}/api/credits/grant` : '/api/credits/grant'
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-    if (options?.token) headers.Authorization = `Bearer ${options.token}`
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ userId, planCode })
-    })
-    const data = await res.json().catch(() => ({}))
-    return { ok: Boolean(res.ok && data?.ok), creditId: data?.creditId }
-  } catch {
-    return { ok: false }
   }
 }

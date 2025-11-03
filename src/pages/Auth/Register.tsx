@@ -11,7 +11,6 @@ import { getSupabaseClient, supabaseEnabled } from '../../services/supabase'
 import { createUserProfile } from '../../services/users'
 import { deriveProfileSlug, pickDiscipline } from '../../utils/user'
 import { useToast } from '../../context/ToastContext'
-import { grantCredit } from '../../services/credits'
 import { trackMetaPixel } from '../../lib/metaPixel'
 import { detectInAppBrowser, canUseOAuthInContext } from '../../utils/inAppBrowser'
 import InAppBrowserWarning from '../../components/InAppBrowserWarning'
@@ -103,16 +102,6 @@ export default function Register() {
           bikePreferences: bikePrefs,
           profileSlug,
         })
-        // Grant welcome basic credit (idempotente en backend). Puede requerir verificación; si no hay token, AuthContext lo reintenta al login.
-        try {
-          const session = await getSupabaseClient().auth.getSession()
-          const token = session.data.session?.access_token || undefined
-          const res = await grantCredit(data.user.id, 'basic', { token })
-          if (res?.ok) {
-            try { window.dispatchEvent(new CustomEvent('mb_credits_updated')) } catch { /* noop */ }
-            try { showToast('Te otorgamos un crédito Básico de bienvenida ✨', { variant: 'success' }) } catch { /* noop */ }
-          }
-        } catch { /* noop */ }
         // Newsletter opt-in (Resend audience)
         if (newsletterOptIn) {
           try {
