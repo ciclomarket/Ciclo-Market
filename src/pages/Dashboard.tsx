@@ -1275,8 +1275,14 @@ function ListingsView({
   const navigate = useNavigate()
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const { show: showToast } = useToast()
+  const { user } = useAuth()
+  const userId = user?.id ?? null
+  const { plans: planOptions } = usePlans()
   const [openMenuFor, setOpenMenuFor] = useState<string | null>(null)
   const [upgradingKey, setUpgradingKey] = useState<string | null>(null)
+  const [processingPaymentKey, setProcessingPaymentKey] = useState<string | null>(null)
+  const API_BASE = useMemo(() => (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, ''), [])
+  const canInitiateCheckout = Boolean(API_BASE)
   const now = Date.now()
   const expiredList = useMemo(() =>
     listings.filter((l) => l.status === 'expired' || (typeof l.expiresAt === 'number' && l.expiresAt > 0 && l.expiresAt < now)),
@@ -1300,6 +1306,26 @@ function ListingsView({
     if (currentPlan === 'basic' && targetPlan === 'premium') return 'Subir a Premium con crédito'
     return `Cambiar a plan ${targetLabel} con crédito`
   }, [])
+
+  const planCatalog = useMemo(() => {
+    const defaults: Record<'basic' | 'premium', { id: string; name: string; price?: number; currency?: string }> = {
+      basic: { id: 'basic', name: 'Plan Básico' },
+      premium: { id: 'premium', name: 'Plan Premium' }
+    }
+    const map = { ...defaults }
+    planOptions.forEach((plan) => {
+      const code = canonicalPlanCode(plan.code ?? plan.id ?? null)
+      if (code === 'basic' || code === 'premium') {
+        map[code] = {
+          id: plan.id || plan.code || code,
+          name: plan.name || (code === 'premium' ? 'Plan Premium' : 'Plan Básico'),
+          price: typeof plan.price === 'number' ? plan.price : undefined,
+          currency: plan.currency || 'ARS'
+        }
+      }
+    })
+    return map
+  }, [planOptions])
 
   const handleUpgrade = useCallback(async (listing: Listing, targetPlan: 'basic' | 'premium') => {
     if (!creditAvailable(targetPlan)) {
@@ -1347,6 +1373,72 @@ function ListingsView({
       setUpgradingKey(null)
     }
   }, [creditAvailable, hasProfileWhatsapp, onRefresh, showToast])
+
+  const handleUpgradeCheckout = useCallback(async (listing: Listing, targetPlan: 'basic' | 'premium') => {
+    if (!API_BASE) {
+      showToast('Configurá VITE_API_BASE_URL en tu entorno para iniciar el pago.', { variant: 'error' })
+      return
+    }
+    if (!userId) {
+      showToast('Iniciá sesión nuevamente para continuar.', { variant: 'error' })
+      return
+    }
+    const payKey = `${listing.id}-${targetPlan}-checkout`
+    const planConfig = planCatalog[targetPlan]
+    const amountValue = typeof planConfig?.price === 'number' ? planConfig.price : undefined
+    const currency = planConfig?.currency || 'ARS'
+    const planId = planConfig?.id || targetPlan
+    const planName = planConfig?.name || (targetPlan === 'premium' ? 'Plan Premium' : 'Plan Básico')
+    setProcessingPaymentKey(payKey)
+    try {
+      trackMetaPixel('InitiateCheckout', {
+        content_ids: [`upgrade_${targetPlan}`],
+        content_name: `Upgrade ${targetPlan === 'premium' ? 'Premium' : 'Básico'}`,
+        content_type: 'product',
+        value: typeof amountValue === 'number' ? amountValue : 0,
+        currency
+      })
+    } catch { /* noop */ }
+    try {
+      const response = await fetch(`${API_BASE}/api/checkout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          planId,
+          planCode: targetPlan,
+          planName,
+          planCurrency: currency,
+          amount: amountValue,
+          userId,
+          listingId: listing.id,
+          listingSlug: listing.slug ?? undefined,
+          listingTitle: listing.title,
+          upgradePlanCode: targetPlan,
+          autoRenew: false,
+          redirectUrls: {
+            success: `${window.location.origin}/publicar/nueva?id=${listing.id}&upgrade=success&plan=${targetPlan}`,
+            failure: `${window.location.origin}/publicar/nueva?id=${listing.id}&upgrade=failure&plan=${targetPlan}`,
+            pending: `${window.location.origin}/publicar/nueva?id=${listing.id}&upgrade=pending&plan=${targetPlan}`
+          }
+        })
+      })
+      const data = await response.json().catch(() => ({}))
+      const redirectUrl = data?.url ?? data?.init_point
+      if (!response.ok || !redirectUrl) {
+        console.error('[dashboard] upgrade checkout error', data)
+        showToast('No pudimos iniciar el pago. Intentá nuevamente.', { variant: 'error' })
+        return
+      }
+      setOpenMenuFor(null)
+      window.location.href = redirectUrl
+    } catch (err) {
+      console.error('[dashboard] upgrade checkout failed', err)
+      const aborted = (err as Error)?.name === 'AbortError'
+      showToast(aborted ? 'No pudimos iniciar el pago a tiempo. Revisá tu conexión e intentá de nuevo.' : 'No pudimos iniciar el pago. Intentá nuevamente.', { variant: 'error' })
+    } finally {
+      setProcessingPaymentKey(null)
+    }
+  }, [API_BASE, planCatalog, showToast, userId])
 
   useEffect(() => {
     if (!successMessage || typeof window === 'undefined') return
@@ -1523,8 +1615,12 @@ function ListingsView({
           const listingPlanCode = canonicalPlanCode(listing.plan ?? listing.sellerPlan ?? undefined)
           const basicOptionKey = `${listing.id}-basic`
           const premiumOptionKey = `${listing.id}-premium`
+          const basicCheckoutKey = `${listing.id}-basic-checkout`
+          const premiumCheckoutKey = `${listing.id}-premium-checkout`
           const showBasicCreditOption = creditAvailable('basic') && listingPlanCode !== 'premium'
           const showPremiumCreditOption = creditAvailable('premium')
+          const showBasicCheckoutOption = canInitiateCheckout && listingPlanCode !== 'premium'
+          const showPremiumCheckoutOption = canInitiateCheckout
           const basicUpgradeLabel = getUpgradeLabel(listingPlanCode, 'basic')
           const premiumUpgradeLabel = getUpgradeLabel(listingPlanCode, 'premium')
           return (
@@ -1605,7 +1701,27 @@ function ListingsView({
                         {upgradingKey === premiumOptionKey ? 'Aplicando…' : premiumUpgradeLabel}
                       </button>
                     )}
-                    {!showBasicCreditOption && !showPremiumCreditOption && (
+                    {showBasicCheckoutOption && (
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-[#14212e]/5"
+                        disabled={processingPaymentKey === basicCheckoutKey}
+                        onClick={() => { void handleUpgradeCheckout(listing, 'basic') }}
+                      >
+                        {processingPaymentKey === basicCheckoutKey ? 'Redirigiendo…' : 'Upgrade plan Básico (Mercado Pago)'}
+                      </button>
+                    )}
+                    {showPremiumCheckoutOption && (
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-[#14212e]/5"
+                        disabled={processingPaymentKey === premiumCheckoutKey}
+                        onClick={() => { void handleUpgradeCheckout(listing, 'premium') }}
+                      >
+                        {processingPaymentKey === premiumCheckoutKey ? 'Redirigiendo…' : 'Upgrade plan Premium (Mercado Pago)'}
+                      </button>
+                    )}
+                    {!canInitiateCheckout && !showBasicCreditOption && !showPremiumCreditOption && (
                       <Link
                         to="/publicar"
                         className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-[#14212e] hover:bg-[#14212e]/5"

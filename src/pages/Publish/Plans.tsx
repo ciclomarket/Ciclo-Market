@@ -643,6 +643,12 @@ export default function Plans() {
             const listingDuration = plan.listingDurationDays ?? plan.periodDays
             const priceLabel = giftPlan === planCode && giftCode ? 'Bonificado' : formatPrice(plan.price, plan.currency)
             const displayName = PLAN_LABEL[planCode] ?? plan.name ?? planCode
+            const orderClass =
+              planCode === 'premium'
+                ? 'order-1 md:order-3'
+                : planCode === 'basic'
+                ? 'order-2 md:order-2'
+                : 'order-3 md:order-1'
 
             const accent =
               planCode === 'premium'
@@ -683,7 +689,7 @@ export default function Plans() {
             return (
               <div
                 key={planCode}
-                className="relative overflow-hidden rounded-[30px] border border-white/10 bg-white/10 p-6 backdrop-blur shadow-[0_30px_80px_rgba(12,20,28,0.35)]"
+                className={`relative overflow-hidden rounded-[30px] border border-white/10 bg-white/10 p-6 backdrop-blur shadow-[0_30px_80px_rgba(12,20,28,0.35)] ${orderClass}`}
               >
                 {isRecommended && (
                   <div className="absolute right-4 top-4 z-10 rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#14212e]">

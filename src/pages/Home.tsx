@@ -18,6 +18,7 @@ import type { Listing } from '../types'
 import { buildListingSlug } from '../utils/slug'
 import { hasPaidPlan } from '../utils/plans'
 import { track, trackOncePerSession } from '../services/track'
+import { useAuth } from '../context/AuthContext'
 
 import specializedLogo from '/brands/specialized.png'
 import canyonLogo from '/brands/canyon.png'
@@ -53,6 +54,7 @@ const BRAND_LOGOS: Record<(typeof BRANDS)[number]['slug'], string> = {
 
 function HeroBackground() {
   const [src, setSrc] = useState('/bicicletas-home-card.jpg')
+
   useEffect(() => {
     const pick = () => {
       const w = window.innerWidth
@@ -65,6 +67,7 @@ function HeroBackground() {
     window.addEventListener('resize', pick)
     return () => window.removeEventListener('resize', pick)
   }, [])
+
   return (
     <div
       className="absolute inset-0 -z-20 bg-cover bg-center md:[background-position:50%_28%]"
@@ -214,6 +217,7 @@ function Step({ icon, t, d }: { icon: ReactNode; t: string; d: string }) {
 }
 
 export default function Home() {
+  const { user } = useAuth()
   useEffect(() => {
     trackOncePerSession('site_view_home', () => track('site_view'))
   }, [])
@@ -372,30 +376,34 @@ export default function Home() {
         <div className="absolute inset-0 -z-10 bg-[radial-gradient(1200px_600px_at_-20%_-10%,rgba(255,255,255,0.18),transparent_70%)]" />
         <div className="absolute inset-0 -z-10 bg-[radial-gradient(900px_520px_at_110%_10%,rgba(20,33,46,0.28),transparent_78%)]" />
         <Container>
-          <div className="relative mx-auto max-w-4xl py-10 md:py-14 text-center">
+          <div className="relative mx-auto max-w-4xl py-10 text-center md:py-14">
             <span className="inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.4em] text-white/70">
               Comunidad ciclista
             </span>
             <h1 className="mt-5 text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl md:text-5xl">
               El nuevo lugar para comprar y vender bicicletas en Argentina.
             </h1>
-            <p className="mt-3 mx-auto max-w-2xl text-base md:text-lg text-white/80">
+            <p className="mx-auto mt-3 max-w-2xl text-base text-white/80 md:text-lg">
               Publicá en minutos, destacá tu aviso y conectá directo con compradores. Sin comisiones por venta.
             </p>
             <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
               <Button
-                to="/publicar"
+                to={user ? '/publicar' : '/register'}
                 className="bg-gradient-to-r from-[#0ea5e9] via-[#2563eb] to-[#1d4ed8] text-white shadow-[0_14px_40px_rgba(37,99,235,0.45)] hover:brightness-110"
               >
                 <span>Publicar bicicleta</span>
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  className="h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.8}
+                >
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14m-6-6 6 6-6 6" />
                 </svg>
               </Button>
-              <Link
-                to="/marketplace"
-                className="btn bg-[#14212e] text-white shadow-[0_14px_40px_rgba(20,33,46,0.35)] hover:bg-[#1b2f3f]"
-              >
+              <Link to="/marketplace" className="btn bg-[#14212e] text-white shadow-[0_14px_40px_rgba(20,33,46,0.35)] hover:bg-[#1b2f3f]">
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   viewBox="0 0 24 24"

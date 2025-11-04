@@ -7,13 +7,21 @@ type Props = {
 export default function InAppBrowserWarning({ onClose }: Props) {
   const locationHref = typeof window !== 'undefined' ? window.location.href : ''
   const copyLink = async () => {
-    try { await navigator.clipboard.writeText(locationHref) } catch {}
+    try {
+      await navigator.clipboard.writeText(locationHref)
+    } catch (err) {
+      console.warn('[inapp-warning] clipboard copy failed', err)
+    }
     alert('Link copiado. Abrilo en Chrome o Safari para continuar con el login.')
   }
   const openExternal = () => {
     // En la mayoría de in-app browsers no abre Safari/Chrome directamente.
     // Igual intentamos _blank y dejamos instrucción.
-    try { window.open(locationHref, '_blank') } catch {}
+    try {
+      window.open(locationHref, '_blank')
+    } catch (err) {
+      console.warn('[inapp-warning] window.open blocked', err)
+    }
   }
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
@@ -36,4 +44,3 @@ export default function InAppBrowserWarning({ onClose }: Props) {
     </div>
   )
 }
-

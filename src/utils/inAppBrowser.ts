@@ -5,7 +5,9 @@ export function detectInAppBrowser(ua?: string): { isInApp: boolean; agent: 'ins
     const override = sp.get('inapp')
     if (override === '1') return { isInApp: true, agent: 'other' }
     if (override === '0') return { isInApp: false, agent: null }
-  } catch {}
+  } catch (err) {
+    console.warn('[inapp] search params unavailable', err)
+  }
   const s = (ua || (typeof navigator !== 'undefined' ? (navigator.userAgent || (navigator as any).vendor || (window as any).opera || '') : '')).toString()
   const lower = s.toLowerCase()
   if (/instagram/i.test(s)) return { isInApp: true, agent: 'instagram' }

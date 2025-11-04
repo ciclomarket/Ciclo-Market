@@ -87,6 +87,12 @@ export default function NewListingForm() {
   const [giftClaimedAsCredit, setGiftClaimedAsCredit] = useState(false)
   const [profile, setProfile] = useState<UserProfileRecord | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const upgradeStatusParam = searchParams.get('upgrade')
+  const upgradePlanParam = canonicalPlanCode(searchParams.get('plan'))
+  const upgradePlanLabel = upgradePlanParam === 'premium' ? 'Premium' : 'Básico'
+  const upgradeSuccess = Boolean(listingId && upgradeStatusParam === 'success' && (upgradePlanParam === 'basic' || upgradePlanParam === 'premium'))
+  const upgradePending = Boolean(listingId && upgradeStatusParam === 'pending')
+  const upgradeFailure = Boolean(listingId && upgradeStatusParam === 'failure')
 
   /** 1) Plan seleccionado por query (?plan=free|basic|premium) */
   const selectedPlan = useMemo(() => {
@@ -1099,20 +1105,38 @@ export default function NewListingForm() {
   return (
     <div className="bg-[#14212e]">
       <Container className="text-white">
-      <div className="flex w-full flex-col gap-3 md:flex-row md:items-center md:justify-between mb-6">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-bold text-white">{isEditing ? 'Editar publicación' : 'Nueva publicación'}</h1>
-          <p className="text-sm text-white/75 mt-1">
-            {isEditing
-              ? 'Actualizá la información de tu aviso. Los cambios se publican al instante.'
-              : isAccessory
-                ? 'Completá los datos de tu producto y mirá la vista previa en tiempo real.'
-                : isApparel
-                  ? 'Completá los datos de tu prenda y mirá la vista previa en tiempo real.'
-                  : 'Completá los datos de tu bici y obtené una vista previa en tiempo real.'}
-          </p>
-        </div>
-        <div className="min-w-0 rounded-xl border border-white/30 bg-white/10 px-4 py-3 text-sm text-white max-w-full md:max-w-sm">
+        {upgradeSuccess && (
+          <div className="mb-6 rounded-2xl border border-emerald-400/60 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100 shadow-[0_18px_40px_rgba(6,12,24,0.35)]">
+            <p className="font-semibold text-emerald-100">Plan {upgradePlanLabel} activado</p>
+            <p className="mt-1 text-emerald-50/90">Tu plan {upgradePlanLabel.toLowerCase()} ya está activo para esta publicación. Ahora podés agregar tu WhatsApp y subir más fotos.</p>
+          </div>
+        )}
+        {!upgradeSuccess && upgradePending && (
+          <div className="mb-6 rounded-2xl border border-amber-400/60 bg-amber-500/10 px-4 py-3 text-sm text-amber-100 shadow-[0_18px_40px_rgba(6,12,24,0.25)]">
+            <p className="font-semibold text-amber-100">Estamos procesando tu pago</p>
+            <p className="mt-1 text-amber-50/90">Apenas Mercado Pago confirme el cobro vamos a activar el plan automáticamente.</p>
+          </div>
+        )}
+        {upgradeFailure && (
+          <div className="mb-6 rounded-2xl border border-red-400/60 bg-red-500/10 px-4 py-3 text-sm text-red-100 shadow-[0_18px_40px_rgba(48,10,10,0.25)]">
+            <p className="font-semibold text-red-100">El pago no se completó</p>
+            <p className="mt-1 text-red-50/90">Volvé a tu panel para intentar el upgrade nuevamente cuando quieras.</p>
+          </div>
+        )}
+        <div className="flex w-full flex-col gap-3 md:flex-row md:items-center md:justify-between mb-6">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold text-white">{isEditing ? 'Editar publicación' : 'Nueva publicación'}</h1>
+            <p className="text-sm text-white/75 mt-1">
+              {isEditing
+                ? 'Actualizá la información de tu aviso. Los cambios se publican al instante.'
+                : isAccessory
+                  ? 'Completá los datos de tu producto y mirá la vista previa en tiempo real.'
+                  : isApparel
+                    ? 'Completá los datos de tu prenda y mirá la vista previa en tiempo real.'
+                    : 'Completá los datos de tu bici y obtené una vista previa en tiempo real.'}
+            </p>
+          </div>
+          <div className="min-w-0 rounded-xl border border-white/30 bg-white/10 px-4 py-3 text-sm text-white max-w-full md:max-w-sm">
           {/* Badge destacado de crédito/cortesía aplicada */}
           {((searchParams.get('credit') === '1') || (giftCode && giftPlan)) && (
             <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-emerald-500 px-3 py-1 text-xs font-bold text-white shadow">

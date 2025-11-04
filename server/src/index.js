@@ -2792,14 +2792,208 @@ function ensureWhatsappInContactMethods(methods) {
   return Array.from(set)
 }
 
+async function applyCheckoutUpgrade({
+  planCode,
+  listingId,
+  listingSlug,
+  userId,
+  providerRef,
+  preferenceId
+}) {
+  if (!supabaseService) return { ok: false, reason: 'service_unavailable' }
+  const targetPlan = normalisePlanCode(planCode)
+  if (targetPlan !== 'basic' && targetPlan !== 'premium') {
+    return { ok: false, reason: 'invalid_plan' }
+  }
+
+  const supabase = supabaseService
+  const targetUserId = userId ? String(userId) : null
+  let creditRow = null
+
+  try {
+    if (providerRef) {
+      const { data } = await supabase
+        .from('publish_credits')
+        .select('id,status,listing_id,used_at')
+        .eq('provider_ref', String(providerRef))
+        .eq('provider', 'mercadopago')
+        .maybeSingle()
+      creditRow = data || null
+      if (creditRow && creditRow.status === 'used' && creditRow.listing_id) {
+        return { ok: true, reason: 'already_applied' }
+      }
+    }
+    if (!creditRow && preferenceId) {
+      const { data } = await supabase
+        .from('publish_credits')
+        .select('id,status,listing_id,used_at')
+        .eq('preference_id', String(preferenceId))
+        .eq('provider', 'mercadopago')
+        .maybeSingle()
+      creditRow = data || null
+      if (creditRow && creditRow.status === 'used' && creditRow.listing_id) {
+        return { ok: true, reason: 'already_applied' }
+      }
+    }
+  } catch (lookupErr) {
+    console.warn('[upgrade/checkout] credit lookup failed', lookupErr?.message || lookupErr)
+  }
+
+  let targetListingId = listingId ? String(listingId) : null
+  let listing = null
+
+  try {
+    if (targetListingId) {
+      const { data } = await supabase
+        .from('listings')
+        .select('id,seller_id,plan,plan_code,seller_plan,expires_at,highlight_expires,seller_whatsapp,contact_methods')
+        .eq('id', targetListingId)
+        .maybeSingle()
+      listing = data || null
+    }
+    if (!listing && listingSlug) {
+      const { data } = await supabase
+        .from('listings')
+        .select('id,seller_id,plan,plan_code,seller_plan,expires_at,highlight_expires,seller_whatsapp,contact_methods')
+        .eq('slug', String(listingSlug))
+        .maybeSingle()
+      if (data && data.id) {
+        listing = data
+        targetListingId = String(data.id)
+      }
+    }
+  } catch (fetchErr) {
+    console.error('[upgrade/checkout] listing lookup failed', fetchErr?.message || fetchErr)
+    return { ok: false, reason: 'listing_lookup_failed' }
+  }
+
+  if (!listing || !targetListingId) {
+    return { ok: false, reason: 'listing_not_found' }
+  }
+
+  if (targetUserId && String(listing.seller_id) !== targetUserId) {
+    console.warn('[upgrade/checkout] ownership mismatch', { listingId: targetListingId, sellerId: listing.seller_id, userId: targetUserId })
+    return { ok: false, reason: 'ownership_mismatch' }
+  }
+
+  let planRow = null
+  try {
+    const { data } = await supabase
+      .from('plans')
+      .select('code, listing_duration_days, period_days, featured_days, featured_slots, whatsapp_enabled')
+      .eq('code', targetPlan)
+      .maybeSingle()
+    planRow = data || null
+  } catch (planErr) {
+    console.warn('[upgrade/checkout] plan lookup failed', planErr?.message || planErr)
+  }
+
+  const defaultDuration = 60
+  const listingDays = Number(planRow?.listing_duration_days || planRow?.period_days || defaultDuration) || defaultDuration
+  const defaultHighlight = targetPlan === 'premium' ? 14 : 7
+  const includedHighlightDays = Number(planRow?.featured_days || planRow?.featured_slots || defaultHighlight) || 0
+
+  const now = Date.now()
+  const nextExpires = new Date(now + listingDays * 24 * 60 * 60 * 1000).toISOString()
+  const existingHighlight = listing.highlight_expires ? new Date(listing.highlight_expires).getTime() : null
+  const baseHighlight = Number.isFinite(existingHighlight) ? Math.max(existingHighlight, now) : now
+  const nextHighlightIso = includedHighlightDays > 0
+    ? new Date(baseHighlight + includedHighlightDays * 24 * 60 * 60 * 1000).toISOString()
+    : (listing.highlight_expires || null)
+
+  let sellerWhatsapp = normalizeWhatsappForStorage(listing.seller_whatsapp || '')
+  if (!sellerWhatsapp) {
+    try {
+      const { data: profile } = await supabase
+        .from('users')
+        .select('whatsapp_number, store_phone')
+        .eq('id', listing.seller_id)
+        .maybeSingle()
+      const fallbackWhatsapp = profile?.whatsapp_number || profile?.store_phone || ''
+      sellerWhatsapp = normalizeWhatsappForStorage(fallbackWhatsapp)
+    } catch (profileErr) {
+      console.warn('[upgrade/checkout] profile lookup failed', profileErr?.message || profileErr)
+    }
+  }
+
+  if (!sellerWhatsapp) {
+    console.warn('[upgrade/checkout] missing whatsapp for upgrade', { listingId: targetListingId })
+    return { ok: false, reason: 'missing_whatsapp' }
+  }
+
+  const contactMethods = ensureWhatsappInContactMethods(listing.contact_methods || ['email', 'chat'])
+
+  try {
+    const { error: updateErr } = await supabase
+      .from('listings')
+      .update({
+        plan: targetPlan,
+        plan_code: targetPlan,
+        seller_plan: targetPlan,
+        seller_plan_expires: nextExpires,
+        seller_whatsapp: sellerWhatsapp,
+        contact_methods: contactMethods,
+        expires_at: nextExpires,
+        highlight_expires: nextHighlightIso,
+        status: 'active'
+      })
+      .eq('id', targetListingId)
+
+    if (updateErr) {
+      console.error('[upgrade/checkout] failed to update listing', updateErr)
+      return { ok: false, reason: 'update_failed' }
+    }
+  } catch (e) {
+    console.error('[upgrade/checkout] exception updating listing', e?.message || e)
+    return { ok: false, reason: 'update_exception' }
+  }
+
+  const nowIso = new Date().toISOString()
+  try {
+    if (providerRef) {
+      await supabase
+        .from('publish_credits')
+        .update({ status: 'used', used_at: nowIso, listing_id: targetListingId })
+        .eq('provider_ref', String(providerRef))
+        .eq('provider', 'mercadopago')
+    }
+    if (preferenceId) {
+      await supabase
+        .from('publish_credits')
+        .update({ status: 'used', used_at: nowIso, listing_id: targetListingId })
+        .eq('preference_id', String(preferenceId))
+        .eq('provider', 'mercadopago')
+    }
+  } catch (markErr) {
+    console.warn('[upgrade/checkout] failed to mark credit used', markErr?.message || markErr)
+  }
+
+  return { ok: true }
+}
+
 app.post('/api/checkout', async (req, res) => {
   const startedAt = Date.now()
   try {
-    const requestPlanCode = normalisePlanCode(req.body?.planCode || req.body?.plan || req.body?.planId)
+    let requestPlanCode = normalisePlanCode(req.body?.planCode || req.body?.plan || req.body?.planId)
     const requestPlanId = req.body?.planId || req.body?.plan || requestPlanCode || 'premium'
     const amountFromBody = Number(req.body?.amount)
     const autoRenew = Boolean(req.body?.autoRenew ?? true)
     const requestUserId = (req.body?.userId ? String(req.body.userId) : '').trim() || null
+    const upgradeListingIdRaw = req.body?.listingId ?? req.body?.listing_id ?? null
+    const upgradeListingId = typeof upgradeListingIdRaw === 'string'
+      ? upgradeListingIdRaw.trim()
+      : (upgradeListingIdRaw ? String(upgradeListingIdRaw) : null)
+    const upgradeListingSlugRaw = req.body?.listingSlug ?? req.body?.listing_slug ?? null
+    const upgradeListingSlug = typeof upgradeListingSlugRaw === 'string'
+      ? upgradeListingSlugRaw.trim()
+      : (upgradeListingSlugRaw ? String(upgradeListingSlugRaw) : null)
+    const upgradePlanOverride = normalisePlanCode(req.body?.upgradePlanCode || req.body?.upgrade_plan_code)
+    if (upgradePlanOverride) requestPlanCode = upgradePlanOverride
+    const upgradeListingTitleRaw = req.body?.listingTitle ?? req.body?.listing_title ?? null
+    const upgradeListingTitle = typeof upgradeListingTitleRaw === 'string'
+      ? upgradeListingTitleRaw.trim()
+      : (upgradeListingTitleRaw ? String(upgradeListingTitleRaw) : null)
+    const upgradeIntent = upgradeListingId ? 'listing_upgrade' : null
 
     let amount = Number.isFinite(amountFromBody) && amountFromBody > 0 ? amountFromBody : 0
 
@@ -2852,7 +3046,9 @@ app.post('/api/checkout', async (req, res) => {
       items: [
         {
           id: String(requestPlanId),
-          title: `Plan ${String(requestPlanId).toUpperCase()}`,
+          title: upgradeIntent
+            ? `Upgrade ${requestPlanCode === 'premium' ? 'Premium' : 'Básico'}`
+            : `Plan ${String(requestPlanId).toUpperCase()}`,
           quantity: 1,
           unit_price: unitPrice,
           currency_id: 'ARS',
@@ -2860,10 +3056,31 @@ app.post('/api/checkout', async (req, res) => {
       ],
       back_urls: { success: successUrl, failure: failureUrl, pending: pendingUrl },
       auto_return: 'approved',
-      metadata: { planId: requestPlanId, planCode: requestPlanCode, userId: requestUserId, autoRenew },
+      metadata: {
+        planId: requestPlanId,
+        planCode: requestPlanCode,
+        userId: requestUserId,
+        autoRenew,
+        ...(upgradeIntent ? {
+          intent: upgradeIntent,
+          listingId: upgradeListingId,
+          listingSlug: upgradeListingSlug,
+        } : {}),
+      },
       // external_reference ayuda a correlacionar en MP (visible en pago)
-      external_reference: [requestUserId || 'anon', requestPlanCode || requestPlanId || 'unknown', String(Date.now())].join(':'),
+      external_reference: [
+        requestUserId || 'anon',
+        requestPlanCode || requestPlanId || 'unknown',
+        upgradeListingId ? `listing-${upgradeListingId}` : null,
+        String(Date.now()),
+      ].filter(Boolean).join(':'),
       ...(notificationUrl ? { notification_url: notificationUrl } : {}),
+    }
+
+    if (upgradeIntent && upgradeListingTitle) {
+      try {
+        preference.items[0].title = `Upgrade ${requestPlanCode === 'premium' ? 'Premium' : 'Básico'} · ${upgradeListingTitle}`
+      } catch { /* noop */ }
     }
 
     const mpStart = Date.now()
@@ -2895,6 +3112,7 @@ app.post('/api/checkout', async (req, res) => {
           provider: 'mercadopago',
           preference_id: preferenceId || null,
           expires_at: expiresAt,
+          ...(upgradeListingId ? { listing_id: upgradeListingId } : {}),
         }
         await supabaseService.from('publish_credits').insert(payload)
       }
@@ -2930,8 +3148,17 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
         const externalRef = (mpPayment && mpPayment.external_reference) ? String(mpPayment.external_reference) : null
         const userId = typeof meta?.userId === 'string' && meta.userId ? meta.userId : null
         const planCode = normalisePlanCode(meta?.planCode || meta?.planId)
+        const listingIdRaw = meta?.listingId ?? meta?.listing_id ?? null
+        const listingSlugRaw = meta?.listingSlug ?? meta?.listing_slug ?? null
+        const upgradeListingId = typeof listingIdRaw === 'string'
+          ? listingIdRaw.trim() || null
+          : (listingIdRaw ? String(listingIdRaw) : null)
+        const upgradeListingSlug = typeof listingSlugRaw === 'string'
+          ? listingSlugRaw.trim() || null
+          : (listingSlugRaw ? String(listingSlugRaw) : null)
+        const metaIntent = typeof meta?.intent === 'string' ? meta.intent : null
         // Registrar pago con userId cuando esté disponible
-        await recordPayment({ userId, listingId: null, amount, currency, status, providerRef: String(paymentId) })
+        await recordPayment({ userId, listingId: upgradeListingId, amount, currency, status, providerRef: String(paymentId) })
         // Upsert crédito según estado del pago
         if (supabaseService && (planCode === 'basic' || planCode === 'premium')) {
           const creditStatus = status === 'succeeded' ? 'available' : (status === 'pending' ? 'pending' : 'cancelled')
@@ -2945,6 +3172,7 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
             provider_ref: String(paymentId),
             preference_id: prefId,
             expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+            ...(upgradeListingId ? { listing_id: upgradeListingId } : {}),
           }
           try {
             // Upsert por provider_ref (si backend lo soporta)
@@ -2961,6 +3189,23 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
                 .upsert(baseUpdate, { onConflict: 'preference_id,provider' })
             } catch (e2) {
               console.warn('[webhook] upsert by preference_id failed', e2?.message || e2)
+            }
+          }
+          if (status === 'succeeded' && metaIntent === 'listing_upgrade' && upgradeListingId) {
+            try {
+              const applyResult = await applyCheckoutUpgrade({
+                planCode,
+                listingId: upgradeListingId,
+                listingSlug: upgradeListingSlug,
+                userId,
+                providerRef: String(paymentId),
+                preferenceId: prefId
+              })
+              if (!applyResult.ok && applyResult.reason !== 'already_applied') {
+                console.warn('[webhook] failed to auto-apply upgrade', applyResult)
+              }
+            } catch (applyErr) {
+              console.error('[webhook] auto apply upgrade failed', applyErr?.message || applyErr)
             }
           }
         }

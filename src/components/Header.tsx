@@ -273,6 +273,7 @@ export default function Header() {
   const [storesOpen, setStoresOpen] = useState(false)
   const [creditCount, setCreditCount] = useState<number>(0)
   const { show: showToast } = useToast()
+  const publishLink = user ? '/publicar' : '/register'
 
   useEffect(() => {
     if (user) {
@@ -619,9 +620,9 @@ export default function Header() {
           )}
           <div className="relative">
             <Link
-              to="/publicar"
+              to={publishLink}
               className="h-9 px-4 rounded-full bg-mb-primary text-white text-sm grid place-content-center"
-              title={creditCount > 0 ? 'Tenés un crédito disponible. Publicá gratis.' : undefined}
+              title={creditCount > 0 && user ? 'Tenés un crédito disponible. Publicá gratis.' : undefined}
             >
               Vender
             </Link>
@@ -771,7 +772,7 @@ export default function Header() {
                           Créditos disponibles: <b>{creditCount}</b>
                         </div>
                         <Link
-                          to="/publicar"
+                          to={publishLink}
                           className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
                           onClick={closeMobileMenu}
                         >
@@ -791,7 +792,7 @@ export default function Header() {
                         </span>
                       )}
                     </Link>
-                    <Link to="/publicar" className="btn bg-gradient-to-r from-[#0ea5e9] via-[#2563eb] to-[#1d4ed8] text-white hover:brightness-110" onClick={closeMobileMenu}>Vender</Link>
+                    <Link to={publishLink} className="btn bg-gradient-to-r from-[#0ea5e9] via-[#2563eb] to-[#1d4ed8] text-white hover:brightness-110" onClick={closeMobileMenu}>Vender</Link>
                     <Link to="/marketplace" className="btn border border-white/30 bg-transparent text-white hover:bg-white/10" onClick={closeMobileMenu}>Marketplace</Link>
                     <Link to={`/dashboard?tab=${encodeURIComponent('Cerrar sesión')}`} className="btn border border-white/30 bg-transparent text-white hover:bg-white/10" onClick={closeMobileMenu}>Cerrar sesión</Link>
                     </div>
@@ -801,7 +802,7 @@ export default function Header() {
                     <button type="button" className="btn bg-white text-[#14212e] hover:bg-white/90" onClick={() => { setLoginOpen(true); closeMobileMenu() }}>Ingresar</button>
                     <Link to="/register" className="btn border border-white/30 bg-transparent text-white hover:bg-white/10" onClick={closeMobileMenu}>Crear cuenta</Link>
                     <Link to="/marketplace" className="btn border border-white/30 bg-transparent text-white hover:bg-white/10" onClick={closeMobileMenu}>Marketplace</Link>
-                    <Link to="/publicar" className="btn bg-gradient-to-r from-[#0ea5e9] via-[#2563eb] to-[#1d4ed8] text-white hover:brightness-110" onClick={closeMobileMenu}>Vender</Link>
+                    <Link to={publishLink} className="btn bg-gradient-to-r from-[#0ea5e9] via-[#2563eb] to-[#1d4ed8] text-white hover:brightness-110" onClick={closeMobileMenu}>Vender</Link>
                   </div>
                 )}
               </div>
