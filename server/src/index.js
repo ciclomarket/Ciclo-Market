@@ -9,6 +9,8 @@ try {
 
 const express = require('express')
 const cors = require('cors')
+let sharp
+try { sharp = require('sharp') } catch { sharp = null }
 const { MercadoPagoConfig, Preference } = require('mercadopago')
 const { createClient: createSupabaseServerClient } = require('@supabase/supabase-js')
 const { sendMail, isMailConfigured } = require('./lib/mail')
@@ -318,6 +320,55 @@ function ensureMailAvailable(res) {
 /* ----------------------------- Health ------------------------------------- */
 app.get('/', (_req, res) => {
   res.send('Ciclo Market API ready')
+})
+
+/* ----------------------------- Image proxy (resize/compress) -------------- */
+// GET /api/img?url=<absolute>&w=640&q=70&f=webp
+// - Only allows hosts in ALLOWED_IMAGE_HOSTS or *.supabase.co by default
+// - If sharp is not available, performs a plain passthrough (302 redirect)
+app.get('/api/img', async (req, res) => {
+  try {
+    const rawUrl = String(req.query.url || '').trim()
+    const w = Math.max(0, Math.min(4096, Number(req.query.w) || 0))
+    const q = Math.max(1, Math.min(100, Number(req.query.q) || 75))
+    const f = String(req.query.f || 'webp').toLowerCase()
+    if (!rawUrl) return res.status(400).json({ ok: false, error: 'missing_url' })
+    let parsed
+    try { parsed = new URL(rawUrl) } catch { return res.status(400).json({ ok: false, error: 'invalid_url' }) }
+    const allowedEnv = String(process.env.ALLOWED_IMAGE_HOSTS || '').split(',').map(s => s.trim()).filter(Boolean)
+    const host = parsed.hostname.toLowerCase()
+    const isAllowed =
+      allowedEnv.includes(host) ||
+      host.endsWith('.supabase.co') ||
+      host === 'supabase.co'
+    if (!isAllowed) return res.status(403).json({ ok: false, error: 'host_not_allowed' })
+
+    // If sharp is missing, redirect to original as a safe fallback
+    if (!sharp) {
+      res.setHeader('Cache-Control', 'public, max-age=600')
+      return res.redirect(302, parsed.toString())
+    }
+
+    const upstream = await fetch(parsed.toString(), { headers: { 'Accept': 'image/*' } })
+    if (!upstream.ok) return res.status(502).json({ ok: false, error: 'fetch_failed' })
+    const contentType = upstream.headers.get('content-type') || 'image/jpeg'
+    const arrayBuf = await upstream.arrayBuffer()
+    let img = sharp(Buffer.from(arrayBuf))
+    if (w > 0) img = img.resize({ width: w, withoutEnlargement: true })
+    let output
+    let outType
+    if (f === 'webp') { output = await img.webp({ quality: q }).toBuffer(); outType = 'image/webp' }
+    else if (f === 'jpeg' || f === 'jpg') { output = await img.jpeg({ quality: q }).toBuffer(); outType = 'image/jpeg' }
+    else if (f === 'png') { output = await img.png({ compressionLevel: 9 }).toBuffer(); outType = 'image/png' }
+    else { output = await img.webp({ quality: q }).toBuffer(); outType = 'image/webp' }
+
+    res.setHeader('Content-Type', outType || contentType)
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+    res.send(output)
+  } catch (err) {
+    console.warn('[img] proxy error', err)
+    res.status(500).json({ ok: false, error: 'transform_failed' })
+  }
 })
 
 /* ----------------------------- Supabase (service) ------------------------- */

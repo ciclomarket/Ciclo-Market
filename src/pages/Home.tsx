@@ -53,15 +53,14 @@ const BRAND_LOGOS: Record<(typeof BRANDS)[number]['slug'], string> = {
 }
 
 function HeroBackground() {
-  const [src, setSrc] = useState('/bicicletas-home-card.jpg')
-
+  // Render as an actual image for better LCP discoverability
+  // Use WebP (fallback to JPEG) and mark as high priority
+  const [isLarge, setIsLarge] = useState(false)
   useEffect(() => {
     const pick = () => {
       const w = window.innerWidth
       const dpr = window.devicePixelRatio || 1
-      // Elegir asset según ancho/dpr. En mobile usamos la versión más liviana.
-      if (w * dpr > 1200) setSrc('/bicicletas-home.jpg')
-      else setSrc('/bicicletas-home-card.jpg')
+      setIsLarge(w * dpr > 1200)
     }
     pick()
     window.addEventListener('resize', pick)
@@ -69,11 +68,22 @@ function HeroBackground() {
   }, [])
 
   return (
-    <div
-      className="absolute inset-0 -z-20 bg-cover bg-center md:[background-position:50%_28%]"
-      style={{ backgroundImage: `url(${src})` }}
-      aria-hidden
-    />
+    <picture aria-hidden>
+      <source
+        srcSet={'/bicicletas-home-card.webp 720w, /bicicletas-home.webp 1520w'}
+        type="image/webp"
+      />
+      <img
+        src={isLarge ? '/bicicletas-home.jpg' : '/bicicletas-home-card.jpg'}
+        srcSet={'/bicicletas-home-card.jpg 720w, /bicicletas-home.jpg 1520w'}
+        sizes="100vw"
+        alt=""
+        fetchPriority="high"
+        loading="eager"
+        decoding="async"
+        className="absolute inset-0 -z-20 size-full object-cover md:[object-position:50%_28%]"
+      />
+    </picture>
   )
 }
 
@@ -185,6 +195,9 @@ function BrandLogo({
           src={BRAND_LOGOS[brand.slug]}
           alt={brand.name}
           className="max-h-8 w-auto opacity-90"
+          height={32}
+          loading="lazy"
+          decoding="async"
           onError={() => setErr(true)}
         />
       ) : (
