@@ -3393,11 +3393,11 @@ app.get('/api/market/search', async (req, res) => {
     const fSize = toArray(req.query.size).map((s) => String(s))
     const subcat = (req.query.subcat ? String(req.query.subcat) : '').trim()
 
-    // Base: publicaciones activas
+    // Base: publicaciones visibles (activas o publicadas)
     let query = supabase
       .from('listings')
       .select('*')
-      .eq('status', 'active')
+      .in('status', ['active', 'published'])
 
     if (cat) query = query.eq('category', cat)
     if (subcat) query = query.eq('subcategory', subcat)
