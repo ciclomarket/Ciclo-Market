@@ -135,9 +135,9 @@ function OfferCard({ l }: { l: any }) {
       <div className="relative">
         <div className="aspect-video overflow-hidden bg-[#0b131c]/20">
           <img
-            src={transformSupabasePublicUrl(l.images?.[0] || '', { width: 640, quality: 72, format: 'webp' })}
-            srcSet={l.images && l.images[0] ? [320, 480, 640, 768, 960]
-              .map((w) => `${transformSupabasePublicUrl(l.images[0], { width: w, quality: 72, format: 'webp' })} ${w}w`).join(', ') : undefined}
+            src={transformSupabasePublicUrl(l.images?.[0] || '', { width: 640 })}
+            srcSet={l.images && l.images[0] ? [320, 480, 640, 768]
+              .map((w) => `${transformSupabasePublicUrl(l.images[0], { width: w })} ${w}w`).join(', ') : undefined}
             sizes="(max-width: 1023px) 100vw, 33vw"
             alt={l.title}
             className="w-full h-full object-cover group-hover:scale-105 transition"
@@ -301,10 +301,12 @@ export default function Home() {
     navigate(`/marketplace?brand=${encodeURIComponent(brandName)}`)
   }
 
-  // Preload estratégico: primeras 2 de "Últimas publicadas"
+  // Preload estratégico: primera de "Últimas publicadas" (evitar exceso en mobile)
   useEffect(() => {
     if (typeof document === 'undefined') return
-    const preloadTargets = filtered.slice(0, 2)
+    const isMobile = typeof window !== 'undefined' ? window.innerWidth < 768 : false
+    if (isMobile) return // en mobile evitamos preload extra
+    const preloadTargets = filtered.slice(0, 1)
     const created: HTMLLinkElement[] = []
     for (const l of preloadTargets) {
       const img = (l as any).images?.[0]
@@ -312,8 +314,8 @@ export default function Home() {
       const link = document.createElement('link')
       link.rel = 'preload'
       link.as = 'image'
-      link.href = transformSupabasePublicUrl(img, { width: 640, quality: 70, format: 'webp' })
-      const srcset = [320, 480, 640, 768, 960].map((w) => `${transformSupabasePublicUrl(img, { width: w, quality: 70, format: 'webp' })} ${w}w`).join(', ')
+      link.href = transformSupabasePublicUrl(img, { width: 640 })
+      const srcset = [320, 480, 640, 768].map((w) => `${transformSupabasePublicUrl(img, { width: w })} ${w}w`).join(', ')
       link.setAttribute('imagesrcset', srcset)
       link.setAttribute('imagesizes', '(max-width: 1279px) 75vw, 50vw')
       document.head.appendChild(link)
@@ -324,7 +326,7 @@ export default function Home() {
         try { document.head.removeChild(el) } catch { void 0 }
       }
     }
-  }, [filtered.slice(0, 2).map((x) => (x as any).id).join(',')])
+  }, [filtered.slice(0, 1).map((x) => (x as any).id).join(',')])
 
   // Like counts (batch) for sections
   const [likesFeatured, setLikesFeatured] = useState<Record<string, number>>({})

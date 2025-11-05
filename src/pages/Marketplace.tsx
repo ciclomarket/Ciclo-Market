@@ -1291,10 +1291,12 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
     return () => io.disconnect()
   }, [serverMode, serverTotal, listings.length, paramsKey, sortMode, fx])
 
-  // Preload estratégico: primeras 2 imágenes visibles
+  // Preload estratégico: primera imagen visible (desactivado en mobile)
   useEffect(() => {
     if (typeof document === 'undefined') return
-    const preloadTargets = visible.slice(0, 2)
+    const isMobile = typeof window !== 'undefined' ? window.innerWidth < 768 : false
+    if (isMobile) return
+    const preloadTargets = visible.slice(0, 1)
     const created: HTMLLinkElement[] = []
     for (const l of preloadTargets) {
       const img = l.images?.[0]
@@ -1302,8 +1304,8 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
       const link = document.createElement('link')
       link.rel = 'preload'
       link.as = 'image'
-      link.href = transformSupabasePublicUrl(img, { width: 640, quality: 70, format: 'webp' })
-      const srcset = [320, 480, 640, 768, 960].map((w) => `${transformSupabasePublicUrl(img, { width: w, quality: 70, format: 'webp' })} ${w}w`).join(', ')
+      link.href = transformSupabasePublicUrl(img, { width: 640 })
+      const srcset = [320, 480, 640, 768].map((w) => `${transformSupabasePublicUrl(img, { width: w })} ${w}w`).join(', ')
       link.setAttribute('imagesrcset', srcset)
       link.setAttribute('imagesizes', '(max-width: 1279px) 50vw, 33vw')
       document.head.appendChild(link)
@@ -1314,7 +1316,7 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
         try { document.head.removeChild(el) } catch { void 0 }
       }
     }
-  }, [visible.slice(0, 2).map((x) => x.id).join(',')])
+  }, [visible.slice(0, 1).map((x) => x.id).join(',')])
 
   const handleCategory = useCallback((cat: Cat) => {
     if (forcedCat) return

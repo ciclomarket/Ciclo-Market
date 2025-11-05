@@ -357,7 +357,8 @@ app.get('/api/img', async (req, res) => {
     if (w > 0) img = img.resize({ width: w, withoutEnlargement: true })
     let output
     let outType
-    if (f === 'webp') { output = await img.webp({ quality: q }).toBuffer(); outType = 'image/webp' }
+    if (f === 'avif') { output = await img.avif({ quality: q }).toBuffer(); outType = 'image/avif' }
+    else if (f === 'webp') { output = await img.webp({ quality: q }).toBuffer(); outType = 'image/webp' }
     else if (f === 'jpeg' || f === 'jpg') { output = await img.jpeg({ quality: q }).toBuffer(); outType = 'image/jpeg' }
     else if (f === 'png') { output = await img.png({ compressionLevel: 9 }).toBuffer(); outType = 'image/png' }
     else { output = await img.webp({ quality: q }).toBuffer(); outType = 'image/webp' }

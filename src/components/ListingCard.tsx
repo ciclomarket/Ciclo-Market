@@ -172,9 +172,9 @@ export default function ListingCard({ l, storeLogoUrl, priority = false, likeCou
       <Link to={`/listing/${slug}`} className="card-flat group flex h-full flex-col overflow-hidden">
         <div className="aspect-[5/4] sm:aspect-video relative overflow-hidden bg-black/10">
           <img
-            src={transformSupabasePublicUrl(l.images[0], { width: 640, quality: 70, format: 'webp' })}
-            srcSet={l.images && l.images[0] ? [320, 480, 640, 768, 960, 1200]
-              .map((w) => `${transformSupabasePublicUrl(l.images[0], { width: w, quality: 70, format: 'webp' })} ${w}w`).join(', ') : undefined}
+            src={transformSupabasePublicUrl(l.images[0], { width: 640 })}
+            srcSet={l.images && l.images[0] ? [320, 480, 640, 768]
+              .map((w) => `${transformSupabasePublicUrl(l.images[0], { width: w })} ${w}w`).join(', ') : undefined}
             sizes="(max-width: 1279px) 50vw, 33vw"
             alt={l.title}
             loading={priority ? 'eager' : 'lazy'}

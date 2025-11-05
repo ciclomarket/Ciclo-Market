@@ -2,7 +2,7 @@ export type TransformOpts = {
   width?: number
   height?: number
   quality?: number
-  format?: 'webp' | 'jpeg' | 'png'
+  format?: 'avif' | 'webp' | 'jpeg' | 'png'
 }
 
 /**
@@ -10,6 +10,23 @@ export type TransformOpts = {
  * If the URL is not a Supabase storage public URL, returns the original URL.
  */
 const API_BASE = String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+
+// Lightweight runtime detection for AVIF support (cached per session)
+let AVIF_SUPPORTED: boolean | null = null
+function supportsAvif(): boolean {
+  if (AVIF_SUPPORTED !== null) return AVIF_SUPPORTED
+  try {
+    if (typeof document === 'undefined') return (AVIF_SUPPORTED = false)
+    const canvas = document.createElement('canvas')
+    if (!canvas.getContext) return (AVIF_SUPPORTED = false)
+    const data = canvas.toDataURL('image/avif')
+    AVIF_SUPPORTED = data.indexOf('image/avif') !== -1
+    return AVIF_SUPPORTED
+  } catch {
+    AVIF_SUPPORTED = false
+    return AVIF_SUPPORTED
+  }
+}
 
 export function transformSupabasePublicUrl(url: string, opts: TransformOpts = {}): string {
   try {
@@ -24,8 +41,14 @@ export function transformSupabasePublicUrl(url: string, opts: TransformOpts = {}
     const proxy = new URL((base ? base : '') + '/api/img', base || window.location.origin)
     proxy.searchParams.set('url', u.toString())
     if (width) proxy.searchParams.set('w', String(width))
-    if (quality) proxy.searchParams.set('q', String(quality))
-    proxy.searchParams.set('f', (format || 'webp'))
+    const autoQ = typeof quality === 'number'
+      ? quality
+      : (width
+          ? (width <= 480 ? 50 : width <= 640 ? 55 : 60)
+          : 60)
+    if (autoQ) proxy.searchParams.set('q', String(autoQ))
+    const preferred = format || (supportsAvif() ? 'avif' : 'webp')
+    proxy.searchParams.set('f', preferred)
     return proxy.toString()
   } catch {
     return url
