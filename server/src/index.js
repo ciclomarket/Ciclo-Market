@@ -906,11 +906,12 @@ app.get('/robots.txt', (_req, res) => {
 
 /* ----------------------- Open Graph for Listings --------------------------- */
 /**
- * Sirve meta-tags OG para /listing/:id y /share/listing/:id en el BACKEND.
+ * Sirve meta-tags OG solo para /share/listing/:id en el BACKEND.
  * - Si es un bot (WhatsApp/Facebook/etc.): devuelve HTML con <meta property="og:*">
  * - Si es un humano: redirige al front (FRONTEND_URL).
+ * Nota: evitamos interceptar /listing/:id aquí para no interferir con el SPA.
  */
-app.get(['/share/listing/:id', '/listing/:id'], async (req, res) => {
+app.get(['/share/listing/:id'], async (req, res) => {
   try {
     const { id } = req.params
     const supabase = getServerSupabaseClient()
@@ -937,7 +938,7 @@ app.get(['/share/listing/:id', '/listing/:id'], async (req, res) => {
 
     const { data: listing, error } = await fetchByIdOrSlug(id)
 
-    const baseFront = (process.env.FRONTEND_URL || '').split(',')[0]?.trim() || 'https://ciclomarket.ar'
+    const baseFront = getFrontendBaseUrl()
     const slugOrId = (listing && listing.slug) ? listing.slug : id
     const canonicalUrl = `${baseFront}/listing/${encodeURIComponent(slugOrId)}`
     const fallbackImg = `${baseFront}/logo-azul.png`
