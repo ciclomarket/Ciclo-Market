@@ -11,7 +11,7 @@ function getSiteOrigin() {
 export default function GlobalJsonLd() {
   const origin = useMemo(() => getSiteOrigin(), [])
   const siteName = 'Ciclo Market'
-  const logo = `${origin}/site-logo.png`
+  const logo = `${origin}/site-logo.webp`
   const sameAs = [
     'https://instagram.com/ciclomarket.ar',
     'https://facebook.com/ciclomarket.ar',
@@ -45,4 +45,3 @@ export default function GlobalJsonLd() {
     </>
   )
 }
-

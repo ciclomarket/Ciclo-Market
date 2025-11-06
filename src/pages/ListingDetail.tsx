@@ -1281,7 +1281,7 @@ function IconCircleButton({ label, icon, onClick, className, size = 'md' }: { la
 }
 
 const WhatsappIcon = () => (
-  <img src="/whatsapp.png" alt="" className="h-5 w-5" loading="lazy" decoding="async" aria-hidden="true" />
+  <img src="/whatsapp.webp" alt="" className="h-5 w-5" loading="lazy" decoding="async" aria-hidden="true" onError={(e)=>{try{const el=e.currentTarget as HTMLImageElement; if(el.src.endsWith('.webp')) el.src='/whatsapp.png';}catch{}}} />
 )
 
 const FacebookIcon = () => (

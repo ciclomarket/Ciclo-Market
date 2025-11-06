@@ -156,7 +156,7 @@ export default function StoresLanding() {
                 {visibleStores.length ? (
                   visibleStores.map((s) => {
                     const name = (s.store_name || s.store_slug || 'Tienda').toString()
-                    const avatar = s.store_avatar_url || '/site-logo.png'
+                    const avatar = s.store_avatar_url || '/site-logo.webp'
                     return (
                       <Link
                         key={s.id}

@@ -124,7 +124,7 @@ export default function Footer() {
                       aria-label="Strava Ciclo Market"
                       className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/30 text-white transition hover:border-white/60"
                     >
-                      <img src="/strava.png" alt="" className="h-4 w-4" loading="lazy" decoding="async" aria-hidden />
+                      <img src="/strava.webp" alt="" className="h-4 w-4" loading="lazy" decoding="async" aria-hidden onError={(e)=>{try{const el=e.currentTarget as HTMLImageElement; if(el.src.endsWith('.webp')) el.src='/strava.png';}catch{}}} />
                     </a>
                   </div>
                 </li>

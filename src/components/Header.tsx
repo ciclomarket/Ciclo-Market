@@ -495,15 +495,18 @@ export default function Header() {
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/70">
       <div className="max-w-6xl mx-auto px-4 py-4 flex items-center gap-3 md:gap-6">
         <Link to="/" className="flex items-center gap-2 shrink-0" aria-label="Ir al inicio">
-          <img
-            src="/site-logo.png"
-            alt="Ciclo Market"
-            className="h-12 md:h-16 w-auto block transform scale-[0.8] md:scale-[0.96] origin-left"
-            width={200}
-            height={80}
-            loading="eager"
-            decoding="async"
-          />
+          <picture>
+            <source srcSet="/site-logo.webp" type="image/webp" />
+            <img
+              src="/site-logo.png"
+              alt="Ciclo Market"
+              className="h-12 md:h-16 w-auto block transform scale-[0.8] md:scale-[0.96] origin-left"
+              width={200}
+              height={80}
+              loading="eager"
+              decoding="async"
+            />
+          </picture>
         </Link>
 
         {/* Search también visible en mobile */}

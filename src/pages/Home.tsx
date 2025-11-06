@@ -20,16 +20,16 @@ import { hasPaidPlan } from '../utils/plans'
 import { track, trackOncePerSession } from '../services/track'
 import { useAuth } from '../context/AuthContext'
 
-import specializedLogo from '/brands/specialized.png'
-import canyonLogo from '/brands/canyon.png'
-import trekLogo from '/brands/trek.png'
-import scottLogo from '/brands/scott.png'
-import cannondaleLogo from '/brands/cannondale.png'
-import cerveloLogo from '/brands/cervelo.png'
-import colnerLogo from '/brands/colner.png'
-import giantLogo from '/brands/giant.png'
+import specializedLogo from '/brands/specialized.webp'
+import canyonLogo from '/brands/canyon.webp'
+import trekLogo from '/brands/trek.webp'
+import scottLogo from '/brands/scott.webp'
+import cannondaleLogo from '/brands/cannondale.webp'
+import cerveloLogo from '/brands/cervelo.webp'
+import colnerLogo from '/brands/colner.webp'
+import giantLogo from '/brands/giant.webp'
 
-// ── Config marcas: logos en /public/brands/*.png
+// ── Config marcas: logos en /public/brands/*.webp
 const BRANDS = [
   { slug: 'specialized', name: 'Specialized' },
   { slug: 'canyon', name: 'Canyon' },
@@ -198,7 +198,16 @@ function BrandLogo({
           height={32}
           loading="lazy"
           decoding="async"
-          onError={() => setErr(true)}
+          onError={(e) => {
+            try {
+              const el = e.currentTarget as HTMLImageElement
+              if (el.src.endsWith('.webp')) {
+                el.src = el.src.replace(/\.webp$/, '.png')
+                return
+              }
+            } catch {}
+            setErr(true)
+          }}
         />
       ) : (
         <span className="px-3 py-1 text-sm font-semibold">{brand.name}</span>

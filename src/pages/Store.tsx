@@ -1073,7 +1073,7 @@ export default function Store() {
                 const classes = `inline-flex items-center justify-center gap-2 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#14212e] shadow md:px-4 md:py-2 md:text-sm ${disabled ? 'opacity-60 cursor-not-allowed' : 'hover:bg-white/90'}`
                 return (
                   <a href={href} target={disabled ? undefined : '_blank'} rel={disabled ? undefined : 'noreferrer'} className={classes} onClick={(e) => { if (disabled) e.preventDefault() }} aria-label="WhatsApp">
-                    <img src="/whatsapp.png" alt="" className="h-4 w-4" aria-hidden /> WhatsApp
+                    <img src="/whatsapp.webp" alt="" className="h-4 w-4" aria-hidden onError={(e)=>{try{const el=e.currentTarget as HTMLImageElement; if(el.src.endsWith('.webp')) el.src='/whatsapp.png';}catch{}}} /> WhatsApp
                   </a>
                 )
               })()}
@@ -1421,7 +1421,7 @@ function normalizeHandle(value: string, type: 'ig' | 'fb') {
 }
 
 function PhoneIcon() {
-  return <img src="/call.png" alt="" className="h-5 w-5" loading="lazy" decoding="async" aria-hidden />
+  return <img src="/call.webp" alt="" className="h-5 w-5" loading="lazy" decoding="async" aria-hidden onError={(e)=>{try{const el=e.currentTarget as HTMLImageElement; if(el.src.endsWith('.webp')) el.src='/call.png';}catch{}}} />
 }
 function EmailIcon() {
   return (

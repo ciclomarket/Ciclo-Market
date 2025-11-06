@@ -678,15 +678,17 @@ app.get('/sitemap.xml', async (_req, res) => {
     res.type('application/xml')
     const origin = normalizeOrigin(process.env.FRONTEND_URL)
 
-    // Calcular cantidad de páginas para listings
+    // Calcular cantidad de páginas para listings visibles (mismo criterio que el front)
     let pages = 1
     const PAGE_SIZE = 1000
     try {
       const supabase = getServerSupabaseClient()
+      const nowIso = new Date().toISOString()
       const { count } = await supabase
         .from('listings')
         .select('id', { count: 'exact', head: true })
-        .eq('status', 'active')
+        .not('status', 'in', '(draft,deleted,archived,expired)')
+        .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
       if (typeof count === 'number' && count > 0) {
         pages = Math.max(1, Math.ceil(count / PAGE_SIZE))
       }
@@ -787,18 +789,27 @@ app.get('/sitemap-listings-:page(\\d+).xml', async (req, res) => {
     const from = (page - 1) * PAGE_SIZE
     const to = from + PAGE_SIZE - 1
     const supabase = getServerSupabaseClient()
+    const nowIso = new Date().toISOString()
     const { data, error } = await supabase
       .from('listings')
-      .select('id, slug, created_at', { count: 'exact' })
-      .eq('status', 'active')
+      .select('id, slug, created_at, expires_at, status')
+      .not('status', 'in', '(draft,deleted,archived,expired)')
+      .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
       .order('created_at', { ascending: false })
       .range(from, to)
     if (error) throw error
-    const nowIso = new Date().toISOString().slice(0, 10)
-    const urls = (data || [])
+    const nowDay = new Date().toISOString().slice(0, 10)
+    // Filtro defensivo adicional por si alguna fila no respeta las condiciones anteriores
+    const rows = (data || []).filter((l) => {
+      const status = typeof l.status === 'string' ? l.status.trim().toLowerCase() : 'active'
+      if (status === 'draft' || status === 'deleted' || status === 'archived' || status === 'expired') return false
+      const exp = l.expires_at ? Date.parse(l.expires_at) : null
+      return !(typeof exp === 'number' && exp > 0 && exp < Date.now())
+    })
+    const urls = rows
       .map((l) => {
         const slugOrId = l.slug || l.id
-        const lastmod = l.created_at ? new Date(l.created_at).toISOString().slice(0, 10) : nowIso
+        const lastmod = l.created_at ? new Date(l.created_at).toISOString().slice(0, 10) : nowDay
         return `
   <url>
     <loc>${origin}/listing/${encodeURIComponent(slugOrId)}</loc>
