@@ -9,15 +9,6 @@ try {
 
 const express = require('express')
 const cors = require('cors')
-let sharp
-try {
-  sharp = require('sharp')
-  // Limitar uso de memoria de Sharp en instancias pequeñas (Render 512MB)
-  try {
-    sharp.cache({ files: 0, items: 64, memory: 32 }) // ~32MB para caché interna
-    if (typeof sharp.concurrency === 'function') sharp.concurrency(1)
-  } catch {}
-} catch { sharp = null }
 const { MercadoPagoConfig, Preference } = require('mercadopago')
 const { createClient: createSupabaseServerClient } = require('@supabase/supabase-js')
 const { sendMail, isMailConfigured } = require('./lib/mail')
@@ -329,60 +320,7 @@ app.get('/', (_req, res) => {
   res.send('Ciclo Market API ready')
 })
 
-/* ----------------------------- Image proxy (resize/compress) -------------- */
-// GET /api/img?url=<absolute>&w=640&q=70&f=webp
-// - Only allows hosts in ALLOWED_IMAGE_HOSTS or *.supabase.co by default
-// - If sharp is not available, performs a plain passthrough (302 redirect)
-app.get('/api/img', async (req, res) => {
-  try {
-    const rawUrl = String(req.query.url || '').trim()
-    const w = Math.max(0, Math.min(4096, Number(req.query.w) || 0))
-    const q = Math.max(1, Math.min(100, Number(req.query.q) || 75))
-    const f = String(req.query.f || 'webp').toLowerCase()
-    if (!rawUrl) return res.status(400).json({ ok: false, error: 'missing_url' })
-    let parsed
-    try { parsed = new URL(rawUrl) } catch { return res.status(400).json({ ok: false, error: 'invalid_url' }) }
-    const allowedEnv = String(process.env.ALLOWED_IMAGE_HOSTS || '').split(',').map(s => s.trim()).filter(Boolean)
-    const host = parsed.hostname.toLowerCase()
-    const isAllowed =
-      allowedEnv.includes(host) ||
-      host.endsWith('.supabase.co') ||
-      host === 'supabase.co'
-    if (!isAllowed) return res.status(403).json({ ok: false, error: 'host_not_allowed' })
-
-    // If sharp is missing, redirect to original as a safe fallback
-    if (!sharp) {
-      res.setHeader('Cache-Control', 'public, max-age=600')
-      return res.redirect(302, parsed.toString())
-    }
-
-    // Timeout de red prudente para evitar sockets colgados consumiendo memoria
-    const ac = new AbortController()
-    const t = setTimeout(() => ac.abort(), 7000)
-    const upstream = await fetch(parsed.toString(), { headers: { 'Accept': 'image/*' }, signal: ac.signal })
-    clearTimeout(t)
-    if (!upstream.ok) return res.status(502).json({ ok: false, error: 'fetch_failed' })
-    const contentType = upstream.headers.get('content-type') || 'image/jpeg'
-    const arrayBuf = await upstream.arrayBuffer()
-    let img = sharp(Buffer.from(arrayBuf), { sequentialRead: true, unlimited: false })
-    try { img = img.limitInputPixels(268402689) } catch {}
-    if (w > 0) img = img.resize({ width: w, withoutEnlargement: true })
-    let output
-    let outType
-    if (f === 'avif') { output = await img.avif({ quality: q }).toBuffer(); outType = 'image/avif' }
-    else if (f === 'webp') { output = await img.webp({ quality: q }).toBuffer(); outType = 'image/webp' }
-    else if (f === 'jpeg' || f === 'jpg') { output = await img.jpeg({ quality: q }).toBuffer(); outType = 'image/jpeg' }
-    else if (f === 'png') { output = await img.png({ compressionLevel: 9 }).toBuffer(); outType = 'image/png' }
-    else { output = await img.webp({ quality: q }).toBuffer(); outType = 'image/webp' }
-
-    res.setHeader('Content-Type', outType || contentType)
-    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
-    res.send(output)
-  } catch (err) {
-    console.warn('[img] proxy error', err)
-    res.status(500).json({ ok: false, error: 'transform_failed' })
-  }
-})
+/* (Imagen proxy eliminado: ahora usamos URL directas o el transform nativo de Supabase) */
 
 /* ----------------------------- Supabase (service) ------------------------- */
 // Cliente con service role para registrar pagos (solo backend)
@@ -1530,10 +1468,11 @@ app.post('/api/contacts/log', async (req, res) => {
     if (!sellerId || !type) return res.status(400).json({ error: 'missing_fields' })
     const supabase = getServerSupabaseClient()
     // Normalizar listingId: si viene un slug (texto) intentamos resolver el UUID
+    const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/
     let listingUuid = null
     try {
       const raw = typeof listingId === 'string' ? listingId.trim() : ''
-      const isUuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(raw)
+      const isUuid = UUID_RE.test(raw)
       if (raw) {
         if (isUuid) {
           listingUuid = raw
@@ -1543,7 +1482,7 @@ app.post('/api/contacts/log', async (req, res) => {
             .select('id')
             .eq('slug', raw)
             .maybeSingle()
-          if (bySlug?.id) listingUuid = bySlug.id
+          if (bySlug?.id && UUID_RE.test(String(bySlug.id))) listingUuid = bySlug.id
         }
       }
     } catch (_) {
@@ -1559,7 +1498,7 @@ app.post('/api/contacts/log', async (req, res) => {
     }
     const { error } = await supabase.from('contact_events').insert([payload])
     if (error) {
-      console.warn('[contacts] insert failed', error)
+      console.warn('[contacts] insert failed', { ...error, listingId, listingUuid })
     }
     // Emisión inmediata de recordatorio/notification/email (one-shot, si hay buyer)
     if (buyerId) {
@@ -1570,7 +1509,7 @@ app.post('/api/contacts/log', async (req, res) => {
           .upsert({
             seller_id: sellerId,
             buyer_id: buyerId,
-            listing_id: listingUuid,
+            ...(listingUuid ? { listing_id: listingUuid } : {}),
             contact_event_id: null,
             ready_at: new Date().toISOString(),
           }, { onConflict: 'seller_id,buyer_id' })

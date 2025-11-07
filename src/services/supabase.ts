@@ -29,33 +29,68 @@ function getPersistMode(): PersistMode {
   return v === 'session' ? 'session' : 'local'
 }
 
-function resolveStorage(): Storage {
-  if (typeof window === 'undefined') {
-    // Fallback in non-browser contexts (e.g. SSR) con un storage en memoria
-    const mem = new Map<string, string>()
-    const fallbackStorage: Storage = {
-      get length() {
-        return mem.size
-      },
-      clear() {
-        mem.clear()
-      },
-      getItem(key) {
-        return mem.has(key) ? (mem.get(key) as string) : null
-      },
-      key(index) {
-        return Array.from(mem.keys())[index] ?? null
-      },
-      removeItem(key) {
-        mem.delete(key)
-      },
-      setItem(key, value) {
-        mem.set(key, value)
-      },
-    }
-    return fallbackStorage
+// Señaliza si tuvimos que usar storage en memoria (p.ej., Safari con cookies/bloqueo de storage)
+let usedMemoryStorage = false
+
+function createMemoryStorage(): Storage {
+  const mem = new Map<string, string>()
+  const fallbackStorage: Storage = {
+    get length() {
+      return mem.size
+    },
+    clear() {
+      mem.clear()
+    },
+    getItem(key) {
+      return mem.has(key) ? (mem.get(key) as string) : null
+    },
+    key(index) {
+      return Array.from(mem.keys())[index] ?? null
+    },
+    removeItem(key) {
+      mem.delete(key)
+    },
+    setItem(key, value) {
+      mem.set(key, value)
+    },
   }
-  return getPersistMode() === 'session' ? window.sessionStorage : window.localStorage
+  return fallbackStorage
+}
+
+function isStorageWritable(storage: Storage): boolean {
+  try {
+    const probeKey = '__mb_probe__'
+    storage.setItem(probeKey, '1')
+    storage.removeItem(probeKey)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function resolveStorage(): Storage {
+  // SSR/Node: usar memoria
+  if (typeof window === 'undefined') {
+    usedMemoryStorage = true
+    return createMemoryStorage()
+  }
+
+  // Browser: elegir storage según preferencia y validar que sea escribible
+  const preferSession = getPersistMode() === 'session'
+  const chosen = preferSession ? window.sessionStorage : window.localStorage
+
+  if (isStorageWritable(chosen)) return chosen
+
+  // Si el storage elegido no es escribible (Safari con "Bloquear todas las cookies", modo privado estricto, etc.)
+  // intentar con el alternativo; si tampoco, usar memoria y avisar por consola.
+  const alternative = preferSession ? window.localStorage : window.sessionStorage
+  if (isStorageWritable(alternative)) return alternative
+
+  usedMemoryStorage = true
+  if (import.meta.env.DEV) {
+    console.warn('[supabase] Web Storage no disponible. Usando storage en memoria. Recomendado: desactivar "Bloquear todas las cookies" en Safari para mantener la sesión.')
+  }
+  return createMemoryStorage()
 }
 
 let supabase: SupabaseClient | null = null
@@ -105,3 +140,8 @@ export function setAuthPersistence(remember: boolean): void {
 }
 
 export { supabase }
+
+// Exponer diagnóstico para UI/debug
+export function didUseMemoryStorage(): boolean {
+  return usedMemoryStorage
+}
