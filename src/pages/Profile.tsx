@@ -12,6 +12,7 @@ import { mockListings } from '../mock/mockData'
 import type { Listing } from '../types'
 import { computeTrustLevel, trustLabel, trustColorClasses, trustDescription, trustBadgeBgClasses } from '../utils/user'
 import { useAuth } from '../context/AuthContext'
+import { fetchMyCredits, fetchCreditsHistory, type Credit } from '../services/credits'
 
 const TABS = ['Perfil', 'Publicaciones', 'Reseñas', 'Intereses'] as const
 const TAB_METADATA: Record<(typeof TABS)[number], { title: string; description: string }> = {
@@ -132,6 +133,9 @@ export default function Profile() {
   const [reviewRating, setReviewRating] = useState(0)
   const [reviewTags, setReviewTags] = useState<string[]>([])
   const [reviewComment, setReviewComment] = useState('')
+  // Moderador: créditos e info ampliada
+  const [modAvailableCredits, setModAvailableCredits] = useState<Credit[] | null>(null)
+  const [modCreditHistory, setModCreditHistory] = useState<Credit[] | null>(null)
 
   const handleSelectTab = useCallback((tab: SellerTab) => {
     setActiveTab(tab)
@@ -216,6 +220,33 @@ export default function Profile() {
       setCanReview(result)
     })()
   }, [user?.id, sellerId])
+
+  // Cargar créditos del vendedor si el usuario actual es moderador
+  const { isModerator } = useAuth()
+  useEffect(() => {
+    if (!isModerator || !sellerId) {
+      setModAvailableCredits(null)
+      setModCreditHistory(null)
+      return
+    }
+    let active = true
+    ;(async () => {
+      try {
+        const [avail, history] = await Promise.all([
+          fetchMyCredits(sellerId),
+          fetchCreditsHistory(sellerId),
+        ])
+        if (!active) return
+        setModAvailableCredits(avail)
+        setModCreditHistory(history)
+      } catch {
+        if (!active) return
+        setModAvailableCredits([])
+        setModCreditHistory([])
+      }
+    })()
+    return () => { active = false }
+  }, [isModerator, sellerId])
 
   useEffect(() => {
     if (!isMobile) {
@@ -354,6 +385,39 @@ export default function Profile() {
               </div>
               <p className="mt-1 text-sm text-[#14212e]/70">{trustDescription(trustLevel)}</p>
             </div>
+
+            {/* Panel de moderación (solo visible para moderadores) */}
+            {isModerator && (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                <p className="text-xs uppercase tracking-wide text-amber-700">Panel de moderación</p>
+                <div className="mt-2 space-y-1 text-sm text-[#14212e]/80">
+                  {profile?.email ? (
+                    <div><span className="font-medium">Email:</span> {profile.email}</div>
+                  ) : null}
+                  {(() => {
+                    const avail = Array.isArray(modAvailableCredits) ? modAvailableCredits : []
+                    const byPlan = avail.reduce<Record<string, number>>((acc, c) => {
+                      acc[c.plan_code] = (acc[c.plan_code] || 0) + 1
+                      return acc
+                    }, {})
+                    const basic = byPlan['basic'] || 0
+                    const premium = byPlan['premium'] || 0
+                    return (
+                      <div><span className="font-medium">Créditos disponibles:</span> Básico {basic} · Premium {premium}</div>
+                    )
+                  })()}
+                  {(() => {
+                    const hist = Array.isArray(modCreditHistory) ? modCreditHistory : []
+                    const pending = hist.filter((c) => c.status === 'pending').length
+                    const used = hist.filter((c) => c.status === 'used').length
+                    const cancelled = hist.filter((c) => c.status === 'cancelled').length
+                    return (
+                      <div className="text-xs text-[#14212e]/60">Pendientes {pending} · Usados {used} · Cancelados {cancelled}</div>
+                    )
+                  })()}
+                </div>
+              </div>
+            )}
 
             <div className="grid gap-4 sm:grid-cols-2">
               {instagramLink && (

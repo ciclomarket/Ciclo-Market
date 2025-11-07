@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import Container from '../components/Container'
 // SEO global se maneja desde App; acá sólo inyectamos JSON-LD
@@ -639,6 +639,94 @@ export default function Store() {
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [mobileSortOpen, setMobileSortOpen] = useState(false)
   const [sortMode, setSortMode] = useState<'relevance' | 'newest' | 'asc' | 'desc'>('relevance')
+  const [hoursOpen, setHoursOpen] = useState(false)
+  const [hoursStyle, setHoursStyle] = useState<React.CSSProperties>({})
+  const [hoursArrowLeft, setHoursArrowLeft] = useState<number>(16)
+  const hoursRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!hoursOpen) return
+    const computePosition = () => {
+      const root = hoursRef.current
+      if (!root) return
+      const rect = root.getBoundingClientRect()
+      const vw = window.innerWidth
+      const vh = window.innerHeight
+      const padding = 8
+      const desired = vw < 480 ? Math.min(320, vw - padding * 2) : Math.min(360, vw - padding * 2)
+      const centerX = rect.left + rect.width / 2
+      const left = Math.max(padding, Math.min(centerX - desired / 2, vw - desired - padding))
+      const top = Math.min(rect.bottom + 8, vh - 16) // evita pegarse al borde inferior
+      setHoursStyle({ position: 'fixed', top, left, width: desired })
+      setHoursArrowLeft(Math.max(16, Math.min(desired - 16, centerX - left)))
+    }
+    const handleClickAway = (e: MouseEvent) => {
+      const root = hoursRef.current
+      if (!root) return
+      const target = e.target as Node
+      if (!root.contains(target)) setHoursOpen(false)
+    }
+    const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setHoursOpen(false) }
+    computePosition()
+    window.addEventListener('resize', computePosition)
+    window.addEventListener('scroll', computePosition, { passive: true })
+    document.addEventListener('mousedown', handleClickAway)
+    document.addEventListener('keydown', handleKey)
+    return () => {
+      window.removeEventListener('resize', computePosition)
+      window.removeEventListener('scroll', computePosition)
+      document.removeEventListener('mousedown', handleClickAway)
+      document.removeEventListener('keydown', handleKey)
+    }
+  }, [hoursOpen])
+
+  const renderWorkingHours = (text?: string | null) => {
+    const raw = (text || '').trim()
+    if (!raw) return null
+    const lines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
+    if (!lines.length) return <p className="text-xs text-white/85">{raw}</p>
+    const normalizeVal = (v: string) => v
+      .replace(/\s*a\s*/gi, ' – ')
+      .replace(/\s*[-–]\s*/g, ' – ')
+      .replace(/\s+/g, ' ')
+      .trim()
+
+    return (
+      <ul className="space-y-1 text-xs">
+        {lines.map((rawLine, idx) => {
+          const line = rawLine.replace(/\s+/g, ' ').trim()
+          // Caso 1: "Día: horario" con el ":" actuando como separador de etiqueta (antes del primer número)
+          const colonIdx = line.indexOf(':')
+          const firstDigitIdx = line.search(/\d/)
+          if (colonIdx > 0 && (firstDigitIdx === -1 || colonIdx < firstDigitIdx)) {
+            const day = line.slice(0, colonIdx).trim()
+            const val = normalizeVal(line.slice(colonIdx + 1).trim())
+            return (
+              <li key={idx} className="flex items-baseline gap-3">
+                <span className="w-28 sm:w-32 shrink-0 font-medium text-white/90">{day}</span>
+                <span className="text-white/85 tabular-nums font-mono">{val}</span>
+              </li>
+            )
+          }
+          // Caso 2: "Día horario" donde el primer número marca el inicio del horario
+          if (firstDigitIdx > 0) {
+            const day = line.slice(0, firstDigitIdx).trim()
+            const val = normalizeVal(line.slice(firstDigitIdx).trim())
+            return (
+              <li key={idx} className="flex items-baseline gap-3">
+                <span className="w-28 sm:w-32 shrink-0 font-medium text-white/90">{day}</span>
+                <span className="text-white/85 tabular-nums font-mono">{val}</span>
+              </li>
+            )
+          }
+          // Fallback: línea completa como valor
+          return (
+            <li key={idx} className="text-white/85 tabular-nums">{line}</li>
+          )
+        })}
+      </ul>
+    )
+  }
   const activeSection = (search.get('sec') || '').trim()
   const activeOption = (search.get('opt') || '').trim()
 
@@ -1015,25 +1103,29 @@ export default function Store() {
           ].filter(Boolean),
         }}
       />
-      <div className="relative h-48 md:h-64 w-full overflow-hidden bg-[#14212e]">
-        <img
-          src={transformSupabasePublicUrl(banner, { width: 1280, quality: 78, format: 'webp' })}
-          srcSet={[640, 960, 1280, 1600]
-            .map((w) => `${transformSupabasePublicUrl(banner, { width: w, quality: 78, format: 'webp' })} ${w}w`)
-            .join(', ')}
-          sizes="(max-width: 767px) 100vw, 100vw"
-          alt="Banner"
-          className="h-full w-full object-cover"
-          style={{ objectPosition: `center ${bannerPosY}%` }}
-        />
-        {/* Fade inferior sutil en todos los tamaños para legibilidad del título */}
-        <div
-          className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-20 md:h-28 bg-gradient-to-t from-[#14212e]/80 via-transparent to-transparent"
-          aria-hidden
-        />
+      <div className="relative w-full">
+        <div className="mx-auto max-w-md sm:max-w-2xl md:max-w-4xl lg:max-w-6xl px-3 sm:px-4">
+          <div className="relative h-64 md:h-80 lg:h-96 overflow-hidden w-full">
+            <img
+              src={transformSupabasePublicUrl(banner, { width: 1600, quality: 78, format: 'webp' })}
+              srcSet={[800, 1200, 1600, 1920]
+                .map((w) => `${transformSupabasePublicUrl(banner, { width: w, quality: 78, format: 'webp' })} ${w}w`)
+                .join(', ')}
+              sizes="(max-width: 639px) 448px, (max-width: 767px) 672px, (max-width: 1023px) 896px, 1152px"
+              alt="Banner"
+              className="h-full w-full object-cover block mx-auto"
+              style={{ objectPosition: `center ${bannerPosY}%` }}
+            />
+            {/* Fade inferior sutil en todos los tamaños para legibilidad del título */}
+            <div
+              className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-28 md:h-40 lg:h-48 bg-gradient-to-t from-[#0f1729] via-[#0f1729]/60 to-transparent"
+              aria-hidden
+            />
+          </div>
+        </div>
       </div>
       <Container>
-        <div className="relative z-20 -mt-14 md:-mt-10 flex flex-col items-center gap-3 md:flex-row md:items-end md:gap-4">
+        <div className="relative z-20 -mt-14 md:-mt-12 flex flex-col items-center gap-3 md:flex-row md:items-end md:gap-4">
           <img
             src={transformSupabasePublicUrl(avatar, { width: 256, quality: 80, format: 'webp' })}
             srcSet={[128, 160, 192, 256]
@@ -1041,16 +1133,23 @@ export default function Store() {
               .join(', ')}
             sizes="(max-width: 767px) 96px, 128px"
             alt={storeName}
-            className="h-24 w-24 md:h-20 md:w-20 rounded-2xl border-4 border-white object-cover shadow"
+            className="h-24 w-24 md:h-28 md:w-28 lg:h-32 lg:w-32 rounded-full border-4 border-white object-cover shadow"
             loading="eager"
             decoding="async"
           />
-          <div className="flex-1 min-w-0 pt-1 text-center md:text-left">
-            <h1 className="text-2xl font-bold text-white truncate">{storeName}</h1>
-            {/* Rating de Google removido */}
-            {profile.verified ? (
-              <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-emerald-500/90 px-2.5 py-0.5 text-xs font-semibold text-white">✓ Verificado</div>
-            ) : null}
+          <div className="flex-1 min-w-0 w-full max-w-full overflow-visible pt-1 md:pb-1 text-center md:text-left">
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
+              <h1 className="text-2xl md:text-3xl font-extrabold text-white truncate">{storeName}</h1>
+              <span className="inline-flex items-center gap-2 text-sm text-white/90">
+                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#1d9bf0] text-white" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 2 7.5 4.1 3 6v6c0 5 3.4 9.4 9 10 5.6-.6 9-5 9-10V6l-4.5-1.9L12 2Z" />
+                    <path d="m9 12 2 2 4-4" />
+                  </svg>
+                </span>
+                <span className="text-white/90">Tienda oficial</span>
+              </span>
+            </div>
             <p className="mt-1 text-sm text-white/85 truncate">{address}</p>
             <div className="mt-3 grid w-full max-w-md grid-cols-3 gap-2 justify-items-stretch md:max-w-none">
               {phone && (
@@ -1078,28 +1177,65 @@ export default function Store() {
                 )
               })()}
             </div>
-            {(profile.store_instagram || profile.store_facebook || profile.store_website) && (
-              <div className="mt-3 text-center text-xs text-white/80 md:text-left">
-                <span className="text-white/70">Redes:</span>{' '}
-                {profile.store_instagram ? (<a href={normalizeHandle(profile.store_instagram, 'ig')} target="_blank" rel="noreferrer" className="underline hover:text-white">Instagram</a>) : null}
-                {profile.store_facebook ? (<><span>{' '}|{' '}</span><a href={normalizeHandle(profile.store_facebook, 'fb')} target="_blank" rel="noreferrer" className="underline hover:text-white">Facebook</a></>) : null}
-                {profile.store_website ? (<><span>{' '}|{' '}</span><a href={profile.store_website} target="_blank" rel="noreferrer" className="underline hover:text-white">Web</a></>) : null}
+            <div className="mt-3 flex flex-wrap items-center justify-center md:justify-start gap-2 text-xs text-white/80">
+              {(profile.store_instagram || profile.store_facebook || profile.store_website) ? (
+                <>
+                  <span className="text-white/70">Redes:</span>{' '}
+                  {profile.store_instagram ? (<a href={normalizeHandle(profile.store_instagram, 'ig')} target="_blank" rel="noreferrer" className="underline hover:text-white">Instagram</a>) : null}
+                  {profile.store_facebook ? (<><span>{' '}|{' '}</span><a href={normalizeHandle(profile.store_facebook, 'fb')} target="_blank" rel="noreferrer" className="underline hover:text-white">Facebook</a></>) : null}
+                  {profile.store_website ? (<><span>{' '}|{' '}</span><a href={profile.store_website} target="_blank" rel="noreferrer" className="underline hover:text-white">Web</a></>) : null}
+                </>
+              ) : null}
+              <span className="text-white/30">|</span>
+              <div className="relative" ref={hoursRef}>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 underline hover:text-white"
+                  aria-expanded={hoursOpen}
+                  aria-controls="store-hours-popover"
+                  onClick={() => setHoursOpen((v) => !v)}
+                >
+                  Horarios de atención
+                  <svg
+                    className={`h-4 w-4 transition-transform duration-200 ${hoursOpen ? 'rotate-180' : ''}`}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </button>
+                {hoursOpen && (
+                  <div className="fixed inset-0 z-40" aria-hidden onClick={() => setHoursOpen(false)}>
+                    {/* Popover */}
+                    <div
+                      id="store-hours-popover"
+                      className="rounded-xl border border-white/15 bg-[#0f1729]/95 backdrop-blur-sm p-4 text-white shadow-2xl max-h-64 overflow-auto z-50"
+                      role="dialog"
+                      aria-label="Horarios de atención"
+                      style={hoursStyle}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {/* caret */}
+                      <div className="absolute -top-2 h-4 w-4 rotate-45 border-l border-t border-white/15 bg-[#0f1729]/95" style={{ left: hoursArrowLeft, }} aria-hidden />
+                      <div className="mb-2 text-[11px] uppercase tracking-wide text-white/50">Horarios de atención</div>
+                      {renderWorkingHours(workingHours)}
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
           </div>
         </div>
 
         {/* Bloque de "Dejar reseña en Google" removido */}
 
         <div className="mt-6 space-y-6">
-          {workingHours && (
-            <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-white">
-              <div className="flex items-center justify-between text-sm font-semibold">
-                <span>Horarios de atención</span>
-              </div>
-              <p className="mt-2 whitespace-pre-line text-sm text-white/80">{workingHours}</p>
-            </div>
-          )}
+          {/* Horarios movidos al header junto a Redes */}
 
           <div className="space-y-6">
             <div className="grid grid-cols-3 gap-2 sm:gap-4">

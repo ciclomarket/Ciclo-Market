@@ -10,7 +10,14 @@ try {
 const express = require('express')
 const cors = require('cors')
 let sharp
-try { sharp = require('sharp') } catch { sharp = null }
+try {
+  sharp = require('sharp')
+  // Limitar uso de memoria de Sharp en instancias pequeñas (Render 512MB)
+  try {
+    sharp.cache({ files: 0, items: 64, memory: 32 }) // ~32MB para caché interna
+    if (typeof sharp.concurrency === 'function') sharp.concurrency(1)
+  } catch {}
+} catch { sharp = null }
 const { MercadoPagoConfig, Preference } = require('mercadopago')
 const { createClient: createSupabaseServerClient } = require('@supabase/supabase-js')
 const { sendMail, isMailConfigured } = require('./lib/mail')
@@ -349,11 +356,16 @@ app.get('/api/img', async (req, res) => {
       return res.redirect(302, parsed.toString())
     }
 
-    const upstream = await fetch(parsed.toString(), { headers: { 'Accept': 'image/*' } })
+    // Timeout de red prudente para evitar sockets colgados consumiendo memoria
+    const ac = new AbortController()
+    const t = setTimeout(() => ac.abort(), 7000)
+    const upstream = await fetch(parsed.toString(), { headers: { 'Accept': 'image/*' }, signal: ac.signal })
+    clearTimeout(t)
     if (!upstream.ok) return res.status(502).json({ ok: false, error: 'fetch_failed' })
     const contentType = upstream.headers.get('content-type') || 'image/jpeg'
     const arrayBuf = await upstream.arrayBuffer()
-    let img = sharp(Buffer.from(arrayBuf))
+    let img = sharp(Buffer.from(arrayBuf), { sequentialRead: true, unlimited: false })
+    try { img = img.limitInputPixels(268402689) } catch {}
     if (w > 0) img = img.resize({ width: w, withoutEnlargement: true })
     let output
     let outType
@@ -3221,13 +3233,38 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
           ? listingSlugRaw.trim() || null
           : (listingSlugRaw ? String(listingSlugRaw) : null)
         const metaIntent = typeof meta?.intent === 'string' ? meta.intent : null
+
+        // Intentar resolver correctamente el preference_id a partir del merchant_order
+        // Nota: mpPayment.order.id es merchant_order id, NO el preference_id
+        let prefId = null
+        try {
+          const merchantOrderId = mpPayment?.order?.id ? String(mpPayment.order.id) : null
+          if (merchantOrderId) {
+            const moAc = new AbortController()
+            const moTimer = setTimeout(() => moAc.abort(), 5000)
+            const moRes = await fetch(`https://api.mercadolibre.com/merchant_orders/${merchantOrderId}`, {
+              headers: { Authorization: `Bearer ${String(process.env.MERCADOPAGO_ACCESS_TOKEN || '')}` },
+              signal: moAc.signal,
+            })
+            clearTimeout(moTimer)
+            if (moRes.ok) {
+              const mo = await moRes.json()
+              if (mo && typeof mo.preference_id === 'string' && mo.preference_id) {
+                prefId = mo.preference_id
+              }
+            } else {
+              console.warn('[MP webhook] merchant_order fetch failed', merchantOrderId, moRes.status)
+            }
+          }
+        } catch (e) {
+          console.warn('[MP webhook] merchant_order resolve error', e?.message || e)
+        }
         // Registrar pago con userId cuando esté disponible
         await recordPayment({ userId, listingId: upgradeListingId, amount, currency, status, providerRef: String(paymentId) })
-        // Upsert crédito según estado del pago
+        // Upsert/Update crédito según estado del pago
         if (supabaseService && (planCode === 'basic' || planCode === 'premium')) {
           const creditStatus = status === 'succeeded' ? 'available' : (status === 'pending' ? 'pending' : 'cancelled')
-          const prefId = (mpPayment && mpPayment.order && mpPayment.order.id) ? String(mpPayment.order.id) : null
-          // Intentar actualizar crédito existente por preference_id o provider_ref; si no existe, crear
+          // Intentar actualizar crédito existente (pendiente) por preference_id; si no existe, crear/upsert por provider_ref
           const baseUpdate = {
             user_id: userId,
             plan_code: planCode,
@@ -3238,21 +3275,62 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
             expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
             ...(upgradeListingId ? { listing_id: upgradeListingId } : {}),
           }
-          try {
-            // Upsert por provider_ref (si backend lo soporta)
-            await supabaseService
-              .from('publish_credits')
-              .upsert(baseUpdate, { onConflict: 'provider_ref,provider' })
-          } catch (e1) {
-            console.warn('[webhook] upsert by provider_ref failed', e1?.message || e1)
-          }
+          let updatedCount = 0
           if (prefId) {
+            try {
+              const { data: updRows, error: updErr } = await supabaseService
+                .from('publish_credits')
+                .update({
+                  status: creditStatus,
+                  provider_ref: String(paymentId),
+                  preference_id: prefId,
+                  expires_at: baseUpdate.expires_at,
+                  ...(upgradeListingId ? { listing_id: upgradeListingId } : {}),
+                })
+                .eq('provider', 'mercadopago')
+                .eq('preference_id', prefId)
+                .select('id')
+              if (!updErr && Array.isArray(updRows)) updatedCount = updRows.length
+              if (updatedCount > 0) console.log('[webhook] credit updated by preference_id', updatedCount)
+            } catch (eUpd) {
+              console.warn('[webhook] update by preference_id failed', eUpd?.message || eUpd)
+            }
+          }
+          if (updatedCount === 0) {
+            // Fallback idempotente por provider_ref
             try {
               await supabaseService
                 .from('publish_credits')
-                .upsert(baseUpdate, { onConflict: 'preference_id,provider' })
-            } catch (e2) {
-              console.warn('[webhook] upsert by preference_id failed', e2?.message || e2)
+                .upsert(baseUpdate, { onConflict: 'provider_ref,provider' })
+              console.log('[webhook] credit upserted by provider_ref')
+            } catch (e1) {
+              console.warn('[webhook] upsert by provider_ref failed', e1?.message || e1)
+            }
+            if (prefId) {
+              try {
+                await supabaseService
+                  .from('publish_credits')
+                  .upsert(baseUpdate, { onConflict: 'preference_id,provider' })
+                console.log('[webhook] credit upserted by preference_id')
+              } catch (e2) {
+                console.warn('[webhook] upsert by preference_id failed', e2?.message || e2)
+              }
+            }
+          }
+
+          // Limpieza: si el pago quedó aprobado, cancelar otros créditos pendientes del mismo usuario/plan
+          if (creditStatus === 'available' && userId && planCode) {
+            try {
+              const { error: cancelErr } = await supabaseService
+                .from('publish_credits')
+                .update({ status: 'cancelled' })
+                .eq('user_id', userId)
+                .eq('plan_code', planCode)
+                .eq('status', 'pending')
+                .neq('provider_ref', String(paymentId))
+              if (cancelErr) console.warn('[webhook] cleanup pending credits failed', cancelErr)
+            } catch (e) {
+              console.warn('[webhook] cleanup pending credits error', e?.message || e)
             }
           }
           if (status === 'succeeded' && metaIntent === 'listing_upgrade' && upgradeListingId) {
@@ -3480,7 +3558,9 @@ app.get('/api/market/search', async (req, res) => {
       .order('highlight_expires', { ascending: false, nullsFirst: true })
       .order('created_at', { ascending: false })
 
-    const { data: rows, error } = await query.limit(1000) // recuperar un pool suficiente para ordenar y paginar
+    // Evitar cargar demasiadas filas en memoria: ajustar pool en función del "limit" solicitado
+    const poolSize = Math.min(Math.max(limit * 5, 100), 300)
+    const { data: rows, error } = await query.limit(poolSize) // recuperar un pool suficiente para ordenar y paginar sin exceder memoria
     if (error) return res.status(500).json({ ok: false, error: 'query_failed' })
     const listings = Array.isArray(rows) ? rows : []
     if (!listings.length) return res.json({ items: [] })
@@ -3769,6 +3849,66 @@ app.post('/api/payments/confirm', async (req, res) => {
     const amount = typeof mpPayment?.transaction_amount === 'number' ? mpPayment.transaction_amount : null
     const currency = mpPayment?.currency_id || 'ARS'
     await recordPayment({ userId: null, listingId: null, amount, currency, status, providerRef: String(paymentId) })
+    // Best-effort: también actualizar créditos si corresponde
+    try {
+      const meta = (mpPayment && typeof mpPayment.metadata === 'object') ? mpPayment.metadata : {}
+      const userId = typeof meta?.userId === 'string' && meta.userId ? meta.userId : null
+      const planCode = normalisePlanCode(meta?.planCode || meta?.planId)
+      const listingIdRaw = meta?.listingId ?? meta?.listing_id ?? null
+      const upgradeListingId = typeof listingIdRaw === 'string' ? listingIdRaw.trim() || null : (listingIdRaw ? String(listingIdRaw) : null)
+      const merchantOrderId = mpPayment?.order?.id ? String(mpPayment.order.id) : null
+      let prefId = null
+      if (merchantOrderId) {
+        try {
+          const moAc = new AbortController()
+          const moTimer = setTimeout(() => moAc.abort(), 5000)
+          const moRes = await fetch(`https://api.mercadolibre.com/merchant_orders/${merchantOrderId}`, {
+            headers: { Authorization: `Bearer ${String(process.env.MERCADOPAGO_ACCESS_TOKEN || '')}` },
+            signal: moAc.signal,
+          })
+          clearTimeout(moTimer)
+          if (moRes.ok) {
+            const mo = await moRes.json()
+            if (mo && typeof mo.preference_id === 'string' && mo.preference_id) prefId = mo.preference_id
+          }
+        } catch {}
+      }
+      if (supabaseService && (planCode === 'basic' || planCode === 'premium')) {
+        const creditStatus = status === 'succeeded' ? 'available' : (status === 'pending' ? 'pending' : 'cancelled')
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+        let updatedCount = 0
+        if (prefId) {
+          try {
+            const { data: updRows } = await supabaseService
+              .from('publish_credits')
+              .update({ status: creditStatus, provider_ref: String(paymentId), preference_id: prefId, expires_at: expiresAt, ...(upgradeListingId ? { listing_id: upgradeListingId } : {}) })
+              .eq('provider', 'mercadopago')
+              .eq('preference_id', prefId)
+              .select('id')
+            updatedCount = Array.isArray(updRows) ? updRows.length : 0
+          } catch {}
+        }
+        if (updatedCount === 0) {
+          const baseUpdate = { user_id: userId, plan_code: planCode, status: creditStatus, provider: 'mercadopago', provider_ref: String(paymentId), preference_id: prefId, expires_at: expiresAt, ...(upgradeListingId ? { listing_id: upgradeListingId } : {}) }
+          try { await supabaseService.from('publish_credits').upsert(baseUpdate, { onConflict: 'provider_ref,provider' }) } catch {}
+          if (prefId) { try { await supabaseService.from('publish_credits').upsert(baseUpdate, { onConflict: 'preference_id,provider' }) } catch {} }
+        }
+
+        // Limpieza: si el pago quedó aprobado, cancelar otros créditos pendientes del mismo usuario/plan
+        if (creditStatus === 'available' && userId && planCode) {
+          try {
+            const { error: cancelErr } = await supabaseService
+              .from('publish_credits')
+              .update({ status: 'cancelled' })
+              .eq('user_id', userId)
+              .eq('plan_code', planCode)
+              .eq('status', 'pending')
+              .neq('provider_ref', String(paymentId))
+            if (cancelErr) console.warn('[payments/confirm] cleanup pending credits failed', cancelErr)
+          } catch {}
+        }
+      }
+    } catch {}
     return res.json({ ok: true, status, amount, currency })
   } catch (err) {
     console.error('[payments/confirm] failed', err)
