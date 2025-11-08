@@ -1784,7 +1784,21 @@ app.post('/api/reviews/submit', async (req, res) => {
         .eq('seller_id', sellerId)
         .eq('buyer_id', buyerId)
         .limit(1)
-      if (!contacts || contacts.length === 0) return res.status(400).send('not_allowed')
+      if (!contacts || contacts.length === 0) {
+        // Fallback: permitir si existe un recordatorio emitido (misma regla que can-review)
+        try {
+          const { data: rems } = await supabase
+            .from('review_reminders')
+            .select('id')
+            .eq('seller_id', sellerId)
+            .eq('buyer_id', buyerId)
+            .limit(1)
+          const hasReminder = Array.isArray(rems) && rems.length > 0
+          if (!hasReminder) return res.status(400).send('not_allowed')
+        } catch (e) {
+          return res.status(400).send('not_allowed')
+        }
+      }
     } catch (e) {
       // Si falla la verificación, negar por defecto
       return res.status(400).send('not_allowed')

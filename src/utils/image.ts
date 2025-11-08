@@ -13,13 +13,19 @@ const DEFAULTS: Required<CompressOptions> = {
 }
 
 /**
- * Compress an image in the browser and return a File in WebP when supported.
- * Falls back to JPEG if WebP encoding isn’t available.
+ * Compress an image client‑side y devuelve el archivo MÁS CHICO posible.
+ * Intenta WebP primero; si no reduce tamaño, conserva el original.
+ * Si WebP falla, intenta JPEG; si tampoco mejora, devuelve el original.
  */
 export async function compressToWebp(input: File, opts: CompressOptions = {}): Promise<File> {
   if (!input || !(input instanceof File) || !input.type.startsWith('image/')) return input
 
   const options = { ...DEFAULTS, ...opts }
+
+  // No comprimir imágenes ya pequeñas
+  if (typeof input.size === 'number' && input.size > 0 && input.size <= (options.minSizeBytes || 0)) {
+    return input
+  }
 
   const imageUrl = URL.createObjectURL(input)
   try {
@@ -31,7 +37,7 @@ export async function compressToWebp(input: File, opts: CompressOptions = {}): P
     })
 
     const { naturalWidth: width, naturalHeight: height } = img
-    if (!width || !height) return renameExtension(input, 'webp')
+    if (!width || !height) return input
 
     const widthRatio = options.maxWidth / width
     const heightRatio = options.maxHeight / height
@@ -47,23 +53,27 @@ export async function compressToWebp(input: File, opts: CompressOptions = {}): P
     if (!ctx) return renameExtension(input, 'webp')
     ctx.drawImage(img, 0, 0, targetWidth, targetHeight)
 
-    // Encode to WebP (preferido). Si falla, intentamos JPEG; si aún así falla, devolvemos el original.
+    // Encode a WebP (preferido)
     const webpBlob: Blob | null = await new Promise((resolve) =>
       canvas.toBlob(resolve, 'image/webp', options.quality)
     )
-    if (!webpBlob) {
-      // Fallback poco probable
-      const jpegBlob: Blob | null = await new Promise((resolve) =>
-        canvas.toBlob(resolve, 'image/jpeg', options.quality)
-      )
-      if (!jpegBlob) return input
-      // Aun si el JPEG resultara más grande, preferimos retornarlo comprimido
+    const inputSize = input.size || 0
+    if (webpBlob && webpBlob.size > 0 && (inputSize === 0 || webpBlob.size < inputSize)) {
+      const outName = changeExtension(sanitizeName(input.name), 'webp')
+      return new File([webpBlob], outName, { type: 'image/webp' })
+    }
+
+    // Fallback: intentar JPEG y comparar
+    const jpegBlob: Blob | null = await new Promise((resolve) =>
+      canvas.toBlob(resolve, 'image/jpeg', Math.min(0.9, Math.max(0.6, options.quality)))
+    )
+    if (jpegBlob && jpegBlob.size > 0 && (inputSize === 0 || jpegBlob.size < inputSize)) {
       const outNameJpg = changeExtension(sanitizeName(input.name), 'jpg')
       return new File([jpegBlob], outNameJpg, { type: 'image/jpeg' })
     }
 
-    const outName = changeExtension(sanitizeName(input.name), 'webp')
-    return new File([webpBlob], outName, { type: 'image/webp' })
+    // Si nada mejora el tamaño, conservar el original para máxima compatibilidad
+    return input
   } catch {
     return input
   } finally {
@@ -79,8 +89,4 @@ function changeExtension(name: string, ext: string): string {
   return name.replace(/\.[^.]+$/, '') + `.${ext}`
 }
 
-function renameExtension(file: File, ext: string): File {
-  const outName = changeExtension(sanitizeName(file.name), ext)
-  // Mantiene el contenido original; NO cambia el tipo. Evitar usar este camino para forzar webp.
-  return new File([file], outName, { type: file.type })
-}
+// Nota: ya no renombramos extensiones si no cambiamos el contenido, para evitar confusiones

@@ -813,7 +813,17 @@ export default function Profile() {
                   })
                 }
               } catch (err: any) {
-                showToast(err?.message || 'No pudimos guardar la reseña', { variant: 'error' })
+                const raw = String(err?.message || '').trim().toLowerCase()
+                const pretty = (() => {
+                  if (!raw) return 'No pudimos guardar la reseña'
+                  if (raw.includes('missing_fields')) return 'Faltan datos para enviar la reseña. Verificá que estés logueado y elijas una calificación.'
+                  if (raw.includes('invalid_rating')) return 'La calificación debe ser de 1 a 5 estrellas.'
+                  if (raw.includes('not_allowed')) return 'Para publicar una reseña necesitás haber contactado al vendedor (WhatsApp o email), y solo podés dejar una reseña por vendedor.'
+                  if (raw.includes('insert_failed')) return 'No pudimos guardar la reseña en este momento. Probá de nuevo en unos minutos.'
+                  if (raw.includes('unexpected_error')) return 'Ocurrió un error inesperado. Intentá nuevamente.'
+                  return 'No pudimos guardar la reseña. ' + (err?.message || '')
+                })()
+                showToast(pretty, { variant: 'error' } as any)
               } finally {
                 setReviewSubmitting(false)
               }

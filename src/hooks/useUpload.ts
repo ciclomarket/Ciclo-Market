@@ -11,10 +11,10 @@ type CompressOptions = {
 }
 
 const DEFAULT_COMPRESS_OPTIONS: Required<CompressOptions> = {
-  quality: 0.82,
+  quality: 0.8,
   maxWidth: 1920,
   maxHeight: 1920,
-  minSizeBytes: 200 * 1024, // ~200 KB, bypass compression for already small files
+  minSizeBytes: 180 * 1024, // evita recomprimir archivos ya pequeños
 }
 
 async function compressImage(file: File, opts: CompressOptions = {}): Promise<File> {
