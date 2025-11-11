@@ -3161,9 +3161,22 @@ app.post('/api/checkout', async (req, res) => {
 app.post('/api/webhooks/mercadopago', async (req, res) => {
   try {
     console.log('[MP webhook]', JSON.stringify(req.body))
-    const type = req.body?.type || req.query?.type
-    const paymentId = req.body?.data?.id || req.query?.id
-    if (type === 'payment' && paymentId) {
+    const topic = typeof req.body?.topic === 'string' ? req.body.topic : (typeof req.query?.topic === 'string' ? req.query.topic : null)
+    const action = typeof req.body?.action === 'string' ? req.body.action : null
+    const type = req.body?.type || req.query?.type || topic || null
+    let paymentId = req.body?.data?.id || req.query?.id || null
+    if (!paymentId) {
+      const resource = typeof req.body?.resource === 'string' ? req.body.resource : null
+      if (resource) {
+        const match = resource.match(/(\d+)$/)
+        if (match) paymentId = match[1]
+      }
+    }
+    const isPaymentNotification =
+      type === 'payment' ||
+      topic === 'payment' ||
+      (typeof action === 'string' && action.startsWith('payment.'))
+    if (isPaymentNotification && paymentId) {
       try {
         const { Payment } = require('mercadopago')
         const paymentClient = new Payment(mpClient)
