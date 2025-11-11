@@ -3175,17 +3175,51 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
         // Extraer metadata útil
         const meta = (mpPayment && typeof mpPayment.metadata === 'object') ? mpPayment.metadata : {}
         const externalRef = (mpPayment && mpPayment.external_reference) ? String(mpPayment.external_reference) : null
-        const userId = typeof meta?.userId === 'string' && meta.userId ? meta.userId : null
-        const planCode = normalisePlanCode(meta?.planCode || meta?.planId)
+        let userId = typeof meta?.userId === 'string' && meta.userId ? meta.userId : null
+        let planCode = normalisePlanCode(meta?.planCode || meta?.planId)
         const listingIdRaw = meta?.listingId ?? meta?.listing_id ?? null
         const listingSlugRaw = meta?.listingSlug ?? meta?.listing_slug ?? null
-        const upgradeListingId = typeof listingIdRaw === 'string'
+        let upgradeListingId = typeof listingIdRaw === 'string'
           ? listingIdRaw.trim() || null
           : (listingIdRaw ? String(listingIdRaw) : null)
-        const upgradeListingSlug = typeof listingSlugRaw === 'string'
+        let upgradeListingSlug = typeof listingSlugRaw === 'string'
           ? listingSlugRaw.trim() || null
           : (listingSlugRaw ? String(listingSlugRaw) : null)
         const metaIntent = typeof meta?.intent === 'string' ? meta.intent : null
+
+        if ((!userId || !planCode || !upgradeListingId) && externalRef) {
+          try {
+            const parts = externalRef
+              .split(':')
+              .map((p) => p.trim())
+              .filter(Boolean)
+            if (!userId) {
+              const candidate = parts.find((p) => p && p !== 'anon')
+              if (candidate) userId = candidate
+            }
+            if (!planCode) {
+              const planCandidate = parts
+                .map((p) => normalisePlanCode(p))
+                .find((code) => code === 'basic' || code === 'premium')
+              if (planCandidate) planCode = planCandidate
+            }
+            if (!upgradeListingId) {
+              const listingPart = parts.find((p) => p.toLowerCase().startsWith('listing-'))
+              if (listingPart) {
+                const candidate = listingPart.slice('listing-'.length)
+                if (candidate) {
+                  if (UUID_REGEX.test(candidate)) {
+                    upgradeListingId = candidate
+                  } else if (!upgradeListingSlug) {
+                    upgradeListingSlug = candidate
+                  }
+                }
+              }
+            }
+          } catch (refErr) {
+            console.warn('[MP webhook] external_reference fallback failed', refErr?.message || refErr)
+          }
+        }
 
         // Intentar resolver correctamente el preference_id a partir del merchant_order
         // Nota: mpPayment.order.id es merchant_order id, NO el preference_id
