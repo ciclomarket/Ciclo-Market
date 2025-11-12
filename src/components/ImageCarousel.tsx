@@ -37,13 +37,13 @@ export default function ImageCarousel({ images, slides, aspect = 'video', showTh
   const currentImage = displayImages[safeIndex]
   const currentSlide = slideMeta[safeIndex]
   const currentTransformed = currentImage
-    ? transformSupabasePublicUrl(currentImage, { width: 1280, quality: 78, format: 'webp' })
+    ? transformSupabasePublicUrl(currentImage, { width: 1280, quality: 68, format: 'webp' })
     : undefined
   const currentSrcSet = useMemo(() => {
     if (!currentImage) return undefined
-    const widths = [640, 960, 1280, 1600]
+    const widths = [640, 960, 1280]
     return widths
-      .map((w) => `${transformSupabasePublicUrl(currentImage, { width: w, quality: 78, format: 'webp' })} ${w}w`)
+      .map((w) => `${transformSupabasePublicUrl(currentImage, { width: w, quality: 68, format: 'webp' })} ${w}w`)
       .join(', ')
   }, [currentImage])
   const [lightbox, setLightbox] = useState(false)

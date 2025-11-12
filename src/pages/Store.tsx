@@ -1113,32 +1113,9 @@ const handleClearFilters = useCallback(() => {
     setFilters(reset)
   }, [setFilters])
 
-  const { config: seoConfig, details: seoDetails } = seoMeta
+  // (moved) Desestructuración de seoMeta más abajo para evitar referenciar antes de su inicialización
 
-  if (loading) {
-    return (
-      <>
-        <SeoHead {...seoConfig} />
-        <Container className="py-12">Cargando tienda…</Container>
-      </>
-    )
-  }
-  if (!profile || !profile.store_enabled) {
-    return (
-      <>
-        <SeoHead {...seoConfig} />
-        <Container className="py-12">Tienda no encontrada.</Container>
-      </>
-    )
-  }
-
-  const banner = profile.store_banner_url || '/og-preview.png'
-  const bannerPosY = typeof profile.store_banner_position_y === 'number' ? profile.store_banner_position_y : 50
-  const avatar = profile.store_avatar_url || profile.avatar_url || '/avatar-placeholder.png'
-  const storeName = profile.store_name || profile.full_name || 'Tienda'
-  const address = profile.store_address || [profile.city, profile.province].filter(Boolean).join(', ')
-  const phone = profile.store_phone || profile.whatsapp_number || ''
-  const workingHours = (profile as any).store_hours as string | null
+  // NOTE: No leer `profile` aquí; puede ser null. Derivar dentro de `seoMeta` o después de early returns.
 
   const seoMeta = useMemo((): { config: Partial<SeoHeadProps>; details: { summary: string; copy: string } | null } => {
     if (!profile) {
@@ -1156,10 +1133,15 @@ const handleClearFilters = useCallback(() => {
     const slug = profile.store_slug || params.slug || profile.id || ''
     const canonicalPath = slug ? `/tienda/${slug}` : undefined
     const canonicalUrl = canonicalPath ? absoluteUrl(canonicalPath, siteOrigin) : undefined
-    const locationLabel = address || [profile.city, profile.province].filter(Boolean).join(', ')
+    const storeNameLocal = profile.store_name || profile.full_name || 'Tienda'
+    const addressLocal = profile.store_address || [profile.city, profile.province].filter(Boolean).join(', ')
+    const phoneLocal = profile.store_phone || profile.whatsapp_number || ''
+    const avatarLocal = profile.store_avatar_url || profile.avatar_url || '/avatar-placeholder.png'
+    const bannerUrl = profile.store_banner_url || avatarLocal
+    const locationLabel = addressLocal
     const categoriesLabel = categorySummary.label || 'bicicletas y accesorios'
     const descriptionParts = [
-      `${storeName} en Ciclo Market: ${categoriesLabel}.`,
+      `${storeNameLocal} en Ciclo Market: ${categoriesLabel}.`,
       locationLabel ? `Atención en ${locationLabel}.` : null,
       listings.length
         ? `${listings.length} publicaciones activas con fotos reales, estado verificado y contacto directo.`
@@ -1168,9 +1150,8 @@ const handleClearFilters = useCallback(() => {
     ].filter(Boolean)
     const description = descriptionParts.join(' ').replace(/\s+/g, ' ').trim()
 
-    const bannerUrl = profile.store_banner_url || avatar
     const absoluteBanner = absoluteUrl(bannerUrl, siteOrigin) ?? bannerUrl
-    const absoluteLogo = absoluteUrl(avatar, siteOrigin) ?? avatar
+    const absoluteLogo = absoluteUrl(avatarLocal, siteOrigin) ?? avatarLocal
     const instagram = profile.store_instagram
       ? ensureUrl(`https://instagram.com/${String(profile.store_instagram).replace(/^@+/, '')}`)
       : null
@@ -1194,17 +1175,17 @@ const handleClearFilters = useCallback(() => {
     const organizationSchema = {
       '@context': 'https://schema.org',
       '@type': postalAddress ? 'LocalBusiness' : 'Organization',
-      name: storeName,
+      name: storeNameLocal,
       url: canonicalUrl,
       logo: absoluteLogo,
       image: absoluteBanner,
-      telephone: phone || undefined,
+      telephone: phoneLocal || undefined,
       address: postalAddress,
-      contactPoint: phone
+      contactPoint: phoneLocal
         ? [
             {
               '@type': 'ContactPoint',
-              telephone: phone,
+              telephone: phoneLocal,
               contactType: 'customer service',
               areaServed: 'AR',
             },
@@ -1234,11 +1215,11 @@ const handleClearFilters = useCallback(() => {
         ? {
             '@context': 'https://schema.org',
             '@type': 'ItemList',
-            name: `${storeName} - catálogo`,
-            url: canonicalUrl,
-            numberOfItems: itemListElements.length,
-            itemListElement: itemListElements,
-          }
+      name: `${storeNameLocal} - catálogo`,
+      url: canonicalUrl,
+      numberOfItems: itemListElements.length,
+      itemListElement: itemListElements,
+    }
         : null
 
     const breadcrumbs = [
@@ -1246,7 +1227,7 @@ const handleClearFilters = useCallback(() => {
       { name: 'Tiendas oficiales', item: '/tiendas-oficiales' },
     ]
     if (canonicalPath) {
-      breadcrumbs.push({ name: storeName, item: canonicalPath })
+      breadcrumbs.push({ name: storeNameLocal, item: canonicalPath })
     }
     const breadcrumbSchema = buildBreadcrumbList(breadcrumbs, siteOrigin)
 
@@ -1255,7 +1236,7 @@ const handleClearFilters = useCallback(() => {
         [
           'ciclomarket',
           'tienda oficial bicicletas',
-          storeName,
+          storeNameLocal,
           categoriesLabel ? `${categoriesLabel}` : null,
           locationLabel ? `bicicletas ${locationLabel}` : null,
         ].filter(Boolean) as string[],
@@ -1263,11 +1244,11 @@ const handleClearFilters = useCallback(() => {
     )
 
     const detailsCopy = [
-      `${storeName} publica un inventario curado de ${categorySummary.values.length ? categorySummary.values.join(', ') : 'bicicletas y accesorios'} en Ciclo Market, siempre listos para rodar.`,
+      `${storeNameLocal} publica un inventario curado de ${categorySummary.values.length ? categorySummary.values.join(', ') : 'bicicletas y accesorios'} en Ciclo Market, siempre listos para rodar.`,
       `Cada aviso incluye historia, mantenimiento y upgrades recientes para que puedas decidirte sin salir de ${locationLabel || 'casa'}.`,
       `Coordinamos pruebas presenciales${locationLabel ? ` en ${locationLabel}` : ''} y envíos asegurados a todo el país con seguimiento personalizado.`,
       `${listings.length ? `Hoy contamos con ${listings.length} publicaciones activas` : 'Actualizamos el catálogo cada semana'} y agregamos ingresos apenas pasan nuestro control de calidad.`,
-      `Si necesitás asesoramiento${phone ? ` escribinos al ${phone}` : ''}; te ayudamos con talles, accesorios compatibles o planes corporativos.`,
+      `Si necesitás asesoramiento${phoneLocal ? ` escribinos al ${phoneLocal}` : ''}; te ayudamos con talles, accesorios compatibles o planes corporativos.`,
       `Seguinos dentro de la tienda oficial y activá alertas: te avisamos cuando lleguen ediciones limitadas o reposiciones muy buscadas.`,
     ]
       .join(' ')
@@ -1278,7 +1259,7 @@ const handleClearFilters = useCallback(() => {
 
     return {
       config: {
-        title: `Tienda oficial ${storeName}`,
+        title: `Tienda oficial ${storeNameLocal}`,
         description,
         canonicalPath,
         image: absoluteBanner,
@@ -1287,7 +1268,7 @@ const handleClearFilters = useCallback(() => {
         noIndex: false,
       },
       details: {
-        summary: `Sobre ${storeName}`,
+        summary: `Sobre ${storeNameLocal}`,
         copy: detailsCopy,
       },
     }
@@ -1298,14 +1279,38 @@ const handleClearFilters = useCallback(() => {
     categorySummary.values,
     categorySummary.label,
     listings.length,
-    address,
-    phone,
     topListings,
-    storeName,
   ])
 
-
+  // Desestructuramos después de construir seoMeta para evitar referencias antes de inicialización
+  const { config: seoConfig, details: seoDetails } = seoMeta
   // Google Reviews integrations removidas
+
+  if (loading) {
+    return (
+      <>
+        <SeoHead {...seoConfig} />
+        <Container className="py-12">Cargando tienda…</Container>
+      </>
+    )
+  }
+  if (!profile || !profile.store_enabled) {
+    return (
+      <>
+        <SeoHead {...seoConfig} />
+        <Container className="py-12">Tienda no encontrada.</Container>
+      </>
+    )
+  }
+
+  // Derivar campos de perfil una vez garantizado
+  const banner = profile.store_banner_url || '/og-preview.png'
+  const bannerPosY = typeof profile.store_banner_position_y === 'number' ? profile.store_banner_position_y : 50
+  const avatar = profile.store_avatar_url || profile.avatar_url || '/avatar-placeholder.png'
+  const storeName = profile.store_name || profile.full_name || 'Tienda'
+  const address = profile.store_address || [profile.city, profile.province].filter(Boolean).join(', ')
+  const phone = profile.store_phone || profile.whatsapp_number || ''
+  const workingHours = (profile as any).store_hours as string | null
 
   return (
     <div className="min-h-[70vh] relative isolate overflow-hidden text-white bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729]">

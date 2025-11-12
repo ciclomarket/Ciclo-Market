@@ -172,16 +172,21 @@ export default function ListingCard({ l, storeLogoUrl, priority = false, likeCou
       <Link to={`/listing/${slug}`} className="card-flat group flex h-full flex-col overflow-hidden">
         <div className="aspect-[5/4] sm:aspect-video relative overflow-hidden bg-black/10">
           <img
-            src={transformSupabasePublicUrl(l.images[0], { width: 600, quality: 48 })}
-            srcSet={l.images && l.images[0] ? [320, 480, 600, 768, 960]
-              .map((w) => {
-                const q = w <= 320 ? 38 : w <= 480 ? 42 : w <= 600 ? 48 : w <= 768 ? 50 : 52
-                return `${transformSupabasePublicUrl(l.images[0], { width: w, quality: q })} ${w}w`
-              }).join(', ') : undefined}
-            sizes="(max-width: 1279px) 50vw, 33vw"
+            src={transformSupabasePublicUrl(l.images[0], { width: 480, quality: 36, format: 'webp' })}
+            srcSet={l.images && l.images[0]
+              ? [240, 360, 480, 640, 800]
+                  .map((w) => {
+                    const q = w <= 240 ? 28 : w <= 360 ? 32 : w <= 480 ? 36 : w <= 640 ? 40 : 44
+                    return `${transformSupabasePublicUrl(l.images[0], { width: w, quality: q, format: 'webp' })} ${w}w`
+                  })
+                  .join(', ')
+              : undefined}
+            sizes="(max-width: 639px) 90vw, (max-width: 1279px) 50vw, 33vw"
             alt={l.title}
             loading={priority ? 'eager' : 'lazy'}
             decoding="async"
+            width={480}
+            height={384}
             {...(priority ? ({ fetchpriority: 'high' } as any) : ({} as any))}
             onLoad={() => setImageLoaded(true)}
             onError={(e) => {
