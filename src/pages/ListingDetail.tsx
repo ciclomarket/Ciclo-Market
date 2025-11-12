@@ -28,7 +28,7 @@ import ListingQuestionsSection from '../components/ListingQuestionsSection'
 import { submitShareBoost } from '../services/shareBoost'
 import useUpload from '../hooks/useUpload'
 import { FALLBACK_PLANS } from '../services/plans'
-import { SUPABASE_RECOMMENDED_QUALITY, buildSupabaseSrc, buildSupabaseSrcSet } from '../utils/supabaseImage'
+import { SUPABASE_RECOMMENDED_QUALITY, buildSupabaseSrc, buildSupabaseSrcSet, shouldTranscodeToWebp } from '../utils/supabaseImage'
 import { canonicalPlanCode } from '../utils/planCodes'
 
 export default function ListingDetail() {
@@ -799,14 +799,16 @@ export default function ListingDetail() {
                   <div className="flex items-center gap-3 min-w-0">
                     {sellerAvatarUrl && (
                       <picture>
-                        <source
-                          type="image/webp"
-                          srcSet={buildSupabaseSrcSet(sellerAvatarUrl, [64, 80, 96], {
-                            format: 'webp',
-                            quality: SUPABASE_RECOMMENDED_QUALITY,
-                          })}
-                          sizes="40px"
-                        />
+                        {shouldTranscodeToWebp(sellerAvatarUrl) ? (
+                          <source
+                            type="image/webp"
+                            srcSet={buildSupabaseSrcSet(sellerAvatarUrl, [64, 80, 96], {
+                              format: 'webp',
+                              quality: SUPABASE_RECOMMENDED_QUALITY,
+                            })}
+                            sizes="40px"
+                          />
+                        ) : null}
                         <img
                           src={buildSupabaseSrc(sellerAvatarUrl, 96)}
                           srcSet={buildSupabaseSrcSet(sellerAvatarUrl, [64, 80, 96])}

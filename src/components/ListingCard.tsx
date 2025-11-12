@@ -1,8 +1,8 @@
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Listing } from '../types'
-import { SUPABASE_RECOMMENDED_QUALITY, buildSupabaseSrc, buildSupabaseSrcSet } from '../utils/supabaseImage'
+import { buildImageSource } from '../lib/imageUrl'
 import { useListingLike } from '../hooks/useServerLikes'
 import { useCurrency } from '../context/CurrencyContext'
 import { formatListingPrice } from '../utils/pricing'
@@ -107,6 +107,20 @@ export default function ListingCard({ l, storeLogoUrl, priority = false, likeCou
   const isArchived = l.status === 'archived'
   const statusLabel = isSold ? 'Vendida' : isArchived ? 'Archivada' : isExpired ? 'Vencida' : null
   const imageStatusClass = (isArchived || isExpired) ? 'opacity-60 grayscale' : isSold ? 'opacity-85' : ''
+  const primaryImage = typeof l.images?.[0] === 'string' ? l.images[0] : null
+  const cardImage = buildImageSource(primaryImage, { profile: 'card' })
+  const imageSrc = cardImage?.src || primaryImage || ''
+  const imageSrcSet = cardImage?.srcSet
+  const imageSizes = cardImage?.sizes || '(max-width: 1279px) 50vw, 33vw'
+  const hasImage = Boolean(imageSrc)
+
+  useEffect(() => {
+    if (!imageSrc) {
+      setImageLoaded(true)
+    } else {
+      setImageLoaded(false)
+    }
+  }, [imageSrc])
   const titleClass = (isArchived || isExpired) ? 'line-clamp-2 font-semibold text-[#14212e]/50' : 'line-clamp-2 font-semibold text-[#14212e]'
   const metaClass = (isArchived || isExpired)
     ? 'mt-1 text-xs text-[#14212e]/50 line-clamp-1 sm:line-clamp-2'
@@ -170,50 +184,36 @@ export default function ListingCard({ l, storeLogoUrl, priority = false, likeCou
         </div>
       </div>
       <Link to={`/listing/${slug}`} className="card-flat group flex h-full flex-col overflow-hidden">
-        <div className="aspect-[5/4] sm:aspect-video relative overflow-hidden bg-black/10">
-          <picture>
-            {l.images?.[0] ? (
-              <source
-                type="image/webp"
-                srcSet={buildSupabaseSrcSet(l.images[0], [320, 480, 600, 768, 960], {
-                  format: 'webp',
-                  quality: SUPABASE_RECOMMENDED_QUALITY,
-                })}
-                sizes="(max-width: 1279px) 50vw, 33vw"
-              />
-            ) : null}
+        <div className="aspect-[5/4] sm:aspect-video relative overflow-hidden rounded-2xl bg-transparent">
+          {hasImage ? (
             <img
-              src={buildSupabaseSrc(l.images?.[0] || '', 600)}
-              srcSet={
-                l.images?.[0]
-                  ? buildSupabaseSrcSet(l.images[0], [320, 480, 600, 768, 960])
-                  : undefined
-              }
-              sizes="(max-width: 1279px) 50vw, 33vw"
+              src={imageSrc}
+              srcSet={imageSrcSet}
+              sizes={imageSizes}
               alt={l.title}
               loading={priority ? 'eager' : 'lazy'}
               decoding="async"
-              {...(priority ? ({ fetchpriority: 'high' } as any) : ({} as any))}
+              {...(priority ? ({ fetchPriority: 'high' as const }) : {})}
               onLoad={() => setImageLoaded(true)}
               onError={(e) => {
-                // Fallback a URL original si la transformación devuelve 400/404
                 try {
                   const el = e.currentTarget as HTMLImageElement
-                  if (l.images?.[0] && el.src !== l.images[0]) {
-                    el.src = l.images[0]
+                  if (primaryImage && el.src !== primaryImage) {
+                    el.src = primaryImage
+                    return
                   }
                 } catch {
                   void 0
                 }
                 setImageLoaded(true)
               }}
-              className={`h-full w-full object-cover transition duration-700 ${imageLoaded ? 'opacity-100 scale-100' : 'opacity-0 scale-105'} ${imageStatusClass} group-hover:scale-105`}
+              className={`absolute inset-0 h-full w-full object-cover object-center transition-opacity duration-500 ${imageLoaded ? 'opacity-100' : 'opacity-0'} ${imageStatusClass}`}
             />
-          </picture>
-          <div
-            aria-hidden="true"
-            className={`pointer-events-none absolute inset-0 bg-gradient-to-br from-white/40 via-white/10 to-white/40 transition-opacity duration-500 ${imageLoaded ? 'opacity-0' : 'opacity-100 animate-pulse'}`}
-          />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center text-xs font-medium uppercase tracking-wide text-black/40">
+              Sin imagen
+            </div>
+          )}
           {storeLogoUrl ? (
             <img src={storeLogoUrl} alt="Logo tienda" className="absolute bottom-2 left-2 h-8 w-8 rounded-full border border-white/50 bg-white object-cover shadow" loading="lazy" decoding="async" />
           ) : null}

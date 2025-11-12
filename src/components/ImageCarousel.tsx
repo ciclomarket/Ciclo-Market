@@ -1,6 +1,6 @@
 
 import { useEffect, useMemo, useState } from 'react'
-import { SUPABASE_RECOMMENDED_QUALITY, buildSupabaseSrc, buildSupabaseSrcSet } from '../utils/supabaseImage'
+import { SUPABASE_RECOMMENDED_QUALITY, buildSupabaseSrc, buildSupabaseSrcSet, shouldTranscodeToWebp } from '../utils/supabaseImage'
 
 type Slide = { src: string; title?: string; desc?: string }
 
@@ -16,11 +16,9 @@ export default function ImageCarousel({ images, slides, aspect = 'video', showTh
       return slides
         .map((s) => s?.src)
         .filter((src): src is string => typeof src === 'string' && !!src.trim())
-        .filter((src) => !/\.heic(?:$|\?)/i.test(src))
     }
     return rawImages
       .filter((src): src is string => typeof src === 'string' && !!src.trim())
-      .filter((src) => !/\.heic(?:$|\?)/i.test(src))
   }, [rawImages, slides])
 
   const slideMeta: Slide[] = useMemo(() => {
@@ -40,10 +38,13 @@ export default function ImageCarousel({ images, slides, aspect = 'video', showTh
   const widthSteps = useMemo(() => [640, 960, 1280, 1600], [])
   const currentSources = useMemo(() => {
     if (!currentImage) return null
+    const allowWebp = shouldTranscodeToWebp(currentImage)
     return {
       fallback: buildSupabaseSrc(currentImage, 1280),
       fallbackSrcSet: buildSupabaseSrcSet(currentImage, widthSteps),
-      webpSrcSet: buildSupabaseSrcSet(currentImage, widthSteps, { format: 'webp', quality: SUPABASE_RECOMMENDED_QUALITY }),
+      webpSrcSet: allowWebp
+        ? buildSupabaseSrcSet(currentImage, widthSteps, { format: 'webp', quality: SUPABASE_RECOMMENDED_QUALITY })
+        : undefined,
       avifSrcSet: buildSupabaseSrcSet(currentImage, widthSteps, { format: 'avif', quality: SUPABASE_RECOMMENDED_QUALITY }),
     }
   }, [currentImage, widthSteps])
@@ -131,10 +132,12 @@ export default function ImageCarousel({ images, slides, aspect = 'video', showTh
               aria-label={`Ver imagen ${idx + 1}`}
             >
               <picture>
+              {shouldTranscodeToWebp(src) ? (
                 <source
                   type="image/webp"
                   srcSet={buildSupabaseSrc(src, 300, { format: 'webp', quality: SUPABASE_RECOMMENDED_QUALITY })}
                 />
+              ) : null}
                 <img
                   src={buildSupabaseSrc(src, 300)}
                   alt="Miniatura de la publicación"

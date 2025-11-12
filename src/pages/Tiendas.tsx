@@ -6,7 +6,7 @@ import GoogleStoresMap from '../components/GoogleStoresMap'
 import SeoHead from '../components/SeoHead'
 import { fetchStores, fetchStoreActivityCounts, type StoreSummary } from '../services/users'
 import { fetchListings } from '../services/listings'
-import { SUPABASE_RECOMMENDED_QUALITY, buildSupabaseSrc, buildSupabaseSrcSet } from '../utils/supabaseImage'
+import { SUPABASE_RECOMMENDED_QUALITY, buildSupabaseSrc, buildSupabaseSrcSet, shouldTranscodeToWebp } from '../utils/supabaseImage'
 import type { Category } from '../types'
 
 type StoreCategoryFilter = 'Todos' | 'Accesorios' | 'Indumentaria'
@@ -353,14 +353,16 @@ export default function Tiendas() {
                                 <div className="h-14 w-14 flex-shrink-0 overflow-hidden rounded-xl border border-white/15 bg-white/10">
                                   {store.store_avatar_url ? (
                                     <picture>
-                                      <source
-                                        type="image/webp"
-                                        srcSet={buildSupabaseSrcSet(store.store_avatar_url, [120, 160, 200], {
-                                          format: 'webp',
-                                          quality: SUPABASE_RECOMMENDED_QUALITY,
-                                        })}
-                                        sizes="56px"
-                                      />
+                                      {shouldTranscodeToWebp(store.store_avatar_url) ? (
+                                        <source
+                                          type="image/webp"
+                                          srcSet={buildSupabaseSrcSet(store.store_avatar_url, [120, 160, 200], {
+                                            format: 'webp',
+                                            quality: SUPABASE_RECOMMENDED_QUALITY,
+                                          })}
+                                          sizes="56px"
+                                        />
+                                      ) : null}
                                       <img
                                         src={buildSupabaseSrc(store.store_avatar_url, 160)}
                                         srcSet={buildSupabaseSrcSet(store.store_avatar_url, [120, 160, 200])}

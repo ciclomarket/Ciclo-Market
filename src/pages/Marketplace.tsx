@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams, Link, useLocation } from 'react-router-dom'
 import Container from '../components/Container'
 import ListingCard from '../components/ListingCard'
-import { SUPABASE_RECOMMENDED_QUALITY, buildSupabaseSrc, buildSupabaseSrcSet } from '../utils/supabaseImage'
+import { buildImageSource } from '../lib/imageUrl'
 import { fetchStoresMeta } from '../services/users'
 import EmptyState from '../components/EmptyState'
 import SkeletonCard from '../components/SkeletonCard'
@@ -1445,12 +1445,11 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
       const link = document.createElement('link')
       link.rel = 'preload'
       link.as = 'image'
-      link.href = buildSupabaseSrc(img, 640)
-      const srcset = buildSupabaseSrcSet(img, [320, 480, 640, 768, 960])
-      if (srcset) link.setAttribute('imagesrcset', srcset)
-      const webpSet = buildSupabaseSrcSet(img, [320, 480, 640, 768, 960], { format: 'webp', quality: SUPABASE_RECOMMENDED_QUALITY })
-      if (webpSet) link.dataset.webpSrcSet = webpSet
-      link.setAttribute('imagesizes', '(max-width: 1279px) 50vw, 33vw')
+      const media = buildImageSource(img, { profile: 'card', sizes: '(max-width: 1279px) 50vw, 33vw' })
+      if (!media?.src) continue
+      link.href = media.src
+      if (media.srcSet) link.setAttribute('imagesrcset', media.srcSet)
+      if (media.sizes) link.setAttribute('imagesizes', media.sizes)
       document.head.appendChild(link)
       created.push(link)
     }

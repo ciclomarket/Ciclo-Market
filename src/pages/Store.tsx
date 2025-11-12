@@ -11,7 +11,7 @@ import { fetchListingsBySeller } from '../services/listings'
 import ListingCard from '../components/ListingCard'
 import type { Listing } from '../types'
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
-import { SUPABASE_RECOMMENDED_QUALITY, buildSupabaseSrc, buildSupabaseSrcSet } from '../utils/supabaseImage'
+import { SUPABASE_RECOMMENDED_QUALITY, buildSupabaseSrc, buildSupabaseSrcSet, shouldTranscodeToWebp } from '../utils/supabaseImage'
 import { fetchLikeCounts } from '../services/likes'
 import { useAuth } from '../context/AuthContext'
 import { resolveSiteOrigin, toAbsoluteUrl as absoluteUrl, buildBreadcrumbList } from '../utils/seo'
@@ -1333,14 +1333,16 @@ const handleClearFilters = useCallback(() => {
                     })}
                     sizes="(max-width: 639px) 448px, (max-width: 767px) 672px, (max-width: 1023px) 896px, 1152px"
                   />
-                  <source
-                    type="image/webp"
-                    srcSet={buildSupabaseSrcSet(banner, [800, 1200, 1600, 1920], {
-                      format: 'webp',
-                      quality: SUPABASE_RECOMMENDED_QUALITY,
-                    })}
-                    sizes="(max-width: 639px) 448px, (max-width: 767px) 672px, (max-width: 1023px) 896px, 1152px"
-                  />
+                  {shouldTranscodeToWebp(banner) ? (
+                    <source
+                      type="image/webp"
+                      srcSet={buildSupabaseSrcSet(banner, [800, 1200, 1600, 1920], {
+                        format: 'webp',
+                        quality: SUPABASE_RECOMMENDED_QUALITY,
+                      })}
+                      sizes="(max-width: 639px) 448px, (max-width: 767px) 672px, (max-width: 1023px) 896px, 1152px"
+                    />
+                  ) : null}
                 </>
               ) : null}
               <img
@@ -1363,7 +1365,7 @@ const handleClearFilters = useCallback(() => {
       <Container>
         <div className="relative z-20 -mt-14 md:-mt-12 flex flex-col items-center gap-3 md:flex-row md:items-end md:gap-4">
           <picture>
-            {avatar ? (
+            {avatar && shouldTranscodeToWebp(avatar) ? (
               <source
                 type="image/webp"
                 srcSet={buildSupabaseSrcSet(avatar, [128, 160, 192, 256], {

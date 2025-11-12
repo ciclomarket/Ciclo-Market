@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { SUPABASE_RECOMMENDED_QUALITY, buildSupabaseSrc } from '../utils/supabaseImage'
+import { SUPABASE_RECOMMENDED_QUALITY, buildSupabaseSrc, shouldTranscodeToWebp } from '../utils/supabaseImage'
 
 declare global {
   interface Window { L?: any }
@@ -155,10 +155,15 @@ export default function StoresMap({ stores, focusStoreId, onStoreClick }: Props)
         let avatarHtml = ''
         if (s.avatarUrl) {
           const fallback = buildSupabaseSrc(s.avatarUrl, 160)
-          const webp = buildSupabaseSrc(s.avatarUrl, 160, { format: 'webp', quality: SUPABASE_RECOMMENDED_QUALITY })
-          avatarHtml = webp
-            ? `<picture><source type="image/webp" srcset="${webp}" /><img src="${fallback}" style="width:100%;height:100%;object-fit:cover;" alt="${s.name}" /></picture>`
-            : `<img src="${fallback}" style="width:100%;height:100%;object-fit:cover;" alt="${s.name}" />`
+          if (shouldTranscodeToWebp(s.avatarUrl)) {
+            const webp = buildSupabaseSrc(s.avatarUrl, 160, { format: 'webp', quality: SUPABASE_RECOMMENDED_QUALITY })
+            if (webp) {
+              avatarHtml = `<picture><source type="image/webp" srcset="${webp}" /><img src="${fallback}" style="width:100%;height:100%;object-fit:cover;" alt="${s.name}" /></picture>`
+            }
+          }
+          if (!avatarHtml) {
+            avatarHtml = `<img src="${fallback}" style="width:100%;height:100%;object-fit:cover;" alt="${s.name}" />`
+          }
         }
         const html = avatarHtml
           ? `<div style="width:${size}px;height:${size}px;border-radius:50%;border:3px solid #fff;background:#fff;box-shadow:0 12px 24px rgba(10,20,35,0.42);overflow:hidden;display:flex;align-items:center;justify-content:center;">${avatarHtml}</div>`

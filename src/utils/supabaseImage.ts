@@ -3,6 +3,8 @@ export type TransformOpts = {
   height?: number
   quality?: number
   format?: 'avif' | 'webp' | 'jpeg' | 'png'
+  resize?: 'contain' | 'cover' | 'fill' | 'inside' | 'outside'
+  background?: string
 }
 
 const USE_SUPABASE_TRANSFORM = String(import.meta.env.VITE_SUPABASE_IMG_TRANSFORM || '').toLowerCase() === 'true'
@@ -15,12 +17,14 @@ function clampQuality(value?: number): number | null {
 }
 
 const applyOpts = (renderUrl: URL, opts: TransformOpts) => {
-  const { width, height, quality, format } = opts
+  const { width, height, quality, format, resize, background } = opts
   if (typeof width === 'number' && width > 0) renderUrl.searchParams.set('width', String(Math.floor(width)))
   if (typeof height === 'number' && height > 0) renderUrl.searchParams.set('height', String(Math.floor(height)))
   const q = clampQuality(quality)
   if (q !== null) renderUrl.searchParams.set('quality', String(q))
   if (format) renderUrl.searchParams.set('format', format.toLowerCase())
+  if (resize) renderUrl.searchParams.set('resize', resize)
+  if (background) renderUrl.searchParams.set('background', background)
   return renderUrl
 }
 
@@ -48,18 +52,62 @@ export function transformSupabasePublicUrl(url: string, opts: TransformOpts = {}
 export function buildSupabaseSrcSet(url: string, widths: number[], opts: Omit<TransformOpts, 'width'> = {}): string | undefined {
   if (!Array.isArray(widths) || !widths.length) return undefined
   const seen = new Set<number>()
+  const baseOpts = normalizeTransformOpts(url, opts as TransformOpts)
   const entries = widths
     .map((w) => Math.floor(w))
     .filter((w) => Number.isFinite(w) && w > 0 && !seen.has(w) && seen.add(w))
-    .map((w) => `${transformSupabasePublicUrl(url, { ...opts, width: w })} ${w}w`)
+    .map((w) => `${transformSupabasePublicUrl(url, { ...baseOpts, width: w })} ${w}w`)
   return entries.length ? entries.join(', ') : undefined
 }
 
 export function buildSupabaseSrc(url: string, width?: number, opts: Omit<TransformOpts, 'width'> = {}): string {
+  const normalized = normalizeTransformOpts(url, opts as TransformOpts)
   if (typeof width === 'number') {
-    return transformSupabasePublicUrl(url, { ...opts, width })
+    return transformSupabasePublicUrl(url, { ...normalized, width })
   }
-  return transformSupabasePublicUrl(url, opts)
+  return transformSupabasePublicUrl(url, normalized)
 }
 
 export const SUPABASE_RECOMMENDED_QUALITY = 70
+
+let SAFARI_DETECTED: boolean | null = null
+function isSafariLike(): boolean {
+  if (SAFARI_DETECTED !== null) return SAFARI_DETECTED
+  if (typeof navigator === 'undefined') return (SAFARI_DETECTED = false)
+  const ua = navigator.userAgent || ''
+  const isSafari = /Safari/i.test(ua) && !/Chrome|CriOS|FxiOS|EdgiOS/i.test(ua)
+  const isIOSWebView = /iP(hone|od|ad).+AppleWebKit(?!.*Safari)/i.test(ua)
+  SAFARI_DETECTED = isSafari || isIOSWebView
+  return SAFARI_DETECTED
+}
+
+export function inferImageFormat(value: string | undefined | null): string | null {
+  if (!value) return null
+  try {
+    const pathname = value.startsWith('http') ? new URL(value).pathname : value
+    const match = pathname.match(/\.([a-z0-9]+)(?:$|\?)/i)
+    return match ? match[1].toLowerCase() : null
+  } catch {
+    return null
+  }
+}
+
+export function shouldTranscodeToWebp(url: string | undefined | null): boolean {
+  const ext = inferImageFormat(url)
+  if (isSafariLike()) return false
+  if (!ext) return true
+  if (ext === 'webp') return false
+  if (ext === 'jpg' || ext === 'jpeg') return false
+  return true
+}
+
+function normalizeTransformOpts(url: string, opts: TransformOpts = {}): TransformOpts {
+  const normalized: TransformOpts = { ...opts }
+  const ext = inferImageFormat(url)
+  if (!normalized.format && ext && (ext === 'heic' || ext === 'heif')) {
+    normalized.format = 'jpeg'
+    if (typeof normalized.quality !== 'number') normalized.quality = 80
+  }
+  if (normalized.background) normalized.background = normalized.background.replace(/^#/, '').toLowerCase()
+  return normalized
+}
