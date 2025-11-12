@@ -1,15 +1,17 @@
-import SEO from '../../components/SEO'
 import Marketplace from '../Marketplace'
 
 export default function Accesorios() {
   return (
-    <>
-      <SEO
-        title="Accesorios para tu bicicleta"
-        description="Componentes, ruedas, electrónicos y más. Encontrá accesorios para ruta, MTB y gravel."
-        keywords={['accesorios bicicleta','componentes bicicleta','ruedas bicicleta','ciclocomputadoras']}
-      />
-      <Marketplace forcedCat="Accesorios" headingTitle="Accesorios para tu bicicleta" breadcrumbs={[{ label: 'Inicio', to: '/' }, { label: 'Accesorios para tu bicicleta' }]} />
-    </>
+    <Marketplace
+      forcedCat="Accesorios"
+      headingTitle="Accesorios para tu bicicleta"
+      breadcrumbs={[{ label: 'Inicio', to: '/' }, { label: 'Accesorios para tu bicicleta' }]}
+      seoOverrides={{
+        title: 'Accesorios para tu bicicleta',
+        description: 'Componentes, rodillos inteligentes, ciclocomputadoras y repuestos premium con compatibilidades detalladas para que equipes tu bici sin sorpresas ni gastos extra.',
+        keywords: ['accesorios bicicleta', 'componentes bicicleta', 'ruedas bicicleta', 'ciclocomputadoras'],
+        canonicalPath: '/accesorios',
+      }}
+    />
   )
 }

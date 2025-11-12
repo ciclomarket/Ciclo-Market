@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import Container from '../components/Container'
-// SEO global se maneja desde App; acá sólo inyectamos JSON-LD
-import JsonLd from '../components/JsonLd'
+import SeoHead, { type SeoHeadProps } from '../components/SeoHead'
 import FilterDropdown from '../components/FilterDropdown'
 import { fetchUserProfile, fetchStoreProfileBySlug, fetchUserContactEmail, type UserProfileRecord } from '../services/users'
 import { track, trackOncePerSession } from '../services/track'
@@ -14,6 +13,8 @@ import type { Listing } from '../types'
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 import { transformSupabasePublicUrl } from '../utils/supabaseImage'
 import { fetchLikeCounts } from '../services/likes'
+import { useAuth } from '../context/AuthContext'
+import { resolveSiteOrigin, toAbsoluteUrl as absoluteUrl, buildBreadcrumbList } from '../utils/seo'
 
 type FilterOption = { id: string; label: string; match: (l: Listing) => boolean }
 type FilterSection = { id: string; label: string; options: FilterOption[] }
@@ -107,6 +108,9 @@ type StoreFiltersState = {
 }
 
 const MULTI_FILTER_ORDER: MultiFilterKey[] = ['brand','material','frameSize','wheelSize','drivetrain','condition','brake','year','size']
+// UI ordering helpers for filters (avoid duplicate frameSize vs size)
+const UI_FILTERS_BEFORE_PRICE: MultiFilterKey[] = ['size']
+const UI_FILTERS_AFTER_PRICE: MultiFilterKey[] = ['brand','material','brake','year','condition','drivetrain','wheelSize']
 const MULTI_FILTER_LABELS: Record<MultiFilterKey, string> = {
   brand: 'Marca',
   material: 'Material',
@@ -203,6 +207,22 @@ const cleanValue = (value?: string | null) => {
   return trimmed ? trimmed.replace(/\s+/g, ' ') : undefined
 }
 
+const formatList = (values: string[], limit = 3) => {
+  const unique = Array.from(new Set(values.map((v) => v.trim()).filter(Boolean)))
+  const sliced = unique.slice(0, limit)
+  if (!sliced.length) return ''
+  if (sliced.length === 1) return sliced[0]
+  return `${sliced.slice(0, -1).join(', ')} y ${sliced[sliced.length - 1]}`
+}
+
+const ensureUrl = (value?: string | null) => {
+  if (!value) return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  if (/^https?:\/\//i.test(trimmed)) return trimmed
+  return `https://${trimmed.replace(/^\/+/, '')}`
+}
+
 function sortAlpha(values: Iterable<string>) {
   return Array.from(values).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))
 }
@@ -255,12 +275,12 @@ function computeListingFacets(listings: Listing[]): ListingFacetsResult {
     if (material) sets.material.add(material)
 
     const frameSize = cleanValue(listing.frameSize)
-    if (frameSize) sets.frameSize.add(frameSize)
+    if (frameSize) { sets.frameSize.add(frameSize); sets.size.add(frameSize) }
     // Agregar múltiples talles desde extras si existen
     const extrasMap = extractExtrasMap(listing.extras)
     const multi = extrasMap.talles
     if (multi) {
-      multi.split(',').map((s) => s.trim()).filter(Boolean).forEach((s) => sets.frameSize.add(s))
+      multi.split(',').map((s) => s.trim()).filter(Boolean).forEach((s) => { sets.frameSize.add(s); sets.size.add(s) })
     }
 
     const wheelSize = cleanValue(listing.wheelSize)
@@ -587,9 +607,9 @@ function DealFilterContent({ active, onToggle, close }: DealFilterContentProps) 
 const STORE_CATEGORY_BANNERS: Array<{ key: 'all' | 'acc' | 'app'; label: string; section: '' | 'accessories' | 'apparel'; description: string; image: string; imageMobile: string }> = [
   {
     key: 'all',
-    label: 'Todas',
+    label: 'Bicicletas',
     section: '',
-    description: 'Todo el catálogo disponible',
+    description: 'Solo bicicletas',
     image: '/design/Banners/1.png',
     imageMobile: '/design/Banners-Mobile/1.png'
   },
@@ -613,8 +633,10 @@ const STORE_CATEGORY_BANNERS: Array<{ key: 'all' | 'acc' | 'app'; label: string;
 
 export default function Store() {
   const { fx } = useCurrency()
+  const { user } = useAuth()
   const params = useParams()
   const [search, setSearch] = useSearchParams()
+  const siteOrigin = useMemo(() => resolveSiteOrigin(), [])
   // filtros de sidebar removidos
   const [profile, setProfile] = useState<UserProfileRecord | null>(null)
   const [listings, setListings] = useState<Listing[]>([])
@@ -729,8 +751,9 @@ export default function Store() {
   }
   const activeSection = (search.get('sec') || '').trim()
   const activeOption = (search.get('opt') || '').trim()
+  const bikesOnly = (search.get('bikes') || '').trim() === '1'
 
-  const setSection = useCallback((sec: string, opt?: string) => {
+  const setSection = useCallback((sec: string, opt?: string, bikes?: boolean) => {
     const next = new URLSearchParams(search)
     if (!sec) {
       next.delete('sec')
@@ -740,6 +763,8 @@ export default function Store() {
       if (!opt) next.delete('opt')
       else next.set('opt', opt)
     }
+    if (bikes) next.set('bikes', '1')
+    else next.delete('bikes')
     setSearch(next, { replace: true })
   }, [search, setSearch])
 
@@ -790,9 +815,9 @@ export default function Store() {
     const pid = profile?.id
     if (!pid) return
     trackOncePerSession(`store_view_${pid}`, () => {
-      track('store_view', { store_user_id: pid })
+      track('store_view', { store_user_id: pid, user_id: user?.id || null })
     })
-  }, [profile?.id])
+  }, [profile?.id, user?.id])
 
   useEffect(() => {
     let mounted = true
@@ -834,7 +859,12 @@ export default function Store() {
     }
     return listings
   }, [listings, activeSection, activeOption])
-  const facetsData = useMemo(() => computeListingFacets(sectionFiltered), [sectionFiltered])
+  // Aplicar filtro de "Solo bicicletas" si bikesOnly = true
+  const baseList = useMemo(() => {
+    if (!bikesOnly) return sectionFiltered
+    return sectionFiltered.filter((l) => (l.category || '') !== 'Accesorios' && (l.category || '') !== 'Indumentaria')
+  }, [sectionFiltered, bikesOnly])
+  const facetsData = useMemo(() => computeListingFacets(baseList), [baseList])
   const listingMetadata = facetsData.metadata
   const filtered = useMemo(() => {
     const brandSet = new Set(filters.brand.map((value) => normalizeText(value)))
@@ -855,7 +885,7 @@ export default function Store() {
       return activeSet.has(normalizeText(value))
     }
 
-    return sectionFiltered.filter((listing) => {
+    return baseList.filter((listing) => {
       if (!matchesValue(listing.brand, brandSet)) return false
       if (!matchesValue(listing.material, materialSet)) return false
       if (frameSizeSet.size) {
@@ -891,17 +921,20 @@ export default function Store() {
       }
 
       if (sizeSet.size) {
+        // Match por talle de indumentaria, multi-talles y también por tamaño de cuadro
+        const frameMatch = listing.frameSize && sizeSet.has(normalizeText(listing.frameSize))
         const hasSingle = derived.apparelSize && sizeSet.has(normalizeText(derived.apparelSize))
-        if (!hasSingle) {
+        let anyMulti = false
+        if (!hasSingle && !frameMatch) {
           const extrasMap = extractExtrasMap(listing.extras)
           const multi = extrasMap.talles || ''
-          const anyMulti = multi
+          anyMulti = multi
             .split(',')
             .map((s) => s.trim())
             .filter(Boolean)
             .some((s) => sizeSet.has(normalizeText(s)))
-          if (!anyMulti) return false
         }
+        if (!(frameMatch || hasSingle || anyMulti)) return false
       }
 
       // Precio: convertir a moneda seleccionada usando fx y aplicar rango
@@ -931,7 +964,7 @@ export default function Store() {
 
       return true
     })
-  }, [sectionFiltered, filters, listingMetadata])
+  }, [baseList, filters, listingMetadata])
 
   const finalList = useMemo(() => {
     const arr = [...filtered]
@@ -1054,7 +1087,20 @@ export default function Store() {
 
   const hasActiveFilters = activeFilterChips.length > 0
 
-  const handleClearFilters = useCallback(() => {
+const categorySummary = useMemo(() => {
+  const categories = listings
+    .map((listing) => listing.category)
+    .filter((value): value is string => Boolean(value))
+  const unique = Array.from(new Set(categories))
+  return {
+    values: unique,
+    label: unique.length ? formatList(unique, 3) : '',
+  }
+}, [listings])
+
+const topListings = useMemo(() => listings.slice(0, Math.min(listings.length, 10)), [listings])
+
+const handleClearFilters = useCallback(() => {
     const reset: Partial<StoreFiltersState> = {
       priceMin: undefined,
       priceMax: undefined,
@@ -1067,8 +1113,24 @@ export default function Store() {
     setFilters(reset)
   }, [setFilters])
 
-  if (loading) return <Container className="py-12">Cargando tienda…</Container>
-  if (!profile || !profile.store_enabled) return <Container className="py-12">Tienda no encontrada.</Container>
+  const { config: seoConfig, details: seoDetails } = seoMeta
+
+  if (loading) {
+    return (
+      <>
+        <SeoHead {...seoConfig} />
+        <Container className="py-12">Cargando tienda…</Container>
+      </>
+    )
+  }
+  if (!profile || !profile.store_enabled) {
+    return (
+      <>
+        <SeoHead {...seoConfig} />
+        <Container className="py-12">Tienda no encontrada.</Container>
+      </>
+    )
+  }
 
   const banner = profile.store_banner_url || '/og-preview.png'
   const bannerPosY = typeof profile.store_banner_position_y === 'number' ? profile.store_banner_position_y : 50
@@ -1078,31 +1140,180 @@ export default function Store() {
   const phone = profile.store_phone || profile.whatsapp_number || ''
   const workingHours = (profile as any).store_hours as string | null
 
+  const seoMeta = useMemo((): { config: Partial<SeoHeadProps>; details: { summary: string; copy: string } | null } => {
+    if (!profile) {
+      return {
+        config: {
+          title: 'Tienda no encontrada',
+          description: 'Explorá las tiendas oficiales verificadas en Ciclo Market.',
+          canonicalPath: params.slug ? `/tienda/${params.slug}` : undefined,
+          noIndex: true,
+        },
+        details: null,
+      }
+    }
+
+    const slug = profile.store_slug || params.slug || profile.id || ''
+    const canonicalPath = slug ? `/tienda/${slug}` : undefined
+    const canonicalUrl = canonicalPath ? absoluteUrl(canonicalPath, siteOrigin) : undefined
+    const locationLabel = address || [profile.city, profile.province].filter(Boolean).join(', ')
+    const categoriesLabel = categorySummary.label || 'bicicletas y accesorios'
+    const descriptionParts = [
+      `${storeName} en Ciclo Market: ${categoriesLabel}.`,
+      locationLabel ? `Atención en ${locationLabel}.` : null,
+      listings.length
+        ? `${listings.length} publicaciones activas con fotos reales, estado verificado y contacto directo.`
+        : 'Publicaciones activas con fotos reales, estado verificado y contacto directo.',
+      'Coordiná pruebas, envíos asegurados y soporte personalizado desde la tienda oficial.',
+    ].filter(Boolean)
+    const description = descriptionParts.join(' ').replace(/\s+/g, ' ').trim()
+
+    const bannerUrl = profile.store_banner_url || avatar
+    const absoluteBanner = absoluteUrl(bannerUrl, siteOrigin) ?? bannerUrl
+    const absoluteLogo = absoluteUrl(avatar, siteOrigin) ?? avatar
+    const instagram = profile.store_instagram
+      ? ensureUrl(`https://instagram.com/${String(profile.store_instagram).replace(/^@+/, '')}`)
+      : null
+    const facebook = profile.store_facebook
+      ? ensureUrl(`https://facebook.com/${String(profile.store_facebook).replace(/^@+/, '')}`)
+      : null
+    const website = ensureUrl(profile.store_website || null)
+    const sameAs = [instagram, facebook, website].filter(Boolean) as string[]
+
+    const postalAddress =
+      profile.store_address || profile.city || profile.province
+        ? {
+            '@type': 'PostalAddress',
+            streetAddress: profile.store_address || undefined,
+            addressLocality: profile.city || undefined,
+            addressRegion: profile.province || undefined,
+            addressCountry: 'AR',
+          }
+        : undefined
+
+    const organizationSchema = {
+      '@context': 'https://schema.org',
+      '@type': postalAddress ? 'LocalBusiness' : 'Organization',
+      name: storeName,
+      url: canonicalUrl,
+      logo: absoluteLogo,
+      image: absoluteBanner,
+      telephone: phone || undefined,
+      address: postalAddress,
+      contactPoint: phone
+        ? [
+            {
+              '@type': 'ContactPoint',
+              telephone: phone,
+              contactType: 'customer service',
+              areaServed: 'AR',
+            },
+          ]
+        : undefined,
+      sameAs: sameAs.length ? sameAs : undefined,
+    }
+
+    const itemListElements = topListings
+      .map((listing, index) => {
+        const slug = listing.slug || listing.id
+        if (!slug) return null
+        const url = absoluteUrl(`/listing/${slug}`, siteOrigin)
+        if (!url) return null
+        const name = [listing.brand, listing.model].filter(Boolean).join(' ').trim() || listing.title
+        return {
+          '@type': 'ListItem' as const,
+          position: index + 1,
+          name,
+          url,
+        }
+      })
+      .filter((entry): entry is { '@type': 'ListItem'; position: number; name: string; url: string } => Boolean(entry))
+
+    const itemListSchema =
+      itemListElements.length > 0
+        ? {
+            '@context': 'https://schema.org',
+            '@type': 'ItemList',
+            name: `${storeName} - catálogo`,
+            url: canonicalUrl,
+            numberOfItems: itemListElements.length,
+            itemListElement: itemListElements,
+          }
+        : null
+
+    const breadcrumbs = [
+      { name: 'Inicio', item: '/' },
+      { name: 'Tiendas oficiales', item: '/tiendas-oficiales' },
+    ]
+    if (canonicalPath) {
+      breadcrumbs.push({ name: storeName, item: canonicalPath })
+    }
+    const breadcrumbSchema = buildBreadcrumbList(breadcrumbs, siteOrigin)
+
+    const keywords = Array.from(
+      new Set(
+        [
+          'ciclomarket',
+          'tienda oficial bicicletas',
+          storeName,
+          categoriesLabel ? `${categoriesLabel}` : null,
+          locationLabel ? `bicicletas ${locationLabel}` : null,
+        ].filter(Boolean) as string[],
+      ),
+    )
+
+    const detailsCopy = [
+      `${storeName} publica un inventario curado de ${categorySummary.values.length ? categorySummary.values.join(', ') : 'bicicletas y accesorios'} en Ciclo Market, siempre listos para rodar.`,
+      `Cada aviso incluye historia, mantenimiento y upgrades recientes para que puedas decidirte sin salir de ${locationLabel || 'casa'}.`,
+      `Coordinamos pruebas presenciales${locationLabel ? ` en ${locationLabel}` : ''} y envíos asegurados a todo el país con seguimiento personalizado.`,
+      `${listings.length ? `Hoy contamos con ${listings.length} publicaciones activas` : 'Actualizamos el catálogo cada semana'} y agregamos ingresos apenas pasan nuestro control de calidad.`,
+      `Si necesitás asesoramiento${phone ? ` escribinos al ${phone}` : ''}; te ayudamos con talles, accesorios compatibles o planes corporativos.`,
+      `Seguinos dentro de la tienda oficial y activá alertas: te avisamos cuando lleguen ediciones limitadas o reposiciones muy buscadas.`,
+    ]
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+
+    const jsonLd = [organizationSchema, itemListSchema, breadcrumbSchema].filter(Boolean)
+
+    return {
+      config: {
+        title: `Tienda oficial ${storeName}`,
+        description,
+        canonicalPath,
+        image: absoluteBanner,
+        keywords,
+        jsonLd,
+        noIndex: false,
+      },
+      details: {
+        summary: `Sobre ${storeName}`,
+        copy: detailsCopy,
+      },
+    }
+  }, [
+    profile,
+    params.slug,
+    siteOrigin,
+    categorySummary.values,
+    categorySummary.label,
+    listings.length,
+    address,
+    phone,
+    topListings,
+    storeName,
+  ])
+
+
   // Google Reviews integrations removidas
 
   return (
     <div className="min-h-[70vh] relative isolate overflow-hidden text-white bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729]">
+      <SeoHead {...seoConfig} />
       <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
         <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
         <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
       </div>
-      <JsonLd
-        data={{
-          '@context': 'https://schema.org',
-          '@type': profile.store_address ? 'LocalBusiness' : 'Organization',
-          name: storeName,
-          url: `${(import.meta.env.VITE_FRONTEND_URL || window.location.origin).replace(/\/$/, '')}/tienda/${profile.store_slug || profile.id}`,
-          logo: avatar,
-          image: banner,
-          address: address || undefined,
-          contactPoint: (phone ? [{ '@type': 'ContactPoint', telephone: phone, contactType: 'customer service' }] : undefined),
-          sameAs: [
-            profile.store_instagram ? `https://instagram.com/${String(profile.store_instagram).replace(/^@+/, '')}` : null,
-            profile.store_facebook ? `https://facebook.com/${String(profile.store_facebook).replace(/^@+/, '')}` : null,
-            profile.store_website || null,
-          ].filter(Boolean),
-        }}
-      />
       <div className="relative w-full">
         <div className="mx-auto max-w-md sm:max-w-2xl md:max-w-4xl lg:max-w-6xl px-3 sm:px-4">
           <div className="relative h-64 md:h-80 lg:h-96 overflow-hidden w-full">
@@ -1240,12 +1451,15 @@ export default function Store() {
           <div className="space-y-6">
             <div className="grid grid-cols-3 gap-2 sm:gap-4">
               {STORE_CATEGORY_BANNERS.map((card) => {
-                const isActive = card.section ? activeSection === card.section : !activeSection
+                const isActive = card.section ? (activeSection === card.section && !bikesOnly) : (!activeSection && bikesOnly)
                 return (
                   <button
                     key={card.key}
                     type="button"
-                    onClick={() => setSection(card.section)}
+                    onClick={() => {
+                      if (card.key === 'all') setSection('', undefined, true)
+                      else setSection(card.section)
+                    }}
                     className={`relative w-full overflow-hidden rounded-3xl border-2 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#14212e] ${
                       isActive ? 'border-white shadow-lg' : 'border-white/15 bg-white/5 hover:border-white/30 hover:shadow-md'
                     }`}
@@ -1310,7 +1524,7 @@ export default function Store() {
 
             {/* Filtros (desktop): estilo inline con separadores y wrap a 2+ filas */}
             <div className="hidden sm:flex flex-wrap items-center text-sm gap-y-2">
-              {MULTI_FILTER_ORDER.map((key) => {
+              {UI_FILTERS_BEFORE_PRICE.map((key) => {
                 const rawOptions = facetsData.options[key]
                 const options = Array.from(new Set([...rawOptions, ...filters[key]]))
                 return (
@@ -1351,6 +1565,30 @@ export default function Store() {
                 )}
               </FilterDropdown>
               </div>
+              {UI_FILTERS_AFTER_PRICE.map((key) => {
+                const rawOptions = facetsData.options[key]
+                const options = Array.from(new Set([...rawOptions, ...filters[key]]))
+                return (
+                  <div key={key} className="px-3 border-l border-white/20 first:border-l-0 whitespace-nowrap">
+                    <FilterDropdown
+                      label={MULTI_FILTER_LABELS[key]}
+                      summary={summaryFor(key)}
+                      disabled={!options.length}
+                      variant="inline"
+                    >
+                      {({ close }) => (
+                        <MultiSelectContent
+                          options={options}
+                          selected={filters[key]}
+                          onChange={(next) => setFilters({ [key]: next } as Partial<StoreFiltersState>)}
+                          close={close}
+                          placeholder={`Buscar ${MULTI_FILTER_LABELS[key].toLowerCase()}`}
+                        />
+                      )}
+                    </FilterDropdown>
+                  </div>
+                )
+              })}
               <div className="px-3 border-l border-white/20 first:border-l-0 whitespace-nowrap">
               <FilterDropdown label="Promos" summary={filters.deal === '1' ? 'Activas' : 'Todas'} variant="inline">
                 {({ close }) => (
@@ -1385,6 +1623,17 @@ export default function Store() {
         </div>
       </Container>
 
+      {seoDetails ? (
+        <Container className="mt-10 mb-12">
+          <details className="seo-details">
+            <summary className="seo-summary">{seoDetails.summary}</summary>
+            <div className="seo-copy">
+              <p>{seoDetails.copy}</p>
+            </div>
+          </details>
+        </Container>
+      ) : null}
+
       {mobileFiltersOpen ? (
         <div
           className="fixed inset-0 z-50 bg-[#050c18]/80 backdrop-blur-sm sm:hidden"
@@ -1406,7 +1655,7 @@ export default function Store() {
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto px-5 py-4 pb-28 space-y-3 text-white">
-                {MULTI_FILTER_ORDER.map((key) => {
+                {UI_FILTERS_BEFORE_PRICE.map((key) => {
                   const rawOptions = facetsData.options[key]
                   const options = Array.from(new Set([...rawOptions, ...filters[key]]))
                   return (
@@ -1454,6 +1703,32 @@ export default function Store() {
                     />
                   )}
                 </FilterDropdown>
+                {UI_FILTERS_AFTER_PRICE.map((key) => {
+                  const rawOptions = facetsData.options[key]
+                  const options = Array.from(new Set([...rawOptions, ...filters[key]]))
+                  return (
+                    <FilterDropdown
+                      key={`mobile-${key}`}
+                      label={MULTI_FILTER_LABELS[key]}
+                      summary={summaryFor(key)}
+                      disabled={!options.length}
+                      className="w-full"
+                      buttonClassName="w-full justify-between"
+                      inlineOnMobile
+                      variant="inline"
+                    >
+                      {({ close }) => (
+                        <MultiSelectContent
+                          options={options}
+                          selected={filters[key]}
+                          onChange={(next) => setFilters({ [key]: next } as Partial<StoreFiltersState>)}
+                          close={close}
+                          placeholder={`Buscar ${MULTI_FILTER_LABELS[key].toLowerCase()}`}
+                        />
+                      )}
+                    </FilterDropdown>
+                  )
+                })}
                 <FilterDropdown
                   label="Promos"
                   summary={filters.deal === '1' ? 'Activas' : 'Todas'}

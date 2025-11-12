@@ -16,15 +16,32 @@ interface AdminAuthContextValue {
 
 const AdminAuthContext = createContext<AdminAuthContextValue | undefined>(undefined)
 
+async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout>
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('timeout')), ms)
+  })
+  try {
+    return await Promise.race([promise, timeoutPromise])
+  } finally {
+    clearTimeout(timeoutId!)
+  }
+}
+
 async function fetchRole(user: User | null): Promise<AdminRole> {
   if (!user || !supabaseEnabled) return 'user'
   try {
     const client = getSupabaseClient()
-    const { data, error } = await client
+    const roleRequest = client
       .from('user_roles')
       .select('role')
       .eq('user_id', user.id)
       .maybeSingle()
+    const roleResponse = await withTimeout(
+      roleRequest as unknown as Promise<{ data: { role?: AdminRole } | null; error: { message?: string } | null }>,
+      8000
+    )
+    const { data, error } = roleResponse
     if (error) {
       console.warn('[admin-auth] role lookup failed', error)
       return 'user'
@@ -56,13 +73,22 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
 
     const init = async () => {
       try {
-        const { data } = await client.auth.getSession()
+        const sessionResponse = await withTimeout(client.auth.getSession(), 10000) as Awaited<ReturnType<typeof client.auth.getSession>>
+        const { data, error } = sessionResponse
         const sessionUser = data.session?.user ?? null
         if (!mounted) return
         setUser(sessionUser)
         const fetchedRole = await fetchRole(sessionUser)
         if (!mounted) return
         setRole(fetchedRole)
+        if (error) {
+          setError('No pudimos validar la sesión. Verificá la conexión a Supabase.')
+        }
+      } catch (err) {
+        console.warn('[admin-auth] session init failed', err)
+        setError('No pudimos validar la sesión. Verificá la conexión a Supabase.')
+        setUser(null)
+        setRole('user')
       } finally {
         if (mounted) setLoading(false)
       }

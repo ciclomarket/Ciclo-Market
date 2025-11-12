@@ -1,5 +1,6 @@
 {
   "redirects": [
+    { "source": "/:path*/", "destination": "/:path*", "status": 301 },
     { "source": "/api/*", "destination": "https://www.ciclomarket.ar/api/:splat", "status": 200 },
     { "source": "/sitemap.xml", "destination": "https://www.ciclomarket.ar/sitemap.xml", "status": 301 },
     { "source": "/sitemap-static.xml", "destination": "https://www.ciclomarket.ar/sitemap-static.xml", "status": 301 },

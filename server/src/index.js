@@ -61,7 +61,37 @@ function normalizeOrigin(frontendUrlEnv) {
 }
 
 const app = express()
+app.set('trust proxy', true)
 app.use(express.json())
+
+app.use((req, res, next) => {
+  const rawHost = String(req.headers.host || '').trim()
+  const protoHeader = req.headers['x-forwarded-proto']
+  const forwardedProto = Array.isArray(protoHeader) ? protoHeader[0] : protoHeader
+  const currentProto = String(forwardedProto || req.protocol || 'http').toLowerCase()
+
+  const prefersCiclomarket = /(?:^|\.)ciclomarket\.ar$/i.test(rawHost)
+  const enforceHost = /^ciclomarket\.ar$/i.test(rawHost)
+  const targetHost = enforceHost ? 'www.ciclomarket.ar' : rawHost
+  const shouldForceHttps = prefersCiclomarket && currentProto !== 'https'
+
+  if ((enforceHost || shouldForceHttps) && targetHost) {
+    const redirectUrl = new URL(req.originalUrl, `https://${targetHost}`)
+    redirectUrl.protocol = 'https:'
+    redirectUrl.host = targetHost
+    return res.redirect(301, redirectUrl.toString())
+  }
+
+  if (prefersCiclomarket && req.path.length > 1 && req.path.endsWith('/')) {
+    const normalized = new URL(req.originalUrl, `${currentProto}://${targetHost || rawHost}`)
+    normalized.pathname = normalized.pathname.replace(/\/+$/, '')
+    normalized.protocol = prefersCiclomarket ? 'https:' : normalized.protocol
+    if (targetHost) normalized.host = targetHost
+    return res.redirect(301, normalized.toString())
+  }
+
+  return next()
+})
 
 /* ----------------------------- Static assets ------------------------------ */
 const distDir = path.join(__dirname, '..', '..', 'dist')
@@ -357,7 +387,7 @@ async function recordPayment({ userId, listingId, amount, currency = 'ARS', stat
 app.post('/api/track', async (req, res) => {
   try {
     if (!supabaseService) return res.sendStatus(204)
-    const { type, listing_id, store_user_id, path, referrer, anon_id, meta } = req.body || {}
+    const { type, listing_id, store_user_id, user_id, source, path, referrer, anon_id, meta } = req.body || {}
     const clean = (s) => (typeof s === 'string' ? s.slice(0, 512) : null)
     const allowed = new Set(['site_view','listing_view','store_view','wa_click'])
     if (!allowed.has(type)) return res.status(400).json({ ok: false, error: 'invalid_type' })
@@ -366,10 +396,11 @@ app.post('/api/track', async (req, res) => {
       type,
       listing_id: listing_id || null,
       store_user_id: store_user_id || null,
-      user_id: null,
+      user_id: typeof user_id === 'string' && user_id ? user_id : null,
       anon_id: clean(anon_id) || null,
       path: clean(path) || null,
       referrer: clean(referrer) || null,
+      source: typeof source === 'string' && source ? source.slice(0, 64) : null,
       ua,
       meta: meta && typeof meta === 'object' ? meta : null,
     }

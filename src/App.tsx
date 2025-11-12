@@ -52,7 +52,7 @@ import { SweepstakesProvider } from './context/SweepstakesContext'
 const CheckoutSuccess = lazy(() => import('./pages/Checkout/Success'))
 const CheckoutFailure = lazy(() => import('./pages/Checkout/Failure'))
 const CheckoutPending = lazy(() => import('./pages/Checkout/Pending'))
-import SEO, { type SEOProps } from './components/SEO'
+import SeoHead, { type SeoHeadProps } from './components/SeoHead'
 import GlobalJsonLd from './components/GlobalJsonLd'
 import { useRef } from 'react'
 import { trackMetaPixel } from './lib/metaPixel'
@@ -63,7 +63,7 @@ function RedirectWithSearch({ to }: { to: string }) {
   return <Navigate to={`${to}${search}`} replace />
 }
 
-function resolveSeoForPath(pathname: string, search: string): SEOProps {
+function resolveSeoForPath(pathname: string, search: string): Partial<SeoHeadProps> {
   const normalized = pathname.toLowerCase()
 
   if (normalized === '/' || normalized === '') {
@@ -80,25 +80,29 @@ function resolveSeoForPath(pathname: string, search: string): SEOProps {
         'bicicletas de gravel',
         'fixie',
         'clasificados de bicicletas'
-      ]
+      ],
+      jsonLd: {
+        '@context': 'https://schema.org',
+        '@type': 'CollectionPage',
+        name: 'Ciclo Market · Marketplace de bicicletas',
+        url: 'https://www.ciclomarket.ar/',
+        description:
+          'Marketplace de bicicletas en Argentina con publicaciones verificadas, contacto directo entre ciclistas y catálogos de tiendas oficiales.',
+        isPartOf: {
+          '@type': 'WebSite',
+          name: 'Ciclo Market',
+          url: 'https://www.ciclomarket.ar/'
+        }
+      }
     }
   }
 
-  if (
-    normalized.startsWith('/marketplace') ||
-    normalized.startsWith('/market') ||
-    normalized.startsWith('/buscar') ||
-    normalized.startsWith('/ofertas')
-  ) {
-    // Si hay filtros dinámicos en query, marcamos noindex y canonical sin query
-    const hasFilters = /[?&](cat|brand|deal|q|min|max|sub)=/i.test(search)
+  if (normalized.startsWith('/marketplace') || normalized.startsWith('/market') || normalized.startsWith('/buscar') || normalized.startsWith('/ofertas')) {
     return {
       title: 'Comprar bicicletas nuevas y usadas',
       description:
         'Explorá cientos de bicicletas verificadas por tipo, talle, ubicación y rango de precio. Filtrá por gravel, ruta, MTB, e-bikes y accesorios para encontrar tu próxima bici.',
       image: '/OG-Marketplace.png',
-      url: hasFilters ? '/marketplace' : undefined,
-      noIndex: hasFilters,
       keywords: [
         'venta de bicicletas usadas',
         'bicicletas usadas',
@@ -391,7 +395,7 @@ export default function App() {
               <SweepstakesProvider>
                 <CompareProvider>
                   <div className="min-h-screen flex flex-col">
-                  <SEO {...seoConfig} />
+                  <SeoHead {...seoConfig} />
                   <GlobalJsonLd />
                   <Header />
                   <ScrollToTop />

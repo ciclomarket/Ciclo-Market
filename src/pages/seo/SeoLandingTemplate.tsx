@@ -1,5 +1,5 @@
 import Container from '../../components/Container'
-import SEO from '../../components/SEO'
+import SeoHead from '../../components/SeoHead'
 import Button from '../../components/Button'
 
 export default function SeoLandingTemplate({
@@ -23,7 +23,7 @@ export default function SeoLandingTemplate({
         <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
         <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
       </div>
-      <SEO title={title} description={description} image="/OG-Marketplace.png" keywords={keywords} />
+      <SeoHead title={title} description={description} image="/OG-Marketplace.png" keywords={keywords} />
       <Container>
         <div className="mx-auto max-w-4xl py-12 space-y-4">
           <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">{h1}</h1>
@@ -39,4 +39,3 @@ export default function SeoLandingTemplate({
     </section>
   )
 }
-

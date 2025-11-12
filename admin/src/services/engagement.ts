@@ -28,63 +28,116 @@ export async function fetchDailyEvents(days = 30): Promise<DailyEventsByType> {
   return { site: site.sort(cmp), listing: listing.sort(cmp), store: store.sort(cmp), wa: wa.sort(cmp) }
 }
 
-async function aggregateByListing(view: 'admin_listing_views_daily' | 'admin_wa_clicks_daily', days = 30): Promise<Array<{ listing_id: string; total: number }>> {
+function resolveSuffix(days: number): '7d' | '30d' | '90d' {
+  if (days <= 7) return '7d'
+  if (days <= 30) return '30d'
+  return '90d'
+}
+
+export interface ListingEngagementTop {
+  id: string
+  title: string
+  sellerId: string | null
+  views: number
+  waClicks: number
+  ctr: number
+}
+
+async function fetchListingTop(period: number, limit: number, sortBy: 'views' | 'wa'): Promise<ListingEngagementTop[]> {
   if (!supabaseEnabled) return []
   const supabase = getSupabaseClient()
-  const sinceIso = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10)
-  const { data, error } = await supabase.from(view).select('day, listing_id, total')
-  if (error || !Array.isArray(data)) return []
-  const filtered = (data as any[]).filter((r) => r.day && String(r.day).slice(0, 10) >= sinceIso)
-  const map = new Map<string, number>()
-  for (const r of filtered) {
-    const id = String(r.listing_id || '')
-    if (!id) continue
-    map.set(id, (map.get(id) || 0) + (Number(r.total) || 0))
+  const suffix = resolveSuffix(period)
+  const viewsField = `views_${suffix}`
+  const waField = `wa_clicks_${suffix}`
+  const orderField = sortBy === 'views' ? viewsField : waField
+  const { data, error } = await supabase
+    .from('admin_listing_engagement_summary')
+    .select(`listing_id, title, seller_id, ${viewsField}, ${waField}`)
+    .order(orderField, { ascending: false })
+    .limit(limit * 2)
+  if (error || !Array.isArray(data)) {
+    if (error) console.warn('[engagement] listing top fetch failed', error)
+    return []
   }
-  return Array.from(map.entries()).map(([listing_id, total]) => ({ listing_id, total })).sort((a, b) => b.total - a.total)
+  const rows = (data as any[])
+    .map((row) => {
+      const views = Number(row[viewsField] ?? 0)
+      const waClicks = Number(row[waField] ?? 0)
+      const ctr = views > 0 ? (waClicks / views) * 100 : 0
+      return {
+        id: String(row.listing_id ?? ''),
+        title: String(row.title ?? 'Sin título'),
+        sellerId: row.seller_id ? String(row.seller_id) : null,
+        views,
+        waClicks,
+        ctr,
+      }
+    })
+    .filter((row) => row.id)
+  return rows
+    .sort((a, b) => (sortBy === 'views' ? b.views - a.views : b.waClicks - a.waClicks))
+    .slice(0, limit)
 }
 
-export async function fetchTopListingsByViews(days = 30, limit = 10): Promise<Array<{ id: string; title: string; total: number }>> {
-  const agg = await aggregateByListing('admin_listing_views_daily', days)
-  const top = agg.slice(0, limit)
-  if (top.length === 0 || !supabaseEnabled) return []
-  const supabase = getSupabaseClient()
-  const ids = top.map((t) => t.listing_id)
-  const { data } = await supabase.from('listings').select('id,title').in('id', ids)
-  const titleById = new Map<string, string>((data || []).map((r: any) => [String(r.id), String(r.title || 'Sin título')]))
-  return top.map((t) => ({ id: t.listing_id, title: titleById.get(t.listing_id) || 'Sin título', total: t.total }))
+export async function fetchTopListingsByViews(days = 30, limit = 10): Promise<ListingEngagementTop[]> {
+  return fetchListingTop(days, limit, 'views')
 }
 
-export async function fetchTopListingsByWaClicks(days = 30, limit = 10): Promise<Array<{ id: string; title: string; total: number }>> {
-  const agg = await aggregateByListing('admin_wa_clicks_daily', days)
-  const top = agg.slice(0, limit)
-  if (top.length === 0 || !supabaseEnabled) return []
-  const supabase = getSupabaseClient()
-  const ids = top.map((t) => t.listing_id)
-  const { data } = await supabase.from('listings').select('id,title').in('id', ids)
-  const titleById = new Map<string, string>((data || []).map((r: any) => [String(r.id), String(r.title || 'Sin título')]))
-  return top.map((t) => ({ id: t.listing_id, title: titleById.get(t.listing_id) || 'Sin título', total: t.total }))
+export async function fetchTopListingsByWaClicks(days = 30, limit = 10): Promise<ListingEngagementTop[]> {
+  return fetchListingTop(days, limit, 'wa')
 }
 
-export async function fetchTopStoresByViews(days = 30, limit = 10): Promise<Array<{ id: string; name: string; total: number }>> {
+export interface StoreEngagementTop {
+  id: string
+  name: string
+  storeViews: number
+  listingViews: number
+  waClicks: number
+  ctr: number
+}
+
+async function fetchStoreEngagementAll(period: number, limit = 200): Promise<StoreEngagementTop[]> {
   if (!supabaseEnabled) return []
   const supabase = getSupabaseClient()
-  const sinceIso = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10)
-  const { data, error } = await supabase.from('admin_store_views_daily').select('day, store_user_id, total')
-  if (error || !Array.isArray(data)) return []
-  const filtered = (data as any[]).filter((r) => r.day && String(r.day).slice(0, 10) >= sinceIso)
-  const map = new Map<string, number>()
-  for (const r of filtered) {
-    const id = String(r.store_user_id || '')
-    if (!id) continue
-    map.set(id, (map.get(id) || 0) + (Number(r.total) || 0))
+  const suffix = resolveSuffix(period)
+  const storeField = `store_views_${suffix}`
+  const listingField = `listing_views_${suffix}`
+  const waField = `wa_clicks_${suffix}`
+  const { data, error } = await supabase
+    .from('admin_store_engagement_summary')
+    .select(`store_user_id, store_name, ${storeField}, ${listingField}, ${waField}`)
+    .order(listingField, { ascending: false })
+    .limit(limit)
+  if (error || !Array.isArray(data)) {
+    if (error) console.warn('[engagement] store engagement fetch failed', error)
+    return []
   }
-  const agg = Array.from(map.entries()).map(([id, total]) => ({ id, total })).sort((a, b) => b.total - a.total).slice(0, limit)
-  if (!agg.length) return []
-  const ids = agg.map((x) => x.id)
-  const { data: stores } = await supabase.from('users').select('id, store_name').in('id', ids)
-  const nameById = new Map<string, string>((stores || []).map((r: any) => [String(r.id), String(r.store_name || 'Tienda')]))
-  return agg.map((x) => ({ id: x.id, name: nameById.get(x.id) || 'Tienda', total: x.total }))
+  return (data as any[])
+    .map((row) => {
+      const storeViews = Number(row[storeField] ?? 0)
+      const listingViews = Number(row[listingField] ?? 0)
+      const waClicks = Number(row[waField] ?? 0)
+      const ctr = listingViews > 0 ? (waClicks / listingViews) * 100 : 0
+      return {
+        id: String(row.store_user_id ?? ''),
+        name: String(row.store_name ?? 'Tienda'),
+        storeViews,
+        listingViews,
+        waClicks,
+        ctr,
+      }
+    })
+    .filter((row) => row.id)
+}
+
+export async function fetchTopStoresByViews(days = 30, limit = 10): Promise<StoreEngagementTop[]> {
+  const rows = await fetchStoreEngagementAll(days, limit * 2)
+  return rows.sort((a, b) => b.storeViews - a.storeViews).slice(0, limit)
+}
+
+export async function fetchStoreEngagementSummary(days = 30, limit = 50): Promise<StoreEngagementTop[]> {
+  const rows = await fetchStoreEngagementAll(days, limit)
+  return rows
 }
 
 export type Comparative = { current: number; previous: number; delta: number; pct: number }

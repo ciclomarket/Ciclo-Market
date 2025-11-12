@@ -83,3 +83,51 @@ body {
     radial-gradient(700px 280px at 10% 10%, rgba(255, 255, 255, 0.12), transparent 70%);
 }
 .sticky-shadow { box-shadow: 0 6px 20px rgba(0,0,0,.08); }
+
+.seo-details {
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 18px;
+  color: inherit;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+.seo-details[open] {
+  border-color: rgba(255, 255, 255, 0.3);
+  background: rgba(15, 23, 42, 0.55);
+}
+.seo-summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 1rem 1.5rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: rgba(248, 250, 252, 0.92);
+}
+.seo-summary::-webkit-details-marker {
+  display: none;
+}
+.seo-details:not([open]) .seo-summary::after {
+  content: '+';
+  margin-left: auto;
+  font-size: 1.25rem;
+  line-height: 1;
+  opacity: 0.7;
+}
+.seo-details[open] .seo-summary::after {
+  content: '–';
+  margin-left: auto;
+  font-size: 1.25rem;
+  line-height: 1;
+  opacity: 0.7;
+}
+.seo-copy {
+  padding: 0 1.5rem 1.5rem;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: rgba(241, 245, 249, 0.82);
+}
+.seo-details:not([open]) .seo-copy {
+  display: none;
+}

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import Container from '../components/Container'
 import StoresMap from '../components/StoresMap'
 import GoogleStoresMap from '../components/GoogleStoresMap'
-import SEO from '../components/SEO'
+import SeoHead from '../components/SeoHead'
 import { fetchStores, fetchStoreActivityCounts, type StoreSummary } from '../services/users'
 import { fetchListings } from '../services/listings'
 import { transformSupabasePublicUrl } from '../utils/supabaseImage'
@@ -200,9 +200,10 @@ export default function Tiendas() {
 
   return (
     <>
-      <SEO
+      <SeoHead
         title="Tiendas oficiales | Ciclo Market"
-        description="Locales verificados con catálogo activo, accesorios y servicios para ciclistas en Ciclo Market."
+        description="Locales verificados con catálogo activo, contacto directo y métricas para seguir ventas. Encontrá tiendas por provincia y descubrí sus bicicletas destacadas."
+        canonicalPath="/tiendas"
       />
       <section className="relative overflow-hidden text-white">
         <img

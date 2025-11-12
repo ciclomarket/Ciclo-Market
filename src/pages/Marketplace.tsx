@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useSearchParams, Link } from 'react-router-dom'
+import { useSearchParams, Link, useLocation } from 'react-router-dom'
 import Container from '../components/Container'
 import ListingCard from '../components/ListingCard'
 import { transformSupabasePublicUrl } from '../utils/supabaseImage'
@@ -15,6 +15,8 @@ import { useCurrency } from '../context/CurrencyContext'
 import { hasPaidPlan } from '../utils/plans'
 import FilterDropdown from '../components/FilterDropdown'
 import { fetchLikeCounts } from '../services/likes'
+import SeoHead, { type SeoHeadProps } from '../components/SeoHead'
+import { resolveSiteOrigin, toAbsoluteUrl as absoluteUrl, categoryToCanonicalPath, buildBreadcrumbList } from '../utils/seo'
 
 type Cat = 'Todos' | 'Ruta' | 'MTB' | 'Gravel' | 'Urbana' | 'Fixie' | 'Accesorios' | 'Indumentaria' | 'E-Bike' | 'Niños' | 'Pista' | 'Triatlón'
 type MultiFilterKey = 'brand' | 'material' | 'frameSize' | 'wheelSize' | 'drivetrain' | 'condition' | 'brake' | 'year' | 'size' | 'location'
@@ -35,14 +37,19 @@ type FiltersState = {
   priceMax?: number
   deal?: '1'
   store?: '1'
+  // When set, restricts 'Todos' to only bike categories
+  bikes?: '1'
   q?: string
   /** Subcategoría/tipo dentro de la categoría (p.ej. Accesorios → Ruedas y cubiertas) */
   subcat?: string
 }
 
-const CAT_VALUES: Cat[] = ['Todos','Ruta','MTB','Gravel','Urbana','Fixie','Accesorios','Indumentaria','E-Bike','Niños','Pista','Triatlón']
+const CAT_VALUES: Cat[] = ['Todos','Ruta','MTB','Gravel','Triatlón','Urbana','Fixie','Accesorios','Indumentaria','E-Bike','Niños','Pista']
 const MULTI_PARAM_KEYS: MultiFilterKey[] = ['brand','material','frameSize','wheelSize','drivetrain','condition','brake','year','size','location']
 const MULTI_FILTER_ORDER: MultiFilterKey[] = ['brand','material','frameSize','wheelSize','drivetrain','condition','brake','year','size','location']
+// UI ordering helpers: show frame size first, then price, then the rest
+const UI_FILTERS_BEFORE_PRICE: MultiFilterKey[] = ['size']
+const UI_FILTERS_AFTER_PRICE: MultiFilterKey[] = ['brand','location','material','brake','year','condition','drivetrain','wheelSize']
 const MULTI_FILTER_LABELS: Record<MultiFilterKey, string> = {
   brand: 'Marca',
   material: 'Material',
@@ -58,8 +65,8 @@ const MULTI_FILTER_LABELS: Record<MultiFilterKey, string> = {
 const CATEGORY_CARDS: Array<{ cat: Cat; label: string; description: string; image: string; imageMobile: string }> = [
   {
     cat: 'Todos',
-    label: 'Todas',
-    description: 'Todo el catálogo disponible',
+    label: 'Bicicletas',
+    description: 'Solo bicicletas',
     image: '/design/Banners/1.png',
     imageMobile: '/design/Banners-Mobile/1.png'
   },
@@ -78,6 +85,91 @@ const CATEGORY_CARDS: Array<{ cat: Cat; label: string; description: string; imag
     imageMobile: '/design/Banners-Mobile/3.png'
   }
 ]
+
+type CategorySeoKey = Cat | 'Deals'
+
+const CATEGORY_SEO_CONTENT: Record<CategorySeoKey, { descriptor: string; summary: string; copy: string }> = {
+  Todos: {
+    descriptor: 'bicicletas nuevas y usadas',
+    summary: 'Sobre el marketplace de bicicletas',
+    copy: `El marketplace de Ciclo Market se actualiza todos los días con bicicletas nuevas, usadas y reacondicionadas pensadas para distintas disciplinas. El objetivo es que ahorres tiempo: cada aviso muestra fotos reales, estado declarado, formas de contacto directo y señales de confianza del vendedor. Podés filtrar por marca, rango de precio, talle o ubicación y guardar búsquedas para recibir avisos cuando ingrese una bici similar. También destacamos negociaciones transparentes; por eso verás etiquetas de ofertas, planes vigentes y métricas de interacción. Si preferís comprar a una tienda, activá el filtro de oficiales y revisá su catálogo completo en un mismo lugar. Publicar es igual de simple: en minutos cargás tu bici, sumás upgrades y elegís un plan que te ayuda a vender más rápido sin comisiones ocultas.`,
+  },
+  Ruta: {
+    descriptor: 'bicicletas de ruta usadas',
+    summary: 'Sobre bicicletas de ruta usadas',
+    copy: `Las bicicletas de ruta publicadas en Ciclo Market pasan por una curaduría para asegurar medidas claras, fotos nítidas y componentes detallados. Encontrás opciones endurance, aero y escaladoras, muchas con mejoras como ruedas de carbono, potenciómetros o grupos electrónicos. Usá los filtros para ajustar por talle, material del cuadro, grupo o ciudad y así llegar a una prueba segura. En cada aviso señalamos si pertenece a una tienda oficial o a un ciclista verificado para coordinar entrega con tranquilidad. Si necesitás vender, podés publicar tu bici y activar un plan destacado que la ubique en la portada. Guardá las publicaciones que te interesen y solicitá alertas de baja de precio para no perder oportunidades cuando alguien negocia.`,
+  },
+  MTB: {
+    descriptor: 'bicicletas de mountain bike usadas',
+    summary: 'Sobre bicicletas de MTB usadas',
+    copy: `El segmento MTB reúne rígidas y dobles suspensión listas para XC, trail o enduro. Cada publicación aclara recorrido, seteo del amortiguador y upgrades como ruedas tubeless, transmisiones 12v o frenos de cuatro pistones. Podés filtrar por recorrido, tamaño de rueda, grupo, material o condición para encontrar la bici que se adapte a tu terreno. Las tiendas oficiales suelen publicar flotas demo y opciones reacondicionadas con garantía, mientras que los ciclistas privados destacan mantenimientos recientes y service al día. Si todavía estás buscando referencias, guardá modelos para compararlos y recibir avisos cuando ingresen cuadros similares. Y si tenés una MTB a la venta, subila en minutos y añadí fotos de los componentes clave para conseguir más contactos.`,
+  },
+  Gravel: {
+    descriptor: 'bicicletas de gravel usadas',
+    summary: 'Sobre bicicletas de gravel usadas',
+    copy: `La categoría gravel mezcla bicicletas para explorar, entrenar en ripio y viajar con bikepacking. Vas a encontrar cuadros de carbono, aluminio y acero con vainas cortas o geometrías más relajadas según el enfoque del fabricante. Indicamos espacio máximo de cubierta, monturas disponibles y upgrades como ruedas 650B, transmisión monoplato o bolsos específicos. Con los filtros podés segmentar por material, ancho de neumático, grupo o ubicación para coordinar prueba en tu zona. Muchas publicaciones incluyen historias del setup, rutas recomendadas y kilometraje estimado, lo que ayuda a decidirse sin sorpresas. Si querés vender la tuya, añadí fotos del equipamiento y aclaraciones sobre mantenimiento para destacar frente a otros anuncios de aventura.`,
+  },
+  Triatlón: {
+    descriptor: 'bicicletas de triatlón y contrarreloj',
+    summary: 'Sobre bicicletas de triatlón usadas',
+    copy: `La categoría triatlón combina cuadros TT, componentes aero y montajes listos para carreras de media o larga distancia. Detallamos stack, reach, extensiones, soportes de hidratación y tipo de freno para que puedas replicar tu posición sin adivinar. Los filtros te permiten acotar por talle, grupo, ruedas o ubicación y así planificar una prueba con tiempo. Muchas publicaciones incluyen datos de fitting, potenciómetros instalados y kilometraje real, lo que simplifica la evaluación previa a un viaje. Las tiendas oficiales suelen ofrecer armado profesional y garantías de cuadro, mientras que los atletas privados comentan el calendario en el que competían. Usá la lista de seguimiento para detectar cuando una bici baja de precio y asegurarte un upgrade antes de la próxima temporada.`,
+  },
+  Urbana: {
+    descriptor: 'bicicletas urbanas y plegables',
+    summary: 'Sobre bicicletas urbanas usadas',
+    copy: `Las bicicletas urbanas y plegables de Ciclo Market están pensadas para moverse en la ciudad con seguridad y estilo. Abundan opciones con guardabarros, portaequipaje, transmisión interna o correas libres de mantenimiento. Podés usar los filtros para priorizar tamaño, sistema de frenos, tipo de cuadro o accesorios incluidos, y así definir si querés una bici lista para el viaje diario o un proyecto de restauración. Revisamos que cada publicación detalle luces, candados o mejoras de seguridad para que el recorrido urbano sea más simple. También vas a ver destacadas las tiendas con servicio técnico propio para quienes buscan garantía o instalación de canastos y sillas infantiles. Si vas a publicar la tuya, contá cómo se usó, el kilometraje estimado y el estado de la batería si se trata de un modelo asistido.`,
+  },
+  Fixie: {
+    descriptor: 'bicicletas fixie y single speed',
+    summary: 'Sobre fixie y single speed',
+    copy: `La sección fixie agrupa cuadros livianos, componentes minimalistas y muchas bicicletas listas para personalizar. Encontrás montajes con piñón fijo, rueda libre o configuraciones mixtas para ciudad. Indicamos medidas de cuadro, relación de transmisión y componentes destacados como correas, straps o manubrios de pista. Los filtros permiten segmentar por material, tipo de freno, tamaño de rueda o marca del cuadro artesanal. Muchas publicaciones explican qué piezas se reemplazaron recientemente, algo clave para quienes quieren rodar sin mantenimiento inmediato. Si buscás inspiración, guardá tus favoritas y comparalas para ver diferencias de geometría. Y si vas a vender tu fixie, suma fotos de detalles de pintura, soldaduras y componentes custom para que se destaque dentro del listado.`,
+  },
+  Accesorios: {
+    descriptor: 'accesorios y componentes para ciclismo',
+    summary: 'Sobre accesorios para ciclismo',
+    copy: `El catálogo de accesorios reúne componentes originales, upgrades premium y equipamiento de entrenamiento. Encontrás ruedas, grupos completos, potenciómetros, ciclocomputadoras, rodillos inteligentes y repuestos difíciles de conseguir. Cada publicación detalla compatibilidades, estado de uso y, cuando corresponde, facturas o garantías vigentes. Podés filtrar por tipo de componente, material, marca o condición para acelerar la búsqueda. Las tiendas oficiales suelen ofrecer instalación y servicio, mientras que los ciclistas particulares destacan upgrades que cambiaron por una mejora. Aprovechá los filtros de precio y condición para detectar oportunidades en productos casi nuevos. Y si querés vender accesorios olvidados en tu taller, sacá fotos claras, aclarando estándares (Boost, AXS, 12v) para facilitar la decisión de otro ciclista.`,
+  },
+  Indumentaria: {
+    descriptor: 'indumentaria de ciclismo',
+    summary: 'Sobre indumentaria para ciclismo',
+    copy: `Esta sección agrupa jerseys, culottes, cascos, zapatillas y accesorios técnicos para entrenar o competir. Indicamos la tabla de talles declarada, el ajuste recomendado y si la prenda fue usada en competencias, salidas casuales o permanece nueva. Los filtros permiten ordenar por marca, categoría, género y talle para evitar pruebas innecesarias. También se destacan las tecnologías de los tejidos, ventilaciones y protecciones integradas. Las tiendas oficiales suelen publicar colecciones completas con posibilidad de cambios, mientras que los ciclistas privados liberan prendas en muy buen estado para renovar guardarropa. Sumá tus favoritos a la lista de seguimiento y recibí alertas cuando aparezcan talles difíciles. Si vas a vender, una guía rápida sobre medidas y fotos con buena luz ayudan a que otro ciclista confíe en tu publicación.`,
+  },
+  'E-Bike': {
+    descriptor: 'bicicletas eléctricas asistidas',
+    summary: 'Sobre bicicletas eléctricas',
+    copy: `En E-Bike vas a encontrar bicicletas asistidas para ciudad, montaña o gravel con motores centrales o hub. Destacamos capacidad de batería, ciclos de carga, autonomía estimada y modo de asistencia regulable para que evalúes si se adapta a tu rutina. Usá los filtros para separar por disciplina, potencia, tamaño de rueda o marca del sistema eléctrico. Muchas publicaciones incluyen historial de service y certificaciones de taller autorizado, algo clave para cuidar tu inversión. Las tiendas oficiales ofrecen upgrades como packs de luces, portaequipaje o software actualizado, mientras que particulares describen cómo usaron la bici y por qué la venden. Revisá la sección de preguntas para conocer detalles adicionales y coordiná una prueba segura antes de decidirte.`,
+  },
+  'Niños': {
+    descriptor: 'bicicletas para niños y niñas',
+    summary: 'Sobre bicicletas infantiles',
+    copy: `En la categoría Niños reunimos balance bikes, rodados intermedios y primeras bicis con transmisión. Cada aviso incluye altura recomendada, peso del cuadro y si tiene rueditas, freno a contra pedal o frenos de mano. Podés filtrar por rodado, marca, material o estado para encontrar una bici que acompañe el crecimiento sin sorpresas. Los vendedores suelen detallar cuánto uso tuvo, si la bici pasó por service y qué accesorios incluyen (casco, canasto, luces). También vas a ver publicaciones de tiendas oficiales con programas de recompra o cambios de talla, ideales para familias que cambian de bici cada temporada. Guardá tus opciones preferidas y coordiná entrega en un punto seguro para que la experiencia sea tan simple como estrenar la bici nueva.`,
+  },
+  Pista: {
+    descriptor: 'bicicletas de pista y velódromo',
+    summary: 'Sobre bicicletas de pista',
+    copy: `Las bicicletas de pista listadas en Ciclo Market están pensadas para velódromo o criterium con cuadros rígidos, ángulos agresivos y componentes específicos. Detallamos material del cuadro, geometría, longitud de bielas y relación de transmisión sugerida para cada disciplina. Los filtros ayudan a separar montajes para entrenamientos, carreras o uso urbano controlado. Muchos avisos incluyen mejoras como ruedas lenticulares, cockpits aero o straps reforzados. Revisamos que cada publicación aclare si se entrega con piñón fijo, rueda libre o ambos, y si trae tapabarros o frenos desmontables. Sumá modelos a tu lista para comparar geometrías o armar un segundo juego de ruedas. Cuando publiques la tuya, destacá las sesiones donde la usaste y estado de los rodamientos para generar confianza entre especialistas.`,
+  },
+  Deals: {
+    descriptor: 'ofertas destacadas en bicicletas y accesorios',
+    summary: 'Sobre ofertas de bicicletas',
+    copy: `La sección de ofertas reúne bicicletas y accesorios con precio promocional o reciente baja confirmada por el vendedor. Cada publicación indica el valor anterior para que puedas medir el descuento real y comparar con otros anuncios activos. Filtrá por categoría, rango de precio, tienda oficial o ubicación para detectar oportunidades cerca tuyo. También destacamos planes vigentes, upgrades incluidos y la fecha de actualización del anuncio para evitar precios desactualizados. Agregá tus favoritos a la lista de seguimiento y activá alertas: cuando un vendedor aplica otra rebaja, te avisamos por correo o notificación. Y si querés acelerar la venta de tu bici, podés marcar el precio anterior y agregar un copy claro sobre el estado y los extras para atraer compradores atentos a las oportunidades.`,
+  },
+}
+
+const CATEGORY_TITLE_MAP: Record<Cat, string> = {
+  Todos: 'Bicicletas usadas y nuevas',
+  Ruta: 'Bicicletas de ruta',
+  MTB: 'Bicicletas de MTB',
+  Gravel: 'Bicicletas de gravel',
+  Triatlón: 'Bicicletas de triatlón',
+  Urbana: 'Bicicletas urbanas',
+  Fixie: 'Fixie y single speed',
+  Accesorios: 'Accesorios de ciclismo',
+  Indumentaria: 'Indumentaria ciclista',
+  'E-Bike': 'Bicicletas eléctricas',
+  'Niños': 'Bicicletas para niños',
+  Pista: 'Bicicletas de pista',
+}
 
 const normalizeText = (value: string) => value
   ? value
@@ -129,8 +221,17 @@ function paramsToFilters(params: URLSearchParams): FiltersState {
     if (values.length) base[key] = uniqueInsensitive(values)
   }
 
+  // Backward compatibility: merge any legacy 'frameSize' params into unified 'size'
+  if (base.frameSize && base.frameSize.length) {
+    base.size = uniqueInsensitive([...(base.size || []), ...base.frameSize])
+    base.frameSize = []
+  }
+
   const deal = params.get('deal')
   if (deal === '1' || deal === 'true') base.deal = '1'
+
+  const bikes = params.get('bikes')
+  if (bikes === '1' || bikes === 'true') base.bikes = '1'
 
   const q = params.get('q')
   if (q) base.q = q
@@ -184,6 +285,9 @@ function filtersToSearchParams(current: URLSearchParams, filters: FiltersState) 
   if (filters.store === '1') params.set('store', '1')
   else params.delete('store')
 
+  if (filters.bikes === '1') params.set('bikes', '1')
+  else params.delete('bikes')
+
   return params
 }
 
@@ -192,13 +296,6 @@ type ListingMetadata = {
   brake?: string
   apparelSize?: string
   accessoryType?: string
-}
-
-const isListingPubliclyVisible = (listing: Listing): boolean => {
-  const status = (listing.status || '').toLowerCase()
-  if (status === 'archived' || status === 'deleted' || status === 'draft' || status === 'expired') return false
-  if (typeof listing.expiresAt === 'number' && listing.expiresAt > 0 && listing.expiresAt < Date.now()) return false
-  return true
 }
 
 type ListingFacetsResult = {
@@ -274,6 +371,32 @@ const cleanValue = (value?: string | null) => {
   return trimmed ? trimmed.replace(/\s+/g, ' ') : undefined
 }
 
+const listingDisplayName = (listing: Listing) => {
+  const brandModel = [listing.brand, listing.model].filter(Boolean).join(' ').trim()
+  if (brandModel) {
+    if (listing.year) return `${brandModel} ${listing.year}`.trim()
+    return brandModel
+  }
+  return listing.title
+}
+
+const formatList = (values: string[], limit = 3) => {
+  const unique = Array.from(new Set(values.map((v) => v.trim()).filter(Boolean)))
+  const sliced = unique.slice(0, limit)
+  if (!sliced.length) return ''
+  if (sliced.length === 1) return sliced[0]
+  return `${sliced.slice(0, -1).join(', ')} y ${sliced[sliced.length - 1]}`
+}
+
+const formatResultsCount = (count: number | null | undefined) => {
+  if (!count || count <= 0) return 'las mejores'
+  if (count === 1) return 'una'
+  if (count < 10) return `${count}`
+  if (count < 30) return `más de ${Math.max(10, Math.floor(count / 5) * 5)}`
+  if (count < 100) return `más de ${Math.floor(count / 10) * 10}`
+  return 'más de 100'
+}
+
 function computeListingFacets(listings: Listing[]): ListingFacetsResult {
   const sets: Record<MultiFilterKey, Set<string>> = {
     brand: new Set(),
@@ -303,12 +426,20 @@ function computeListingFacets(listings: Listing[]): ListingFacetsResult {
     if (material) sets.material.add(material)
 
     const frameSize = cleanValue(listing.frameSize)
-    if (frameSize) sets.frameSize.add(frameSize)
+    if (frameSize) {
+      // Unificamos en 'size' para no duplicar con 'Talle'
+      sets.frameSize.add(frameSize)
+      sets.size.add(frameSize)
+    }
     // Incluir múltiples talles desde extras
     const extrasMap = extractExtrasMap(listing.extras)
     const multi = extrasMap.talles
     if (multi) {
-      multi.split(',').map((s) => s.trim()).filter(Boolean).forEach((s) => sets.frameSize.add(s))
+      multi
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .forEach((s) => { sets.frameSize.add(s); sets.size.add(s) })
     }
 
     const wheelSize = cleanValue(listing.wheelSize)
@@ -688,9 +819,18 @@ function StoreFilterContent({ active, onToggle, close }: StoreFilterContentProps
 /* ------------------------ UI helpers ------------------------ */
 /* ------------------------ Page ------------------------ */
 type Crumb = { label: string; to?: string }
-type MarketplaceProps = { forcedCat?: Cat; allowedCats?: Cat[]; forcedDeal?: boolean; headingTitle?: string; breadcrumbs?: Crumb[] }
-export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headingTitle, breadcrumbs }: MarketplaceProps = {}) {
+type MarketplaceProps = {
+  forcedCat?: Cat
+  allowedCats?: Cat[]
+  forcedDeal?: boolean
+  headingTitle?: string
+  breadcrumbs?: Crumb[]
+  seoOverrides?: Partial<SeoHeadProps>
+}
+export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headingTitle, breadcrumbs, seoOverrides }: MarketplaceProps = {}) {
+  const location = useLocation()
   const { fx } = useCurrency()
+  const siteOrigin = useMemo(() => resolveSiteOrigin(), [])
   const [searchParams, setSearchParams] = useSearchParams()
   const paramsKey = searchParams.toString()
   const filters = useMemo(() => paramsToFilters(searchParams), [paramsKey])
@@ -711,7 +851,6 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [mobileSortOpen, setMobileSortOpen] = useState(false)
   const [likeCounts, setLikeCounts] = useState<Record<string, number>>({})
-  const sanitizedListings = useMemo(() => listings.filter(isListingPubliclyVisible), [listings])
 
   useEffect(() => {
     let active = true
@@ -769,12 +908,11 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
                 renewalNotifiedAt: row.renewal_notified_at ? Date.parse(row.renewal_notified_at) : null,
                 createdAt: row.created_at ? Date.parse(row.created_at) : Date.now(),
               }))
-              const activeListings = mapped.filter(isListingPubliclyVisible)
-              setListings(activeListings)
+              setListings(mapped)
               setServerMode(true)
               setServerTotal(typeof total === 'number' ? total : null)
               try {
-                const sellerIds = Array.from(new Set(activeListings.map((x) => x.sellerId).filter(Boolean)))
+                const sellerIds = Array.from(new Set(mapped.map((x) => x.sellerId).filter(Boolean)))
                 const logos = await fetchStoresMeta(sellerIds)
                 if (active) setStoreLogos(logos)
               } catch { /* noop */ }
@@ -784,10 +922,9 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
           }
           setServerMode(false)
           setServerTotal(null)
-          const activeListings = data.filter(isListingPubliclyVisible)
-          setListings(activeListings)
+          setListings(data)
           try {
-            const sellerIds = Array.from(new Set(activeListings.map((x) => x.sellerId).filter(Boolean)))
+            const sellerIds = Array.from(new Set(data.map((x) => x.sellerId).filter(Boolean)))
             const logos = await fetchStoresMeta(sellerIds)
             if (active) setStoreLogos(logos)
           } catch { void 0 }
@@ -842,12 +979,11 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
             renewalNotifiedAt: row.renewal_notified_at ? Date.parse(row.renewal_notified_at) : null,
             createdAt: row.created_at ? Date.parse(row.created_at) : Date.now(),
           }))
-          const activeListings = mapped.filter(isListingPubliclyVisible)
-          setListings(activeListings)
+          setListings(mapped)
           setServerMode(true)
           setServerTotal(typeof total === 'number' ? total : null)
           try {
-            const sellerIds = Array.from(new Set(activeListings.map((x) => x.sellerId).filter(Boolean)))
+            const sellerIds = Array.from(new Set(mapped.map((x) => x.sellerId).filter(Boolean)))
             const logos = await fetchStoresMeta(sellerIds)
             if (active) setStoreLogos(logos)
           } catch { /* noop */ }
@@ -862,7 +998,7 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
         if (!active) return
         setServerMode(false)
         setServerTotal(null)
-        setListings(mockListings.filter(isListingPubliclyVisible))
+        setListings(mockListings)
         setLoading(false)
         return
       }
@@ -874,14 +1010,20 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
   }, [paramsKey, sortMode, fx])
 
   const categoryFiltered = useMemo(() => {
-    if (serverMode) return sanitizedListings
+    if (serverMode) return listings
     if (Array.isArray(allowedCats) && allowedCats.length) {
       const set = new Set(allowedCats)
-      return sanitizedListings.filter((listing) => set.has(listing.category as Cat))
+      return listings.filter((listing) => set.has(listing.category as Cat))
     }
-    if (effectiveCat === 'Todos') return sanitizedListings
-    return sanitizedListings.filter((listing) => listing.category === effectiveCat)
-  }, [sanitizedListings, serverMode, effectiveCat, allowedCats?.join(',')])
+    if (effectiveCat === 'Todos') {
+      if (filters.bikes === '1') {
+        // Excluir accesorios e indumentaria cuando 'Solo bicicletas'
+        return listings.filter((l) => l.category !== 'Accesorios' && l.category !== 'Indumentaria')
+      }
+      return listings
+    }
+    return listings.filter((listing) => listing.category === effectiveCat)
+  }, [listings, serverMode, effectiveCat, allowedCats?.join(','), filters.bikes])
 
   const facetsData = useMemo(() => computeListingFacets(categoryFiltered), [categoryFiltered])
   const listingMetadata = facetsData.metadata
@@ -904,6 +1046,7 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
       priceMin: 'priceMin' in patch ? patch.priceMin : filters.priceMin,
       priceMax: 'priceMax' in patch ? patch.priceMax : filters.priceMax,
       deal: 'deal' in patch ? patch.deal : filters.deal,
+      bikes: 'bikes' in patch ? patch.bikes : filters.bikes,
       q: 'q' in patch ? patch.q : filters.q
     }
     const nextParams = filtersToSearchParams(searchParams, merged)
@@ -913,7 +1056,7 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
   const filtered = useMemo(() => {
     if (serverMode) {
       // El backend ya aplicó orden, cat/q/deal/store/price. Mantener order para 'relevance'/'newest'/'precio'
-      return categoryFiltered
+      return listings
     }
     if (!categoryFiltered.length) return []
     const brandSet = new Set(filters.brand.map((value) => normalizeText(value)))
@@ -1291,12 +1434,10 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
     return () => io.disconnect()
   }, [serverMode, serverTotal, listings.length, paramsKey, sortMode, fx])
 
-  // Preload estratégico: primera imagen visible (desactivado en mobile)
+  // Preload estratégico: primeras 2 imágenes visibles
   useEffect(() => {
     if (typeof document === 'undefined') return
-    const isMobile = typeof window !== 'undefined' ? window.innerWidth < 768 : false
-    if (isMobile) return
-    const preloadTargets = visible.slice(0, 1)
+    const preloadTargets = visible.slice(0, 2)
     const created: HTMLLinkElement[] = []
     for (const l of preloadTargets) {
       const img = l.images?.[0]
@@ -1304,8 +1445,8 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
       const link = document.createElement('link')
       link.rel = 'preload'
       link.as = 'image'
-      link.href = transformSupabasePublicUrl(img, { width: 640 })
-      const srcset = [320, 480, 640, 768].map((w) => `${transformSupabasePublicUrl(img, { width: w })} ${w}w`).join(', ')
+      link.href = transformSupabasePublicUrl(img, { width: 640, quality: 70, format: 'webp' })
+      const srcset = [320, 480, 640, 768, 960].map((w) => `${transformSupabasePublicUrl(img, { width: w, quality: 70, format: 'webp' })} ${w}w`).join(', ')
       link.setAttribute('imagesrcset', srcset)
       link.setAttribute('imagesizes', '(max-width: 1279px) 50vw, 33vw')
       document.head.appendChild(link)
@@ -1316,7 +1457,7 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
         try { document.head.removeChild(el) } catch { void 0 }
       }
     }
-  }, [visible.slice(0, 1).map((x) => x.id).join(',')])
+  }, [visible.slice(0, 2).map((x) => x.id).join(',')])
 
   const handleCategory = useCallback((cat: Cat) => {
     if (forcedCat) return
@@ -1335,6 +1476,7 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
       priceMin: undefined,
       priceMax: undefined,
       deal: undefined,
+      bikes: undefined,
       q: undefined
     }
     for (const key of MULTI_FILTER_ORDER) {
@@ -1426,11 +1568,229 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
       onRemove: () => setFilters({ store: undefined })
     })
   }
+  if (filters.bikes === '1') {
+    activeFilterChips.push({
+      key: 'bikes',
+      label: 'Solo bicicletas',
+      onRemove: () => setFilters({ bikes: undefined })
+    })
+  }
 
   const hasActiveFilters = activeFilterChips.length > 0
 
+  const pathname = location.pathname || '/marketplace'
+  const baseMarketplacePath = useMemo(
+    () => (/^\/(market|buscar)/.test(pathname) ? '/marketplace' : pathname || '/marketplace'),
+    [pathname],
+  )
+  const effectiveDealActive = Boolean(forcedDeal || effectiveDeal === '1')
+  const categoryKey: CategorySeoKey = effectiveDealActive ? 'Deals' : effectiveCat
+  const categoryContent = CATEGORY_SEO_CONTENT[categoryKey] ?? CATEGORY_SEO_CONTENT.Todos
+
+  const totalResults = useMemo(
+    () => (serverMode ? (typeof serverTotal === 'number' ? serverTotal : filtered.length) : filtered.length),
+    [serverMode, serverTotal, filtered.length],
+  )
+
+  const primaryLocation = filters.location && filters.location.length ? filters.location[0]?.trim() || null : null
+
+  const filterIntensity = [
+    filters.brand?.length,
+    filters.material?.length,
+    filters.frameSize?.length,
+    filters.wheelSize?.length,
+    filters.drivetrain?.length,
+    filters.condition?.length,
+    filters.brake?.length,
+    filters.year?.length,
+    filters.size?.length,
+    filters.location?.length,
+    filters.subcat ? 1 : 0,
+    filters.priceCur ? 1 : 0,
+    filters.priceMin ? 1 : 0,
+    filters.priceMax ? 1 : 0,
+    filters.store ? 1 : 0,
+  ].reduce((acc, value) => acc + (value ? 1 : 0), 0)
+
+  const isSearch = Boolean(filters.q)
+  const thinResults = !loading && filtered.length > 0 && filtered.length < 3
+  const shouldApplyNoIndex =
+    !forcedCat &&
+    !(allowedCats && allowedCats.length) &&
+    !effectiveDealActive &&
+    !forcedDeal &&
+    (isSearch || filterIntensity >= 2 || thinResults)
+
+  const canonicalPath = useMemo(() => {
+    if (seoOverrides?.canonicalPath) return seoOverrides.canonicalPath
+    if (effectiveDealActive) return '/ofertas-destacadas'
+    if (forcedCat) return categoryToCanonicalPath(forcedCat) ?? pathname
+    if (allowedCats && allowedCats.length) return pathname
+    if (filters.deal === '1') return '/ofertas-destacadas'
+    if (filters.cat && filters.cat !== 'Todos') {
+      const mapped = categoryToCanonicalPath(filters.cat)
+      if (mapped) return mapped
+    }
+    if (pathname === '/buscar' || pathname === '/market') return '/marketplace'
+    return pathname || '/marketplace'
+  }, [seoOverrides?.canonicalPath, effectiveDealActive, forcedCat, allowedCats?.length, filters.deal, filters.cat, pathname])
+
+  const canonicalUrl = useMemo(
+    () => absoluteUrl(canonicalPath ?? baseMarketplacePath, siteOrigin) ?? `${siteOrigin}${canonicalPath ?? baseMarketplacePath}`,
+    [canonicalPath, baseMarketplacePath, siteOrigin],
+  )
+
+  const topListings = useMemo(() => filtered.slice(0, Math.min(filtered.length, 12)), [filtered])
+
+  const highlightTokens: string[] = []
+  if (filters.brand?.length) highlightTokens.push(`marcas como ${formatList(filters.brand, 3)}`)
+  if (filters.material?.length) highlightTokens.push(`materiales ${formatList(filters.material, 3)}`)
+  if ((filters.size?.length || filters.frameSize?.length) && highlightTokens.length < 2) highlightTokens.push('talles específicos')
+  if ((filters.priceMin || filters.priceMax || filters.priceCur) && highlightTokens.length < 2) highlightTokens.push('tu presupuesto')
+  if (filters.location && filters.location.length > 1 && highlightTokens.length < 2) highlightTokens.push('ciudades cercanas')
+
+  const countLabel = formatResultsCount(typeof totalResults === 'number' ? totalResults : filtered.length)
+  const locationSuffix = primaryLocation ? ` en ${primaryLocation}` : ''
+  const filterSentence = highlightTokens.length ? ` Filtrá por ${formatList(highlightTokens, highlightTokens.length)}.` : ''
+  const dealsSentence = effectiveDealActive
+    ? ' Aprovechá descuentos validados, seguí las bajas de precio y contactá directo al vendedor.'
+    : ' Contactá directo con vendedores verificados y tiendas oficiales.'
+  const description = `Encontrá ${countLabel} ${categoryContent.descriptor}${locationSuffix} en Ciclo Market.${filterSentence}${dealsSentence}`.replace(/\s+/g, ' ').trim()
+
+  const baseHeading =
+    headingTitle ?? (effectiveDealActive ? 'Ofertas destacadas' : CATEGORY_TITLE_MAP[effectiveCat] ?? 'Marketplace de bicicletas')
+
+  let titleCore: string
+  if (filters.q) {
+    titleCore = `Resultados para "${filters.q}"`
+    if (effectiveCat !== 'Todos') {
+      titleCore += ` en ${CATEGORY_TITLE_MAP[effectiveCat] ?? effectiveCat}`
+    }
+    if (primaryLocation) {
+      titleCore += ` en ${primaryLocation}`
+    }
+  } else {
+    titleCore = baseHeading
+    if (effectiveDealActive && effectiveCat !== 'Todos' && !forcedDeal) {
+      titleCore += ` · ${CATEGORY_TITLE_MAP[effectiveCat] ?? effectiveCat}`
+    }
+    if (primaryLocation && !titleCore.toLowerCase().includes(primaryLocation.toLowerCase())) {
+      titleCore += ` en ${primaryLocation}`
+    }
+  }
+  titleCore = titleCore.trim()
+
+  const breadcrumbItems = useMemo(() => {
+    const seen = new Set<string>()
+    const items: Array<{ name: string; item: string }> = []
+    const push = (name: string, item: string) => {
+      const key = `${name}|${item}`
+      if (seen.has(key)) return
+      seen.add(key)
+      items.push({ name, item })
+    }
+    push('Inicio', '/')
+    push('Marketplace', '/marketplace')
+    if (effectiveDealActive) {
+      push('Ofertas destacadas', '/ofertas-destacadas')
+    } else if (forcedCat || effectiveCat !== 'Todos' || (allowedCats && allowedCats.length)) {
+      push(headingTitle ?? CATEGORY_TITLE_MAP[effectiveCat] ?? 'Categoría', canonicalPath ?? baseMarketplacePath)
+    }
+    return items
+  }, [effectiveDealActive, forcedCat, effectiveCat, allowedCats?.length, headingTitle, canonicalPath, baseMarketplacePath])
+
+  const breadcrumbSchema = useMemo(() => buildBreadcrumbList(breadcrumbItems, siteOrigin), [breadcrumbItems, siteOrigin])
+
+  const itemListSchema = useMemo(() => {
+    const elements = topListings
+      .map((listing, index) => {
+        const slug = listing.slug || listing.id
+        if (!slug) return null
+        const listingPath = `/listing/${listing.slug ?? listing.id}`
+        const url = absoluteUrl(listingPath, siteOrigin)
+        if (!url) return null
+        return {
+          '@type': 'ListItem' as const,
+          position: index + 1,
+          name: listingDisplayName(listing),
+          url,
+        }
+      })
+      .filter((entry): entry is { '@type': 'ListItem'; position: number; name: string; url: string } => Boolean(entry))
+    if (!elements.length) return null
+    return {
+      '@context': 'https://schema.org',
+      '@type': 'ItemList',
+      name: `${titleCore} - Ciclo Market`,
+      url: canonicalUrl,
+      numberOfItems: elements.length,
+      itemListElement: elements,
+    }
+  }, [topListings, siteOrigin, canonicalUrl, titleCore])
+
+  const baseJsonLd = useMemo(() => [breadcrumbSchema, itemListSchema].filter(Boolean), [breadcrumbSchema, itemListSchema])
+
+  const otherOverrides = useMemo(() => {
+    if (!seoOverrides) return {}
+    const { jsonLd: _jsonLd, keywords: _keywords, ...rest } = seoOverrides
+    return rest
+  }, [seoOverrides])
+
+  const overrideJsonLd = useMemo(() => {
+    const raw = seoOverrides?.jsonLd
+    if (!raw) return []
+    return Array.isArray(raw) ? raw.filter(Boolean) : [raw]
+  }, [seoOverrides?.jsonLd])
+
+  const jsonLdPayload = useMemo(() => {
+    const merged = [...baseJsonLd, ...overrideJsonLd]
+    return merged.length ? merged : undefined
+  }, [baseJsonLd, overrideJsonLd])
+
+  const baseKeywords = useMemo(() => {
+    const keywords = new Set<string>()
+    keywords.add('ciclomarket')
+    keywords.add('marketplace de bicicletas')
+    keywords.add(categoryContent.descriptor)
+    if (effectiveDealActive) keywords.add('ofertas bicicletas')
+    if (filters.q) keywords.add(`busqueda ${filters.q}`.toLowerCase())
+    if (primaryLocation) keywords.add(`bicicletas en ${primaryLocation}`)
+    if (effectiveCat !== 'Todos') keywords.add(`bicicletas ${effectiveCat.toLowerCase()}`)
+    return Array.from(keywords)
+  }, [categoryContent.descriptor, effectiveDealActive, filters.q, primaryLocation, effectiveCat])
+
+  const mergedKeywords = useMemo(() => {
+    const source = seoOverrides?.keywords
+    if (!source) return baseKeywords
+    const overrideList = Array.isArray(source) ? source : [source]
+    const set = new Set<string>(baseKeywords)
+    for (const value of overrideList) {
+      if (typeof value === 'string' && value.trim()) {
+        set.add(value.trim())
+      }
+    }
+    return Array.from(set)
+  }, [baseKeywords, seoOverrides?.keywords])
+
+  const seoConfig = useMemo<Partial<SeoHeadProps>>(
+    () => ({
+      title: titleCore,
+      description,
+      canonicalPath,
+      noIndex: shouldApplyNoIndex,
+      keywords: mergedKeywords,
+      jsonLd: jsonLdPayload,
+      ...otherOverrides,
+    }),
+    [titleCore, description, canonicalPath, shouldApplyNoIndex, mergedKeywords, jsonLdPayload, otherOverrides],
+  )
+
+  const seoDetailsSummary = categoryContent.summary
+  const seoDetailsCopy = categoryContent.copy
+
   return (
     <>
+      <SeoHead {...seoConfig} />
       <section className="relative overflow-hidden text-white">
         <img
           src="/hero-market.jpg"
@@ -1486,12 +1846,20 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
             {forcedCat || (allowedCats && allowedCats.length) ? null : (
             <div className="grid grid-cols-3 gap-2 sm:gap-4">
               {CATEGORY_CARDS.map((card) => {
-                const isActive = filters.cat === card.cat
+                const isActive = card.cat === 'Todos'
+                  ? (filters.cat === 'Todos' && filters.bikes === '1')
+                  : (filters.cat === card.cat)
                 return (
                   <button
                     key={card.cat}
                     type="button"
-                    onClick={() => handleCategory(card.cat)}
+                    onClick={() => {
+                      if (card.cat === 'Todos') {
+                        setFilters({ cat: 'Todos', bikes: '1' })
+                      } else {
+                        setFilters({ cat: card.cat, bikes: undefined })
+                      }
+                    }}
                     className={`relative w-full overflow-hidden rounded-3xl border-2 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#14212e] ${
                       isActive ? 'border-white shadow-lg' : 'border-white/15 bg-white/5 hover:border-white/30 hover:shadow-md'
                     }`}
@@ -1588,7 +1956,7 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
                             key={cat}
                             type="button"
                             onClick={() => {
-                              setFilters({ cat })
+                              setFilters({ cat, bikes: undefined })
                               close()
                             }}
                             className={`flex items-center justify-between rounded-xl px-3 py-2 transition hover:bg-white/10 ${
@@ -1610,7 +1978,8 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
                 </div>
                 )}
 
-                {MULTI_FILTER_ORDER.map((key) => {
+                {/* Tamaños de cuadro (frameSize) primero */}
+                {UI_FILTERS_BEFORE_PRICE.map((key) => {
                   const rawOptions = facetsData.options[key]
                   const options = Array.from(new Set([...rawOptions, ...filters[key]]))
                   return (
@@ -1635,23 +2004,50 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
                   )
                 })}
 
+                {/* Precio segundo */}
                 <div className="px-3 border-l border-white/20 first:border-l-0 whitespace-nowrap">
-                <FilterDropdown label="Precio" summary={priceSummary} variant="inline">
-                  {({ close }) => (
-                    <PriceFilterContent
-                      min={filters.priceMin}
-                      max={filters.priceMax}
-                      bounds={facetsData.priceRange}
-                      currency={filters.priceCur}
-                      boundsByCur={facetsData.priceRangeByCur}
-                      onCurrencyChange={(cur) => setFilters({ priceCur: cur })}
-                      onApply={({ min, max }) => setFilters({ priceMin: min, priceMax: max })}
-                      onClear={() => setFilters({ priceMin: undefined, priceMax: undefined })}
-                      close={close}
-                    />
-                  )}
-                </FilterDropdown>
+                  <FilterDropdown label="Precio" summary={priceSummary} variant="inline">
+                    {({ close }) => (
+                      <PriceFilterContent
+                        min={filters.priceMin}
+                        max={filters.priceMax}
+                        bounds={facetsData.priceRange}
+                        currency={filters.priceCur}
+                        boundsByCur={facetsData.priceRangeByCur}
+                        onCurrencyChange={(cur) => setFilters({ priceCur: cur })}
+                        onApply={({ min, max }) => setFilters({ priceMin: min, priceMax: max })}
+                        onClear={() => setFilters({ priceMin: undefined, priceMax: undefined })}
+                        close={close}
+                      />
+                    )}
+                  </FilterDropdown>
                 </div>
+
+                {/* Resto de filtros en el orden solicitado */}
+                {UI_FILTERS_AFTER_PRICE.map((key) => {
+                  const rawOptions = facetsData.options[key]
+                  const options = Array.from(new Set([...rawOptions, ...filters[key]]))
+                  return (
+                    <div key={key} className="px-3 border-l border-white/20 first:border-l-0 whitespace-nowrap">
+                      <FilterDropdown
+                        label={MULTI_FILTER_LABELS[key]}
+                        summary={summaryFor(key)}
+                        disabled={!options.length}
+                        variant="inline"
+                      >
+                        {({ close }) => (
+                          <MultiSelectContent
+                            options={options}
+                            selected={filters[key]}
+                            onChange={(next) => setFilters({ [key]: next } as Partial<FiltersState>)}
+                            close={close}
+                            placeholder={`Buscar ${MULTI_FILTER_LABELS[key].toLowerCase()}`}
+                          />
+                        )}
+                      </FilterDropdown>
+                    </div>
+                  )
+                })}
 
                 <div className="px-3 border-l border-white/20 first:border-l-0 whitespace-nowrap">
                 <FilterDropdown label="Promos" summary={effectiveDeal === '1' ? 'Activas' : 'Todas'} variant="inline">
@@ -1708,6 +2104,7 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
                         storeLogoUrl={storeLogos[listing.sellerId] || null}
                         priority={idx < 4}
                         likeCount={likeCounts[listing.id]}
+                        showSweepstakeBadge
                       />
                     </div>
                   ))}
@@ -1743,6 +2140,14 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
               </div>
             )}
           </div>
+          {seoDetailsCopy ? (
+            <details className="seo-details mt-12">
+              <summary className="seo-summary">{seoDetailsSummary}</summary>
+              <div className="seo-copy">
+                <p>{seoDetailsCopy}</p>
+              </div>
+            </details>
+          ) : null}
         </Container>
       </section>
 
@@ -1785,7 +2190,7 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
                             key={cat}
                             type="button"
                             onClick={() => {
-                              setFilters({ cat })
+                              setFilters({ cat, bikes: undefined })
                               close()
                             }}
                             className={`flex items-center justify-between rounded-xl px-3 py-2 transition hover:bg-white/10 ${
@@ -1805,19 +2210,20 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
                   )}
                 </FilterDropdown>
                 )}
-                {MULTI_FILTER_ORDER.map((key) => {
-                  const rawOptions = facetsData.options[key]
-                  const options = Array.from(new Set([...rawOptions, ...filters[key]]))
-                  return (
-                    <FilterDropdown
-                      key={`mobile-${key}`}
-                      label={MULTI_FILTER_LABELS[key]}
-                      summary={summaryFor(key)}
-                      disabled={!options.length}
-                      className="w-full"
-                      buttonClassName="w-full justify-between"
-                      inlineOnMobile
-                      variant="inline"
+              {/* Tamaños de cuadro primero en mobile */}
+              {UI_FILTERS_BEFORE_PRICE.map((key) => {
+                const rawOptions = facetsData.options[key]
+                const options = Array.from(new Set([...rawOptions, ...filters[key]]))
+                return (
+                  <FilterDropdown
+                    key={`mobile-${key}`}
+                    label={MULTI_FILTER_LABELS[key]}
+                    summary={summaryFor(key)}
+                    disabled={!options.length}
+                    className="w-full"
+                    buttonClassName="w-full justify-between"
+                    inlineOnMobile
+                    variant="inline"
                   >
                     {({ close }) => (
                       <MultiSelectContent
@@ -1831,6 +2237,7 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
                   </FilterDropdown>
                 )
               })}
+              {/* Precio segundo en mobile */}
               <FilterDropdown
                 label="Precio"
                 summary={priceSummary}
@@ -1853,6 +2260,33 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
                   />
                 )}
               </FilterDropdown>
+              {/* Resto en el orden solicitado en mobile */}
+              {UI_FILTERS_AFTER_PRICE.map((key) => {
+                const rawOptions = facetsData.options[key]
+                const options = Array.from(new Set([...rawOptions, ...filters[key]]))
+                return (
+                  <FilterDropdown
+                    key={`mobile-${key}`}
+                    label={MULTI_FILTER_LABELS[key]}
+                    summary={summaryFor(key)}
+                    disabled={!options.length}
+                    className="w-full"
+                    buttonClassName="w-full justify-between"
+                    inlineOnMobile
+                    variant="inline"
+                  >
+                    {({ close }) => (
+                      <MultiSelectContent
+                        options={options}
+                        selected={filters[key]}
+                        onChange={(next) => setFilters({ [key]: next } as Partial<FiltersState>)}
+                        close={close}
+                        placeholder={`Buscar ${MULTI_FILTER_LABELS[key].toLowerCase()}`}
+                      />
+                    )}
+                  </FilterDropdown>
+                )
+              })}
               <FilterDropdown
                 label="Promos"
                 summary={effectiveDeal === '1' ? 'Activas' : 'Todas'}

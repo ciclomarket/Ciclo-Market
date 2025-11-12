@@ -78,7 +78,7 @@ function HeroBackground() {
         srcSet={'/bicicletas-home-card.jpg 720w, /bicicletas-home.jpg 1520w'}
         sizes="100vw"
         alt=""
-        fetchPriority="high"
+        fetchpriority="high"
         loading="eager"
         decoding="async"
         className="absolute inset-0 -z-20 size-full object-cover md:[object-position:50%_28%]"

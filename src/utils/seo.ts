@@ -1,64 +1,98 @@
-export type SeoPayload = {
-  title?: string
-  description?: string
-  image?: string
-  url?: string
-}
+const DEFAULT_SITE_ORIGIN = 'https://www.ciclomarket.ar'
 
-const DEFAULT_TITLE = 'Ciclo Market | Marketplace de bicicletas'
-const DEFAULT_DESCRIPTION = 'Comprá y vendé bicicletas usadas o nuevas en Ciclo Market. Planes flexibles, publicaciones destacadas y contacto directo con vendedores verificados.'
-
-function computeDefaultImage(): string {
-  if (typeof window === 'undefined') return '/hero-market.jpg'
-  return `${window.location.origin}/hero-market.jpg`
-}
-
-function computeDefaultUrl(): string {
-  if (typeof window === 'undefined') return 'https://ciclomarket.ar'
-  return window.location.href
-}
-
-const META_NAME_MAP: Record<string, string> = {
-  description: 'description',
-  twitterCard: 'twitter:card'
-}
-
-const META_PROPERTY_MAP: Record<string, string> = {
-  ogTitle: 'og:title',
-  ogDescription: 'og:description',
-  ogImage: 'og:image',
-  ogUrl: 'og:url'
-}
-
-function setMetaWithAttribute(attr: 'name' | 'property', key: string, value: string) {
-  if (typeof document === 'undefined') return
-  let element = document.querySelector(`meta[${attr}="${key}"]`)
-  if (!element) {
-    element = document.createElement('meta')
-    element.setAttribute(attr, key)
-    document.head.appendChild(element)
+function ensureCanonicalOrigin(raw?: string | null): string {
+  if (!raw) return DEFAULT_SITE_ORIGIN
+  try {
+    const normalized = raw.startsWith('http') ? raw : `https://${raw}`
+    const url = new URL(normalized)
+    url.protocol = 'https:'
+    url.pathname = ''
+    url.search = ''
+    url.hash = ''
+    if (/^ciclomarket\.ar$/i.test(url.hostname)) {
+      url.hostname = 'www.ciclomarket.ar'
+    }
+    if (/^www\.ciclomarket\.ar$/i.test(url.hostname)) {
+      return `https://${url.hostname}`
+    }
+    return url.toString().replace(/\/$/, '')
+  } catch {
+    return DEFAULT_SITE_ORIGIN
   }
-  element.setAttribute('content', value)
 }
 
-export function applySeo(payload: SeoPayload) {
-  if (typeof document === 'undefined') return
-  const title = payload.title ?? DEFAULT_TITLE
-  document.title = title
-
-  const description = payload.description ?? DEFAULT_DESCRIPTION
-  setMetaWithAttribute('name', META_NAME_MAP.description, description)
-
-  const url = payload.url ?? computeDefaultUrl()
-  const image = payload.image ?? computeDefaultImage()
-
-  setMetaWithAttribute('property', META_PROPERTY_MAP.ogTitle, title)
-  setMetaWithAttribute('property', META_PROPERTY_MAP.ogDescription, description)
-  setMetaWithAttribute('property', META_PROPERTY_MAP.ogImage, image)
-  setMetaWithAttribute('property', META_PROPERTY_MAP.ogUrl, url)
-  setMetaWithAttribute('name', META_NAME_MAP.twitterCard, 'summary_large_image')
+export function resolveSiteOrigin(): string {
+  const envUrl = (import.meta.env.VITE_FRONTEND_URL ?? import.meta.env.VITE_SITE_URL ?? '').toString().trim()
+  if (envUrl) {
+    return ensureCanonicalOrigin(envUrl)
+  }
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return ensureCanonicalOrigin(window.location.origin)
+  }
+  return DEFAULT_SITE_ORIGIN
 }
 
-export function resetSeo() {
-  applySeo({})
+export function toAbsoluteUrl(value: string | undefined, origin = resolveSiteOrigin()): string | undefined {
+  if (!value) return undefined
+  try {
+    return new URL(value, origin).toString()
+  } catch {
+    return value
+  }
 }
+
+export function categoryToCanonicalPath(category: string | null | undefined): string | null {
+  if (!category) return null
+  const normalized = category.toLowerCase()
+  switch (normalized) {
+    case 'ruta':
+      return '/bicicletas-ruta'
+    case 'mtb':
+      return '/bicicletas-mtb'
+    case 'gravel':
+      return '/bicicletas-gravel'
+    case 'fixie':
+      return '/fixie'
+    case 'accesorios':
+      return '/accesorios'
+    case 'indumentaria':
+      return '/indumentaria'
+    case 'triatlón':
+    case 'triatlon':
+      return '/bicicletas-triatlon'
+    case 'e-bike':
+      return '/marketplace?cat=E-Bike'
+    case 'urbana':
+      return '/marketplace?cat=Urbana'
+    case 'niños':
+    case 'ninos':
+      return '/marketplace?cat=Niños'
+    case 'pista':
+      return '/marketplace?cat=Pista'
+    default:
+      return null
+  }
+}
+
+export function buildBreadcrumbList(items: Array<{ name: string; item: string }>, origin = resolveSiteOrigin()) {
+  if (!Array.isArray(items) || !items.length) return null
+  const elements = items
+    .filter((entry) => entry && entry.name && entry.item)
+    .map((entry, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      name: entry.name,
+      item: toAbsoluteUrl(entry.item, origin),
+    }))
+    .filter((entry) => Boolean(entry.item))
+
+  if (!elements.length) return null
+
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: elements,
+  }
+}
+
+export { DEFAULT_SITE_ORIGIN, ensureCanonicalOrigin }

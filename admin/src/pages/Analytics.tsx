@@ -1,19 +1,45 @@
 import { useEffect, useMemo, useState } from 'react'
-import { fetchSummaryMetrics, summarizeRecentPayments, fetchActiveListingsSeries, exportPaymentsCsv, type SummaryMetrics } from '@admin/services/metrics'
-import MiniLineChart from '@admin/components/MiniLineChart'
-import { triggerNewsletterDigest } from '@admin/services/actions'
+import { TimeSeriesChart } from '@admin/components/TimeSeriesChart'
+import {
+  summarizeRecentPayments,
+  fetchListingQualityMetrics,
+  type PaymentsSummary,
+  type ListingQualityMetrics,
+} from '@admin/services/metrics'
+import {
+  fetchTopListingsByViews,
+  fetchTopListingsByWaClicks,
+  type ListingEngagementTop,
+} from '@admin/services/engagement'
 
-const format = new Intl.NumberFormat('es-AR')
+const currencyArs = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })
+const currencyUsd = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
+const percentFormatter = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 1 })
+const numberFormatter = new Intl.NumberFormat('es-AR')
 
-function formatValue(value: number | null): string {
-  if (value === null) return '—'
-  return format.format(value)
+const planLabels: Record<string, string> = {
+  free: 'Free',
+  basic: 'Básico',
+  pro: 'Pro',
+  premium: 'Premium',
+  sin_plan: 'Sin dato',
+}
+
+function planLabel(raw: string): string {
+  const key = raw.toLowerCase()
+  return planLabels[key] || key.charAt(0).toUpperCase() + key.slice(1)
+}
+
+function formatCtr(views: number, waClicks: number): string {
+  if (!views) return '0%'
+  return `${percentFormatter.format((waClicks / views) * 100)}%`
 }
 
 export default function AnalyticsPage() {
-  const [metrics, setMetrics] = useState<SummaryMetrics | null>(null)
-  const [payments, setPayments] = useState<{ count: number; totalArs: number; totalUsd: number; byDay: Array<{ day: string; total: number }> } | null>(null)
-  const [activeSeries, setActiveSeries] = useState<Array<{ day: string; total: number }>>([])
+  const [payments, setPayments] = useState<PaymentsSummary | null>(null)
+  const [listingQuality, setListingQuality] = useState<ListingQualityMetrics | null>(null)
+  const [topViews, setTopViews] = useState<ListingEngagementTop[]>([])
+  const [topWa, setTopWa] = useState<ListingEngagementTop[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -22,191 +48,219 @@ export default function AnalyticsPage() {
     setLoading(true)
     setError(null)
 
-    Promise.all([fetchSummaryMetrics(), summarizeRecentPayments(30), fetchActiveListingsSeries(30)])
-      .then(([data, pay, active]) => {
+    Promise.all([
+      summarizeRecentPayments(90),
+      fetchListingQualityMetrics(),
+      fetchTopListingsByViews(30, 5),
+      fetchTopListingsByWaClicks(30, 5),
+    ])
+      .then(([paymentsSummary, qualitySummary, topByViews, topByWa]) => {
         if (!alive) return
-        setMetrics(data)
-        const ars = pay.totalByCurrency['ARS'] || 0
-        const usd = pay.totalByCurrency['USD'] || 0
-        const byDay = pay.byDay.map((d) => ({ day: d.day, total: d.total }))
-        setPayments({ count: pay.count, totalArs: ars, totalUsd: usd, byDay })
-        setActiveSeries(active)
+        setPayments(paymentsSummary)
+        setListingQuality(qualitySummary)
+        setTopViews(topByViews)
+        setTopWa(topByWa)
       })
       .catch((err) => {
-        console.warn('[admin] analytics metrics failed', err)
-        if (!alive) return
-        setError('No pudimos cargar las métricas.')
+        console.warn('[analytics] load failed', err)
+        if (alive) setError('No pudimos cargar la analítica. Intentá nuevamente.')
       })
       .finally(() => {
         if (alive) setLoading(false)
       })
 
-    return () => {
-      alive = false
-    }
+    return () => { alive = false }
   }, [])
 
-  const listingStatus = useMemo(() => ([
-    { label: 'Activos', value: metrics?.activeListings ?? null },
-    { label: 'Pausados', value: metrics?.pausedListings ?? null },
-    { label: 'Borradores', value: metrics?.draftListings ?? null },
-    { label: 'Total', value: metrics?.totalListings ?? null },
-  ]), [metrics])
+  const revenueSeries = useMemo(() => (
+    payments
+      ? payments.byDay.map((row) => ({ date: row.day, value: row.total }))
+      : []
+  ), [payments])
 
-  const storeData = useMemo(() => ([
-    { label: 'Tiendas oficiales', value: metrics?.officialStores ?? null },
-    { label: 'Usuarios verificados', value: metrics?.verifiedUsers ?? null },
-    { label: 'Usuarios totales', value: metrics?.totalUsers ?? null },
-  ]), [metrics])
+  const checkoutSeries = useMemo(() => (
+    payments
+      ? payments.byDay.map((row) => ({ date: row.day, value: row.count }))
+      : []
+  ), [payments])
 
-  const currencyFormatARS = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })
-  const currencyFormatUSD = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'USD' })
-
-  const chartData = (payments?.byDay || []).map((d, idx) => ({ x: idx, y: d.total }))
-  const activeChartData = activeSeries.map((d, idx) => ({ x: idx, y: d.total }))
+  const planBreakdown = useMemo(() => (
+    payments
+      ? Object.entries(payments.totalByPlan)
+        .map(([plan, amount]) => ({ plan, label: planLabel(plan), amount }))
+        .sort((a, b) => b.amount - a.amount)
+      : []
+  ), [payments])
 
   return (
     <div>
-      <section className="admin-grid">
-        {storeData.map((item) => (
-          <article key={item.label} className="admin-card">
-            <h3>{item.label}</h3>
-            <p style={{ fontSize: '2rem', margin: '0.5rem 0', fontWeight: 600, color: '#f2f6fb' }}>
-              {loading ? '…' : formatValue(item.value)}
-            </p>
-            <p style={{ color: '#8ea0b3' }}>Refrescá estos datos para seguir el crecimiento del marketplace.</p>
-          </article>
-        ))}
-      </section>
-
-      {error ? (
-        <div className="admin-card" style={{ borderColor: 'rgba(255,107,107,0.4)', color: '#ff8f8f', marginTop: '1.5rem' }}>
-          {error}
-        </div>
-      ) : null}
-
-      <section className="admin-card" style={{ marginTop: '1.5rem' }}>
-        <h3>Breakdown de publicaciones</h3>
-        <div style={{ display: 'grid', gap: '0.75rem', marginTop: '1rem' }}>
-          {listingStatus.map((item) => (
-            <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', color: '#b7c7da' }}>
-              <span>{item.label}</span>
-              <strong style={{ color: '#f2f6fb' }}>{loading ? '…' : formatValue(item.value)}</strong>
+      <section className="admin-card" style={{ marginBottom: '1.5rem' }}>
+        <h3>Ingresos por moneda (últimos 90 días)</h3>
+        <div style={{ display: 'grid', gap: '1.25rem', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', marginTop: '1rem' }}>
+          <div>
+            <div style={{ color: '#9fb3c9', fontSize: '0.82rem' }}>Total ARS</div>
+            <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#f2f6fb' }}>
+              {payments ? currencyArs.format(payments.totalByCurrency['ARS'] || 0) : '…'}
             </div>
-          ))}
-        </div>
-        <p style={{ marginTop: '1.5rem', color: '#7f92ab', fontSize: '0.88rem' }}>
-          Tip: creá vistas en Supabase que calculen tendencia semana a semana para graficarlas acá.
-        </p>
-      </section>
-
-      <section className="admin-card" style={{ marginTop: '1.5rem' }}>
-        <h3>Ingresos (últimos 30 días)</h3>
-        <div style={{ display: 'grid', gap: '0.75rem', marginTop: '1rem', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
-          <div>
-            <div style={{ color: '#9fb3c9', fontSize: '0.85rem' }}>Checkouts confirmados</div>
-            <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#f2f6fb' }}>{loading ? '…' : (payments ? formatValue(payments.count) : '—')}</div>
           </div>
           <div>
-            <div style={{ color: '#9fb3c9', fontSize: '0.85rem' }}>Total ARS</div>
-            <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#f2f6fb' }}>{loading ? '…' : (payments ? currencyFormatARS.format(payments.totalArs) : '—')}</div>
-          </div>
-          <div>
-            <div style={{ color: '#9fb3c9', fontSize: '0.85rem' }}>Total USD</div>
-            <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#f2f6fb' }}>{loading ? '…' : (payments ? currencyFormatUSD.format(payments.totalUsd) : '—')}</div>
-          </div>
-        </div>
-
-        <div style={{ marginTop: '1rem', overflowX: 'auto' }}>
-          {payments && payments.byDay.length > 1 ? (
-            <div style={{ marginBottom: '1rem' }}>
-              <MiniLineChart data={chartData} width={680} height={180} />
+            <div style={{ color: '#9fb3c9', fontSize: '0.82rem' }}>Total USD</div>
+            <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#f2f6fb' }}>
+              {payments ? currencyUsd.format(payments.totalByCurrency['USD'] || 0) : '…'}
             </div>
-          ) : null}
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '520px' }}>
-            <thead>
-              <tr style={{ background: 'rgba(12,23,35,0.9)', textAlign: 'left', color: '#9fb3c9', fontSize: '0.78rem', letterSpacing: '0.08em' }}>
-                <th style={{ padding: '0.6rem 0.9rem' }}>Día</th>
-                <th style={{ padding: '0.6rem 0.9rem' }}>Total (ARS)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={2} style={{ padding: '1rem', color: '#92a5bc', textAlign: 'center' }}>Cargando ingresos…</td>
-                </tr>
-              ) : payments && payments.byDay.length ? (
-                payments.byDay.map((d) => (
-                  <tr key={d.day} style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-                    <td style={{ padding: '0.7rem 0.9rem', color: '#c2d5eb' }}>{d.day}</td>
-                    <td style={{ padding: '0.7rem 0.9rem', color: '#c2d5eb' }}>{currencyFormatARS.format(d.total)}</td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={2} style={{ padding: '1rem', color: '#92a5bc', textAlign: 'center' }}>No hay datos para mostrar.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+          </div>
+          <div>
+            <div style={{ color: '#9fb3c9', fontSize: '0.82rem' }}>Checkouts (90d)</div>
+            <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#f2f6fb' }}>
+              {payments ? numberFormatter.format(payments.count) : '…'}
+            </div>
+          </div>
         </div>
-      </section>
 
-      <section className="admin-card" style={{ marginTop: '1.5rem' }}>
-        <h3>Publicaciones activas por día (últimos 30 días)</h3>
-        <div style={{ marginTop: '0.75rem' }}>
-          {activeChartData.length > 1 ? (
-            <MiniLineChart data={activeChartData} width={680} height={180} stroke="#6fff9d" fill="rgba(111,255,157,0.18)" />
+        <div style={{ marginTop: '2rem' }}>
+          <h4 style={{ marginBottom: '0.75rem', color: '#9fb3c9', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            Distribución por plan
+          </h4>
+          {planBreakdown.length ? (
+            <div style={{ display: 'grid', gap: '0.6rem', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))' }}>
+              {planBreakdown.map((plan) => (
+                <div key={plan.plan} style={{ background: 'rgba(97,223,255,0.06)', borderRadius: '12px', padding: '0.75rem 1rem', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <div style={{ color: '#9fb3c9', fontSize: '0.8rem' }}>{plan.label}</div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 600, color: '#f2f6fb' }}>{currencyArs.format(plan.amount)}</div>
+                </div>
+              ))}
+            </div>
           ) : (
-            <div style={{ color: '#92a5bc' }}>Sin datos suficientes para graficar.</div>
+            <p style={{ color: '#7f92ab' }}>{loading ? 'Cargando…' : 'Sin datos disponibles.'}</p>
           )}
         </div>
       </section>
 
-      <section className="admin-card" style={{ marginTop: '1.5rem' }}>
-        <h3>Acciones rápidas</h3>
-        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '0.75rem' }}>
-          <button
-            type="button"
-            onClick={async () => {
-              try {
-                await triggerNewsletterDigest()
-                alert('Newsletter disparada correctamente')
-              } catch (err: any) {
-                alert(err?.message || 'No pudimos enviar la newsletter')
-              }
-            }}
-            style={{
-              padding: '0.6rem 1rem',
-              borderRadius: '12px',
-              border: '1px solid rgba(255,255,255,0.12)',
-              background: 'linear-gradient(135deg, rgba(97,223,255,0.24), rgba(73,133,255,0.24))',
-              color: '#f2f6fb',
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            Enviar newsletter (últimos avisos)
-          </button>
-          <button
-            type="button"
-            onClick={() => exportPaymentsCsv(90)}
-            style={{
-              padding: '0.6rem 1rem',
-              borderRadius: '12px',
-              border: '1px solid rgba(255,255,255,0.12)',
-              background: 'linear-gradient(135deg, rgba(255,255,255,0.14), rgba(255,255,255,0.06))',
-              color: '#f2f6fb',
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            Exportar pagos (CSV)
-          </button>
+      {error ? (
+        <div className="admin-card" style={{ borderColor: 'rgba(255,107,107,0.4)', color: '#ff8f8f', marginBottom: '1.5rem' }}>
+          {error}
         </div>
-        <p style={{ marginTop: '0.75rem', color: '#7f92ab', fontSize: '0.88rem' }}>
-          Nota: esta acción requiere que el backend acepte la cabecera x-cron-secret configurada en el entorno del admin.
-        </p>
+      ) : null}
+
+      <section className="admin-grid" style={{ marginBottom: '1.5rem' }}>
+        <article className="admin-card">
+          <h3>Ingresos diarios</h3>
+          <p style={{ color: '#7f92ab', marginBottom: '0.75rem' }}>Últimos 90 días · escala ARS</p>
+          <TimeSeriesChart
+            data={revenueSeries}
+            height={240}
+            stroke="#61dfff"
+            fill="rgba(97,223,255,0.18)"
+            yFormatter={(value) => currencyArs.format(value)}
+            emptyLabel={loading ? 'Cargando…' : 'Sin datos'}
+          />
+        </article>
+        <article className="admin-card">
+          <h3>Checkouts confirmados</h3>
+          <p style={{ color: '#7f92ab', marginBottom: '0.75rem' }}>Número de órdenes completadas por día.</p>
+          <TimeSeriesChart
+            data={checkoutSeries}
+            height={240}
+            stroke="#6fff9d"
+            fill="rgba(111,255,157,0.18)"
+            yFormatter={(value) => numberFormatter.format(Math.round(value))}
+            emptyLabel={loading ? 'Cargando…' : 'Sin datos'}
+          />
+        </article>
+      </section>
+
+      <section className="admin-card" style={{ marginBottom: '1.5rem' }}>
+        <h3>Calidad de publicaciones (últimos 30 días)</h3>
+        <div style={{ display: 'grid', gap: '1.25rem', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', marginTop: '1rem' }}>
+          <div>
+            <div style={{ color: '#9fb3c9', fontSize: '0.82rem' }}>Promedio de vistas por publicación</div>
+            <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#f2f6fb' }}>
+              {listingQuality ? numberFormatter.format(Math.round(listingQuality.avgViews30d)) : '…'}
+            </div>
+          </div>
+          <div>
+            <div style={{ color: '#9fb3c9', fontSize: '0.82rem' }}>Promedio de clics WA por publicación</div>
+            <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#f2f6fb' }}>
+              {listingQuality ? numberFormatter.format(Math.round(listingQuality.avgWaClicks30d)) : '…'}
+            </div>
+          </div>
+          <div>
+            <div style={{ color: '#9fb3c9', fontSize: '0.82rem' }}>Publicaciones monitorizadas</div>
+            <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#f2f6fb' }}>
+              {listingQuality ? numberFormatter.format(listingQuality.listingsTracked) : '…'}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="admin-grid">
+        <article className="admin-card">
+          <h3>Top 5 publicaciones por vistas (30d)</h3>
+          <div style={{ marginTop: '0.75rem', overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '520px' }}>
+              <thead>
+                <tr style={{ background: 'rgba(12,23,35,0.9)', textAlign: 'left', color: '#9fb3c9', fontSize: '0.78rem', letterSpacing: '0.08em' }}>
+                  <th style={{ padding: '0.6rem 0.9rem' }}>#</th>
+                  <th style={{ padding: '0.6rem 0.9rem' }}>Publicación</th>
+                  <th style={{ padding: '0.6rem 0.9rem' }}>Vistas</th>
+                  <th style={{ padding: '0.6rem 0.9rem' }}>Clics WA</th>
+                  <th style={{ padding: '0.6rem 0.9rem' }}>CTR</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan={5} style={{ padding: '1rem', color: '#92a5bc', textAlign: 'center' }}>Cargando…</td></tr>
+                ) : topViews.length ? (
+                  topViews.map((row, index) => (
+                    <tr key={row.id} style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                      <td style={{ padding: '0.7rem 0.9rem', color: '#7f92ab' }}>{index + 1}</td>
+                      <td style={{ padding: '0.7rem 0.9rem', color: '#c2d5eb' }}>{row.title}</td>
+                      <td style={{ padding: '0.7rem 0.9rem', color: '#c2d5eb' }}>{numberFormatter.format(row.views)}</td>
+                      <td style={{ padding: '0.7rem 0.9rem', color: '#c2d5eb' }}>{numberFormatter.format(row.waClicks)}</td>
+                      <td style={{ padding: '0.7rem 0.9rem', color: '#c2d5eb' }}>{formatCtr(row.views, row.waClicks)}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr><td colSpan={5} style={{ padding: '1rem', color: '#92a5bc', textAlign: 'center' }}>Sin datos</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <article className="admin-card">
+          <h3>Top 5 publicaciones por clics de WhatsApp (30d)</h3>
+          <div style={{ marginTop: '0.75rem', overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '520px' }}>
+              <thead>
+                <tr style={{ background: 'rgba(12,23,35,0.9)', textAlign: 'left', color: '#9fb3c9', fontSize: '0.78rem', letterSpacing: '0.08em' }}>
+                  <th style={{ padding: '0.6rem 0.9rem' }}>#</th>
+                  <th style={{ padding: '0.6rem 0.9rem' }}>Publicación</th>
+                  <th style={{ padding: '0.6rem 0.9rem' }}>Clics WA</th>
+                  <th style={{ padding: '0.6rem 0.9rem' }}>Vistas</th>
+                  <th style={{ padding: '0.6rem 0.9rem' }}>CTR</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan={5} style={{ padding: '1rem', color: '#92a5bc', textAlign: 'center' }}>Cargando…</td></tr>
+                ) : topWa.length ? (
+                  topWa.map((row, index) => (
+                    <tr key={row.id} style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                      <td style={{ padding: '0.7rem 0.9rem', color: '#7f92ab' }}>{index + 1}</td>
+                      <td style={{ padding: '0.7rem 0.9rem', color: '#c2d5eb' }}>{row.title}</td>
+                      <td style={{ padding: '0.7rem 0.9rem', color: '#c2d5eb' }}>{numberFormatter.format(row.waClicks)}</td>
+                      <td style={{ padding: '0.7rem 0.9rem', color: '#c2d5eb' }}>{numberFormatter.format(row.views)}</td>
+                      <td style={{ padding: '0.7rem 0.9rem', color: '#c2d5eb' }}>{formatCtr(row.views, row.waClicks)}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr><td colSpan={5} style={{ padding: '1rem', color: '#92a5bc', textAlign: 'center' }}>Sin datos</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </article>
       </section>
     </div>
   )

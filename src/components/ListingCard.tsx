@@ -182,7 +182,7 @@ export default function ListingCard({ l, storeLogoUrl, priority = false, likeCou
             alt={l.title}
             loading={priority ? 'eager' : 'lazy'}
             decoding="async"
-            {...(priority ? ({ fetchPriority: 'high' } as any) : ({} as any))}
+            {...(priority ? ({ fetchpriority: 'high' } as any) : ({} as any))}
             onLoad={() => setImageLoaded(true)}
             onError={(e) => {
               // Fallback a URL original si la transformación devuelve 400/404

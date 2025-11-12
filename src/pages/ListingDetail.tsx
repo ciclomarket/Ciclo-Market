@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import Container from '../components/Container'
 import ImageCarousel from '../components/ImageCarousel'
@@ -17,8 +17,9 @@ import { normaliseWhatsapp, buildWhatsappUrl } from '../utils/whatsapp'
 import { useAuth } from '../context/AuthContext'
 import { fetchUserProfile, fetchUserContactEmail, setUserVerificationStatus, type UserProfileRecord } from '../services/users'
 import { logContactEvent, fetchSellerReviews } from '../services/reviews'
-// SEO global se maneja desde App; acá sólo inyectamos JSON-LD
-import JsonLd from '../components/JsonLd'
+import SeoHead, { type SeoHeadProps } from '../components/SeoHead'
+import { getOgImageUrlFromFirst } from '../lib/supabaseImages'
+import { resolveSiteOrigin, toAbsoluteUrl as absoluteUrl, buildBreadcrumbList, categoryToCanonicalPath } from '../utils/seo'
 import { trackMetaPixel } from '../lib/metaPixel'
 import { track, trackOncePerSession } from '../services/track'
 import { useToast } from '../context/ToastContext'
@@ -38,6 +39,7 @@ export default function ListingDetail() {
   const { format, fx } = useCurrency()
   const { show: showToast } = useToast()
   const { active: activeSweepstake } = useSweepstakes()
+  const siteOrigin = useMemo(() => resolveSiteOrigin(), [])
   const [listing, setListing] = useState<Listing | null>(null)
   const [loading, setLoading] = useState(true)
   // Oferta deshabilitada
@@ -71,8 +73,27 @@ export default function ListingDetail() {
   const { ids: compareIds, toggle: toggleCompare } = useCompare()
   const { liked: isFav, count: likeCount, toggle: toggleFav, canLike } = useListingLike(listing?.id || '')
   const listingKey = params.slug ?? params.id ?? ''
+  const fallbackCanonicalPath = listingKey ? `/listing/${listingKey}` : undefined
   // Necesario antes de efectos que lo usan
   const isOwner = Boolean(user?.id && listing?.sellerId && user.id === listing.sellerId)
+  
+  // Head meta config early to keep hook order stable across loading/not-found states
+  const seoHeadConfig = useMemo<Partial<SeoHeadProps>>(() => {
+    const fallback = {
+      title: 'Publicación no disponible',
+      description: 'Revisá las últimas bicicletas publicadas en Ciclo Market.',
+      canonicalPath: fallbackCanonicalPath,
+      noIndex: true,
+    }
+    if (!listing) return fallback
+    const slug = listing.slug ?? listing.id ?? listingKey
+    const canonicalPath = slug ? `/listing/${slug}` : fallbackCanonicalPath
+    const productName = `${[listing.brand, listing.model, listing.year].filter(Boolean).join(' ') || listing.title}`.trim()
+    const ogImageUrl = getOgImageUrlFromFirst(listing)
+    const desc = (listing.description || '').replace(/\s+/g, ' ').trim()
+    const description = desc ? (desc.length > 160 ? `${desc.slice(0, 157)}…` : desc) : 'Bicicleta disponible en Ciclo Market.'
+    return { title: `${productName} en venta`, description, canonicalPath, ogImageUrl }
+  }, [listing, listingKey, fallbackCanonicalPath])
   
 
   useEffect(() => {
@@ -100,7 +121,11 @@ export default function ListingDetail() {
               currency: (result.priceCurrency || 'ARS').toUpperCase()
             })
             trackOncePerSession(`listing_view_${result.id}`, () => {
-              track('listing_view', { listing_id: result.id, store_user_id: result.sellerId || null })
+              track('listing_view', {
+                listing_id: result.id,
+                store_user_id: result.sellerId || null,
+                user_id: user?.id || null,
+              })
             })
           } catch { /* noop */ }
           return
@@ -119,7 +144,11 @@ export default function ListingDetail() {
             currency: (fallback.priceCurrency || 'ARS').toUpperCase()
           })
           trackOncePerSession(`listing_view_${fallback.id}`, () => {
-            track('listing_view', { listing_id: fallback.id, store_user_id: fallback.sellerId || null })
+            track('listing_view', {
+              listing_id: fallback.id,
+              store_user_id: fallback.sellerId || null,
+              user_id: user?.id || null,
+            })
           })
         } catch { /* noop */ }
       }
@@ -129,7 +158,7 @@ export default function ListingDetail() {
     return () => {
       active = false
     }
-  }, [listingKey])
+  }, [listingKey, user?.id])
 
   useEffect(() => {
     const loadSellerProfile = async () => {
@@ -248,11 +277,7 @@ export default function ListingDetail() {
 
   const listingSlugOrId = listing.slug ?? listing.id
   const listingPath = `/listing/${listingSlugOrId}`
-  const envFrontendOrigin = (import.meta.env.VITE_FRONTEND_URL || '').trim()
-  const runtimeOrigin = typeof window !== 'undefined' ? window.location.origin : ''
-  const frontendOrigin = (envFrontendOrigin || runtimeOrigin || 'https://ciclomarket.ar').replace(/\/$/, '')
-  const canonicalUrl = `${frontendOrigin}${listingPath}`
-  const shareOrigin = 'https://ciclomarket.ar'
+  const shareOrigin = siteOrigin
   const shareUrl = `${shareOrigin.replace(/\/$/, '')}${listingPath}`
   // URL con OG listo para previews (backend)
   // Usamos exclusivamente VITE_SHARE_BASE_URL para previews OG bajo el dominio principal
@@ -280,6 +305,7 @@ export default function ListingDetail() {
   const mailtoSubjectParam = encodeURIComponent(emailSubject)
   const mailtoBodyParam = encodeURIComponent(contactMessage)
   const sellerAvatarUrl = sellerProfile?.store_avatar_url || listing.sellerAvatar || sellerProfile?.avatar_url || null
+
 
   const formattedPrice = formatListingPrice(listing.price, listing.priceCurrency, format, fx)
   const originalPriceLabel = listing.originalPrice
@@ -621,7 +647,11 @@ export default function ListingDetail() {
                     if (item.id === 'whatsapp') {
                       trackMetaPixel('Contact', { method: 'whatsapp', content_ids: [listing.id], content_type: 'product' })
                       logContactEvent({ sellerId: listing.sellerId, listingId: listing.id, buyerId: user?.id || null, type: 'whatsapp' })
-                      track('wa_click', { listing_id: listing.id, store_user_id: listing.sellerId || null })
+                      track('wa_click', {
+                        listing_id: listing.id,
+                        store_user_id: listing.sellerId || null,
+                        user_id: user?.id || null,
+                      })
                     } else if (item.id === 'email') {
                       trackMetaPixel('Contact', { method: 'email', content_ids: [listing.id], content_type: 'product' })
                       logContactEvent({ sellerId: listing.sellerId, listingId: listing.id, buyerId: user?.id || null, type: 'email' })
@@ -655,12 +685,6 @@ export default function ListingDetail() {
     )
   }
 
-  const firstImage = listing.images?.[0]
-  const metaDescription = listing.description?.trim() || 'Bicicleta disponible en Ciclo Market.'
-  const priceAmount = Number.isFinite(listing.price) ? listing.price.toString() : null
-  const priceCurrency = (listing.priceCurrency ?? 'ARS').toUpperCase()
-  const productAvailability = listing.status === 'sold' ? 'oos' : 'instock'
-
   const isStore = Boolean(sellerProfile?.store_enabled)
   const storeLink = isStore ? (sellerProfile?.store_slug ? `/tienda/${sellerProfile.store_slug}` : `/tienda/${listing.sellerId}`) : null
   const sellerDisplayName = isStore
@@ -671,29 +695,11 @@ export default function ListingDetail() {
     sellerRating ? { count: sellerRating.count, avgRating: sellerRating.avg } : undefined
   )
 
+  // Detailed SEO (JSON-LD, etc.) moved out to avoid hook order issues; using early minimal config instead.
+
   return (
     <>
-      {/* JSON-LD Product */}
-      <JsonLd
-        data={{
-          '@context': 'https://schema.org',
-          '@type': 'Product',
-          name: listing.title,
-          description: metaDescription,
-          image: Array.isArray(listing.images) && listing.images.length ? listing.images : (firstImage ? [firstImage] : []),
-          brand: listing.brand || undefined,
-          category: listing.category || undefined,
-          offers: priceAmount
-            ? {
-                '@type': 'Offer',
-                price: priceAmount,
-                priceCurrency,
-                availability: productAvailability === 'instock' ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
-                url: canonicalUrl,
-              }
-            : undefined,
-        }}
-      />
+      <SeoHead {...seoHeadConfig} />
       <div className="bg-[#14212e]">
         <Container>
           <div className="grid w-full gap-4 lg:gap-6 lg:grid-cols-[2fr_1fr]">

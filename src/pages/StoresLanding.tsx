@@ -1,6 +1,6 @@
 import Container from '../components/Container'
 import Button from '../components/Button'
-import SEO from '../components/SEO'
+import SeoHead from '../components/SeoHead'
 import ImageCarousel from '../components/ImageCarousel'
 import { Link } from 'react-router-dom'
 import GoogleStoresMap from '../components/GoogleStoresMap'
@@ -44,9 +44,9 @@ export default function StoresLanding() {
 
   return (
     <div className="bg-[#0c1723] text-white">
-      <SEO
+      <SeoHead
         title="Tiendas oficiales: cómo funciona y beneficios"
-        description="Sumá tu local como tienda oficial en Ciclo Market: catálogo destacado, métricas, soporte y más. Solicitá una prueba gratuita."
+        description="Sumá tu local como tienda oficial en Ciclo Market y accedé a catálogo destacado, métricas de rendimiento, soporte humano y campañas para atraer ciclistas verificados."
         image="/hero-tiendas.webp"
         keywords={[
           'tienda oficial bicicletas',
@@ -54,6 +54,7 @@ export default function StoresLanding() {
           'prueba gratuita tienda',
           'vender bicicletas online tienda',
         ]}
+        canonicalPath="/tiendas-oficiales"
       />
       {/* Intro 2 columnas (90% width), sin hero */}
       <section className="bg-[#0f1729]">

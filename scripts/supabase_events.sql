@@ -19,6 +19,10 @@ create index if not exists events_store_created_at_idx on public.events(store_us
 
 alter table public.events enable row level security;
 
+-- Fuente del evento (web, mobile, admin, etc.) para segmentar engagement
+alter table if exists public.events
+  add column if not exists source text;
+
 -- Lectura sólo para moderadores/admin (basado en user_roles)
 drop policy if exists "mods can read events" on public.events;
 create policy "mods can read events"
@@ -66,3 +70,54 @@ where type = 'wa_click' and created_at >= now() - interval '90 days'
 group by 1,2
 order by 1 asc;
 alter view public.admin_wa_clicks_daily set (security_invoker = true);
+
+-- Resumen agregado por publicación (7 / 30 / 90 días) para el panel admin
+create or replace view public.admin_listing_engagement_summary as
+select
+  l.id as listing_id,
+  l.seller_id,
+  l.title,
+  coalesce(nullif(l.plan_code, ''), nullif(l.plan, ''), nullif(l.seller_plan, '')) as plan_code,
+  sum(case when e.type = 'listing_view' and e.created_at >= now() - interval '7 days' then 1 else 0 end) as views_7d,
+  sum(case when e.type = 'listing_view' and e.created_at >= now() - interval '30 days' then 1 else 0 end) as views_30d,
+  sum(case when e.type = 'listing_view' and e.created_at >= now() - interval '90 days' then 1 else 0 end) as views_90d,
+  sum(case when e.type = 'wa_click' and e.created_at >= now() - interval '7 days' then 1 else 0 end) as wa_clicks_7d,
+  sum(case when e.type = 'wa_click' and e.created_at >= now() - interval '30 days' then 1 else 0 end) as wa_clicks_30d,
+  sum(case when e.type = 'wa_click' and e.created_at >= now() - interval '90 days' then 1 else 0 end) as wa_clicks_90d
+from public.listings l
+left join public.events e
+  on e.listing_id = l.id
+  and e.created_at >= now() - interval '90 days'
+group by 1,2,3,4;
+alter view public.admin_listing_engagement_summary set (security_invoker = true);
+
+-- Estadísticas agregadas de publicaciones para métricas de calidad
+create or replace view public.admin_listing_engagement_stats as
+select
+  count(*) as listings_total,
+  avg(views_30d) as avg_views_30d,
+  avg(wa_clicks_30d) as avg_wa_clicks_30d
+from public.admin_listing_engagement_summary;
+alter view public.admin_listing_engagement_stats set (security_invoker = true);
+
+-- Resumen agregado por tienda oficial (7 / 30 / 90 días)
+create or replace view public.admin_store_engagement_summary as
+select
+  u.id as store_user_id,
+  u.store_name,
+  sum(case when e.type = 'store_view' and e.created_at >= now() - interval '7 days' then 1 else 0 end) as store_views_7d,
+  sum(case when e.type = 'store_view' and e.created_at >= now() - interval '30 days' then 1 else 0 end) as store_views_30d,
+  sum(case when e.type = 'store_view' and e.created_at >= now() - interval '90 days' then 1 else 0 end) as store_views_90d,
+  sum(case when e.type = 'listing_view' and e.created_at >= now() - interval '7 days' then 1 else 0 end) as listing_views_7d,
+  sum(case when e.type = 'listing_view' and e.created_at >= now() - interval '30 days' then 1 else 0 end) as listing_views_30d,
+  sum(case when e.type = 'listing_view' and e.created_at >= now() - interval '90 days' then 1 else 0 end) as listing_views_90d,
+  sum(case when e.type = 'wa_click' and e.created_at >= now() - interval '7 days' then 1 else 0 end) as wa_clicks_7d,
+  sum(case when e.type = 'wa_click' and e.created_at >= now() - interval '30 days' then 1 else 0 end) as wa_clicks_30d,
+  sum(case when e.type = 'wa_click' and e.created_at >= now() - interval '90 days' then 1 else 0 end) as wa_clicks_90d
+from public.users u
+left join public.events e
+  on e.store_user_id = u.id
+  and e.created_at >= now() - interval '90 days'
+where coalesce(u.store_enabled, false) = true
+group by 1,2;
+alter view public.admin_store_engagement_summary set (security_invoker = true);

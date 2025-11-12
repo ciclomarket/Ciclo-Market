@@ -30,6 +30,7 @@
       }
     ],
     "redirects": [
+      { "source": "/:path*/", "destination": "/:path*", "type": 301 },
       {
         "source": "/share/listing/:id",
         "destination": "https://ciclo-market.onrender.com/share/listing/:id",
