@@ -1,6 +1,6 @@
 
 import { useEffect, useMemo, useState } from 'react'
-import { transformSupabasePublicUrl } from '../utils/supabaseImage'
+import { SUPABASE_RECOMMENDED_QUALITY, buildSupabaseSrc, buildSupabaseSrcSet } from '../utils/supabaseImage'
 
 type Slide = { src: string; title?: string; desc?: string }
 
@@ -33,31 +33,32 @@ export default function ImageCarousel({ images, slides, aspect = 'video', showTh
   }, [slides, displayImages])
 
   const [i, setI] = useState(0)
-  const safeIndex = displayImages.length ? Math.min(i, displayImages.length - 1) : 0
+  const totalImages = displayImages.length
+  const safeIndex = totalImages ? Math.min(i, totalImages - 1) : 0
   const currentImage = displayImages[safeIndex]
   const currentSlide = slideMeta[safeIndex]
-  const currentTransformed = currentImage
-    ? transformSupabasePublicUrl(currentImage, { width: 1280, quality: 68, format: 'webp' })
-    : undefined
-  const currentSrcSet = useMemo(() => {
-    if (!currentImage) return undefined
-    const widths = [640, 960, 1280]
-    return widths
-      .map((w) => `${transformSupabasePublicUrl(currentImage, { width: w, quality: 68, format: 'webp' })} ${w}w`)
-      .join(', ')
-  }, [currentImage])
+  const widthSteps = useMemo(() => [640, 960, 1280, 1600], [])
+  const currentSources = useMemo(() => {
+    if (!currentImage) return null
+    return {
+      fallback: buildSupabaseSrc(currentImage, 1280),
+      fallbackSrcSet: buildSupabaseSrcSet(currentImage, widthSteps),
+      webpSrcSet: buildSupabaseSrcSet(currentImage, widthSteps, { format: 'webp', quality: SUPABASE_RECOMMENDED_QUALITY }),
+      avifSrcSet: buildSupabaseSrcSet(currentImage, widthSteps, { format: 'avif', quality: SUPABASE_RECOMMENDED_QUALITY }),
+    }
+  }, [currentImage, widthSteps])
   const [lightbox, setLightbox] = useState(false)
 
   useEffect(() => {
     if (!lightbox) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setLightbox(false)
-      if (e.key === 'ArrowRight') setI((prev) => (prev + 1 < images.length ? prev + 1 : 0))
-      if (e.key === 'ArrowLeft') setI((prev) => (prev - 1 >= 0 ? prev - 1 : images.length - 1))
+      if (e.key === 'ArrowRight' && totalImages) setI((prev) => (prev + 1) % totalImages)
+      if (e.key === 'ArrowLeft' && totalImages) setI((prev) => (prev - 1 + totalImages) % totalImages)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [lightbox, displayImages.length])
+  }, [lightbox, totalImages])
 
   const aspectClass = useMemo(() => {
     switch (aspect) {
@@ -77,19 +78,27 @@ export default function ImageCarousel({ images, slides, aspect = 'video', showTh
       <div className={`relative ${aspectClass} w-full overflow-hidden rounded-2xl bg-black/30 shadow-[0_18px_50px_rgba(5,12,22,0.45)] ring-1 ring-white/10`}>
         {currentImage ? (
           <button type="button" className="h-full w-full" onClick={() => setLightbox(true)} aria-label="Ampliar imagen">
-            <img
-              src={currentTransformed}
-              srcSet={currentSrcSet}
-              sizes="100vw"
-              alt="Vista de la publicación"
-              className="h-full w-full max-w-full object-cover"
-              loading="lazy"
-              decoding="async"
-              onError={() => {
-                // Si falla la imagen actual, avanzamos a la siguiente disponible
-                if (displayImages.length > 1) setI((prev) => (prev + 1) % displayImages.length)
-              }}
-            />
+            <picture>
+              {currentSources?.avifSrcSet ? (
+                <source type="image/avif" srcSet={currentSources.avifSrcSet} sizes="100vw" />
+              ) : null}
+              {currentSources?.webpSrcSet ? (
+                <source type="image/webp" srcSet={currentSources.webpSrcSet} sizes="100vw" />
+              ) : null}
+              <img
+                src={currentSources?.fallback}
+                srcSet={currentSources?.fallbackSrcSet}
+                sizes="100vw"
+                alt="Vista de la publicación"
+                className="h-full w-full max-w-full object-cover"
+                loading="lazy"
+                decoding="async"
+                onError={() => {
+                  // Si falla la imagen actual, avanzamos a la siguiente disponible
+                  if (displayImages.length > 1) setI((prev) => (prev + 1) % displayImages.length)
+                }}
+              />
+            </picture>
           </button>
         ) : (
           <div className="grid h-full w-full place-content-center text-sm text-white/70">
@@ -121,23 +130,29 @@ export default function ImageCarousel({ images, slides, aspect = 'video', showTh
               type="button"
               aria-label={`Ver imagen ${idx + 1}`}
             >
-              <img
-                src={transformSupabasePublicUrl(src, { width: 300, quality: 70, format: 'webp' })}
-                alt="Miniatura de la publicación"
-                className="h-full w-full object-cover"
-                loading="lazy"
-                decoding="async"
-                onError={(e) => {
-                  // Si una miniatura falla, ocultarla
-                  const el = e.currentTarget as HTMLImageElement
-                  // Fallback al original si la transformación no funciona
-                  if (src && el.src !== src) {
-                    el.src = src
-                    return
-                  }
-                  el.style.visibility = 'hidden'
-                }}
-              />
+              <picture>
+                <source
+                  type="image/webp"
+                  srcSet={buildSupabaseSrc(src, 300, { format: 'webp', quality: SUPABASE_RECOMMENDED_QUALITY })}
+                />
+                <img
+                  src={buildSupabaseSrc(src, 300)}
+                  alt="Miniatura de la publicación"
+                  className="h-full w-full object-cover"
+                  loading="lazy"
+                  decoding="async"
+                  onError={(e) => {
+                    // Si una miniatura falla, ocultarla
+                    const el = e.currentTarget as HTMLImageElement
+                    // Fallback al original si la transformación no funciona
+                    if (src && el.src !== src) {
+                      el.src = src
+                      return
+                    }
+                    el.style.visibility = 'hidden'
+                  }}
+                />
+              </picture>
             </button>
           ))}
         </div>
@@ -161,28 +176,36 @@ export default function ImageCarousel({ images, slides, aspect = 'video', showTh
               aria-label="Anterior"
               onClick={(e) => {
                 e.stopPropagation()
-                setI((prev) => (prev - 1 >= 0 ? prev - 1 : images.length - 1))
+                setI((prev) => (totalImages ? (prev - 1 + totalImages) % totalImages : 0))
               }}
             >
               ‹
             </button>
           </div>
-          <img
-            src={currentTransformed}
-            srcSet={currentSrcSet}
-            sizes="100vw"
-            alt="Imagen ampliada"
-            className="max-h-[90vh] max-w-[95vw] object-contain"
-            onError={(e) => {
-              const el = e.currentTarget as HTMLImageElement
-              // Fallback al original
-              if (currentImage && el.src !== currentImage) {
-                el.src = currentImage
-                return
-              }
-              el.style.display = 'none'
-            }}
-          />
+          <picture>
+            {currentSources?.avifSrcSet ? (
+              <source type="image/avif" srcSet={currentSources.avifSrcSet} sizes="100vw" />
+            ) : null}
+            {currentSources?.webpSrcSet ? (
+              <source type="image/webp" srcSet={currentSources.webpSrcSet} sizes="100vw" />
+            ) : null}
+            <img
+              src={currentSources?.fallback || currentImage}
+              srcSet={currentSources?.fallbackSrcSet}
+              sizes="100vw"
+              alt="Imagen ampliada"
+              className="max-h-[90vh] max-w-[95vw] object-contain"
+              onError={(e) => {
+                const el = e.currentTarget as HTMLImageElement
+                // Fallback al original
+                if (currentImage && el.src !== currentImage) {
+                  el.src = currentImage
+                  return
+                }
+                el.style.display = 'none'
+              }}
+            />
+          </picture>
           <div className="absolute right-4">
             <button
               type="button"
@@ -190,7 +213,7 @@ export default function ImageCarousel({ images, slides, aspect = 'video', showTh
               aria-label="Siguiente"
               onClick={(e) => {
                 e.stopPropagation()
-                setI((prev) => (prev + 1 < images.length ? prev + 1 : 0))
+                setI((prev) => (totalImages ? (prev + 1) % totalImages : 0))
               }}
             >
               ›

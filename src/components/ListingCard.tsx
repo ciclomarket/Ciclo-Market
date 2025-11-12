@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Listing } from '../types'
-import { transformSupabasePublicUrl } from '../utils/supabaseImage'
+import { SUPABASE_RECOMMENDED_QUALITY, buildSupabaseSrc, buildSupabaseSrcSet } from '../utils/supabaseImage'
 import { useListingLike } from '../hooks/useServerLikes'
 import { useCurrency } from '../context/CurrencyContext'
 import { formatListingPrice } from '../utils/pricing'
@@ -171,36 +171,45 @@ export default function ListingCard({ l, storeLogoUrl, priority = false, likeCou
       </div>
       <Link to={`/listing/${slug}`} className="card-flat group flex h-full flex-col overflow-hidden">
         <div className="aspect-[5/4] sm:aspect-video relative overflow-hidden bg-black/10">
-          <img
-            src={transformSupabasePublicUrl(l.images[0], { width: 480, quality: 36, format: 'webp' })}
-            srcSet={l.images && l.images[0]
-              ? [240, 360, 480, 640, 800]
-                  .map((w) => {
-                    const q = w <= 240 ? 28 : w <= 360 ? 32 : w <= 480 ? 36 : w <= 640 ? 40 : 44
-                    return `${transformSupabasePublicUrl(l.images[0], { width: w, quality: q, format: 'webp' })} ${w}w`
-                  })
-                  .join(', ')
-              : undefined}
-            sizes="(max-width: 639px) 90vw, (max-width: 1279px) 50vw, 33vw"
-            alt={l.title}
-            loading={priority ? 'eager' : 'lazy'}
-            decoding="async"
-            width={480}
-            height={384}
-            {...(priority ? ({ fetchpriority: 'high' } as any) : ({} as any))}
-            onLoad={() => setImageLoaded(true)}
-            onError={(e) => {
-              // Fallback a URL original si la transformación devuelve 400/404
-              try {
-                const el = e.currentTarget as HTMLImageElement
-                if (l.images?.[0] && el.src !== l.images[0]) {
-                  el.src = l.images[0]
+          <picture>
+            {l.images?.[0] ? (
+              <source
+                type="image/webp"
+                srcSet={buildSupabaseSrcSet(l.images[0], [320, 480, 600, 768, 960], {
+                  format: 'webp',
+                  quality: SUPABASE_RECOMMENDED_QUALITY,
+                })}
+                sizes="(max-width: 1279px) 50vw, 33vw"
+              />
+            ) : null}
+            <img
+              src={buildSupabaseSrc(l.images?.[0] || '', 600)}
+              srcSet={
+                l.images?.[0]
+                  ? buildSupabaseSrcSet(l.images[0], [320, 480, 600, 768, 960])
+                  : undefined
+              }
+              sizes="(max-width: 1279px) 50vw, 33vw"
+              alt={l.title}
+              loading={priority ? 'eager' : 'lazy'}
+              decoding="async"
+              {...(priority ? ({ fetchpriority: 'high' } as any) : ({} as any))}
+              onLoad={() => setImageLoaded(true)}
+              onError={(e) => {
+                // Fallback a URL original si la transformación devuelve 400/404
+                try {
+                  const el = e.currentTarget as HTMLImageElement
+                  if (l.images?.[0] && el.src !== l.images[0]) {
+                    el.src = l.images[0]
+                  }
+                } catch {
+                  void 0
                 }
-              } catch { void 0 }
-              setImageLoaded(true)
-            }}
-            className={`h-full w-full object-cover transition duration-700 ${imageLoaded ? 'opacity-100 scale-100' : 'opacity-0 scale-105'} ${imageStatusClass} group-hover:scale-105`}
-          />
+                setImageLoaded(true)
+              }}
+              className={`h-full w-full object-cover transition duration-700 ${imageLoaded ? 'opacity-100 scale-100' : 'opacity-0 scale-105'} ${imageStatusClass} group-hover:scale-105`}
+            />
+          </picture>
           <div
             aria-hidden="true"
             className={`pointer-events-none absolute inset-0 bg-gradient-to-br from-white/40 via-white/10 to-white/40 transition-opacity duration-500 ${imageLoaded ? 'opacity-0' : 'opacity-100 animate-pulse'}`}

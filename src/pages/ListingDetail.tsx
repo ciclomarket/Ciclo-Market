@@ -28,7 +28,7 @@ import ListingQuestionsSection from '../components/ListingQuestionsSection'
 import { submitShareBoost } from '../services/shareBoost'
 import useUpload from '../hooks/useUpload'
 import { FALLBACK_PLANS } from '../services/plans'
-import { transformSupabasePublicUrl } from '../utils/supabaseImage'
+import { SUPABASE_RECOMMENDED_QUALITY, buildSupabaseSrc, buildSupabaseSrcSet } from '../utils/supabaseImage'
 import { canonicalPlanCode } from '../utils/planCodes'
 
 export default function ListingDetail() {
@@ -798,17 +798,25 @@ export default function ListingDetail() {
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0">
                     {sellerAvatarUrl && (
-                      <img
-                        src={transformSupabasePublicUrl(sellerAvatarUrl, { width: 96, quality: 78, format: 'webp' })}
-                        srcSet={[64, 80, 96]
-                          .map((w) => `${transformSupabasePublicUrl(sellerAvatarUrl, { width: w, quality: 78, format: 'webp' })} ${w}w`)
-                          .join(', ')}
-                        sizes="40px"
-                        alt={formatNameWithInitial(listing.sellerName, 'Vendedor')}
-                        className="h-10 w-10 rounded-full object-cover border border-[#14212e]/10"
-                        loading="lazy"
-                        decoding="async"
-                      />
+                      <picture>
+                        <source
+                          type="image/webp"
+                          srcSet={buildSupabaseSrcSet(sellerAvatarUrl, [64, 80, 96], {
+                            format: 'webp',
+                            quality: SUPABASE_RECOMMENDED_QUALITY,
+                          })}
+                          sizes="40px"
+                        />
+                        <img
+                          src={buildSupabaseSrc(sellerAvatarUrl, 96)}
+                          srcSet={buildSupabaseSrcSet(sellerAvatarUrl, [64, 80, 96])}
+                          sizes="40px"
+                          alt={formatNameWithInitial(listing.sellerName, 'Vendedor')}
+                          className="h-10 w-10 rounded-full object-cover border border-[#14212e]/10"
+                          loading="lazy"
+                          decoding="async"
+                        />
+                      </picture>
                     )}
                     <div className="min-w-0">
                       <p className="text-sm text-[#14212e]/70">Publicado por</p>

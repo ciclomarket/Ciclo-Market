@@ -44,8 +44,6 @@ const {
 })()
 const path = require('path')
 // const https = require('https') // removed: used only for Google rating proxy
-const https = require('https')
-const sharp = (() => { try { return require('sharp') } catch { return null } })()
 
 function normalizeOrigin(frontendUrlEnv) {
   const raw = (frontendUrlEnv || '').split(',')[0]?.trim()
@@ -127,65 +125,6 @@ app.use(
     },
   })
 )
-
-/* ----------------------------- Image proxy (resize/compress) -------------- */
-// GET /api/img?src=<public_supabase_url>&w=640&q=40&fmt=webp
-app.get('/api/img', async (req, res) => {
-  try {
-    if (!sharp) return res.status(501).json({ error: 'sharp_not_available' })
-    const src = String(req.query.src || '').trim()
-    if (!src || !/^https:\/\/[^\s]+/i.test(src)) return res.status(400).json({ error: 'invalid_src' })
-    // Solo permitir objetos públicos del bucket 'listings' de nuestro proyecto
-    const allowedHost = 'jmtsgywgeysagnfgdovr.supabase.co'
-    const u = new URL(src)
-    if (u.host !== allowedHost || !/\/storage\/v1\/object\/public\/listings\//.test(u.pathname)) {
-      return res.status(400).json({ error: 'forbidden_src' })
-    }
-    const w = Math.max(1, Math.min(2048, Number(req.query.w || req.query.width || 0) || 0)) || 640
-    const q = Math.max(1, Math.min(90, Number(req.query.q || req.query.quality || 0) || 0)) || 38
-    const fmtRaw = String(req.query.fmt || req.query.format || 'webp').toLowerCase()
-    const fmt = ['webp', 'jpeg', 'png', 'avif'].includes(fmtRaw) ? fmtRaw : 'webp'
-
-    const fetchBuffer = (url) => new Promise((resolve, reject) => {
-      https.get(url, (r) => {
-        if (r.statusCode && r.statusCode >= 400) {
-          return reject(new Error('upstream_' + r.statusCode))
-        }
-        const chunks = []
-        r.on('data', (c) => chunks.push(c))
-        r.on('end', () => resolve(Buffer.concat(chunks)))
-        r.on('error', reject)
-      }).on('error', reject)
-    })
-
-    const buf = await fetchBuffer(src)
-    let pipeline = sharp(buf).rotate()
-    if (w) pipeline = pipeline.resize({ width: w, withoutEnlargement: true })
-    switch (fmt) {
-      case 'avif':
-        pipeline = pipeline.avif({ quality: q })
-        res.type('image/avif')
-        break
-      case 'jpeg':
-        pipeline = pipeline.jpeg({ quality: q, mozjpeg: true })
-        res.type('image/jpeg')
-        break
-      case 'png':
-        pipeline = pipeline.png({ quality: q, compressionLevel: 9 })
-        res.type('image/png')
-        break
-      default:
-        pipeline = pipeline.webp({ quality: q })
-        res.type('image/webp')
-        break
-    }
-    const out = await pipeline.toBuffer()
-    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
-    res.send(out)
-  } catch (err) {
-    res.status(500).json({ error: 'resize_failed', detail: (err && err.message) || 'unknown' })
-  }
-})
 
 /* ----------------------------- CORS --------------------------------------- */
 // Permitir CORS amplio (ajustable por FRONTEND_URL si se quiere restringir)

@@ -6,7 +6,7 @@ import GoogleStoresMap from '../components/GoogleStoresMap'
 import SeoHead from '../components/SeoHead'
 import { fetchStores, fetchStoreActivityCounts, type StoreSummary } from '../services/users'
 import { fetchListings } from '../services/listings'
-import { transformSupabasePublicUrl } from '../utils/supabaseImage'
+import { SUPABASE_RECOMMENDED_QUALITY, buildSupabaseSrc, buildSupabaseSrcSet } from '../utils/supabaseImage'
 import type { Category } from '../types'
 
 type StoreCategoryFilter = 'Todos' | 'Accesorios' | 'Indumentaria'
@@ -352,17 +352,25 @@ export default function Tiendas() {
                               <div className="flex gap-3">
                                 <div className="h-14 w-14 flex-shrink-0 overflow-hidden rounded-xl border border-white/15 bg-white/10">
                                   {store.store_avatar_url ? (
-                                    <img
-                                      src={transformSupabasePublicUrl(store.store_avatar_url, { width: 160, quality: 78, format: 'webp' })}
-                                      srcSet={[120, 160, 200]
-                                        .map((w) => `${transformSupabasePublicUrl(store.store_avatar_url!, { width: w, quality: 78, format: 'webp' })} ${w}w`)
-                                        .join(', ')}
-                                      sizes="56px"
-                                      alt={store.store_name || store.store_slug}
-                                      className="h-full w-full object-cover"
-                                      loading="lazy"
-                                      decoding="async"
-                                    />
+                                    <picture>
+                                      <source
+                                        type="image/webp"
+                                        srcSet={buildSupabaseSrcSet(store.store_avatar_url, [120, 160, 200], {
+                                          format: 'webp',
+                                          quality: SUPABASE_RECOMMENDED_QUALITY,
+                                        })}
+                                        sizes="56px"
+                                      />
+                                      <img
+                                        src={buildSupabaseSrc(store.store_avatar_url, 160)}
+                                        srcSet={buildSupabaseSrcSet(store.store_avatar_url, [120, 160, 200])}
+                                        sizes="56px"
+                                        alt={store.store_name || store.store_slug}
+                                        className="h-full w-full object-cover"
+                                        loading="lazy"
+                                        decoding="async"
+                                      />
+                                    </picture>
                                   ) : (
                                     <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-white/70">
                                       {(store.store_name || store.store_slug || '?').trim().charAt(0).toUpperCase()}

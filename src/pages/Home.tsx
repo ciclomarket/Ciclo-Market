@@ -10,7 +10,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useCurrency } from '../context/CurrencyContext'
 import { formatListingPrice } from '../utils/pricing'
 import HorizontalSlider from '../components/HorizontalSlider'
-import { transformSupabasePublicUrl } from '../utils/supabaseImage'
+import { SUPABASE_RECOMMENDED_QUALITY, buildSupabaseSrc, buildSupabaseSrcSet } from '../utils/supabaseImage'
 import { fetchListings } from '../services/listings'
 import { supabaseEnabled } from '../services/supabase'
 import { fetchLikeCounts } from '../services/likes'
@@ -78,7 +78,7 @@ function HeroBackground() {
         srcSet={'/bicicletas-home-card.jpg 720w, /bicicletas-home.jpg 1520w'}
         sizes="100vw"
         alt=""
-        fetchpriority="high"
+        fetchPriority="high"
         loading="eager"
         decoding="async"
         className="absolute inset-0 -z-20 size-full object-cover md:[object-position:50%_28%]"
@@ -134,16 +134,27 @@ function OfferCard({ l }: { l: any }) {
     <Link to={`/listing/${slug}`} className="card-flat group flex h-full flex-col overflow-hidden">
       <div className="relative">
         <div className="aspect-video overflow-hidden bg-[#0b131c]/20">
-          <img
-            src={transformSupabasePublicUrl(l.images?.[0] || '', { width: 640 })}
-            srcSet={l.images && l.images[0] ? [320, 480, 640, 768]
-              .map((w) => `${transformSupabasePublicUrl(l.images[0], { width: w })} ${w}w`).join(', ') : undefined}
-            sizes="(max-width: 1023px) 100vw, 33vw"
-            alt={l.title}
-            className="w-full h-full object-cover group-hover:scale-105 transition"
-            loading="lazy"
-            decoding="async"
-          />
+          <picture>
+            {l.images?.[0] ? (
+              <source
+                type="image/webp"
+                srcSet={buildSupabaseSrcSet(l.images[0], [320, 480, 640, 768], {
+                  format: 'webp',
+                  quality: SUPABASE_RECOMMENDED_QUALITY,
+                })}
+                sizes="(max-width: 1023px) 100vw, 33vw"
+              />
+            ) : null}
+            <img
+              src={buildSupabaseSrc(l.images?.[0] || '', 640)}
+              srcSet={l.images?.[0] ? buildSupabaseSrcSet(l.images[0], [320, 480, 640, 768]) : undefined}
+              sizes="(max-width: 1023px) 100vw, 33vw"
+              alt={l.title}
+              className="w-full h-full object-cover group-hover:scale-105 transition"
+              loading="lazy"
+              decoding="async"
+            />
+          </picture>
         </div>
         {hasOriginal && (
           <span className="absolute top-2 left-2 bg-mb-secondary text-white text-xs rounded-full px-2 py-0.5">
@@ -323,9 +334,9 @@ export default function Home() {
       const link = document.createElement('link')
       link.rel = 'preload'
       link.as = 'image'
-      link.href = transformSupabasePublicUrl(img, { width: 640 })
-      const srcset = [320, 480, 640, 768].map((w) => `${transformSupabasePublicUrl(img, { width: w })} ${w}w`).join(', ')
-      link.setAttribute('imagesrcset', srcset)
+      link.href = buildSupabaseSrc(img, 640)
+      const srcset = buildSupabaseSrcSet(img, [320, 480, 640, 768])
+      if (srcset) link.setAttribute('imagesrcset', srcset)
       link.setAttribute('imagesizes', '(max-width: 1279px) 75vw, 50vw')
       document.head.appendChild(link)
       created.push(link)

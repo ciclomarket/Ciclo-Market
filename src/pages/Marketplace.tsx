@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams, Link, useLocation } from 'react-router-dom'
 import Container from '../components/Container'
 import ListingCard from '../components/ListingCard'
-import { transformSupabasePublicUrl } from '../utils/supabaseImage'
+import { SUPABASE_RECOMMENDED_QUALITY, buildSupabaseSrc, buildSupabaseSrcSet } from '../utils/supabaseImage'
 import { fetchStoresMeta } from '../services/users'
 import EmptyState from '../components/EmptyState'
 import SkeletonCard from '../components/SkeletonCard'
@@ -1445,9 +1445,11 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
       const link = document.createElement('link')
       link.rel = 'preload'
       link.as = 'image'
-      link.href = transformSupabasePublicUrl(img, { width: 640, quality: 70, format: 'webp' })
-      const srcset = [320, 480, 640, 768, 960].map((w) => `${transformSupabasePublicUrl(img, { width: w, quality: 70, format: 'webp' })} ${w}w`).join(', ')
-      link.setAttribute('imagesrcset', srcset)
+      link.href = buildSupabaseSrc(img, 640)
+      const srcset = buildSupabaseSrcSet(img, [320, 480, 640, 768, 960])
+      if (srcset) link.setAttribute('imagesrcset', srcset)
+      const webpSet = buildSupabaseSrcSet(img, [320, 480, 640, 768, 960], { format: 'webp', quality: SUPABASE_RECOMMENDED_QUALITY })
+      if (webpSet) link.dataset.webpSrcSet = webpSet
       link.setAttribute('imagesizes', '(max-width: 1279px) 50vw, 33vw')
       document.head.appendChild(link)
       created.push(link)

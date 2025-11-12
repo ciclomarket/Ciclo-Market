@@ -11,7 +11,7 @@ import { fetchListingsBySeller } from '../services/listings'
 import ListingCard from '../components/ListingCard'
 import type { Listing } from '../types'
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
-import { transformSupabasePublicUrl } from '../utils/supabaseImage'
+import { SUPABASE_RECOMMENDED_QUALITY, buildSupabaseSrc, buildSupabaseSrcSet } from '../utils/supabaseImage'
 import { fetchLikeCounts } from '../services/likes'
 import { useAuth } from '../context/AuthContext'
 import { resolveSiteOrigin, toAbsoluteUrl as absoluteUrl, buildBreadcrumbList } from '../utils/seo'
@@ -1322,16 +1322,36 @@ const handleClearFilters = useCallback(() => {
       <div className="relative w-full">
         <div className="mx-auto max-w-md sm:max-w-2xl md:max-w-4xl lg:max-w-6xl px-3 sm:px-4">
           <div className="relative h-64 md:h-80 lg:h-96 overflow-hidden w-full">
-            <img
-              src={transformSupabasePublicUrl(banner, { width: 1600, quality: 78, format: 'webp' })}
-              srcSet={[800, 1200, 1600, 1920]
-                .map((w) => `${transformSupabasePublicUrl(banner, { width: w, quality: 78, format: 'webp' })} ${w}w`)
-                .join(', ')}
-              sizes="(max-width: 639px) 448px, (max-width: 767px) 672px, (max-width: 1023px) 896px, 1152px"
-              alt="Banner"
-              className="h-full w-full object-cover block mx-auto"
-              style={{ objectPosition: `center ${bannerPosY}%` }}
-            />
+            <picture>
+              {banner ? (
+                <>
+                  <source
+                    type="image/avif"
+                    srcSet={buildSupabaseSrcSet(banner, [800, 1200, 1600, 1920], {
+                      format: 'avif',
+                      quality: SUPABASE_RECOMMENDED_QUALITY,
+                    })}
+                    sizes="(max-width: 639px) 448px, (max-width: 767px) 672px, (max-width: 1023px) 896px, 1152px"
+                  />
+                  <source
+                    type="image/webp"
+                    srcSet={buildSupabaseSrcSet(banner, [800, 1200, 1600, 1920], {
+                      format: 'webp',
+                      quality: SUPABASE_RECOMMENDED_QUALITY,
+                    })}
+                    sizes="(max-width: 639px) 448px, (max-width: 767px) 672px, (max-width: 1023px) 896px, 1152px"
+                  />
+                </>
+              ) : null}
+              <img
+                src={buildSupabaseSrc(banner || '', 1600)}
+                srcSet={banner ? buildSupabaseSrcSet(banner, [800, 1200, 1600, 1920]) : undefined}
+                sizes="(max-width: 639px) 448px, (max-width: 767px) 672px, (max-width: 1023px) 896px, 1152px"
+                alt="Banner"
+                className="h-full w-full object-cover block mx-auto"
+                style={{ objectPosition: `center ${bannerPosY}%` }}
+              />
+            </picture>
             {/* Fade inferior sutil en todos los tamaños para legibilidad del título */}
             <div
               className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-28 md:h-40 lg:h-48 bg-gradient-to-t from-[#0f1729] via-[#0f1729]/60 to-transparent"
@@ -1342,17 +1362,27 @@ const handleClearFilters = useCallback(() => {
       </div>
       <Container>
         <div className="relative z-20 -mt-14 md:-mt-12 flex flex-col items-center gap-3 md:flex-row md:items-end md:gap-4">
-          <img
-            src={transformSupabasePublicUrl(avatar, { width: 256, quality: 80, format: 'webp' })}
-            srcSet={[128, 160, 192, 256]
-              .map((w) => `${transformSupabasePublicUrl(avatar, { width: w, quality: 80, format: 'webp' })} ${w}w`)
-              .join(', ')}
-            sizes="(max-width: 767px) 96px, 128px"
-            alt={storeName}
-            className="h-24 w-24 md:h-28 md:w-28 lg:h-32 lg:w-32 rounded-full border-4 border-white object-cover shadow"
-            loading="eager"
-            decoding="async"
-          />
+          <picture>
+            {avatar ? (
+              <source
+                type="image/webp"
+                srcSet={buildSupabaseSrcSet(avatar, [128, 160, 192, 256], {
+                  format: 'webp',
+                  quality: SUPABASE_RECOMMENDED_QUALITY,
+                })}
+                sizes="(max-width: 767px) 96px, 128px"
+              />
+            ) : null}
+            <img
+              src={buildSupabaseSrc(avatar || '', 256)}
+              srcSet={avatar ? buildSupabaseSrcSet(avatar, [128, 160, 192, 256]) : undefined}
+              sizes="(max-width: 767px) 96px, 128px"
+              alt={storeName}
+              className="h-24 w-24 md:h-28 md:w-28 lg:h-32 lg:w-32 rounded-full border-4 border-white object-cover shadow"
+              loading="eager"
+              decoding="async"
+            />
+          </picture>
           <div className="flex-1 min-w-0 w-full max-w-full overflow-visible pt-1 md:pb-1 text-center md:text-left">
             <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
               <h1 className="text-2xl md:text-3xl font-extrabold text-white truncate">{storeName}</h1>
