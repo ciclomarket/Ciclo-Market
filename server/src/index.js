@@ -3224,6 +3224,7 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
         const currency = mpPayment?.currency_id || 'ARS'
         // Extraer metadata útil
         const meta = (mpPayment && typeof mpPayment.metadata === 'object') ? mpPayment.metadata : {}
+        console.log('[MP webhook] payment metadata', { paymentId: String(paymentId), meta })
         const externalRef = (mpPayment && mpPayment.external_reference) ? String(mpPayment.external_reference) : null
         let userId = typeof meta?.userId === 'string' && meta.userId ? meta.userId : null
         let planCode = normalisePlanCode(meta?.planCode || meta?.planId)
@@ -3396,6 +3397,7 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
             const highlightDays = Number(meta?.highlightDays || 0)
 
             if (listingSlug && Number.isFinite(highlightDays) && highlightDays > 0) {
+              console.log('[webhook/highlight] applying', { listingSlug, highlightDays, paymentId: String(paymentId) })
               // Evitar aplicar más de una vez por pago
               let alreadyApplied = false
               try {
@@ -3436,6 +3438,7 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
                   if (upd) {
                     console.error('[webhook/highlight] failed to update listing', upd)
                   } else {
+                    console.log('[webhook/highlight] updated listing', { listingId: listing.id, prev: listing.highlight_expires, next })
                     // Marcar crédito como aplicado (si existe)
                     try {
                       const nowIso = new Date().toISOString()
