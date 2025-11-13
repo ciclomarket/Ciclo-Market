@@ -3427,13 +3427,13 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
               // Evitar aplicar más de una vez por pago
               let alreadyApplied = false
               try {
-                const { data: appliedRow } = await supabaseService
-                  .from('publish_credits')
-                  .select('id, applied')
+                const { data: payRow } = await supabaseService
+                  .from('payments')
+                  .select('applied')
                   .eq('provider', 'mercadopago')
                   .eq('provider_ref', String(paymentId))
                   .maybeSingle()
-                alreadyApplied = Boolean(appliedRow?.applied)
+                alreadyApplied = Boolean(payRow?.applied)
               } catch {}
 
               if (!alreadyApplied) {
@@ -3469,7 +3469,7 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
                     try {
                       const nowIso = new Date().toISOString()
                       await supabaseService
-                        .from('publish_credits')
+                        .from('payments')
                         .update({ applied: true, applied_at: nowIso })
                         .eq('provider', 'mercadopago')
                         .eq('provider_ref', String(paymentId))
