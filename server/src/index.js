@@ -3108,6 +3108,30 @@ app.post('/api/checkout', async (req, res) => {
     const publicBase = (process.env.SERVER_BASE_URL || process.env.RENDER_EXTERNAL_URL || '').replace(/\/$/, '')
     const notificationUrl = publicBase ? `${publicBase}/api/webhooks/mercadopago` : undefined
 
+    const extraMetadata = (() => {
+      const source = req.body?.metadata
+      if (!source || typeof source !== 'object' || Array.isArray(source)) return {}
+      const result = {}
+      for (const [key, value] of Object.entries(source)) {
+        if (!key || typeof key !== 'string') continue
+        if (['planId', 'planCode', 'userId', 'autoRenew', 'intent', 'listingId', 'listingSlug'].includes(key)) continue
+        if (value === undefined || value === null) continue
+        if (typeof value === 'object') continue
+        result[key] = value
+      }
+      return result
+    })()
+
+    if (typeof req.body?.metadata?.listingSlug === 'string' && req.body.metadata.listingSlug) {
+      extraMetadata.listingSlug = String(req.body.metadata.listingSlug)
+    }
+    if (req.body?.metadata?.listingId && typeof req.body.metadata.listingId === 'string') {
+      extraMetadata.listingId = String(req.body.metadata.listingId)
+    }
+    if (Number.isFinite(Number(req.body?.metadata?.highlightDays))) {
+      extraMetadata.highlightDays = Number(req.body.metadata.highlightDays)
+    }
+
     const preference = {
       items: [
         {
@@ -3132,6 +3156,7 @@ app.post('/api/checkout', async (req, res) => {
           listingId: upgradeListingId,
           listingSlug: upgradeListingSlug,
         } : {}),
+        ...extraMetadata,
       },
       // external_reference ayuda a correlacionar en MP (visible en pago)
       external_reference: [
@@ -3394,7 +3419,8 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
         try {
           if (supabaseService && status === 'succeeded') {
             const listingSlug = typeof meta?.listingSlug === 'string' ? meta.listingSlug : null
-            const highlightDays = Number(meta?.highlightDays || 0)
+            const highlightDaysRaw = meta?.highlightDays ?? meta?.highlight_days ?? 0
+            const highlightDays = Number(highlightDaysRaw || 0)
 
             if (listingSlug && Number.isFinite(highlightDays) && highlightDays > 0) {
               console.log('[webhook/highlight] applying', { listingSlug, highlightDays, paymentId: String(paymentId) })
