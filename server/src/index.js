@@ -3418,7 +3418,9 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
         // Auto-aplicar destaque para pagos de "Highlight" (idempotente)
         try {
           if (supabaseService && status === 'succeeded') {
-            const listingSlug = typeof meta?.listingSlug === 'string' ? meta.listingSlug : null
+            const listingSlugCandidate = meta?.listingSlug ?? meta?.listing_slug ?? null
+            const listingSlug = typeof listingSlugCandidate === 'string' ? (listingSlugCandidate.trim() || null) : null
+            const listingIdCandidate = meta?.listingId ?? meta?.listing_id ?? null
             const highlightDaysRaw = meta?.highlightDays ?? meta?.highlight_days ?? 0
             const highlightDays = Number(highlightDaysRaw || 0)
 
@@ -3438,19 +3440,24 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
 
               if (!alreadyApplied) {
                 // Buscar listing por slug o id
-                const { data: listingBySlug } = await supabaseService
-                  .from('listings')
-                  .select('id, highlight_expires')
-                  .eq('slug', listingSlug)
-                  .maybeSingle()
-                let listing = listingBySlug
+                const { data: listingBySlug } = listingSlug
+                  ? await supabaseService
+                      .from('listings')
+                      .select('id, highlight_expires')
+                      .eq('slug', listingSlug)
+                      .maybeSingle()
+                  : { data: null }
+                let listing = listingBySlug || null
                 if (!listing) {
-                  const { data: listingById } = await supabaseService
-                    .from('listings')
-                    .select('id, highlight_expires')
-                    .eq('id', listingSlug)
-                    .maybeSingle()
-                  listing = listingById || null
+                  const listingIdLookup = listingIdCandidate || listingSlug
+                  if (listingIdLookup) {
+                    const { data: listingById } = await supabaseService
+                      .from('listings')
+                      .select('id, highlight_expires')
+                      .eq('id', listingIdLookup)
+                      .maybeSingle()
+                    listing = listingById || null
+                  }
                 }
 
                 if (listing && listing.id) {
@@ -3468,13 +3475,23 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
                     // Marcar crédito como aplicado (si existe)
                     try {
                       const nowIso = new Date().toISOString()
-                      await supabaseService
+                      const payUpdate = await supabaseService
                         .from('payments')
                         .update({ applied: true, applied_at: nowIso })
                         .eq('provider', 'mercadopago')
                         .eq('provider_ref', String(paymentId))
+                      if (payUpdate?.error) throw payUpdate.error
                     } catch (e3) {
                       console.warn('[webhook/highlight] mark applied failed', e3?.message || e3)
+                      try {
+                        await supabaseService
+                          .from('publish_credits')
+                          .update({ applied: true, applied_at: new Date().toISOString() })
+                          .eq('provider', 'mercadopago')
+                          .eq('provider_ref', String(paymentId))
+                      } catch (fallbackErr) {
+                        console.warn('[webhook/highlight] mark applied fallback failed', fallbackErr?.message || fallbackErr)
+                      }
                     }
                   }
                 } else {
