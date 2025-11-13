@@ -9,7 +9,7 @@ import { formatListingPrice } from '../utils/pricing'
 import { getPlanLabel, hasPaidPlan, isPlanVerified } from '../utils/plans'
 import { useCompare } from '../context/CompareContext'
 import { useListingLike } from '../hooks/useServerLikes'
-import { fetchListing, updateListingPlan, deleteListing, setListingWhatsapp, updateListingStatus, archiveListing, reduceListingPrice, extendListingExpiryDays, updateListingFields, upgradeListingPlan, setListingHighlightDays } from '../services/listings'
+import { fetchListing, updateListingPlan, deleteListing, setListingWhatsapp, updateListingStatus, archiveListing, reduceListingPrice, extendListingExpiryDays, updateListingFields, upgradeListingPlan, setListingHighlightDays, normalizeListingVigencies } from '../services/listings'
 import { supabaseEnabled, getSupabaseClient } from '../services/supabase'
 import type { Listing } from '../types'
 import { formatNameWithInitial, computeTrustLevel, trustLabel, trustColorClasses, trustBadgeBgClasses } from '../utils/user'
@@ -28,7 +28,7 @@ import ListingQuestionsSection from '../components/ListingQuestionsSection'
 import { submitShareBoost } from '../services/shareBoost'
 import useUpload from '../hooks/useUpload'
 import { FALLBACK_PLANS } from '../services/plans'
-import { SUPABASE_RECOMMENDED_QUALITY, buildSupabaseSrc, buildSupabaseSrcSet, shouldTranscodeToWebp } from '../utils/supabaseImage'
+import { buildPublicUrlSafe } from '../lib/supabaseImages'
 import { canonicalPlanCode } from '../utils/planCodes'
 
 export default function ListingDetail() {
@@ -798,27 +798,14 @@ export default function ListingDetail() {
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0">
                     {sellerAvatarUrl && (
-                      <picture>
-                        {shouldTranscodeToWebp(sellerAvatarUrl) ? (
-                          <source
-                            type="image/webp"
-                            srcSet={buildSupabaseSrcSet(sellerAvatarUrl, [64, 80, 96], {
-                              format: 'webp',
-                              quality: SUPABASE_RECOMMENDED_QUALITY,
-                            })}
-                            sizes="40px"
-                          />
-                        ) : null}
-                        <img
-                          src={buildSupabaseSrc(sellerAvatarUrl, 96)}
-                          srcSet={buildSupabaseSrcSet(sellerAvatarUrl, [64, 80, 96])}
-                          sizes="40px"
-                          alt={formatNameWithInitial(listing.sellerName, 'Vendedor')}
-                          className="h-10 w-10 rounded-full object-cover border border-[#14212e]/10"
-                          loading="lazy"
-                          decoding="async"
-                        />
-                      </picture>
+                      <img
+                        src={buildPublicUrlSafe(sellerAvatarUrl) || ''}
+                        sizes="40px"
+                        alt={formatNameWithInitial(listing.sellerName, 'Vendedor')}
+                        className="h-10 w-10 rounded-full object-cover border border-[#14212e]/10"
+                        loading="lazy"
+                        decoding="async"
+                      />
                     )}
                     <div className="min-w-0">
                       <p className="text-sm text-[#14212e]/70">Publicado por</p>
@@ -965,6 +952,26 @@ export default function ListingDetail() {
                       const modPremiumLabel = listingPlanCode === 'premium' ? 'Renovar plan Premium' : 'Aplicar plan Premium'
                       return (
                         <div className="mb-2 flex flex-wrap gap-2">
+                          <Button
+                            variant="ghost"
+                            disabled={moderatorUpdating}
+                            onClick={async () => {
+                              try {
+                                setModeratorUpdating(true)
+                                const updated = await normalizeListingVigencies(listing.id)
+                                if (updated) {
+                                  setListing(updated)
+                                  showToast('Vigencias normalizadas según plan')
+                                } else {
+                                  showToast('No se pudo normalizar (revisá permisos/API)', { variant: 'error' } as any)
+                                }
+                              } finally {
+                                setModeratorUpdating(false)
+                              }
+                            }}
+                          >
+                            Normalizar vigencias
+                          </Button>
                           {!hasHighlight && listing.status !== 'archived' && (
                             <Button variant="ghost" disabled={moderatorUpdating} onClick={() => { setModAction('highlight7'); void runModeratorAction() }}>
                               Destacar 7 días 🔥

@@ -364,12 +364,18 @@ const supabaseService = (() => {
   return createSupabaseServerClient(url, key)
 })()
 
+function coerceUuid(value) {
+  if (!value) return null
+  const str = typeof value === 'string' ? value.trim() : String(value)
+  return UUID_REGEX.test(str) ? str : null
+}
+
 async function recordPayment({ userId, listingId, amount, currency = 'ARS', status = 'succeeded', provider = 'mercadopago', providerRef = null }) {
   if (!supabaseService) return
   try {
     const payload = {
-      user_id: userId ?? null,
-      listing_id: listingId ?? null,
+      user_id: coerceUuid(userId),
+      listing_id: coerceUuid(listingId),
       amount: typeof amount === 'number' ? amount : null,
       currency,
       status,
@@ -377,7 +383,7 @@ async function recordPayment({ userId, listingId, amount, currency = 'ARS', stat
       provider_ref: providerRef,
     }
     const { error } = await supabaseService.from('payments').insert(payload)
-    if (error) console.error('[payments] insert failed', error)
+    if (error) console.error('[payments] insert failed', error, { payload })
   } catch (err) {
     console.error('[payments] unexpected error', err)
   }
@@ -2300,7 +2306,7 @@ app.post('/api/questions/notify', async (req, res) => {
             <td style="padding:16px 24px;background:#f6f8fb">
               <div style="font-size:14px;color:#0c1723;margin:0 0 8px"><b>Seguinos</b></div>
               <div style="font-size:13px;color:#475569;line-height:1.6">
-                Instagram: <a href="https://instagram.com/ciclomarket" style="color:#0c72ff;text-decoration:underline">@ciclomarket</a><br />
+                Instagram: <a href="https://instagram.com/ciclomarket.ar" style="color:#0c72ff;text-decoration:underline">@ciclomarket.ar</a><br />
                 Strava: <a href="https://www.strava.com/clubs/1770147" style="color:#0c72ff;text-decoration:underline">ciclomarket en Strava</a>
               </div>
             </td>
@@ -2428,7 +2434,7 @@ app.post('/api/questions/notify', async (req, res) => {
             <td style="padding:16px 24px;background:#f6f8fb">
               <div style="font-size:14px;color:#0c1723;margin:0 0 8px"><b>Seguinos</b></div>
               <div style="font-size:13px;color:#475569;line-height:1.6">
-                Instagram: <a href="https://instagram.com/ciclomarket" style="color:#0c72ff;text-decoration:underline">@ciclomarket</a><br />
+                Instagram: <a href="https://instagram.com/ciclomarket.ar" style="color:#0c72ff;text-decoration:underline">@ciclomarket.ar</a><br />
                 Strava: <a href="https://www.strava.com/clubs/1770147" style="color:#0c72ff;text-decoration:underline">ciclomarket en Strava</a>
               </div>
             </td>
@@ -3238,7 +3244,7 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
               .map((p) => p.trim())
               .filter(Boolean)
             if (!userId) {
-              const candidate = parts.find((p) => p && p !== 'anon')
+              const candidate = parts.find((p) => UUID_REGEX.test(p))
               if (candidate) userId = candidate
             }
             if (!planCode) {

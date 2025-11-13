@@ -3,6 +3,7 @@ const { createClient } = require('@supabase/supabase-js')
 const { getServerSupabaseClient } = require('../lib/supabaseClient')
 const { sendMail, isMailConfigured, isSMTPConfigured, isResendConfigured } = require('../lib/mail')
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const DEFAULT_WINDOW_HOURS = 24
 const DEFAULT_COOLDOWN_HOURS = 24
 const DEFAULT_CRON_SCHEDULE = '0 * * * *' // cada hora
@@ -17,12 +18,18 @@ const supabaseServiceClient = (() => {
   return createClient(url, serviceKey)
 })()
 
+function coerceUuid(value) {
+  if (!value) return null
+  const str = typeof value === 'string' ? value.trim() : String(value)
+  return UUID_REGEX.test(str) ? str : null
+}
+
 async function recordPayment({ userId, listingId, amount, currency = 'ARS', status = 'succeeded', provider = 'mercadopago', providerRef = null }) {
   if (!supabaseServiceClient) return
   try {
     const payload = {
-      user_id: userId ?? null,
-      listing_id: listingId ?? null,
+      user_id: coerceUuid(userId),
+      listing_id: coerceUuid(listingId),
       amount: typeof amount === 'number' ? amount : null,
       currency,
       status,
@@ -31,7 +38,7 @@ async function recordPayment({ userId, listingId, amount, currency = 'ARS', stat
     }
     const { error } = await supabaseServiceClient.from('payments').insert(payload)
     if (error) {
-      console.error('[renewalNotifier] recordPayment insert failed', error)
+      console.error('[renewalNotifier] recordPayment insert failed', error, { payload })
     }
   } catch (err) {
     console.error('[renewalNotifier] recordPayment unexpected error', err)

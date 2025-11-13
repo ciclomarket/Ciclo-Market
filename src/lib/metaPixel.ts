@@ -4,14 +4,16 @@ declare global {
 }
 
 let initialized = false
+let pendingInit = false
 
 export function initMetaPixel(pixelId?: string | null): boolean {
   if (typeof window === 'undefined') return false
   const id = (pixelId || import.meta.env.VITE_META_PIXEL_ID || '').toString().trim()
   if (!id || initialized) return initialized
 
-  // Create fbq shim if missing
-  if (!window.fbq) {
+  // Avoid injecting duplicate versions if another tag manager loads Pixel
+  const hasExistingScript = Array.from(document.getElementsByTagName('script')).some((s) => /connect\.facebook\.net\/.*fbevents\.js/i.test(s.src))
+  if (!window.fbq && !hasExistingScript) {
     const n = function fbq(this: any, ...args: any[]) {
       (window.fbq as any).callMethod ? (window.fbq as any).callMethod.apply(null, args) : (window.fbq as any).queue.push(args)
     } as any
@@ -27,11 +29,24 @@ export function initMetaPixel(pixelId?: string | null): boolean {
     x?.parentNode?.insertBefore(s, x)
   }
 
-  try {
-    window.fbq?.('init', id)
-    initialized = true
-  } catch {
-    initialized = false
+  const tryInit = () => {
+    try {
+      if (typeof window.fbq === 'function') {
+        window.fbq('init', id)
+        initialized = true
+        pendingInit = false
+        return true
+      }
+    } catch {
+      // ignore
+    }
+    return false
+  }
+
+  if (!tryInit()) {
+    // If another loader will attach fbq soon, retry briefly to avoid injecting a second copy
+    pendingInit = true
+    setTimeout(() => { if (!initialized && pendingInit) tryInit() }, 600)
   }
   return initialized
 }

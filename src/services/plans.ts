@@ -78,11 +78,19 @@ const normalizePlan = (row: PlanRow): Plan => {
   if (code === 'basic' || code === 'premium') {
     // 0 = ilimitadas
     mapped.maxListings = 0
+    // Si la tabla no define featured_days, fijar defaults del negocio
+    if (!mapped.featuredDays || mapped.featuredDays <= 0) {
+      mapped.featuredDays = code === 'premium' ? 14 : 7
+    }
+    // WhatsApp habilitado por defecto en planes pagos
+    mapped.whatsappEnabled = true
   }
   if (code === 'basic') {
+    mapped.maxPhotos = 6
     mapped.description = 'Aprovechá nuestros servicios de destaque y contacto directo.'
   }
   if (code === 'premium') {
+    mapped.maxPhotos = 8
     mapped.description = 'Llegá a más clientes apareciendo en redes y anuncios.'
   }
   return mapped

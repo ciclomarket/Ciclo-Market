@@ -10,8 +10,7 @@ const PLAN_CODE_ALIASES: Record<string, PlanCode> = {
   basica: 'basic',
   featured: 'basic',
   destacada: 'basic',
-  premium: 'premium',
-  pro: 'premium'
+  premium: 'premium'
 }
 
 const ORDER_LOOKUP = new Set<PlanCode>(PLAN_ORDER)

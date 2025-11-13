@@ -94,7 +94,11 @@ export default function NewListingForm() {
   const upgradePending = Boolean(listingId && upgradeStatusParam === 'pending')
   const upgradeFailure = Boolean(listingId && upgradeStatusParam === 'failure')
 
-  /** 1) Plan seleccionado por query (?plan=free|basic|premium) */
+  /** 1) Plan seleccionado por query (?plan=free|basic|premium|pro)
+   * Prioriza coincidencia literal (code/id/name) con el parámetro.
+   * Si no hay, usa coincidencia por alias (resolvePlanCode).
+   * Nota: `pro` no es alias de `premium`; es un plan exclusivo de tiendas.
+   */
   const selectedPlan = useMemo(() => {
     if (planOverride) {
       const explicit = plans.find((plan) => {
@@ -109,15 +113,23 @@ export default function NewListingForm() {
 
     if (!param) return plans[0]
 
-    const explicitMatch = plans.find((plan) => {
-      const code = resolvePlanCode(plan)
-      if (code && code === param) return true
+    // 1) Coincidencia literal exacta (code/id/name normalizados)
+    const literalMatch = plans.find((plan) => {
       if (plan.code && normalisePlanText(plan.code) === param) return true
       if (plan.id && normalisePlanText(plan.id) === param) return true
+      if (plan.name && normalisePlanText(plan.name) === param) return true
       return false
     })
+    if (literalMatch) return literalMatch
 
-    return explicitMatch ?? plans[0]
+    // 2) Coincidencia por alias/canonical (e.g., `pro` -> `premium`)
+    const aliasMatch = plans.find((plan) => {
+      const code = resolvePlanCode(plan)
+      return Boolean(code && code === param)
+    })
+    if (aliasMatch) return aliasMatch
+
+    return plans[0]
   }, [plans, planOverride, searchParams])
 
   // Detectar y validar gift code (?gift=CODE). Si es válido, sobreescribe el plan a basic/premium.
@@ -166,34 +178,73 @@ export default function NewListingForm() {
   // Canonizamos el código de plan (lo usa la DB y el backend)
   const resolvedPlanCode = selectedPlan ? resolvePlanCode(selectedPlan) : null
   const isStore = Boolean(profile?.store_enabled)
+  const rawPlanParam = normalisePlanText(searchParams.get('plan'))
+  const isProSelected = rawPlanParam === 'pro'
   const planCode = (planOverride ?? resolvedPlanCode)
     ?? (selectedPlan?.code ? normalisePlanText(selectedPlan.code) : undefined)
     ?? (selectedPlan?.id ? normalisePlanText(selectedPlan.id) : undefined)
   const planPrice = selectedPlan?.price ?? 0
   const maxPhotos = selectedPlan?.maxPhotos ?? 4
   const planName = selectedPlan?.name ?? 'Plan'
-  const listingDuration = isStore ? 3650 : (selectedPlan?.listingDurationDays ?? selectedPlan?.periodDays ?? 30)
+  // Duración de publicación: siempre según el plan elegido
+  const listingDuration = selectedPlan?.listingDurationDays ?? selectedPlan?.periodDays ?? 30
   const whatsappEnabled = selectedPlan?.whatsappEnabled ?? false
 
+  // Bloqueo temprano: si el usuario intenta abrir el formulario con plan Gratis y ya tiene una publicación activa (o "published")
+  const [freeGateDone, setFreeGateDone] = useState(false)
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        if (!enabled || !supabaseEnabled) { setFreeGateDone(true); return }
+        if (!user?.id) { setFreeGateDone(true); return }
+        if (editingListing) { setFreeGateDone(true); return }
+        if (planCode !== 'free') { setFreeGateDone(true); return }
+        const client = getSupabaseClient()
+        const { data: rows, count } = await client
+          .from('listings')
+          .select('id', { count: 'exact' })
+          .eq('seller_id', user.id)
+          .or('status.in.(active,published),status.is.null')
+          .or('plan.eq.free,plan_code.eq.free,seller_plan.eq.free')
+          .limit(1)
+        const c = typeof count === 'number' ? count : (Array.isArray(rows) ? rows.length : 0)
+        if (!cancelled && c >= 1) {
+          alert('Ya tenés una publicación activa con plan Gratis. Para publicar otra, elegí un plan pago.')
+          navigate('/publicar', { replace: true })
+          return
+        }
+        if (!cancelled) setFreeGateDone(true)
+      } catch {
+        if (!cancelled) setFreeGateDone(true)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [enabled, supabaseEnabled, user?.id, planCode, editingListing, navigate])
+
   const listingExpiresLabel = useMemo(() => {
-    if (isStore) return 'No vence'
+    // En flujo plan=free, esperamos a terminar la verificación antes de renderizar
+    if (planCode === 'free' && !editingListing && !freeGateDone) return '…'
+    // Plan pro (tienda verificada) no vence
+    if (isProSelected) return 'No vence'
     if (editingListing?.expiresAt) {
       return new Intl.DateTimeFormat('es-AR', { dateStyle: 'long' }).format(new Date(editingListing.expiresAt))
     }
     const base = new Date()
     base.setDate(base.getDate() + listingDuration)
     return new Intl.DateTimeFormat('es-AR', { dateStyle: 'long' }).format(base)
-  }, [editingListing?.expiresAt, listingDuration, isStore])
+  }, [editingListing?.expiresAt, listingDuration, planCode, freeGateDone, isProSelected])
 
   const expiresAtIso = useMemo(() => {
-    if (isStore) return null
+    if (planCode === 'free' && !editingListing && !freeGateDone) return null
+    if (isProSelected) return null
     if (editingListing?.expiresAt) {
       return new Date(editingListing.expiresAt).toISOString()
     }
     const base = new Date()
     base.setDate(base.getDate() + listingDuration)
     return base.toISOString()
-  }, [editingListing?.expiresAt, listingDuration, isStore])
+  }, [editingListing?.expiresAt, listingDuration, planCode, freeGateDone, isProSelected])
 
   const planPriceLabel = useMemo(() => {
     if (!selectedPlan) return null
@@ -207,10 +258,11 @@ export default function NewListingForm() {
     }).format(planPrice)
   }, [selectedPlan, planPrice])
 
+  const hasCredit = searchParams.get('credit') === '1'
   const effectivePlanLabel = useMemo(() => {
-    if (giftPlan) return 'Bonificado'
+    if (giftPlan || hasCredit) return 'Bonificado'
     return planPriceLabel ?? 'Sin costo'
-  }, [giftPlan, planPriceLabel])
+  }, [giftPlan, hasCredit, planPriceLabel])
 
   const [category, setCategory] = useState<Category | null>(isAccessory ? 'Accesorios' : isApparel ? 'Indumentaria' : null)
   const [brand, setBrand] = useState('')
@@ -762,12 +814,17 @@ export default function NewListingForm() {
     try {
       // Límite de publicaciones activas por plan: solo aplica a Gratis (1 activa)
       if (!editingListing && supabaseEnabled && planCode === 'free') {
-        const { count } = await client
+        // Contar publicaciones activas (o published) del usuario con plan Gratis
+        const { data: rows, count } = await client
           .from('listings')
-          .select('id', { count: 'exact', head: true })
+          .select('id', { count: 'exact' })
           .eq('seller_id', user.id)
-          .eq('status', 'active')
-        if (typeof count === 'number' && count >= 1) {
+          .or('status.in.(active,published),status.is.null')
+          .or('plan.eq.free,plan_code.eq.free,seller_plan.eq.free')
+          .limit(1)
+
+        const activeCount = typeof count === 'number' ? count : (Array.isArray(rows) ? rows.length : 0)
+        if (activeCount >= 1) {
           alert('El plan Gratis permite una publicación activa a la vez.')
           return
         }
@@ -779,7 +836,8 @@ export default function NewListingForm() {
 
     // Para tiendas oficiales, la publicación no vence (null)
     const computedExpiresAtIso = (() => {
-      if (isStore) return null
+      // Solo publicaciones con plan "pro" (tienda verificada) no vencen
+      if (isProSelected) return null
       const d = new Date()
       d.setDate(d.getDate() + listingDuration)
       return d.toISOString()
@@ -883,7 +941,7 @@ export default function NewListingForm() {
       formattedWhatsapp = editingListing?.sellerWhatsapp ?? null
     }
 
-    const effectivePlanCode = isStore ? 'pro' : planCode
+    const effectivePlanCode = isProSelected ? 'pro' : planCode
     // Derivar subcategoría cuando aplique
     const subcategory = isAccessory ? accessoryType : (isApparel ? apparelType : undefined)
 
@@ -984,7 +1042,7 @@ export default function NewListingForm() {
                 body: JSON.stringify({
                   planCode: effectivePlanCode,
                   listingDays: listingDuration,
-                  includedHighlightDays: isStore ? 14 : (selectedPlan?.featuredDays || 0),
+                  includedHighlightDays: (selectedPlan?.featuredDays || 0),
                 })
               })
             }
@@ -1050,7 +1108,7 @@ export default function NewListingForm() {
                 body: JSON.stringify({
                   planCode: effectivePlanCode,
                   listingDays: listingDuration,
-                  includedHighlightDays: isStore ? 14 : (selectedPlan?.featuredDays || 0),
+                  includedHighlightDays: (selectedPlan?.featuredDays || 0),
                 })
               })
             }
@@ -1091,6 +1149,17 @@ export default function NewListingForm() {
     if (isApparel && category !== 'Indumentaria') setCategory('Indumentaria')
     if (!isAccessory && !isApparel && (category === 'Accesorios' || category === 'Indumentaria')) setCategory(null)
   }, [isAccessory, isApparel, category])
+
+  // Gateo inicial: en flujo plan=free y gate no terminado, no mostrar el formulario todavía
+  if (planCode === 'free' && !editingListing && !freeGateDone) {
+    return (
+      <Container>
+        <div className="mx-auto mt-12 max-w-xl rounded-2xl border border-black/10 bg-white p-6 text-center text-sm text-black/60 shadow">
+          Verificando disponibilidad del plan Gratis…
+        </div>
+      </Container>
+    )
+  }
 
   if (loadingListing) {
     return (
@@ -1147,11 +1216,15 @@ export default function NewListingForm() {
             </div>
           )}
           {searchParams.get('credit') === '1' && (
-            <div className="-mt-1 mb-2 text-xs text-white/90">Tenés un crédito Básico bonificado. Podés usarlo para crear una publicación Básica sin costo.</div>
+            <div className="-mt-1 mb-2 text-xs text-white/90">
+              {planCode === 'premium'
+                ? 'Tenés un crédito Premium bonificado. Podés usarlo para crear una publicación Premium sin costo.'
+                : 'Tenés un crédito Básico bonificado. Podés usarlo para crear una publicación Básica sin costo.'}
+            </div>
           )}
           <div className="font-semibold text-white">{isEditing ? `Plan en uso: ${planName}` : `Plan seleccionado: ${planName}`}</div>
           <div className="text-xs font-semibold text-white/90">
-            {isStore ? 'Tienda verificada (sin costo)' : (isEditing ? 'Podés cambiar de plan desde tu panel de vendedor.' : effectivePlanLabel)}
+            {isProSelected ? 'Tienda verificada (sin costo)' : (isEditing ? 'Podés cambiar de plan desde tu panel de vendedor.' : effectivePlanLabel)}
           </div>
           {giftValidating && (
             <div className="mt-2 text-xs text-white/80">Verificando código de regalo…</div>
@@ -1167,8 +1240,8 @@ export default function NewListingForm() {
           {selectedPlan?.description && (
             <div className="mt-2 text-xs text-white/80">{selectedPlan.description}</div>
           )}
-          <div className="mt-2 space-y-1 text-xs text-white/70">
-            <div>Duración de la publicación: {isStore ? 'Ilimitada' : `${listingDuration} días`}</div>
+            <div className="mt-2 space-y-1 text-xs text-white/70">
+            <div>Duración de la publicación: {isProSelected ? 'Ilimitada' : `${listingDuration} días`}</div>
             <div>Expira aprox.: {listingExpiresLabel}</div>
             <div>Fotos permitidas: {maxPhotos}</div>
             <div>

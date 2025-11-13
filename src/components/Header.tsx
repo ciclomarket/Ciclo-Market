@@ -503,7 +503,7 @@ export default function Header() {
               className="h-12 md:h-16 w-auto block transform scale-[0.8] md:scale-[0.96] origin-left"
               width={200}
               height={80}
-              loading="eager"
+              fetchPriority="low"
               decoding="async"
             />
           </picture>

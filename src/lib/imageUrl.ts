@@ -1,4 +1,4 @@
-import { buildSupabaseSrc, buildSupabaseSrcSet, shouldTranscodeToWebp, SUPABASE_RECOMMENDED_QUALITY, type TransformOpts } from '../utils/supabaseImage'
+import { buildSupabaseSrc, buildSupabaseSrcSet, shouldTranscodeToWebp, SUPABASE_RECOMMENDED_QUALITY, inferImageFormat, type TransformOpts } from '../utils/supabaseImage'
 
 export type ImageProfile = 'card' | 'thumb' | 'og' | 'full'
 
@@ -95,6 +95,11 @@ export function buildImageSource(url: string | undefined | null, options: BuildI
     } else if (desiredFormat === 'webp') {
       desiredFormat = undefined
     }
+  }
+  // If we didn't choose webp (Safari or already webp), still request JPEG to apply quality/compress
+  if (!desiredFormat) {
+    const ext = inferImageFormat(url)
+    if (ext !== 'webp') desiredFormat = 'jpeg'
   }
 
   const transform: TransformOpts = { ...baseTransform, format: desiredFormat }

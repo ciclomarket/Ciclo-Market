@@ -8,6 +8,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useEffect } from 'react'
 import { fetchUserProfile } from '../../services/users'
 import { usePlans } from '../../context/PlanContext'
+import { getSupabaseClient, supabaseEnabled } from '../../services/supabase'
 import { validateGift, claimGift } from '../../services/gifts'
 import type { Plan } from '../../types'
 import { trackMetaPixel } from '../../lib/metaPixel'
@@ -151,6 +152,7 @@ export default function Plans() {
   const [giftError, setGiftError] = useState<string | null>(null)
   const [giftClaimed, setGiftClaimed] = useState(false)
   const [availableCredits, setAvailableCredits] = useState<Array<{ plan_code: 'basic' | 'premium' }>>([])
+  const [hasActiveFree, setHasActiveFree] = useState(false)
 
   const typeParam = searchParams.get('type')
   const listingType: ListingType | null = ((): ListingType | null => {
@@ -173,6 +175,29 @@ export default function Plans() {
     return () => { active = false }
   }, [user?.id])
 
+  // Verificar límite de plan Gratis (1 activa) para el usuario
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      try {
+        if (!supabaseEnabled || !user?.id) { setHasActiveFree(false); return }
+        const supabase = getSupabaseClient()
+        const { data: rows, count } = await supabase
+          .from('listings')
+          .select('id', { count: 'exact' })
+          .eq('seller_id', user.id)
+          .or('status.in.(active,published),status.is.null')
+          .or('plan.eq.free,plan_code.eq.free,seller_plan.eq.free')
+          .limit(1)
+        const c = typeof count === 'number' ? count : (Array.isArray(rows) ? rows.length : 0)
+        if (active) setHasActiveFree(c >= 1)
+      } catch {
+        if (active) setHasActiveFree(false)
+      }
+    })()
+    return () => { active = false }
+  }, [user?.id])
+
   // Cargar créditos disponibles del usuario (si hay API base)
   useEffect(() => {
     let active = true
@@ -189,12 +214,14 @@ export default function Plans() {
     return () => { active = false }
   }, [user?.id])
 
-  // Si es tienda oficial y ya eligió tipo, saltamos la pantalla de planes
+  // Si es tienda oficial y ya eligió tipo, podemos saltar a plan=pro
+  // Solo cuando no hay un plan explícito en la URL (permite elegir Básico/Premium si quiere destaque)
   useEffect(() => {
-    if (isStore && listingType) {
+    const hasExplicitPlan = Boolean(searchParams.get('plan'))
+    if (isStore && listingType && !hasExplicitPlan) {
       navigate(`/publicar/nueva?type=${listingType}&plan=pro`, { replace: true })
     }
-  }, [isStore, listingType, navigate])
+  }, [isStore, listingType, navigate, searchParams])
 
   const paymentStatus = searchParams.get('payment') ?? undefined
   const paymentPlanParam = canonicalPlanCode(searchParams.get('plan'))
@@ -340,6 +367,10 @@ export default function Plans() {
     }
 
     if (plan.price === 0) {
+      if (hasActiveFree) {
+        alert('Ya tenés una publicación activa con plan Gratis. Para publicar otra, elegí un plan pago.')
+        return
+      }
       clearPaymentParams()
       navigate(`/publicar/nueva?type=${listingType}&plan=${encodeURIComponent(planCode)}`)
       return
@@ -729,11 +760,11 @@ export default function Plans() {
 
                   <Button
                     onClick={() => handleSelect(plan)}
-                    disabled={loading || processingPlan === planCode}
+                    disabled={loading || processingPlan === planCode || (planCode === 'free' && hasActiveFree)}
                     className="mt-4 bg-white text-[#14212e] hover:bg-white/90"
                     aria-label={`Seleccionar plan ${displayName}`}
                   >
-                    {processingPlan === planCode ? 'Redirigiendo…' : 'Elegir este plan'}
+                    {processingPlan === planCode ? 'Redirigiendo…' : (planCode === 'free' && hasActiveFree ? 'Límite alcanzado' : 'Elegir este plan')}
                   </Button>
                 </div>
 

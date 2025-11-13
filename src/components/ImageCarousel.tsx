@@ -1,6 +1,6 @@
 
 import { useEffect, useMemo, useState } from 'react'
-import { SUPABASE_RECOMMENDED_QUALITY, buildSupabaseSrc, buildSupabaseSrcSet, shouldTranscodeToWebp } from '../utils/supabaseImage'
+import { SUPABASE_RECOMMENDED_QUALITY, buildSupabaseSrc, shouldTranscodeToWebp } from '../utils/supabaseImage'
 
 type Slide = { src: string; title?: string; desc?: string }
 
@@ -36,18 +36,41 @@ export default function ImageCarousel({ images, slides, aspect = 'video', showTh
   const currentImage = displayImages[safeIndex]
   const currentSlide = slideMeta[safeIndex]
   const widthSteps = useMemo(() => [640, 960, 1280, 1600], [])
+  const ratioFor = useMemo(() => {
+    // Devuelve una función que dado un ancho calcula la altura según el aspecto
+    switch (aspect) {
+      case 'wide':
+        // 21:9
+        return (w: number) => Math.round((w * 9) / 21)
+      case 'square':
+        return (w: number) => w
+      case 'phone':
+        // 9:16 (alto > ancho)
+        return (w: number) => Math.round((w * 16) / 9)
+      default:
+        // video 16:9
+        return (w: number) => Math.round((w * 9) / 16)
+    }
+  }, [aspect])
+
   const currentSources = useMemo(() => {
     if (!currentImage) return null
     const allowWebp = shouldTranscodeToWebp(currentImage)
+    const src = buildSupabaseSrc(currentImage, 1280, { height: ratioFor(1280), resize: 'cover' })
+    const srcSetBase = widthSteps
+      .map((w) => `${buildSupabaseSrc(currentImage, w, { height: ratioFor(w), resize: 'cover' })} ${w}w`)
+      .join(', ')
+    const webpSet = allowWebp
+      ? widthSteps
+          .map((w) => `${buildSupabaseSrc(currentImage, w, { height: ratioFor(w), resize: 'cover', format: 'webp', quality: SUPABASE_RECOMMENDED_QUALITY })} ${w}w`)
+          .join(', ')
+      : undefined
     return {
-      fallback: buildSupabaseSrc(currentImage, 1280),
-      fallbackSrcSet: buildSupabaseSrcSet(currentImage, widthSteps),
-      webpSrcSet: allowWebp
-        ? buildSupabaseSrcSet(currentImage, widthSteps, { format: 'webp', quality: SUPABASE_RECOMMENDED_QUALITY })
-        : undefined,
-      avifSrcSet: buildSupabaseSrcSet(currentImage, widthSteps, { format: 'avif', quality: SUPABASE_RECOMMENDED_QUALITY }),
+      fallback: src,
+      fallbackSrcSet: srcSetBase,
+      webpSrcSet: webpSet,
     }
-  }, [currentImage, widthSteps])
+  }, [currentImage, widthSteps, ratioFor])
   const [lightbox, setLightbox] = useState(false)
 
   useEffect(() => {
@@ -80,9 +103,6 @@ export default function ImageCarousel({ images, slides, aspect = 'video', showTh
         {currentImage ? (
           <button type="button" className="h-full w-full" onClick={() => setLightbox(true)} aria-label="Ampliar imagen">
             <picture>
-              {currentSources?.avifSrcSet ? (
-                <source type="image/avif" srcSet={currentSources.avifSrcSet} sizes="100vw" />
-              ) : null}
               {currentSources?.webpSrcSet ? (
                 <source type="image/webp" srcSet={currentSources.webpSrcSet} sizes="100vw" />
               ) : null}
@@ -125,8 +145,8 @@ export default function ImageCarousel({ images, slides, aspect = 'video', showTh
             <button
               key={idx}
               onClick={() => setI(idx)}
-              className={`h-16 aspect-video min-w-[96px] flex-shrink-0 overflow-hidden rounded-xl2 border transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mb-primary/60 ${
-                safeIndex === idx ? 'border-mb-primary' : 'border-white/10'
+              className={`w-24 sm:w-28 ${aspectClass} flex-shrink-0 overflow-hidden rounded-xl2 border transition hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mb-primary/60 ${
+                safeIndex === idx ? 'border-mb-primary ring-2 ring-mb-primary/40' : 'border-white/10'
               }`}
               type="button"
               aria-label={`Ver imagen ${idx + 1}`}
@@ -135,13 +155,13 @@ export default function ImageCarousel({ images, slides, aspect = 'video', showTh
               {shouldTranscodeToWebp(src) ? (
                 <source
                   type="image/webp"
-                  srcSet={buildSupabaseSrc(src, 300, { format: 'webp', quality: SUPABASE_RECOMMENDED_QUALITY })}
+                  srcSet={buildSupabaseSrc(src, 320, { height: ratioFor(320), resize: 'cover', format: 'webp', quality: SUPABASE_RECOMMENDED_QUALITY })}
                 />
               ) : null}
                 <img
-                  src={buildSupabaseSrc(src, 300)}
+                  src={buildSupabaseSrc(src, 320, { height: ratioFor(320), resize: 'cover' })}
                   alt="Miniatura de la publicación"
-                  className="h-full w-full object-cover"
+                  className="h-full w-full object-cover object-center"
                   loading="lazy"
                   decoding="async"
                   onError={(e) => {

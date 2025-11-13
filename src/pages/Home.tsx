@@ -53,30 +53,20 @@ const BRAND_LOGOS: Record<(typeof BRANDS)[number]['slug'], string> = {
 }
 
 function HeroBackground() {
-  // Render as an actual image for better LCP discoverability
-  // Use WebP (fallback to JPEG) and mark as high priority
-  const [isLarge, setIsLarge] = useState(false)
-  useEffect(() => {
-    const pick = () => {
-      const w = window.innerWidth
-      const dpr = window.devicePixelRatio || 1
-      setIsLarge(w * dpr > 1200)
-    }
-    pick()
-    window.addEventListener('resize', pick)
-    return () => window.removeEventListener('resize', pick)
-  }, [])
-
+  // Imagen LCP con soporte WebP y múltiple densidad (360/720/1520)
   return (
-    <picture aria-hidden>
+    <picture>
       <source
-        srcSet={'/bicicletas-home-card.webp 720w, /bicicletas-home.webp 1520w'}
         type="image/webp"
+        srcSet={'/bicicletas-home.webp 1520w'}
+        sizes="100vw"
       />
       <img
-        src={isLarge ? '/bicicletas-home.jpg' : '/bicicletas-home-card.jpg'}
-        srcSet={'/bicicletas-home-card.jpg 720w, /bicicletas-home.jpg 1520w'}
+        src="/bicicletas-home-card-small.jpg"
+        srcSet={'/bicicletas-home-card-small.jpg 360w, /bicicletas-home-card.jpg 720w, /bicicletas-home.jpg 1520w'}
         sizes="100vw"
+        width={1520}
+        height={1305}
         alt=""
         fetchPriority="high"
         loading="eager"
@@ -476,7 +466,7 @@ export default function Home() {
 
       {/* BICICLETAS DESTACADAS */}
       {featuredListings.length > 0 && (
-        <section className="relative isolate overflow-hidden bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] pt-10 pb-6" style={{ contentVisibility: 'auto' as any }}>
+        <section className="relative isolate overflow-hidden bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] pt-10 pb-6">
           <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
             <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
             <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
@@ -496,7 +486,7 @@ export default function Home() {
       )}
 
       {/* OFERTAS DESTACADAS */}
-      <section className="relative isolate overflow-hidden bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] pt-8 pb-8" style={{ contentVisibility: 'auto' as any }}>
+      <section className="relative isolate overflow-hidden bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] pt-8 pb-8">
         <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
           <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
           <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
@@ -525,7 +515,7 @@ export default function Home() {
       </section>
 
       {/* ÚLTIMAS PUBLICADAS */}
-      <section id="explorar" className="relative isolate overflow-hidden bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] pt-8 pb-10" style={{ contentVisibility: 'auto' as any }}>
+      <section id="explorar" className="relative isolate overflow-hidden bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] pt-8 pb-10">
         <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
           <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
           <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />

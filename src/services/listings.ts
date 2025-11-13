@@ -1,5 +1,6 @@
 
 import { getSupabaseClient, supabaseEnabled } from './supabase'
+import { FALLBACK_PLANS } from './plans'
 import type { Listing } from '../types'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { extractListingId, slugify } from '../utils/slug'
@@ -685,6 +686,111 @@ export async function createListing(payload: Omit<Listing, 'id' | 'createdAt'>):
     if (error || !data) return null
     return { id: data.id as string, slug: data.slug as string }
   } catch {
+    return null
+  }
+}
+
+/**
+ * Normaliza vigencias de una publicación según su plan actual.
+ * - Si expires_at está demasiado lejos en el futuro (p.ej. > 365 días), lo fija a ahora + días del plan.
+ * - Si highlight_expires está vacío o vencido y el plan incluye destaque, lo fija a ahora + días de destaque del plan.
+ */
+export async function normalizeListingVigencies(id: string): Promise<Listing | null> {
+  if (!supabaseEnabled) return null
+  try {
+    const supabase = getSupabaseClient()
+    const { data: session } = await supabase.auth.getSession()
+    const token = session.session?.access_token || null
+    const { data: row, error } = await supabase
+      .from('listings')
+      .select('id, plan, plan_code, seller_plan, expires_at, highlight_expires, created_at')
+      .eq('id', id)
+      .maybeSingle()
+
+    if (error || !row) return null
+
+    const rawPlan = (row.plan ?? row.plan_code ?? row.seller_plan ?? undefined) as string | undefined
+    const normalisedRaw = (rawPlan || '').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')
+    // Publicaciones PRO (tienda) no deben normalizar vencimiento ni destaque automáticamente
+    if (normalisedRaw === 'pro') {
+      return normalizeListing(row as unknown as ListingRow)
+    }
+    const resolvedPlan = canonicalPlanCode(rawPlan)
+    const planDef = FALLBACK_PLANS.find((p) => canonicalPlanCode(p.code ?? p.id ?? p.name) === resolvedPlan)
+
+    // Defaults si no hay plan mapeado
+    const listingDays = Number(planDef?.listingDurationDays ?? planDef?.periodDays ?? 60) || 60
+    const includedHighlightDays = Number(planDef?.featuredDays ?? 0) || 0
+
+    const now = Date.now()
+    const tooFarFutureMs = now + 365 * DAY_MS // umbral de 1 año para detectar 3650d
+    const currentExpiryMs = row.expires_at ? new Date(row.expires_at).getTime() : null
+    const currentHighlightMs = row.highlight_expires ? new Date(row.highlight_expires).getTime() : null
+
+    let nextExpiryIso: string | null = null
+    let nextHighlightIso: string | null = null
+
+    if (!currentExpiryMs || currentExpiryMs > tooFarFutureMs) {
+      nextExpiryIso = new Date(now + listingDays * DAY_MS).toISOString()
+    }
+
+    const highlightExpiredOrMissing = !currentHighlightMs || currentHighlightMs <= now
+    if (includedHighlightDays > 0 && highlightExpiredOrMissing) {
+      nextHighlightIso = new Date(now + includedHighlightDays * DAY_MS).toISOString()
+    }
+
+    if (!nextExpiryIso && !nextHighlightIso) {
+      // Nada para actualizar
+      return normalizeListing(row as unknown as ListingRow)
+    }
+
+    // Intento 1: usar endpoint backend (service role) si está configurado
+    const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+    if (API_BASE && token) {
+      try {
+        const planCode = resolvedPlan || 'premium'
+        const res = await fetch(`${API_BASE}/api/listings/${encodeURIComponent(id)}/apply-plan`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            planCode,
+            listingDays,
+            includedHighlightDays,
+          })
+        })
+        if (res.ok) {
+          // Refrescar fila actualizada
+          const { data: refreshed } = await supabase
+            .from('listings')
+            .select('*')
+            .eq('id', id)
+            .maybeSingle()
+          return refreshed ? normalizeListing(refreshed as ListingRow) : null
+        }
+      } catch (e) {
+        console.warn('[listings] normalize via backend failed, will fallback', (e as any)?.message)
+      }
+    }
+
+    // Fallback: actualizar directo (puede fallar por RLS si no es dueño)
+    const updatePayload: Partial<ListingRow> = {}
+    if (nextExpiryIso) (updatePayload as any).expires_at = nextExpiryIso
+    if (nextHighlightIso) (updatePayload as any).highlight_expires = nextHighlightIso
+
+    const { data: updated, error: updErr } = await supabase
+      .from('listings')
+      .update(updatePayload)
+      .eq('id', id)
+      .select('*')
+      .maybeSingle()
+
+    if (updErr || !updated) {
+      if (updErr) console.warn('[listings] normalize direct update error', updErr)
+      return null
+    }
+    return normalizeListing(updated as ListingRow)
+  } catch (err) {
+    console.warn('[listings] normalize vigencies exception', err)
     return null
   }
 }

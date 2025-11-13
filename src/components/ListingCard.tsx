@@ -1,8 +1,8 @@
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Listing } from '../types'
-import { buildImageSource } from '../lib/imageUrl'
+import { buildCardImageUrlSafe } from '../lib/supabaseImages'
 import { useListingLike } from '../hooks/useServerLikes'
 import { useCurrency } from '../context/CurrencyContext'
 import { formatListingPrice } from '../utils/pricing'
@@ -108,10 +108,7 @@ export default function ListingCard({ l, storeLogoUrl, priority = false, likeCou
   const statusLabel = isSold ? 'Vendida' : isArchived ? 'Archivada' : isExpired ? 'Vencida' : null
   const imageStatusClass = (isArchived || isExpired) ? 'opacity-60 grayscale' : isSold ? 'opacity-85' : ''
   const primaryImage = typeof l.images?.[0] === 'string' ? l.images[0] : null
-  const cardImage = buildImageSource(primaryImage, { profile: 'card' })
-  const imageSrc = cardImage?.src || primaryImage || ''
-  const imageSrcSet = cardImage?.srcSet
-  const imageSizes = cardImage?.sizes || '(max-width: 1279px) 50vw, 33vw'
+  const imageSrc = useMemo(() => buildCardImageUrlSafe(primaryImage) || '/no-image.webp', [primaryImage])
   const hasImage = Boolean(imageSrc)
 
   useEffect(() => {
@@ -188,8 +185,6 @@ export default function ListingCard({ l, storeLogoUrl, priority = false, likeCou
           {hasImage ? (
             <img
               src={imageSrc}
-              srcSet={imageSrcSet}
-              sizes={imageSizes}
               alt={l.title}
               loading={priority ? 'eager' : 'lazy'}
               decoding="async"
@@ -198,16 +193,14 @@ export default function ListingCard({ l, storeLogoUrl, priority = false, likeCou
               onError={(e) => {
                 try {
                   const el = e.currentTarget as HTMLImageElement
-                  if (primaryImage && el.src !== primaryImage) {
-                    el.src = primaryImage
-                    return
-                  }
+                  // final fallback to placeholder if public URL fails
+                  if (el && !el.src.endsWith('/no-image.webp')) el.src = '/no-image.webp'
                 } catch {
                   void 0
                 }
                 setImageLoaded(true)
               }}
-              className={`absolute inset-0 h-full w-full object-cover object-center transition-opacity duration-500 ${imageLoaded ? 'opacity-100' : 'opacity-0'} ${imageStatusClass}`}
+              className={`h-full w-full object-cover object-center ${imageStatusClass}`}
             />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center text-xs font-medium uppercase tracking-wide text-black/40">
