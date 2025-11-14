@@ -298,6 +298,8 @@ export default function NewListingForm() {
   const [cityOther, setCityOther] = useState<string>('')
   const [description, setDescription] = useState('')
   const [images, setImages] = useState<string[]>([])
+  const [draggingIndex, setDraggingIndex] = useState<number | null>(null)
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
   const [sellerWhatsappLocal, setSellerWhatsappLocal] = useState('')
   const [whatsappUserEdited, setWhatsappUserEdited] = useState(false)
   // País para WhatsApp (prefijo)
@@ -785,6 +787,59 @@ export default function NewListingForm() {
 
   const removeImageAt = (index: number) => {
     setImages((prev) => prev.filter((_, idx) => idx !== index))
+  }
+
+  const makePrimaryAt = (index: number) => {
+    setImages((prev) => {
+      if (index <= 0 || index >= prev.length) return prev
+      const next = prev.slice()
+      const [picked] = next.splice(index, 1)
+      next.unshift(picked)
+      return next
+    })
+  }
+
+  const reorderImages = (from: number, to: number) => {
+    setImages((prev) => {
+      if (from === to || from < 0 || to < 0 || from >= prev.length || to >= prev.length) return prev
+      const next = prev.slice()
+      const [moved] = next.splice(from, 1)
+      next.splice(to, 0, moved)
+      return next
+    })
+  }
+
+  const onThumbDragStart = (index: number, e: React.DragEvent<HTMLDivElement>) => {
+    setDraggingIndex(index)
+    setDragOverIndex(index)
+    try {
+      e.dataTransfer.effectAllowed = 'move'
+      e.dataTransfer.setData('text/plain', String(index))
+    } catch { /* noop */ }
+  }
+
+  const onThumbDragOver = (index: number, e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    if (dragOverIndex !== index) setDragOverIndex(index)
+    try { e.dataTransfer.dropEffect = 'move' } catch { /* noop */ }
+  }
+
+  const onThumbDrop = (index: number, e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    let from = draggingIndex
+    if (from == null) {
+      const raw = e.dataTransfer.getData('text/plain')
+      const parsed = Number(raw)
+      if (Number.isFinite(parsed)) from = parsed
+    }
+    if (from != null) reorderImages(from, index)
+    setDraggingIndex(null)
+    setDragOverIndex(null)
+  }
+
+  const onThumbDragEnd = () => {
+    setDraggingIndex(null)
+    setDragOverIndex(null)
   }
 
   /** 3) Submit: inserta listing o actualiza si corresponde */
@@ -1660,7 +1715,8 @@ export default function NewListingForm() {
               className={!photosEnabled ? 'opacity-50 cursor-not-allowed' : ''}
             />
             <p className="text-xs text-black/50">
-              Recomendamos subir imágenes JPG o PNG. Convertimos automáticamente fotos HEIC/HEIF a JPG para asegurar compatibilidad en las previsualizaciones (WhatsApp/Facebook). La primera foto será la imagen principal al compartir.
+              Recomendamos subir imágenes JPG o PNG. Convertimos automáticamente fotos HEIC/HEIF a JPG para asegurar compatibilidad en las previsualizaciones (WhatsApp/Facebook).
+              Arrastrá para reordenar; la primera foto es la imagen principal al compartir.
             </p>
             {!photosEnabled && (
               <p className="text-xs text-black/50">
@@ -1674,8 +1730,33 @@ export default function NewListingForm() {
             {uploading && <p className="text-sm mt-1">Subiendo… {progress}%</p>}
             <div className="grid grid-cols-3 gap-2">
               {images.map((src, index) => (
-                <div key={index} className="relative aspect-square overflow-hidden rounded-md border border-black/10">
+                <div
+                  key={index}
+                  className={`relative aspect-square overflow-hidden rounded-md border ${dragOverIndex === index ? 'border-mb-primary ring-2 ring-mb-primary/40' : 'border-black/10'}`}
+                  draggable
+                  onDragStart={(e) => onThumbDragStart(index, e)}
+                  onDragOver={(e) => onThumbDragOver(index, e)}
+                  onDrop={(e) => onThumbDrop(index, e)}
+                  onDragEnd={onThumbDragEnd}
+                  aria-grabbed={draggingIndex === index}
+                  role="button"
+                  title="Arrastrar para reordenar"
+                >
                   <img src={src} alt="Foto del producto" className="w-full h-full object-cover" />
+                  {index === 0 ? (
+                    <span className="absolute left-1 top-1 rounded-full bg-emerald-600/90 px-2 py-0.5 text-[11px] font-semibold text-white shadow">
+                      Principal
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => makePrimaryAt(index)}
+                      className="absolute left-1 top-1 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-[#0c1723] shadow hover:bg-white"
+                      aria-label={`Hacer principal la foto ${index + 1}`}
+                    >
+                      Hacer principal
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => removeImageAt(index)}

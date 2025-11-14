@@ -1,6 +1,8 @@
 -- Vista de pagos enriquecida con email del usuario y estado del crédito
 -- Ejecutar en el editor SQL de Supabase (proyecto de producción)
 
+drop view if exists public.admin_payments_enriched;
+
 create or replace view public.admin_payments_enriched as
 select
   p.id,
@@ -11,6 +13,8 @@ select
   p.amount,
   p.currency,
   p.status as payment_status,
+  p.applied,
+  p.applied_at,
   p.provider,
   p.provider_ref,
   c.id as credit_id,
@@ -38,4 +42,3 @@ order by p.created_at desc;
 
 -- Importante: que ejecute con privilegios del invocador (RLS-aware)
 alter view public.admin_payments_enriched set (security_invoker = true);
-

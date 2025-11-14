@@ -3563,6 +3563,9 @@ app.get('/api/credits/me', async (req, res) => {
 app.get('/api/market/search', async (req, res) => {
   try {
     const supabase = supabaseService || getServerSupabaseClient()
+    // Moderators can view all listings (including expired/archived)
+    const authUser = await getAuthUser(req, supabase).catch(() => null)
+    const isMod = authUser && authUser.id ? await userIsModerator(authUser.id, supabase) : false
     const limit = Math.min(Math.max(Number(req.query.limit || 48), 1), 200)
     const offset = Math.max(Number(req.query.offset || 0), 0)
     const onlyStore = String(req.query.store || '') === '1'
@@ -3618,11 +3621,14 @@ app.get('/api/market/search', async (req, res) => {
     const fSize = toArray(req.query.size).map((s) => String(s))
     const subcat = (req.query.subcat ? String(req.query.subcat) : '').trim()
 
-    // Base: publicaciones visibles (activas o publicadas)
+    // Base: publicaciones visibles (moderadores ven todas)
+    const visibleStatuses = isMod
+      ? ['active', 'published', 'expired', 'archived', 'paused', 'sold']
+      : ['active', 'published']
     let query = supabase
       .from('listings')
       .select('*')
-      .in('status', ['active', 'published'])
+      .in('status', visibleStatuses)
 
     if (cat) query = query.eq('category', cat)
     if (subcat) query = query.eq('subcategory', subcat)
@@ -3663,8 +3669,17 @@ app.get('/api/market/search', async (req, res) => {
       } catch {}
     }
 
-    // Filtro de texto + precio + tienda
+    // Filtro de texto + precio + tienda + vencimiento
+    const nowTs = Date.now()
     let filtered = listings.filter((l) => {
+      // Excluir publicaciones vencidas por fecha o estado, excepto para moderadores
+      if (!isMod) {
+        if (l.status === 'expired') return false
+        if (l.expires_at) {
+          const t = new Date(l.expires_at).getTime()
+          if (Number.isFinite(t) && t > 0 && t < nowTs) return false
+        }
+      }
       if (onlyStore && !storeMap[String(l.seller_id)]) return false
       if (q) {
         const bucket = [l.title, l.brand, l.model, l.description].filter(Boolean).join(' ').toLowerCase()

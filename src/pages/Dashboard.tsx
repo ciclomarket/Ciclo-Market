@@ -1623,6 +1623,7 @@ function ListingsView({
           const showPremiumCheckoutOption = canInitiateCheckout
           const basicUpgradeLabel = getUpgradeLabel(listingPlanCode, 'basic')
           const premiumUpgradeLabel = getUpgradeLabel(listingPlanCode, 'premium')
+          const isExpired = listing.status === 'expired' || (typeof listing.expiresAt === 'number' && listing.expiresAt > 0 && listing.expiresAt < now)
           return (
             <div key={listing.id} className="space-y-3">
               <ListingCard l={listing} />
@@ -1666,6 +1667,15 @@ function ListingsView({
                     >
                       Editar
                     </button>
+                    {isExpired && (
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-[#14212e]/5"
+                        onClick={() => { void handleRenew(listing); setOpenMenuFor(null) }}
+                      >
+                        Renovar publicación
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-[#14212e]/5"

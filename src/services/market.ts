@@ -1,4 +1,5 @@
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+import { getSupabaseClient, supabaseEnabled } from './supabase'
 
 function guessApiBase(): string | '' {
   if (typeof window === 'undefined') return ''
@@ -61,7 +62,16 @@ export async function fetchMarket(params: MarketSearchParams): Promise<{ items: 
   appendAll('size', params.size)
   appendAll('location', params.location)
 
-  const res = await fetch(url.toString())
+  let headers: Record<string, string> | undefined
+  if (supabaseEnabled) {
+    try {
+      const client = getSupabaseClient()
+      const { data } = await client.auth.getSession()
+      const token = data.session?.access_token || null
+      if (token) headers = { Authorization: `Bearer ${token}` }
+    } catch { /* noop */ }
+  }
+  const res = await fetch(url.toString(), { headers })
   if (!res.ok) throw new Error(`market_search_http_${res.status}`)
   const ct = (res.headers.get('content-type') || '').toLowerCase()
   if (!ct.includes('application/json')) throw new Error('market_search_not_json')

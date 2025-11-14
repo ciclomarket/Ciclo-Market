@@ -257,6 +257,30 @@ export default function ListingDetail() {
 
   if (loading) return <Container>Cargando publicación…</Container>
   if (!listing) return <Container>Publicación no encontrada.</Container>
+  // Ocultar publicaciones vencidas al público (permitir al dueño o moderador verlas)
+  {
+    const now = Date.now()
+    const byStatus = listing.status === 'expired'
+    const byDate = typeof listing.expiresAt === 'number' && listing.expiresAt > 0 && listing.expiresAt < now
+    const isExpiredPublic = (byStatus || byDate) && !isOwner && !isModerator
+    if (isExpiredPublic) {
+      return (
+        <div className="bg-[#14212e] py-10 text-white">
+          <Container>
+            <div className="mx-auto max-w-2xl rounded-3xl border border-white/10 bg-white/5 p-6 text-center">
+              <h1 className="text-xl font-semibold">Publicación no disponible</h1>
+              <p className="mt-2 text-white/80">Este aviso está vencido o fue desactivado por el vendedor.</p>
+              <div className="mt-4">
+                <a href="/marketplace" className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#14212e] hover:bg-white/90">
+                  Ver más bicicletas
+                </a>
+              </div>
+            </div>
+          </Container>
+        </div>
+      )
+    }
+  }
 
   const computeSweepstakeFallbackEnd = () => {
     const now = new Date()

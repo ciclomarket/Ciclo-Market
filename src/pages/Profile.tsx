@@ -113,7 +113,7 @@ function facebookUrl(value?: string | null) {
 export default function Profile() {
   const { sellerId } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
-  const { user } = useAuth()
+  const { user, isModerator } = useAuth()
   const { show: showToast } = useToast()
   const isMobile = useIsMobile()
 
@@ -222,7 +222,6 @@ export default function Profile() {
   }, [user?.id, sellerId])
 
   // Cargar créditos del vendedor si el usuario actual es moderador
-  const { isModerator } = useAuth()
   useEffect(() => {
     if (!isModerator || !sellerId) {
       setModAvailableCredits(null)
@@ -299,6 +298,17 @@ export default function Profile() {
     () => listings.filter((item) => !item.status || item.status === 'active'),
     [listings]
   )
+  const viewerIsOwner = useMemo(() => Boolean(user?.id && sellerId && user.id === sellerId), [user?.id, sellerId])
+  const viewerCanSeeAll = viewerIsOwner || Boolean(isModerator)
+  const publicListings = useMemo(() => {
+    const now = Date.now()
+    return listings.filter((l) => {
+      const byStatus = l.status === 'expired' || l.status === 'deleted' || l.status === 'archived'
+      const byDate = typeof l.expiresAt === 'number' && l.expiresAt > 0 && l.expiresAt < now
+      return !(byStatus || byDate)
+    })
+  }, [listings])
+  const listingsVisible = viewerCanSeeAll ? listings : publicListings
   const locationLabel = useMemo(() => {
     if (!profile) return listings[0]?.sellerLocation ?? 'Ubicación reservada'
     const city = profile.city?.trim()
@@ -488,14 +498,14 @@ export default function Profile() {
         return (
           <div className="space-y-4">
             <h2 className="text-lg font-semibold text-[#14212e]">Publicaciones del vendedor</h2>
-            {listings.length === 0 && (
+            {listingsVisible.length === 0 && (
               <div className="rounded-2xl border border-[#14212e]/10 bg-[#f2f6fb] p-6 text-sm text-[#14212e]/70">
                 Este vendedor aún no tiene publicaciones visibles.
               </div>
             )}
-            {listings.length > 0 && (
+            {listingsVisible.length > 0 && (
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {listings.map((listing) => (
+                {listingsVisible.map((listing) => (
                   <ListingCard key={listing.id} l={listing} />
                 ))}
               </div>
