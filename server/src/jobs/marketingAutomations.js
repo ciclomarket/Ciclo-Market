@@ -174,8 +174,8 @@ function buildExpiredEmail({ listing, profile, baseFront }) {
   const premiumUrl = `${cleanBase}/publicar/nueva?id=${encodeURIComponent(listing.id)}&plan=premium`
   const intro = `
     <p style="margin:0 0 12px">Hola ${escapeHtml(profile?.fullName || 'vendedor')},</p>
-    <p style="margin:0 0 12px">¡Tu publicación <strong>${escapeHtml(listing.title)}</strong> se vendió y la marcamos como finalizada para que no sigas recibiendo consultas duplicadas!</p>
-    <p style="margin:0 0 18px">Si aún tenés stock o querés volver a ofrecerla, podés reactivarla en tu panel y aprovechar los planes destacados para triplicar tus chances de venta.</p>
+    <p style="margin:0 0 12px">Tu publicación <strong>${escapeHtml(listing.title)}</strong> venció y la pausamos para que no siga apareciendo en el marketplace.</p>
+    <p style="margin:0 0 18px">Si todavía la tenés disponible (o querés volver a publicarla), reactivala desde tu panel y aprovechá los planes destacados para triplicar tus chances de venta.</p>
   `
   const buttons = `
     <div style="margin:18px 0;text-align:center">
@@ -196,7 +196,7 @@ function buildExpiredEmail({ listing, profile, baseFront }) {
   `
   const html = buildEmailLayout({
     baseFront: cleanBase,
-    title: 'Tu publicación se vendió 🎉',
+    title: 'Tu publicación venció',
     introHtml: `${intro}${listingCard}${buttons}`,
     bodyHtml: benefits,
     extraFooterHtml: `<a href="${cleanBase}/dashboard?tab=${encodeURIComponent('Perfil')}" style="color:#64748b;text-decoration:underline">Actualizar preferencias</a>`,
@@ -204,7 +204,7 @@ function buildExpiredEmail({ listing, profile, baseFront }) {
 
   const text = [
     `Hola ${profile?.fullName || 'vendedor'},`,
-    `Tu publicación "${listing.title}" se vendió y la pausamos.`,
+    `Tu publicación "${listing.title}" venció y la pausamos.`,
     `Renová desde tu panel: ${dashboardUrl}`,
     `Plan Básico: ${basicUrl}`,
     `Plan Premium: ${premiumUrl}`,
@@ -215,7 +215,7 @@ function buildExpiredEmail({ listing, profile, baseFront }) {
   ].join('\n')
 
   return {
-    subject: `Tu publicación "${listing.title}" se vendió – reactivala cuando quieras`,
+    subject: `Tu publicación "${listing.title}" venció – reactivala cuando quieras`,
     html,
     text,
   }
@@ -342,7 +342,7 @@ async function fetchFreeListingsExpiring(supabase, limit) {
   const { data, error } = await supabase
     .from('listings')
     .select('id,seller_id,title,price,price_currency,images,plan,plan_code,seller_plan,status,slug,expires_at,highlight_expires,location,seller_location')
-    .eq('status', 'active')
+    .in('status', ['active','published'])
     .or('plan.eq.free,plan_code.eq.free,seller_plan.eq.free')
     .not('expires_at', 'is', null)
     .lte('expires_at', windowEnd)
@@ -359,7 +359,7 @@ async function fetchListingsWithoutHighlight(supabase, limit) {
   const { data, error } = await supabase
     .from('listings')
     .select('id,seller_id,title,price,price_currency,images,plan,plan_code,seller_plan,status,slug,expires_at,highlight_expires,location,seller_location,created_at')
-    .eq('status', 'active')
+    .in('status', ['active','published'])
     .order('created_at', { ascending: false, nullsLast: false })
     .limit(limit)
   if (error) {
