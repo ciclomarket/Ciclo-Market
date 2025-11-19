@@ -71,6 +71,16 @@ const FILTERS: FilterSection[] = [
     ]
   },
   {
+    id: 'nutrition',
+    label: 'Nutrición',
+    options: [
+      { id: 'all', label: 'Toda Nutrición', match: (l) => (l.category || '').toLowerCase().includes('nutric') },
+      { id: 'gel', label: 'Geles', match: (l) => (l.category || '').toLowerCase().includes('nutric') && (subcatIs(l, 'gel') || textIncludes(l, 'gel')) },
+      { id: 'barra', label: 'Barras', match: (l) => (l.category || '').toLowerCase().includes('nutric') && (subcatIs(l, 'barra') || textIncludes(l, 'barra')) },
+      { id: 'hidratacion', label: 'Hidratación / Sales', match: (l) => (l.category || '').toLowerCase().includes('nutric') && (subcatIs(l, 'sales','hidrat') || textIncludes(l, 'sales', 'hidrat')) },
+    ]
+  },
+  {
     id: 'apparel',
     label: 'Indumentaria',
     options: [
@@ -89,7 +99,7 @@ const FILTERS: FilterSection[] = [
   },
 ]
 
-type MultiFilterKey = 'brand' | 'material' | 'frameSize' | 'wheelSize' | 'drivetrain' | 'condition' | 'brake' | 'year' | 'size'
+type MultiFilterKey = 'brand' | 'material' | 'frameSize' | 'wheelSize' | 'drivetrain' | 'condition' | 'brake' | 'year' | 'size' | 'transmissionType'
 type StoreFiltersState = {
   brand: string[]
   material: string[]
@@ -100,6 +110,7 @@ type StoreFiltersState = {
   brake: string[]
   year: string[]
   size: string[]
+  transmissionType: string[]
   priceCur?: 'USD' | 'ARS'
   priceMin?: number
   priceMax?: number
@@ -107,10 +118,10 @@ type StoreFiltersState = {
   q?: string
 }
 
-const MULTI_FILTER_ORDER: MultiFilterKey[] = ['brand','material','frameSize','wheelSize','drivetrain','condition','brake','year','size']
+const MULTI_FILTER_ORDER: MultiFilterKey[] = ['brand','material','frameSize','wheelSize','drivetrain','condition','brake','year','size','transmissionType']
 // UI ordering helpers for filters (avoid duplicate frameSize vs size)
 const UI_FILTERS_BEFORE_PRICE: MultiFilterKey[] = ['size']
-const UI_FILTERS_AFTER_PRICE: MultiFilterKey[] = ['brand','material','brake','year','condition','drivetrain','wheelSize']
+const UI_FILTERS_AFTER_PRICE: MultiFilterKey[] = ['brand','material','brake','year','condition','drivetrain','transmissionType','wheelSize']
 const MULTI_FILTER_LABELS: Record<MultiFilterKey, string> = {
   brand: 'Marca',
   material: 'Material',
@@ -120,13 +131,15 @@ const MULTI_FILTER_LABELS: Record<MultiFilterKey, string> = {
   condition: 'Condición',
   brake: 'Freno',
   year: 'Año',
-  size: 'Talle'
+  size: 'Talle',
+  transmissionType: 'Tipo de transmisión'
 }
 
 type ListingMetadata = {
   condition?: string
   brake?: string
   apparelSize?: string
+  transmissionType?: 'Mecánico' | 'Electrónico'
 }
 
 type ListingFacetsResult = {
@@ -137,6 +150,26 @@ type ListingFacetsResult = {
 }
 
 const APPAREL_SIZE_ORDER = ['XXS','XS','S','M','L','XL','XXL','XXXL','4XL','5XL']
+// Mapeo de talles de cuadro (letras) a rangos en cm para filtrado
+const FRAME_SIZE_RANGES: Record<string, { min: number; max?: number }> = {
+  xxs: { min: 44, max: 47 },
+  xs: { min: 48, max: 50 },
+  s: { min: 51, max: 53 },
+  m: { min: 54, max: 55 },
+  l: { min: 56, max: 58 },
+  xxl: { min: 59, max: 62 },
+  xxxl: { min: 62, max: undefined }, // 62+ cm
+}
+const FRAME_SIZE_ORDER = ['XXS','XS','S','M','L','XXL','XXXL'] as const
+
+const parseFrameSizeCm = (value?: string | null): number | null => {
+  if (!value) return null
+  const txt = value.toString().toLowerCase().replace(/,/g, '.').trim()
+  const m = txt.match(/(\d{2}(?:\.\d+)?)/)
+  if (!m) return null
+  const n = Number(m[1])
+  return Number.isFinite(n) ? n : null
+}
 
 const normalizeText = (value: string) => value
   ? value
@@ -247,6 +280,14 @@ function sortSizes(values: Iterable<string>) {
   })
 }
 
+// Inferir tipo de transmisión a partir de texto del grupo o detalle
+const inferTransmissionType = (text?: string | null): 'Mecánico' | 'Electrónico' | null => {
+  const t = (text || '').toLowerCase()
+  if (!t) return null
+  if (t.includes('di2') || t.includes('etap') || t.includes('axs') || t.includes('eps') || t.includes('steps')) return 'Electrónico'
+  return 'Mecánico'
+}
+
 function computeListingFacets(listings: Listing[]): ListingFacetsResult {
   const sets: Record<MultiFilterKey, Set<string>> = {
     brand: new Set(),
@@ -257,7 +298,8 @@ function computeListingFacets(listings: Listing[]): ListingFacetsResult {
     condition: new Set(),
     brake: new Set(),
     year: new Set(),
-    size: new Set()
+    size: new Set(),
+    transmissionType: new Set(),
   }
   const metadata: Record<string, ListingMetadata> = {}
   let minPrice = Number.POSITIVE_INFINITY
@@ -316,10 +358,17 @@ function computeListingFacets(listings: Listing[]): ListingFacetsResult {
       multiSizes.split(',').map((s) => s.trim()).filter(Boolean).forEach((s) => sets.size.add(s))
     }
 
+    const txType = inferTransmissionType((listing as any).drivetrainDetail) || inferTransmissionType(listing.drivetrain) || ((): 'Mecánico' | 'Electrónico' | null => {
+      const m = extractExtrasMap(listing.extras)
+      return inferTransmissionType(m.grupo || m['transmisión'] || m.transmision || null)
+    })()
+    if (txType) sets.transmissionType.add(txType)
+
     metadata[listing.id] = {
       condition: condition || undefined,
       brake: brake || undefined,
-      apparelSize: apparelSize || undefined
+      apparelSize: apparelSize || undefined,
+      transmissionType: txType || undefined
     }
 
     const price = Number(listing.price)
@@ -347,7 +396,8 @@ function computeListingFacets(listings: Listing[]): ListingFacetsResult {
       condition: sortAlpha(sets.condition),
       brake: sortAlpha(sets.brake),
       year: sortYearDesc(sets.year),
-      size: sortSizes(sets.size)
+      size: sortSizes(sets.size),
+      transmissionType: sortAlpha(sets.transmissionType)
     },
     priceRange: {
       min: Number.isFinite(minPrice) ? Math.floor(minPrice) : 0,
@@ -437,6 +487,70 @@ function MultiSelectContent({ options, selected, onChange, close, placeholder = 
         <button type="button" onClick={close} className="rounded-full bg-white px-3 py-1 text-[#14212e] hover:bg-white/90">
           Listo
         </button>
+      </div>
+    </div>
+  )
+}
+
+// Selector especializado para Talle: letras con rango + otros talles libres
+function SizeSelectContent({ options, selected, onChange, close }: { options: string[]; selected: string[]; onChange: (next: string[]) => void; close: () => void }) {
+  const normalizedSelected = useMemo(() => new Set(selected.map((v) => normalizeText(v))), [selected])
+  const letterOptions = FRAME_SIZE_ORDER.map((k) => k)
+  const otherOptions = useMemo(() => {
+    const letterSet = new Set(letterOptions.map((x) => normalizeText(x)))
+    const uniq = Array.from(new Set(options.map((o) => o.trim()).filter(Boolean)))
+    return uniq.filter((opt) => !letterSet.has(normalizeText(opt)))
+  }, [options])
+
+  const toggle = (val: string) => {
+    const norm = normalizeText(val)
+    if (normalizedSelected.has(norm)) onChange(selected.filter((s) => normalizeText(s) !== norm))
+    else onChange([...selected, val])
+  }
+
+  const labelFor = (k: (typeof FRAME_SIZE_ORDER)[number]) => {
+    const range = FRAME_SIZE_RANGES[k.toLowerCase()]
+    if (!range) return k
+    const suffix = typeof range.max === 'number' ? `${range.min}-${range.max} cm` : `${range.min}+ cm`
+    return `${k} (${suffix})`
+  }
+
+  return (
+    <div className="flex flex-col gap-3 text-sm">
+      <div className="flex flex-col gap-2">
+        {letterOptions.map((opt) => {
+          const active = normalizedSelected.has(normalizeText(opt))
+          return (
+            <label key={opt} className={`flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 hover:bg-white/10 ${active ? 'bg-white/10' : ''}`}>
+              <input type="checkbox" className="h-4 w-4 accent-white" checked={active} onChange={() => toggle(opt)} />
+              <span>{labelFor(opt)}</span>
+            </label>
+          )
+        })}
+      </div>
+      {otherOptions.length ? (
+        <>
+          <div className="mt-1 text-xs text-white/60">Otros talles</div>
+          <div className="max-h-40 overflow-y-auto pr-1">
+            <ul className="flex flex-col gap-2">
+              {otherOptions.map((opt) => {
+                const active = normalizedSelected.has(normalizeText(opt))
+                return (
+                  <li key={opt}>
+                    <label className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 hover:bg-white/10">
+                      <input type="checkbox" className="h-4 w-4 accent-white" checked={active} onChange={() => toggle(opt)} />
+                      <span>{opt}</span>
+                    </label>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        </>
+      ) : null}
+      <div className="flex items-center justify-between pt-1 text-sm">
+        <button type="button" onClick={() => { onChange([]); close() }} className="text-white/70 hover:text-white">Limpiar</button>
+        <button type="button" onClick={close} className="rounded-full bg-white px-3 py-1 text-[#14212e] hover:bg-white/90">Listo</button>
       </div>
     </div>
   )
@@ -604,7 +718,7 @@ function DealFilterContent({ active, onToggle, close }: DealFilterContentProps) 
     </div>
   )
 }
-const STORE_CATEGORY_BANNERS: Array<{ key: 'all' | 'acc' | 'app'; label: string; section: '' | 'accessories' | 'apparel'; description: string; image: string; imageMobile: string }> = [
+const STORE_CATEGORY_BANNERS: Array<{ key: 'all' | 'acc' | 'app' | 'nut'; label: string; section: '' | 'accessories' | 'apparel' | 'nutrition'; description: string; image: string; imageMobile: string }> = [
   {
     key: 'all',
     label: 'Bicicletas',
@@ -628,6 +742,14 @@ const STORE_CATEGORY_BANNERS: Array<{ key: 'all' | 'acc' | 'app'; label: string;
     description: 'Ropa técnica y casual',
     image: '/design/Banners/3.png',
     imageMobile: '/design/Banners-Mobile/3.png'
+  },
+  {
+    key: 'nut',
+    label: 'Nutrición',
+    section: 'nutrition',
+    description: 'Geles, hidratación y recovery',
+    image: '/design/Banners/4.png',
+    imageMobile: '/design/Banners-Mobile/4.png'
   }
 ]
 
@@ -652,6 +774,7 @@ export default function Store() {
     brake: [],
     year: [],
     size: [],
+    transmissionType: [],
     priceCur: undefined,
     priceMin: undefined,
     priceMax: undefined,
@@ -779,6 +902,7 @@ export default function Store() {
       brake: 'brake' in patch ? patch.brake ?? [] : prev.brake,
       year: 'year' in patch ? patch.year ?? [] : prev.year,
       size: 'size' in patch ? patch.size ?? [] : prev.size,
+      transmissionType: 'transmissionType' in patch ? patch.transmissionType ?? [] : prev.transmissionType,
       priceCur: 'priceCur' in patch ? patch.priceCur : prev.priceCur,
       priceMin: 'priceMin' in patch ? patch.priceMin : prev.priceMin,
       priceMax: 'priceMax' in patch ? patch.priceMax : prev.priceMax,
@@ -862,7 +986,10 @@ export default function Store() {
   // Aplicar filtro de "Solo bicicletas" si bikesOnly = true
   const baseList = useMemo(() => {
     if (!bikesOnly) return sectionFiltered
-    return sectionFiltered.filter((l) => (l.category || '') !== 'Accesorios' && (l.category || '') !== 'Indumentaria')
+    return sectionFiltered.filter((l) => {
+      const c = (l.category || '')
+      return c !== 'Accesorios' && c !== 'Indumentaria' && c !== 'Nutrición'
+    })
   }, [sectionFiltered, bikesOnly])
   const facetsData = useMemo(() => computeListingFacets(baseList), [baseList])
   const listingMetadata = facetsData.metadata
@@ -876,6 +1003,7 @@ export default function Store() {
     const yearSet = new Set(filters.year.map((value) => normalizeText(value)))
     const sizeSet = new Set(filters.size.map((value) => normalizeText(value)))
     const brakeSet = new Set(filters.brake.map((value) => normalizeText(value)))
+    const txTypeSet = new Set(filters.transmissionType.map((value) => normalizeText(value)))
     const priceMin = typeof filters.priceMin === 'number' ? filters.priceMin : null
     const priceMax = typeof filters.priceMax === 'number' ? filters.priceMax : null
 
@@ -920,21 +1048,58 @@ export default function Store() {
         if (!derived.brake || !brakeSet.has(normalizeText(derived.brake))) return false
       }
 
+      if (txTypeSet.size) {
+        const derivedTx = (listingMetadata[listing.id] ?? {}).transmissionType || inferTransmissionType(listing.drivetrain)
+        if (!derivedTx || !txTypeSet.has(normalizeText(derivedTx))) return false
+      }
+
       if (sizeSet.size) {
-        // Match por talle de indumentaria, multi-talles y también por tamaño de cuadro
-        const frameMatch = listing.frameSize && sizeSet.has(normalizeText(listing.frameSize))
-        const hasSingle = derived.apparelSize && sizeSet.has(normalizeText(derived.apparelSize))
-        let anyMulti = false
-        if (!hasSingle && !frameMatch) {
-          const extrasMap = extractExtrasMap(listing.extras)
-          const multi = extrasMap.talles || ''
-          anyMulti = multi
-            .split(',')
-            .map((s) => s.trim())
-            .filter(Boolean)
-            .some((s) => sizeSet.has(normalizeText(s)))
+        const selectedLetters = filters.size
+          .map((v) => normalizeText(v))
+          .filter((v) => v in FRAME_SIZE_RANGES)
+        const selectedNumeric = filters.size
+          .map((v) => parseFrameSizeCm(v))
+          .filter((n): n is number => Number.isFinite(n as number))
+
+        const extrasMap = extractExtrasMap(listing.extras)
+        const frameCm = parseFrameSizeCm(listing.frameSize)
+        const extrasCandidates: number[] = []
+        const sizeTextCandidates: string[] = []
+        if (extrasMap['tamano cuadro']) sizeTextCandidates.push(extrasMap['tamano cuadro'])
+        if (extrasMap['talle']) sizeTextCandidates.push(extrasMap['talle'])
+        if (extrasMap['talles']) sizeTextCandidates.push(...extrasMap['talles'].split(',').map((s) => s.trim()))
+        for (const txt of sizeTextCandidates) {
+          const n = parseFrameSizeCm(txt)
+          if (n != null) extrasCandidates.push(n)
         }
-        if (!(frameMatch || hasSingle || anyMulti)) return false
+
+        const frameMatch = listing.frameSize ? sizeSet.has(normalizeText(listing.frameSize)) : false
+        const hasSingle = ((): boolean => {
+          const val = (listingMetadata[listing.id] ?? {}).apparelSize
+          return Boolean(val && sizeSet.has(normalizeText(val)))
+        })()
+        const anyMulti = (extrasMap.talles || '')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .some((s) => sizeSet.has(normalizeText(s)))
+        const numericEq = (frameCm != null && selectedNumeric.includes(frameCm)) || extrasCandidates.some((n) => selectedNumeric.includes(n))
+        let letterRange = false
+        const candidates = [frameCm, ...extrasCandidates.filter((n) => n != null)] as number[]
+        for (const cm of candidates) {
+          if (cm == null) continue
+          for (const key of selectedLetters) {
+            const range = FRAME_SIZE_RANGES[key]
+            if (!range) continue
+            if (typeof range.max === 'number') {
+              if (cm >= range.min && cm <= range.max) { letterRange = true; break }
+            } else {
+              if (cm >= range.min) { letterRange = true; break }
+            }
+          }
+          if (letterRange) break
+        }
+        if (!(frameMatch || hasSingle || anyMulti || numericEq || letterRange)) return false
       }
 
       // Precio: convertir a moneda seleccionada usando fx y aplicar rango
@@ -969,6 +1134,24 @@ export default function Store() {
   const finalList = useMemo(() => {
     const arr = [...filtered]
     if (sortMode === 'relevance') {
+      // Si no hay filtros activos, priorizar bicicletas primero
+      const anyFilter = Boolean(
+        activeSection || activeOption || bikesOnly ||
+        filters.q || filters.deal || filters.priceCur ||
+        typeof filters.priceMin === 'number' || typeof filters.priceMax === 'number' ||
+        filters.brand.length || filters.material.length || filters.frameSize.length || filters.wheelSize.length ||
+        filters.drivetrain.length || filters.condition.length || filters.brake.length || filters.year.length ||
+        filters.size.length || filters.transmissionType.length
+      )
+      if (!anyFilter) {
+        const isBike = (l: Listing) => {
+          const c = (l.category || '')
+          return c !== 'Accesorios' && c !== 'Indumentaria' && c !== 'Nutrición'
+        }
+        const bikes = arr.filter(isBike)
+        const others = arr.filter((l) => !isBike(l))
+        return [...bikes, ...others]
+      }
       return arr
     }
     if (sortMode === 'newest') {
@@ -1448,7 +1631,7 @@ const handleClearFilters = useCallback(() => {
           {/* Horarios movidos al header junto a Redes */}
 
           <div className="space-y-6">
-            <div className="grid grid-cols-3 gap-2 sm:gap-4">
+            <div className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-4">
               {STORE_CATEGORY_BANNERS.map((card) => {
                 const isActive = card.section ? (activeSection === card.section && !bikesOnly) : (!activeSection && bikesOnly)
                 return (
@@ -1531,17 +1714,26 @@ const handleClearFilters = useCallback(() => {
                     <FilterDropdown
                       label={MULTI_FILTER_LABELS[key]}
                       summary={summaryFor(key)}
-                      disabled={!options.length}
+                      disabled={key === 'size' ? false : !options.length}
                       variant="inline"
                     >
                       {({ close }) => (
-                        <MultiSelectContent
-                          options={options}
-                          selected={filters[key]}
-                          onChange={(next) => setFilters({ [key]: next } as Partial<StoreFiltersState>)}
-                          close={close}
-                          placeholder={`Buscar ${MULTI_FILTER_LABELS[key].toLowerCase()}`}
-                        />
+                        key === 'size' ? (
+                          <SizeSelectContent
+                            options={options}
+                            selected={filters.size}
+                            onChange={(next) => setFilters({ size: next })}
+                            close={close}
+                          />
+                        ) : (
+                          <MultiSelectContent
+                            options={options}
+                            selected={filters[key]}
+                            onChange={(next) => setFilters({ [key]: next } as Partial<StoreFiltersState>)}
+                            close={close}
+                            placeholder={`Buscar ${MULTI_FILTER_LABELS[key].toLowerCase()}`}
+                          />
+                        )
                       )}
                     </FilterDropdown>
                   </div>
@@ -1662,20 +1854,29 @@ const handleClearFilters = useCallback(() => {
                       key={`mobile-${key}`}
                       label={MULTI_FILTER_LABELS[key]}
                       summary={summaryFor(key)}
-                      disabled={!options.length}
+                      disabled={key === 'size' ? false : !options.length}
                       className="w-full"
                       buttonClassName="w-full justify-between"
                       inlineOnMobile
                       variant="inline"
                     >
                       {({ close }) => (
-                        <MultiSelectContent
-                          options={options}
-                          selected={filters[key]}
-                          onChange={(next) => setFilters({ [key]: next } as Partial<StoreFiltersState>)}
-                          close={close}
-                          placeholder={`Buscar ${MULTI_FILTER_LABELS[key].toLowerCase()}`}
-                        />
+                        key === 'size' ? (
+                          <SizeSelectContent
+                            options={options}
+                            selected={filters.size}
+                            onChange={(next) => setFilters({ size: next })}
+                            close={close}
+                          />
+                        ) : (
+                          <MultiSelectContent
+                            options={options}
+                            selected={filters[key]}
+                            onChange={(next) => setFilters({ [key]: next } as Partial<StoreFiltersState>)}
+                            close={close}
+                            placeholder={`Buscar ${MULTI_FILTER_LABELS[key].toLowerCase()}`}
+                          />
+                        )
                       )}
                     </FilterDropdown>
                   )

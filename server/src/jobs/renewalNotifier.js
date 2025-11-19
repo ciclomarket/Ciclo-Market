@@ -71,6 +71,31 @@ async function fetchExpiringListings({ supabase, windowHours, cooldownHours }) {
   })
 }
 
+async function fetchRecentlyExpiredListings({ supabase, windowHours, cooldownHours }) {
+  const now = new Date()
+  const lowerBound = new Date(now.getTime() - windowHours * 60 * 60 * 1000)
+  const cooldownThreshold = new Date(now.getTime() - cooldownHours * 60 * 60 * 1000)
+
+  const { data, error } = await supabase
+    .from('listings')
+    .select('id,title,seller_id,expires_at,renewal_notified_at,status')
+    .not('expires_at', 'is', null)
+    .lte('expires_at', now.toISOString())
+    .gte('expires_at', lowerBound.toISOString())
+
+  if (error) {
+    console.error('[renewalNotifier] error al buscar publicaciones vencidas', error)
+    return []
+  }
+
+  return (data || []).filter((item) => {
+    if (!item.expires_at) return false
+    if (!item.renewal_notified_at) return true
+    const lastNotified = new Date(item.renewal_notified_at)
+    return Number.isFinite(lastNotified.getTime()) && lastNotified < cooldownThreshold
+  })
+}
+
 async function fetchSellerProfiles(supabase, sellerIds) {
   if (!sellerIds.length) return new Map()
   const { data, error } = await supabase
@@ -176,6 +201,61 @@ async function sendReminder({ listing, profile }) {
   }
 }
 
+async function sendExpiredNotice({ listing, profile }) {
+  if (!profile?.email) {
+    console.warn('[renewalNotifier] publicación vencida sin email de contacto', listing.id)
+    return false
+  }
+
+  const baseFront = (process.env.FRONTEND_URL || '').split(',')[0]?.trim() || ''
+  const cleanBase = baseFront.replace(/\/$/, '')
+  const slugOrId = listing?.id
+  const highlightUrl = `${cleanBase}/listing/${slugOrId}/destacar`
+  const renewUrl = `${cleanBase}/dashboard?tab=Publicaciones`
+
+  const mailOptions = {
+    from: process.env.SMTP_FROM || `Ciclo Market <${process.env.SMTP_USER}>`,
+    to: profile.email,
+    subject: `Tu publicación "${listing.title}" venció – renovala en 1 clic`,
+    html: `
+      <div style="background:#ffffff;margin:0 auto;max-width:640px;font-family:Arial, sans-serif;color:#14212e">
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="width:100%">
+          <tr>
+            <td style="padding:20px 24px;text-align:center">
+              <img src="${cleanBase}/site-logo.png" alt="Ciclo Market" style="height:64px;width:auto;display:inline-block" />
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:24px">
+              <h2 style="margin:0 0 8px;font-size:20px;color:#0c1723">Tu publicación está vencida</h2>
+              <p style="margin:0 0 8px">Hola ${profile.full_name || 'vendedor'},</p>
+              <p style="margin:0 0 12px">Tu aviso <strong>${listing.title}</strong> venció. Podés renovarlo ahora para que vuelva a mostrarse en el marketplace.</p>
+              <p style="margin:0 0 16px;text-align:center">
+                <a href="${renewUrl}" style="display:inline-block;padding:12px 18px;background:#14212e;color:#fff;text-decoration:none;border-radius:10px;margin-right:8px;font-weight:600">Renovar publicación</a>
+                <a href="${highlightUrl}" style="display:inline-block;padding:12px 18px;background:#2563eb;color:#fff;text-decoration:none;border-radius:10px;font-weight:600">Destacar ahora</a>
+              </p>
+              <p style="margin:16px 0 0;font-size:12px;color:#6b7280">Si los botones no funcionan, ingresá a tu panel: <a href="${renewUrl}" style="color:#0c72ff;text-decoration:underline">${renewUrl}</a></p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#0b1724;color:#fff;padding:12px 24px;text-align:center;font-size:12px">
+              © ${new Date().getFullYear()} Ciclo Market · <a href="${cleanBase}/privacidad" style="color:#fff">Privacidad</a>
+            </td>
+          </tr>
+        </table>
+      </div>
+    `
+  }
+
+  try {
+    await sendMail(mailOptions)
+    return true
+  } catch (error) {
+    console.error('[renewalNotifier] error al enviar email vencido', error)
+    return false
+  }
+}
+
 async function markAsNotified(supabase, listingIds) {
   if (!listingIds.length) return
   const { error } = await supabase
@@ -216,20 +296,33 @@ function startRenewalNotificationJob() {
     cronSchedule,
     async () => {
       try {
+        // 1) Avisos por vencer
         const listings = await fetchExpiringListings({ supabase, windowHours, cooldownHours })
-        if (!listings.length) return
-
-        const sellerIds = [...new Set(listings.map((item) => item.seller_id).filter(Boolean))]
-        const profilesMap = await fetchSellerProfiles(supabase, sellerIds)
-
-        const notifiedIds = []
-        for (const listing of listings) {
-          const profile = profilesMap.get(listing.seller_id)
-          const sent = await sendReminder({ listing, profile })
-          if (sent) notifiedIds.push(listing.id)
+        if (listings.length) {
+          const sellerIds = [...new Set(listings.map((item) => item.seller_id).filter(Boolean))]
+          const profilesMap = await fetchSellerProfiles(supabase, sellerIds)
+          const notifiedIds = []
+          for (const listing of listings) {
+            const profile = profilesMap.get(listing.seller_id)
+            const sent = await sendReminder({ listing, profile })
+            if (sent) notifiedIds.push(listing.id)
+          }
+          await markAsNotified(supabase, notifiedIds)
         }
 
-        await markAsNotified(supabase, notifiedIds)
+        // 2) Avisos recién vencidos
+        const expired = await fetchRecentlyExpiredListings({ supabase, windowHours, cooldownHours })
+        if (expired.length) {
+          const sellerIds2 = [...new Set(expired.map((item) => item.seller_id).filter(Boolean))]
+          const profilesMap2 = await fetchSellerProfiles(supabase, sellerIds2)
+          const notifiedIds2 = []
+          for (const listing of expired) {
+            const profile = profilesMap2.get(listing.seller_id)
+            const sent = await sendExpiredNotice({ listing, profile })
+            if (sent) notifiedIds2.push(listing.id)
+          }
+          await markAsNotified(supabase, notifiedIds2)
+        }
       } catch (error) {
         console.error('[renewalNotifier] job failed', error)
       }

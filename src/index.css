@@ -3,7 +3,11 @@
 @tailwind components;
 @tailwind utilities;
 
-:root { color-scheme: light; }
+:root {
+  color-scheme: light;
+  /* Header height (dynamic). JS sets exact pixel height on mount/resize. */
+  --header-h: 96px;
+}
 
 body {
   @apply text-mb-ink overflow-x-hidden;

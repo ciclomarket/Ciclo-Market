@@ -8,7 +8,7 @@ import ErrorBoundary from './components/ErrorBoundary'
 import Home from './pages/Home'
 import { lazyWithRetry } from './utils/lazyWithRetry'
 const Plans = lazyWithRetry(() => import('./pages/Publish/Plans'))
-const NewListingForm = lazyWithRetry(() => import('./pages/Publish/NewListingForm'))
+const PublishNew = lazyWithRetry(() => import('./pages/Publish/PublishNew'))
 const ListingDetail = lazyWithRetry(() => import('./pages/ListingDetail'))
 const HighlightListing = lazyWithRetry(() => import('./pages/HighlightListing'))
 const Dashboard = lazyWithRetry(() => import('./pages/Dashboard'))
@@ -37,18 +37,18 @@ const Accesorios = lazyWithRetry(() => import('./pages/seo/Accesorios'))
 const Indumentaria = lazyWithRetry(() => import('./pages/seo/Indumentaria'))
 const BicicletasTriatlon = lazyWithRetry(() => import('./pages/seo/BicicletasTriatlon'))
 const OfertasDestacadas = lazyWithRetry(() => import('./pages/seo/OfertasDestacadas'))
-const SweepstakeStrava = lazyWithRetry(() => import('./pages/SweepstakeStrava'))
+const Nutricion = lazyWithRetry(() => import('./pages/seo/Nutricion'))
 import { AuthProvider } from './context/AuthContext'
 import { CurrencyProvider } from './context/CurrencyContext'
 import ProtectedRoute from './components/ProtectedRoute'
 const Marketplace = lazy(() => import('./pages/Marketplace'))
 const Compare = lazy(() => import('./pages/Compare'))
+const IgLinks = lazyWithRetry(() => import('./pages/IgLinks'))
 import { CompareProvider } from './context/CompareContext'
 import CompareTray from './components/CompareTray'
 import { PlanProvider } from './context/PlanContext'
 import { NotificationsProvider } from './context/NotificationContext'
 import { ToastProvider } from './context/ToastContext'
-import { SweepstakesProvider } from './context/SweepstakesContext'
 const CheckoutSuccess = lazy(() => import('./pages/Checkout/Success'))
 const CheckoutFailure = lazy(() => import('./pages/Checkout/Failure'))
 const CheckoutPending = lazy(() => import('./pages/Checkout/Pending'))
@@ -97,6 +97,16 @@ function resolveSeoForPath(pathname: string, search: string): Partial<SeoHeadPro
     }
   }
 
+  if (normalized === '/ig' || normalized === '/links') {
+    return {
+      title: 'Ciclo Market · Enlaces oficiales',
+      description:
+        'Entrá directo al marketplace, ofertas, tiendas oficiales y contenido destacado desde el link en bio de Ciclo Market.',
+      image: '/og-preview.png',
+      noIndex: true
+    }
+  }
+
   if (normalized.startsWith('/marketplace') || normalized.startsWith('/market') || normalized.startsWith('/buscar') || normalized.startsWith('/ofertas')) {
     return {
       title: 'Comprar bicicletas nuevas y usadas',
@@ -130,20 +140,7 @@ function resolveSeoForPath(pathname: string, search: string): Partial<SeoHeadPro
     }
   }
 
-  if (normalized.startsWith('/sorteo-strava')) {
-    return {
-      title: 'Sorteo Strava Premium · Ciclo Market',
-      description:
-        'Publicá tu bici durante la campaña Sorteo Strava Premium y participá automáticamente por 1 año de Strava Premium sin pasos extra.',
-      image: '/og-preview.png',
-      keywords: [
-        'sorteo strava premium',
-        'strava ciclomarket',
-        'sorteo publicar bicicleta',
-        'strava argentina'
-      ]
-    }
-  }
+  
 
   if (normalized.startsWith('/comparar') || normalized.startsWith('/compare')) {
     return {
@@ -258,6 +255,22 @@ function resolveSeoForPath(pathname: string, search: string): Partial<SeoHeadPro
       description: 'Descubrí todas las tiendas oficiales en Ciclo Market y mirá sus productos publicados, datos de contacto y redes.',
       image: '/og-preview.png',
       keywords: ['tiendas oficiales', 'tienda ciclomarket', 'vender bicicletas tienda']
+    }
+  }
+
+  if (normalized.startsWith('/nutricion')) {
+    return {
+      title: 'Nutrición para ciclismo: geles, hidratación y recuperación',
+      description:
+        'Encontrá geles, bebidas isotónicas, sales y suplementación de tiendas oficiales. Filtrá por cafeína, sodio y porciones para tu entrenamiento.',
+      image: '/og-preview.png',
+      keywords: [
+        'nutricion ciclismo',
+        'geles energeticos',
+        'bebidas isotónicas',
+        'sales de hidratación',
+        'proteína recuperación'
+      ]
     }
   }
 
@@ -376,6 +389,7 @@ function ScrollToTop() {
 export default function App() {
   const location = useLocation()
   const seoConfig = useMemo(() => resolveSeoForPath(location.pathname, location.search), [location.pathname, location.search])
+  const isInstagramLanding = location.pathname === '/ig' || location.pathname === '/links'
   useEffect(() => {
     const gtag = (window as any).gtag as ((...args: any[]) => void) | undefined
     if (typeof gtag === 'function') {
@@ -392,12 +406,11 @@ export default function App() {
         <NotificationsProvider>
           <CurrencyProvider>
             <ToastProvider>
-              <SweepstakesProvider>
-                <CompareProvider>
+              <CompareProvider>
                   <div className="min-h-screen flex flex-col">
                   <SeoHead {...seoConfig} />
                   <GlobalJsonLd />
-                  <Header />
+                  {!isInstagramLanding && <Header />}
                   <ScrollToTop />
 
                   <main className="flex-1">
@@ -406,6 +419,8 @@ export default function App() {
                         <Routes>
                       {/* Home */}
                       <Route path="/" element={<Home />} />
+                      <Route path="/ig" element={<IgLinks />} />
+                      <Route path="/links" element={<IgLinks />} />
 
                       {/* Marketplace (shop) */}
                       <Route path="/marketplace" element={<Marketplace />} />
@@ -426,7 +441,7 @@ export default function App() {
                         path="/publicar/nueva"
                         element={
                           <ProtectedRoute>
-                            <NewListingForm />
+                            <PublishNew />
                           </ProtectedRoute>
                         }
                       />
@@ -470,8 +485,8 @@ export default function App() {
                       <Route path="/bicicletas-triatlon" element={<BicicletasTriatlon />} />
                       <Route path="/ofertas-destacadas" element={<OfertasDestacadas />} />
                       <Route path="/tiendas-oficiales" element={<StoresLanding />} />
+                      <Route path="/nutricion" element={<Nutricion />} />
                       <Route path="/tienda/:slug" element={<Store />} />
-                      <Route path="/sorteo-strava" element={<SweepstakeStrava />} />
 
                       {/* Checkout status */}
                       <Route path="/checkout/success" element={<CheckoutSuccess />} />
@@ -492,13 +507,12 @@ export default function App() {
                     </ErrorBoundary>
                   </main>
 
-                  <CompareTray />
-                  <Newsletter />
+                  {!isInstagramLanding && <CompareTray />}
+                  {!isInstagramLanding && <Newsletter />}
                   <CookieConsent />
-                  <Footer />
+                  {!isInstagramLanding && <Footer />}
                 </div>
                 </CompareProvider>
-              </SweepstakesProvider>
             </ToastProvider>
           </CurrencyProvider>
         </NotificationsProvider>

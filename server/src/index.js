@@ -22,26 +22,13 @@ const { startNewsletterDigestJob, runDigestOnce } = (() => {
 const { startStoreAnalyticsDigestJob, runStoreAnalyticsDigestOnce } = (() => {
   try { return require('./jobs/storeAnalyticsDigest') } catch { return {} }
 })()
+const { startMarketingAutomationsJob, runMarketingAutomationsOnce } = (() => {
+  try { return require('./jobs/marketingAutomations') } catch { return {} }
+})()
 const { buildStoreAnalyticsHTML } = (() => {
   try { return require('./emails/storeAnalyticsEmail') } catch { return {} }
 })()
-const { buildSweepstakeParticipantEmail } = (() => {
-  try { return require('./emails/sweepstakeParticipantEmail') } catch { return {} }
-})()
-const { buildSweepstakeWinnerEmail } = (() => {
-  try { return require('./emails/sweepstakeWinnerEmail') } catch { return {} }
-})()
-const {
-  getActiveSweepstake,
-  getSweepstakeBySlug,
-  upsertSweepstake,
-  listParticipantsBySweepstakeId,
-  getParticipantByUserId,
-  upsertWinner,
-  getWinnerBySweepstakeId,
-} = (() => {
-  try { return require('./lib/sweepstakes') } catch { return {} }
-})()
+// Sweepstake feature removed
 const path = require('path')
 // const https = require('https') // removed: used only for Google rating proxy
 
@@ -170,6 +157,7 @@ app.options('*', cors(corsOptions))
 // Start scheduled jobs after basic middleware is ready
 try { startNewsletterDigestJob && startNewsletterDigestJob() } catch {}
 try { startStoreAnalyticsDigestJob && startStoreAnalyticsDigestJob() } catch {}
+try { startMarketingAutomationsJob && startMarketingAutomationsJob() } catch {}
 
 /* Google Reviews endpoints removed */
 
@@ -419,243 +407,7 @@ app.post('/api/track', async (req, res) => {
   }
 })
 
-/* ----------------------------- Sweepstakes --------------------------------- */
-app.get('/api/sweepstakes/active', async (_req, res) => {
-  if (typeof getActiveSweepstake !== 'function') {
-    return res.status(501).json({ error: 'not_configured' })
-  }
-  try {
-    const sweepstake = await getActiveSweepstake()
-    res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=60')
-    if (!sweepstake) {
-      return res.json(null)
-    }
-    return res.json(sweepstake)
-  } catch (err) {
-    console.warn('[sweepstakes] active endpoint error', err)
-    return res.status(500).json({ error: 'unexpected_error' })
-  }
-})
-
-app.post('/api/sweepstakes', async (req, res) => {
-  if (typeof upsertSweepstake !== 'function') {
-    return res.status(501).json({ ok: false, error: 'not_configured' })
-  }
-  if (!ensureAdminAuthorized(req, res)) return
-
-  let supabase
-  try {
-    supabase = getServerSupabaseClient()
-  } catch (err) {
-    console.error('[sweepstakes] supabase init failed', err)
-    return res.status(500).json({ ok: false, error: 'supabase_not_configured' })
-  }
-
-  try {
-    const sweepstake = await upsertSweepstake(req.body || {}, supabase)
-    return res.json({ ok: true, sweepstake })
-  } catch (err) {
-    if (err && err.message === 'invalid_payload') {
-      return res.status(400).json({ ok: false, error: 'invalid_payload', details: err.details })
-    }
-    if (err && err.message === 'invalid_range') {
-      return res.status(400).json({ ok: false, error: 'invalid_range', details: err.details })
-    }
-    console.error('[sweepstakes] upsert endpoint error', err)
-    return res.status(500).json({ ok: false, error: 'unexpected_error' })
-  }
-})
-
-app.get('/api/sweepstakes/:slug/participants.csv', async (req, res) => {
-  if (typeof getSweepstakeBySlug !== 'function' || typeof listParticipantsBySweepstakeId !== 'function') {
-    return res.status(501).json({ ok: false, error: 'not_configured' })
-  }
-  if (!ensureAdminAuthorized(req, res)) return
-
-  const slug = String(req.params.slug || '').trim()
-  if (!slug) {
-    return res.status(400).json({ ok: false, error: 'invalid_slug' })
-  }
-
-  let supabase
-  try {
-    supabase = getServerSupabaseClient()
-  } catch (err) {
-    console.error('[sweepstakes] supabase init failed', err)
-    return res.status(500).json({ ok: false, error: 'supabase_not_configured' })
-  }
-
-  try {
-    const sweepstake = await getSweepstakeBySlug(slug, supabase)
-    if (!sweepstake) {
-      return res.status(404).json({ ok: false, error: 'not_found' })
-    }
-    const participants = await listParticipantsBySweepstakeId(sweepstake.id, supabase)
-    const csv = buildParticipantsCsv(participants)
-    const filename = `${sweepstake.slug}-participants.csv`
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8')
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
-    res.setHeader('Cache-Control', 'no-store')
-    return res.send(csv)
-  } catch (err) {
-    console.error('[sweepstakes] participants csv error', err)
-    return res.status(500).json({ ok: false, error: 'unexpected_error' })
-  }
-})
-
-app.post('/api/sweepstakes/:slug/participants/:userId/notify', async (req, res) => {
-  if (
-    typeof getSweepstakeBySlug !== 'function' ||
-    typeof getParticipantByUserId !== 'function' ||
-    typeof buildSweepstakeParticipantEmail !== 'function'
-  ) {
-    return res.status(501).json({ ok: false, error: 'not_configured' })
-  }
-  if (!ensureAdminAuthorized(req, res)) return
-  if (!ensureMailAvailable(res)) return
-
-  const slug = String(req.params.slug || '').trim()
-  const userId = String(req.params.userId || '').trim()
-  if (!slug || !userId) {
-    return res.status(400).json({ ok: false, error: 'invalid_params' })
-  }
-
-  let supabase
-  try {
-    supabase = getServerSupabaseClient()
-  } catch (err) {
-    console.error('[sweepstakes] supabase init failed', err)
-    return res.status(500).json({ ok: false, error: 'supabase_not_configured' })
-  }
-
-  try {
-    const sweepstake = await getSweepstakeBySlug(slug, supabase)
-    if (!sweepstake?.id) {
-      return res.status(404).json({ ok: false, error: 'not_found' })
-    }
-    const participant = await getParticipantByUserId(sweepstake.id, userId, supabase)
-    if (!participant) {
-      return res.status(404).json({ ok: false, error: 'participant_not_found' })
-    }
-
-    const contact = await lookupUserContact(supabase, participant.user_id)
-    if (!contact.email) {
-      return res.status(404).json({ ok: false, error: 'email_not_found' })
-    }
-
-    let listingTitle = null
-    let listingUrl = null
-    if (participant.first_listing_id) {
-      const listing = await fetchListingSummary(supabase, participant.first_listing_id)
-      if (listing) {
-        listingTitle = listing.title
-        listingUrl = listing.url
-      }
-    }
-
-    const emailPayload = buildSweepstakeParticipantEmail({
-      name: contact.name,
-      sweepstakeTitle: sweepstake.title,
-      endAt: sweepstake.end_at,
-      listingTitle,
-      listingUrl,
-    })
-
-    const mailOptions = {
-      to: contact.email,
-      subject: emailPayload.subject,
-      html: emailPayload.html,
-      text: emailPayload.text,
-    }
-
-    await sendMail(mailOptions)
-    return res.json({ ok: true, sentTo: contact.email })
-  } catch (err) {
-    console.error('[sweepstakes] participant notify failed', err)
-    return res.status(500).json({ ok: false, error: 'unexpected_error' })
-  }
-})
-
-app.post('/api/sweepstakes/:slug/winner', async (req, res) => {
-  if (
-    typeof getSweepstakeBySlug !== 'function' ||
-    typeof getParticipantByUserId !== 'function' ||
-    typeof upsertWinner !== 'function'
-  ) {
-    return res.status(501).json({ ok: false, error: 'not_configured' })
-  }
-  if (!ensureAdminAuthorized(req, res)) return
-
-  const slug = String(req.params.slug || '').trim()
-  const userId = String(req.body?.userId || '').trim()
-  const notify = req.body?.notify !== undefined ? Boolean(req.body.notify) : true
-  const instructions =
-    typeof req.body?.instructions === 'string' && req.body.instructions.trim()
-      ? req.body.instructions.trim()
-      : undefined
-
-  if (!slug || !userId) {
-    return res.status(400).json({ ok: false, error: 'invalid_params' })
-  }
-
-  if (notify && typeof buildSweepstakeWinnerEmail !== 'function') {
-    return res.status(501).json({ ok: false, error: 'winner_email_not_configured' })
-  }
-  if (notify && !ensureMailAvailable(res)) return
-
-  let supabase
-  try {
-    supabase = getServerSupabaseClient()
-  } catch (err) {
-    console.error('[sweepstakes] supabase init failed', err)
-    return res.status(500).json({ ok: false, error: 'supabase_not_configured' })
-  }
-
-  try {
-    const sweepstake = await getSweepstakeBySlug(slug, supabase)
-    if (!sweepstake?.id) {
-      return res.status(404).json({ ok: false, error: 'not_found' })
-    }
-
-    const participant = await getParticipantByUserId(sweepstake.id, userId, supabase)
-    if (!participant) {
-      return res.status(404).json({ ok: false, error: 'participant_not_found' })
-    }
-
-    const winner = await upsertWinner({ sweepstakeId: sweepstake.id, userId }, supabase)
-
-    if (notify && winner) {
-      const contact = await lookupUserContact(supabase, userId)
-      if (!contact.email) {
-        console.warn('[sweepstakes] winner notify aborted: email missing')
-      } else {
-        const emailPayload = buildSweepstakeWinnerEmail({
-          name: contact.name,
-          sweepstakeTitle: sweepstake.title,
-          endAt: sweepstake.end_at,
-          claimInstructions: instructions,
-        })
-        const mailOptions = {
-          to: contact.email,
-          subject: emailPayload.subject,
-          html: emailPayload.html,
-          text: emailPayload.text,
-        }
-        try {
-          await sendMail(mailOptions)
-        } catch (mailError) {
-          console.error('[sweepstakes] winner email failed', mailError)
-          return res.status(500).json({ ok: false, error: 'email_failed', details: mailError?.message })
-        }
-      }
-    }
-
-    return res.json({ ok: true, winner })
-  } catch (err) {
-    console.error('[sweepstakes] winner selection failed', err)
-    return res.status(500).json({ ok: false, error: 'unexpected_error' })
-  }
-})
+/* Sweepstakes endpoints removed */
 
 // Per-store Google rating endpoint removed
 
@@ -741,7 +493,6 @@ app.get('/sitemap-static.xml', async (_req, res) => {
     '/clasificados-bicicletas',
     '/publicar',
     '/como-publicar',
-    '/sorteo-strava',
     '/ayuda',
     '/tienda-oficial',
     '/tiendas',

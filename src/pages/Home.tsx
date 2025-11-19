@@ -12,6 +12,7 @@ import { formatListingPrice } from '../utils/pricing'
 import HorizontalSlider from '../components/HorizontalSlider'
 import { buildImageSource } from '../lib/imageUrl'
 import { fetchListings } from '../services/listings'
+import { fetchStoresMeta } from '../services/users'
 import { supabaseEnabled } from '../services/supabase'
 import { fetchLikeCounts } from '../services/likes'
 import type { Listing } from '../types'
@@ -298,7 +299,7 @@ export default function Home() {
 
   const featuredListings = useMemo(() => {
     const now = Date.now()
-    const isBike = (l: Listing) => l.category !== 'Accesorios' && l.category !== 'Indumentaria'
+    const isBike = (l: Listing) => l.category !== 'Accesorios' && l.category !== 'Indumentaria' && l.category !== 'Nutrición'
     const highlighted = listings.filter((l) => isBike(l) && typeof l.highlightExpires === 'number' && l.highlightExpires > now)
       .sort((a, b) => (b.highlightExpires ?? 0) - (a.highlightExpires ?? 0))
     // Completar con pagas si hace falta
@@ -359,6 +360,7 @@ export default function Home() {
   const [likesFeatured, setLikesFeatured] = useState<Record<string, number>>({})
   const [likesOffers, setLikesOffers] = useState<Record<string, number>>({})
   const [likesRecent, setLikesRecent] = useState<Record<string, number>>({})
+  const [storeLogos, setStoreLogos] = useState<Record<string, string | null>>({})
 
   useEffect(() => {
     const ids = featuredListings.slice(0, 24).map((l) => l.id)
@@ -404,6 +406,20 @@ export default function Home() {
     })()
     return () => { active = false }
   }, [filtered.slice(0, 20).map((l) => l.id).join(',')])
+
+  // Cargar logos de tiendas oficiales para mostrar badge en cards
+  useEffect(() => {
+    const sellerIds = Array.from(new Set(listings.map((l) => l.sellerId).filter(Boolean))) as string[]
+    if (!sellerIds.length) { setStoreLogos({}); return }
+    let active = true
+    ;(async () => {
+      try {
+        const logos = await fetchStoresMeta(sellerIds)
+        if (active) setStoreLogos(logos)
+      } catch { if (active) setStoreLogos({}) }
+    })()
+    return () => { active = false }
+  }, [listings.map((l) => l.sellerId || '').join(',')])
 
   return (
     <div
@@ -478,7 +494,7 @@ export default function Home() {
               items={featuredListings}
               maxItems={24}
               initialLoad={8}
-              renderCard={(l: any, idx?: number) => <ListingCard l={l} priority={(idx ?? 0) < 4} likeCount={likesFeatured[l.id]} />}
+              renderCard={(l: any, idx?: number) => <ListingCard l={l} storeLogoUrl={storeLogos[l.sellerId] || null} priority={(idx ?? 0) < 4} likeCount={likesFeatured[l.id]} />}
               tone="dark"
             />
           </Container>
@@ -499,7 +515,7 @@ export default function Home() {
               items={offers}
               maxItems={20}
               initialLoad={8}
-              renderCard={(l:any, idx?: number) => <ListingCard l={l} priority={(idx ?? 0) < 4} likeCount={likesOffers[l.id]} />}
+              renderCard={(l:any, idx?: number) => <ListingCard l={l} storeLogoUrl={storeLogos[l.sellerId] || null} priority={(idx ?? 0) < 4} likeCount={likesOffers[l.id]} />}
               tone="dark"
             />
           ) : (
@@ -535,12 +551,81 @@ export default function Home() {
               items={filtered}
               maxItems={20}
               initialLoad={8}
-              renderCard={(l:any, idx?: number) => <ListingCard l={l} priority={(idx ?? 0) < 4} likeCount={likesRecent[l.id]} />}
+              renderCard={(l:any, idx?: number) => <ListingCard l={l} storeLogoUrl={storeLogos[l.sellerId] || null} priority={(idx ?? 0) < 4} likeCount={likesRecent[l.id]} />}
               tone="dark"
             />
           ) : (
             <EmptyState />
           )}
+        </Container>
+      </section>
+
+      {/* CATEGORÍAS RÁPIDAS (Bicis / Accesorios / Indumentaria / Nutrición) */}
+      <section className="relative isolate overflow-hidden bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] pt-2 pb-8">
+        <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
+          <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
+          <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
+        </div>
+        <Container className="text-white">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-lg font-semibold">Buscá por categoría</h3>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-4">
+            {[
+              {
+                key: 'bikes',
+                label: 'Bicicletas',
+                description: 'Solo bicicletas',
+                image: '/design/Banners/1.png',
+                imageMobile: '/design/Banners-Mobile/1.png',
+                to: '/marketplace?bikes=1',
+              },
+              {
+                key: 'acc',
+                label: 'Accesorios',
+                description: 'Componentes y upgrades',
+                image: '/design/Banners/2.png',
+                imageMobile: '/design/Banners-Mobile/2.png',
+                to: '/marketplace?cat=Accesorios',
+              },
+              {
+                key: 'app',
+                label: 'Indumentaria',
+                description: 'Ropa técnica y casual',
+                image: '/design/Banners/3.png',
+                imageMobile: '/design/Banners-Mobile/3.png',
+                to: '/marketplace?cat=Indumentaria',
+              },
+              {
+                key: 'nut',
+                label: 'Nutrición',
+                description: 'Energía e hidratación',
+                image: '/design/Banners/4.webp',
+                imageMobile: '/design/Banners-Mobile/4.webp',
+                to: '/marketplace?q=nutricion',
+              },
+            ].map((card) => (
+              <Link
+                key={card.key}
+                to={card.to}
+                className="relative w-full overflow-hidden rounded-3xl border-2 border-white/15 bg-white/5 transition hover:border-white/30 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#14212e]"
+              >
+                <div className="relative aspect-square sm:aspect-[17/5]">
+                  <picture className="block h-full w-full">
+                    <source media="(max-width: 640px)" srcSet={card.imageMobile} />
+                    <img src={card.image} alt={card.label} className="h-full w-full object-cover" loading="lazy" decoding="async" />
+                  </picture>
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#050c18]/85 via-transparent to-transparent" aria-hidden />
+                  <div className="absolute inset-0 flex items-end p-2 sm:p-4">
+                    <div className="space-y-1 text-left">
+                      <span className="text-sm font-semibold text-white sm:text-lg drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">{card.label}</span>
+                      <span className="hidden text-xs text-white/80 sm:block">{card.description}</span>
+                    </div>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
         </Container>
       </section>
 

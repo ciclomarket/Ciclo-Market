@@ -228,7 +228,6 @@ export default function Tiendas() {
         </div>
         <Container>
           <div className="py-10 space-y-8">
-            {/* Cajas de categorías removidas */}
 
             {loading ? (
               <div className="rounded-3xl border border-white/10 bg-white/5 p-6 text-center text-white/80">Cargando tiendas…</div>

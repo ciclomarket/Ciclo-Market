@@ -2,9 +2,11 @@ import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { KEYWORDS } from '../data/keywords'
+import { BIKE_CATEGORIES } from '../constants/catalog'
 import { useAuth } from '../context/AuthContext'
 import { getSupabaseClient, supabaseEnabled, setAuthPersistence } from '../services/supabase'
 import { fetchStores, type StoreSummary } from '../services/users'
+import { fetchListings } from '../services/listings'
 import { fetchMyCredits } from '../services/credits'
 import { useToast } from '../context/ToastContext'
 import { SocialAuthButtons } from './SocialAuthButtons'
@@ -12,91 +14,47 @@ import { SocialAuthButtons } from './SocialAuthButtons'
 type MegaCol = { title: string; links: Array<{ label: string; to: string }> }
 type MegaItem = { label: string; cols: MegaCol[] }
 
+const BIKE_CATEGORY_LINKS: Array<{ label: string; to: string }> = (() => {
+  const base = Array.from(BIKE_CATEGORIES).map((c) => ({ label: c, to: `/marketplace?cat=${encodeURIComponent(c)}` }))
+  return base
+})()
+
 const MEGA: MegaItem[] = [
   {
-    label: 'Ruta & Gravel',
+    label: 'Bicicletas',
     cols: [
       {
         title: 'Categorías',
         links: [
-          { label: 'Bicicletas de Ruta', to: '/bicicletas-ruta' },
-          { label: 'Gravel', to: '/bicicletas-gravel' },
-          { label: 'Triatlón / TT', to: '/bicicletas-triatlon' },
-          { label: 'Vintage / Acero', to: '/marketplace?cat=Ruta&q=vintage%20acero' },
+          { label: 'Ver todas las bicicletas', to: '/marketplace?bikes=1' },
+          ...BIKE_CATEGORY_LINKS,
+        ],
+      },
+      {
+        title: 'Filtros especiales',
+        links: [
+          { label: 'Bicicletas de carbono', to: '/marketplace?bikes=1&material=Carbono' },
+          { label: 'Bicicletas de aluminio', to: '/marketplace?bikes=1&material=Aluminio' },
+          { label: 'Transmisión electrónica', to: '/marketplace?bikes=1&transmissionType=Electr%C3%B3nica' },
+          { label: 'Transmisión mecánica', to: '/marketplace?bikes=1&transmissionType=Mec%C3%A1nica' },
+          { label: 'Bicicletas < 2000 USD', to: '/marketplace?bikes=1&price_cur=USD&price_max=2000' },
+          { label: 'Bicicletas nuevas', to: '/marketplace?bikes=1&condition=Nuevo' },
+          { label: 'Bicicletas en oferta', to: '/marketplace?bikes=1&deal=1' },
         ],
       },
       {
         title: 'Marcas destacadas',
         links: [
-          { label: 'Trek', to: '/marketplace?brand=Trek' },
-          { label: 'Specialized', to: '/marketplace?brand=Specialized' },
-          { label: 'Canyon', to: '/marketplace?brand=Canyon' },
-          { label: 'Cervélo', to: '/marketplace?brand=Cervelo' },
-          { label: 'BMC', to: '/marketplace?brand=BMC' },
-        ],
-      },
-      {
-        title: 'Rango de precio',
-        links: [
-          { label: 'Ofertas', to: '/marketplace?deal=1' },
-          { label: 'Hasta USD 1.500', to: '/marketplace?price_max=1500' },
-          { label: 'USD 1.500–3.000', to: '/marketplace?price_min=1500&price_max=3000' },
-          { label: 'USD 3.000–5.000', to: '/marketplace?price_min=3000&price_max=5000' },
-          { label: 'Premium (+USD 5.000)', to: '/marketplace?price_min=5000' },
-        ],
-      },
-    ],
-  },
-  {
-    label: 'MTB',
-    cols: [
-      {
-        title: 'Categorías',
-        links: [
-          { label: 'MTB (todas)', to: '/bicicletas-mtb' },
-          { label: 'Cross Country', to: '/marketplace?cat=MTB&q=cross%20country%20xc' },
-          { label: 'Trail', to: '/marketplace?cat=MTB&q=trail' },
-          { label: 'Enduro', to: '/marketplace?cat=MTB&q=enduro' },
-          { label: 'Downhill', to: '/marketplace?cat=MTB&q=downhill%20dh' },
-        ],
-      },
-      {
-        title: 'Marcas destacadas',
-        links: [
-          { label: 'Trek MTB', to: '/marketplace?brand=Trek&cat=MTB' },
-          { label: 'Scott MTB', to: '/marketplace?brand=Scott&cat=MTB' },
-          { label: 'Cannondale MTB', to: '/marketplace?brand=Cannondale&cat=MTB' },
-          { label: 'Giant MTB', to: '/marketplace?brand=Giant&cat=MTB' },
-        ],
-      },
-      {
-        title: 'Rango de precio',
-        links: [
-          { label: 'Hot Deals', to: '/marketplace?deal=1&cat=MTB' },
-          { label: 'Budget (≤ USD 1.500)', to: '/marketplace?cat=MTB&price_max=1500' },
-          { label: 'Mid (USD 1.500–3.000)', to: '/marketplace?cat=MTB&price_min=1500&price_max=3000' },
-          { label: 'Performance (USD 3.000–5.000)', to: '/marketplace?cat=MTB&price_min=3000&price_max=5000' },
-        ],
-      },
-    ],
-  },
-  {
-    label: 'Urbana & Fixie',
-    cols: [
-      {
-        title: 'Categorías',
-        links: [
-          { label: 'Urbana', to: '/marketplace?cat=Urbana' },
-          { label: 'Fixie', to: '/fixie' },
-          { label: 'Single Speed', to: '/marketplace?cat=Fixie&q=single%20speed' },
-        ],
-      },
-      {
-        title: 'Rango de precio',
-        links: [
-          { label: 'Ofertas', to: '/marketplace?deal=1&cat=Urbana' },
-          { label: 'Hasta USD 800', to: '/marketplace?cat=Urbana&max=800' },
-          { label: 'USD 800–1.500', to: '/marketplace?cat=Urbana&min=800&max=1500' },
+          { label: 'Specialized', to: '/marketplace?bikes=1&brand=Specialized' },
+          { label: 'Trek', to: '/marketplace?bikes=1&brand=Trek' },
+          { label: 'Canyon', to: '/marketplace?bikes=1&brand=Canyon' },
+          { label: 'Scott', to: '/marketplace?bikes=1&brand=Scott' },
+          { label: 'Giant', to: '/marketplace?bikes=1&brand=Giant' },
+          { label: 'Orbea', to: '/marketplace?bikes=1&brand=Orbea' },
+          { label: 'Cervélo', to: '/marketplace?bikes=1&brand=Cervelo' },
+          { label: 'Pinarello', to: '/marketplace?bikes=1&brand=Pinarello' },
+          { label: 'BH', to: '/marketplace?bikes=1&brand=BH' },
+          { label: 'Aurum', to: '/marketplace?bikes=1&brand=Aurum' },
         ],
       },
     ],
@@ -115,12 +73,40 @@ const MEGA: MegaItem[] = [
   {
     label: 'Indumentaria',
     cols: [
-      { title: 'Indumentaria (toda) →', links: [ { label: 'Ver toda', to: '/indumentaria' } ] },
-      { title: 'Jerseys / Maillots', links: [ { label: 'Ver jerseys', to: '/marketplace?cat=Indumentaria&q=jersey%20maillot' } ] },
-      { title: 'Bibs / Culotte', links: [ { label: 'Ver bibs/culotte', to: '/marketplace?cat=Indumentaria&q=bib%20culotte' } ] },
-      { title: 'Cascos', links: [ { label: 'Ver cascos', to: '/marketplace?cat=Indumentaria&q=casco' } ] },
-      { title: 'Zapatillas', links: [ { label: 'Ver zapatillas', to: '/marketplace?cat=Indumentaria&q=zapatillas' } ] },
-      { title: 'Guantes', links: [ { label: 'Ver guantes', to: '/marketplace?cat=Indumentaria&q=guantes' } ] },
+      { title: 'Indumentaria (toda) →', links: [ { label: 'Ver toda', to: '/marketplace?cat=Indumentaria' } ] },
+      { title: 'Jerseys / Maillots', links: [ { label: 'Ver jerseys', to: '/marketplace?cat=Indumentaria&subcat=Jerseys' } ] },
+      { title: 'Bibs / Culotte', links: [ { label: 'Ver bibs/culotte', to: '/marketplace?cat=Indumentaria&subcat=Bibs%20%2F%20Culotte' } ] },
+      { title: 'Cascos', links: [ { label: 'Ver cascos', to: '/marketplace?cat=Indumentaria&subcat=Cascos' } ] },
+      { title: 'Zapatillas', links: [ { label: 'Ver zapatillas', to: '/marketplace?cat=Indumentaria&subcat=Zapatillas' } ] },
+      { title: 'Guantes', links: [ { label: 'Ver guantes', to: '/marketplace?cat=Indumentaria&subcat=Guantes' } ] },
+    ],
+  },
+  {
+    label: 'Nutrición',
+    cols: [
+      {
+        title: 'Categorías',
+        links: [
+          { label: 'Geles', to: '/marketplace?cat=Nutrici%C3%B3n&subcat=Geles' },
+          { label: 'Hidratación', to: '/marketplace?cat=Nutrici%C3%B3n&subcat=Hidrataci%C3%B3n' },
+          { label: 'Suplementación', to: '/marketplace?cat=Nutrici%C3%B3n&subcat=Suplementaci%C3%B3n' },
+          { label: 'Barras y snacks', to: '/marketplace?cat=Nutrici%C3%B3n&subcat=Barras%20y%20snacks' },
+          { label: 'Ver todo Nutrición', to: '/marketplace?cat=Nutrici%C3%B3n' },
+        ],
+      },
+      {
+        title: 'Dietas / atributos',
+        links: [
+          { label: 'Sin cafeína', to: '/marketplace?cat=Nutrici%C3%B3n&q=sin%20cafe%C3%ADna' },
+          { label: 'Cafeína < 50 mg', to: '/marketplace?cat=Nutrici%C3%B3n&q=cafe%C3%ADna%20%3C%2050' },
+          { label: 'Vegano', to: '/marketplace?cat=Nutrici%C3%B3n&q=vegano' },
+          { label: 'Sin gluten', to: '/marketplace?cat=Nutrici%C3%B3n&q=sin%20gluten' },
+        ],
+      },
+      {
+        title: 'Marcas',
+        links: [],
+      },
     ],
   },
 ]
@@ -272,6 +258,7 @@ export default function Header() {
   const [stores, setStores] = useState<StoreSummary[]>([])
   const [storesOpen, setStoresOpen] = useState(false)
   const [creditCount, setCreditCount] = useState<number>(0)
+  const [nutritionBrands, setNutritionBrands] = useState<string[]>([])
   const { show: showToast } = useToast()
   const publishLink = user ? '/publicar' : '/register'
 
@@ -325,6 +312,34 @@ export default function Header() {
     return () => { mounted = false }
   }, [])
 
+  // Cargar marcas existentes de Nutrición (máximo 5) para mega menú
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      try {
+        if (!supabaseEnabled) return
+        const all = await fetchListings()
+        if (!active || !Array.isArray(all)) return
+        const map = new Map<string, { name: string; count: number }>()
+        for (const l of all) {
+          if ((l.category || '') !== 'Nutrición') continue
+          const raw = (l.brand || '').trim()
+          if (!raw) continue
+          const key = raw.toLowerCase()
+          const prev = map.get(key)
+          if (prev) { prev.count += 1; continue }
+          map.set(key, { name: raw, count: 1 })
+        }
+        const top = Array.from(map.values())
+          .sort((a, b) => b.count - a.count)
+          .map((v) => v.name)
+          .slice(0, 5)
+        setNutritionBrands(top)
+      } catch { /* noop */ }
+    })()
+    return () => { active = false }
+  }, [])
+
   // Cargar créditos disponibles para badge en header (con refresco tras evento global)
   useEffect(() => {
     let active = true
@@ -361,7 +376,17 @@ export default function Header() {
   }, [showToast])
 
   const megaItems: MegaItem[] = useMemo(() => {
-    if (!stores || stores.length === 0) return MEGA
+    // Base items, with dynamic Nutrition brands injected
+    const base: MegaItem[] = MEGA.map((it) => ({ label: it.label, cols: it.cols.map((c) => ({ title: c.title, links: [...c.links] })) }))
+    const nut = base.find((m) => m.label === 'Nutrición')
+    if (nut && nutritionBrands.length) {
+      const brandsCol = nut.cols.find((c) => c.title === 'Marcas')
+      if (brandsCol) {
+        brandsCol.links = nutritionBrands.slice(0, 5).map((brand) => ({ label: brand, to: `/marketplace?cat=Nutrici%C3%B3n&brand=${encodeURIComponent(brand)}` }))
+      }
+    }
+
+    if (!stores || stores.length === 0) return base
     const top = stores.slice(0, 9)
     const cols: MegaCol[] = []
     for (let i = 0; i < 3; i++) {
@@ -371,8 +396,8 @@ export default function Header() {
         links: chunk.map((s) => ({ label: (s.store_name || s.store_slug).toString(), to: `/tienda/${s.store_slug}` }))
       })
     }
-    return [...MEGA, { label: 'Tiendas oficiales', cols }]
-  }, [stores])
+    return [...base, { label: 'Tiendas oficiales', cols }]
+  }, [stores, nutritionBrands])
 
   const isMobileViewport = useIsMobile()
   const [mounted, setMounted] = useState(false)
@@ -491,9 +516,22 @@ export default function Header() {
     }
   }
 
+  // Measure header height and expose via CSS var for sticky offsets
+  const headerRef = useRef<HTMLElement | null>(null)
+  useEffect(() => {
+    const root = document.documentElement
+    const update = () => {
+      const h = headerRef.current?.getBoundingClientRect().height || 0
+      root.style.setProperty('--header-h', `${Math.max(0, Math.round(h))}px`)
+    }
+    update()
+    window.addEventListener('resize', update)
+    return () => { window.removeEventListener('resize', update) }
+  }, [])
+
   const header = (
-    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/70">
-      <div className="max-w-6xl mx-auto px-4 py-4 flex items-center gap-3 md:gap-6">
+    <header ref={headerRef} className="sticky top-0 z-40 bg-white border-b border-neutral-200 shadow-sm">
+      <div className="max-w-6xl mx-auto px-4 py-4 flex items-center gap-4 md:gap-6">
         <Link to="/" className="flex items-center gap-2 shrink-0" aria-label="Ir al inicio">
           <picture>
             <source srcSet="/site-logo.webp" type="image/webp" />
@@ -624,7 +662,7 @@ export default function Header() {
           <div className="relative">
             <Link
               to={publishLink}
-              className="h-9 px-4 rounded-full bg-mb-primary text-white text-sm grid place-content-center"
+              className="px-4 py-2 rounded-2xl bg-gradient-to-r from-[#0ea5e9] via-[#2563eb] to-[#1d4ed8] text-white text-sm font-semibold shadow-[0_10px_28px_rgba(37,99,235,0.28)] hover:brightness-110"
               title={creditCount > 0 && user ? 'Tenés un crédito disponible. Publicá gratis.' : undefined}
             >
               Vender
@@ -656,35 +694,42 @@ export default function Header() {
 
       <div className="hidden md:block relative">
         <div
-          className="max-w-6xl mx-auto px-4 flex items-center gap-6 text-sm font-medium"
+          className="max-w-6xl mx-auto px-4 flex items-center gap-7 text-base font-semibold tracking-[0.01em]"
           onMouseEnter={cancelCloseMega}
           onMouseLeave={() => { scheduleCloseMega() }}
         >
+          <Link
+            to="/marketplace"
+            className="py-2 px-5 rounded-full bg-mb-primary text-white font-bold shadow-sm hover:shadow-md hover:brightness-110 hover:scale-[1.01] transition-all"
+            onMouseEnter={() => { setOpenIdx(null); setStoresOpen(false) }}
+          >
+            Marketplace
+          </Link>
           {MEGA.map((item, idx) => {
-            const first = item.cols?.[0]?.links?.[0]?.to || '/marketplace'
+            const primary: Record<string, string> = {
+              'Bicicletas': '/marketplace?bikes=1',
+              'Accesorios': '/marketplace?cat=Accesorios',
+              'Indumentaria': '/marketplace?cat=Indumentaria',
+              'Nutrición': '/marketplace?cat=Nutrici%C3%B3n',
+            }
+            const first = primary[item.label] || item.cols?.[0]?.links?.[0]?.to || '/marketplace'
             return (
               <Link
                 key={item.label}
                 to={first}
-                className={`py-3 border-b-2 transition ${openIdx === idx ? 'border-mb-primary text-mb-primary' : 'border-transparent text-black/70 hover:text-black'}`}
+                className={`py-3 border-b-2 transition-all ${openIdx === idx ? 'border-b-[3px] border-[#14212e] text-[#14212e]' : 'border-transparent text-[#14212e]/80 hover:text-[#14212e] hover:border-[#14212e]'}`}
                 onMouseEnter={() => openMega(idx)}
               >
                 {item.label}
               </Link>
             )
           })}
-          <Link to="/marketplace" className="ml-auto py-3 text-black/70 hover:text-black">
-            Marketplace
-          </Link>
-          <Link to="/ofertas-destacadas" className="py-3 text-black/70 hover:text-black">
-            Ofertas
-          </Link>
-          <Link to="/como-publicar" className="py-3 text-black/70 hover:text-black">
+          <Link to="/como-publicar" className="py-3 text-[#14212e]/80 hover:text-[#14212e] border-b-2 border-transparent hover:border-[#14212e] transition-all" onMouseEnter={() => { setOpenIdx(null); setStoresOpen(false) }}>
             Cómo publicar
           </Link>
           <Link
             to="/tiendas"
-            className={`py-3 border-b-2 transition ${storesOpen ? 'border-mb-primary text-mb-primary' : 'border-transparent text-black/70 hover:text-black'}`}
+            className={`py-3 border-b-2 transition-all ${storesOpen ? 'border-b-[3px] border-[#14212e] text-[#14212e]' : 'border-transparent text-[#14212e]/80 hover:text-[#14212e] hover:border-[#14212e]'}`}
             onMouseEnter={() => { setOpenIdx(null); setStoresOpen(true) }}
           >
             Tiendas oficiales
@@ -692,63 +737,98 @@ export default function Header() {
         </div>
 
         {openIdx !== null && (
-          <div className="absolute inset-x-0 top-full bg-white border-b border-black/10 shadow-lg" onMouseEnter={cancelCloseMega} onMouseLeave={() => { scheduleCloseMega() }}>
-            <div className="max-w-6xl mx-auto px-6 py-6 grid grid-cols-1 sm:grid-cols-3 gap-6">
-              {MEGA[openIdx].cols.map((col, i) => (
-                <div key={i}>
-                  <h4 className="text-xs uppercase tracking-wide text-black/50 mb-3">{col.title}</h4>
-                  <ul className="space-y-2">
-                    {col.links.map((link, j) => (
-                      <li key={j}>
-                        <Link to={link.to} className="text-sm text-black/70 hover:text-mb-primary" onClick={() => setOpenIdx(null)}>
-                          {link.label}
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
+          <div className="absolute inset-x-0 top-full z-40" onMouseEnter={cancelCloseMega} onMouseLeave={() => { scheduleCloseMega() }}>
+            <div className="max-w-6xl mx-auto px-6">
+              <div className="mt-1 rounded-2xl border border-black/10 bg-white shadow-xl">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-x-12 gap-y-6 p-6 items-stretch min-h-[360px]">
+                  {(() => {
+                    const item = MEGA[openIdx]
+                    const cols = item.cols || []
+                    // Group columns for Accesorios/Indumentaria so each column has top+bottom blocks aligned
+                    const needsPairing = (item.label === 'Accesorios' || item.label === 'Indumentaria') && cols.length >= 6
+                    const columns = needsPairing
+                      ? [
+                          [cols[0], cols[3]],
+                          [cols[1], cols[4]],
+                          [cols[2], cols[5]],
+                        ]
+                      : cols.map((c) => [c])
+                    return columns.map((sections, i) => (
+                      <div key={`col-${i}`} className={`h-full ${i > 0 ? 'border-l border-gray-200 pl-8 ml-8' : ''}`}>
+                        {sections.map((section, sIdx) => (
+                          <div key={`sec-${i}-${sIdx}`} className={sIdx > 0 ? 'mt-6' : ''}>
+                            <h3 className="mb-3 text-sm font-semibold text-gray-800">{section.title}</h3>
+                            <ul className="space-y-2">
+                              {(section.links || []).map((link, j) => (
+                                <li key={`lnk-${i}-${sIdx}-${j}`}>
+                                  <Link to={link.to} className="text-sm text-black/70 hover:text-mb-primary" onClick={() => setOpenIdx(null)}>
+                                    {link.label}
+                                  </Link>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ))}
+                      </div>
+                    ))
+                  })()}
                 </div>
-              ))}
+              </div>
             </div>
           </div>
         )}
 
         {storesOpen && (
-          <div className="absolute inset-x-0 top-full bg-white border-b border-black/10 shadow-lg" onMouseEnter={cancelCloseMega} onMouseLeave={() => { scheduleCloseMega() }}>
-            <div className="max-w-6xl mx-auto px-6 py-6 grid grid-cols-1 sm:grid-cols-3 gap-6">
-              {[0,1,2].map((colIdx) => {
-                const items = stores.slice(0, 9).slice(colIdx * 3, colIdx * 3 + 3)
-                return (
-                  <div key={`stores-col-${colIdx}`}>
-                    <h4 className="text-xs uppercase tracking-wide text-black/50 mb-3">{colIdx === 0 ? 'Tiendas oficiales' : '\u00A0'}</h4>
-                    <ul className="space-y-2">
-                      {items.map((s) => (
-                        <li key={s.store_slug}>
-                          <Link to={`/tienda/${s.store_slug}`} className="text-sm text-black/70 hover:text-mb-primary" onClick={() => setStoresOpen(false)}>
-                            {s.store_name || s.store_slug}
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
+          <div className="absolute inset-x-0 top-full z-40" onMouseEnter={cancelCloseMega} onMouseLeave={() => { scheduleCloseMega() }}>
+            <div className="max-w-6xl mx-auto px-6">
+              <div className="mt-1 rounded-2xl border border-black/10 bg-white shadow-xl">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 p-6 min-h-[360px]">
+                  {[0,1,2].map((colIdx) => {
+                    const items = stores.slice(0, 9).slice(colIdx * 3, colIdx * 3 + 3)
+                    return (
+                      <div key={`stores-col-${colIdx}`}>
+                        <h4 className="text-xs uppercase tracking-wide text-black/50 mb-3">{colIdx === 0 ? 'Tiendas oficiales' : '\u00A0'}</h4>
+                        <ul className="space-y-2">
+                          {items.map((s) => (
+                            <li key={s.store_slug}>
+                              <Link to={`/tienda/${s.store_slug}`} className="text-sm text-black/70 hover:text-mb-primary" onClick={() => setStoresOpen(false)}>
+                                {s.store_name || s.store_slug}
+                              </Link>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )
+                  })}
+                </div>
+                {stores.length > 9 && (
+                  <div className="px-6 pb-5 -mt-3">
+                    <Link to="/tiendas" className="inline-flex items-center gap-2 text-sm text-black/70 hover:text-mb-primary" onClick={() => setStoresOpen(false)}>
+                      Ver más tiendas
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                      </svg>
+                    </Link>
                   </div>
-                )
-              })}
-            </div>
-            {stores.length > 9 && (
-              <div className="max-w-6xl mx-auto px-6 pb-5 -mt-3">
-                <Link to="/tiendas" className="inline-flex items-center gap-2 text-sm text-black/70 hover:text-mb-primary" onClick={() => setStoresOpen(false)}>
-                  Ver más tiendas
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                  </svg>
-                </Link>
+                )}
               </div>
-            )}
+            </div>
           </div>
         )}
       </div>
 
     </header>
   )
+
+  const [mobileSectionOpen, setMobileSectionOpen] = useState<Record<string, boolean>>({})
+  const toggleSection = (key: string) => setMobileSectionOpen((prev) => ({ ...prev, [key]: !prev[key] }))
+  const [mobileBikeGroupsOpen, setMobileBikeGroupsOpen] = useState<Record<string, boolean>>({})
+  const toggleBikeGroup = (key: string) => setMobileBikeGroupsOpen((prev) => ({ ...prev, [key]: !prev[key] }))
+
+  const bikesMega = MEGA.find((m) => m.label === 'Bicicletas')
+  const accesoriosMega = MEGA.find((m) => m.label === 'Accesorios')
+  const indumentariaMega = MEGA.find((m) => m.label === 'Indumentaria')
+  const nutricionMega = MEGA.find((m) => m.label === 'Nutrición')
 
   const mobileMenuOverlay = mounted && isMobileViewport && mobileMenuOpen
     ? createPortal(
@@ -763,114 +843,154 @@ export default function Header() {
               </button>
             </div>
 
-            <div className="px-4 py-3 space-y-4">
-              {/* Bloque destacado (primeras filas) */}
-              <div className="rounded-2xl bg-[#0c1723] text-white p-4">
+            <div className="px-4 py-4 space-y-4">
+              {/* 1) Primary actions */}
+              <div className="space-y-2">
+                <Link to="/marketplace" className="w-full inline-flex items-center justify-center rounded-full bg-[#14212e] px-4 py-3 text-base font-semibold text-white shadow hover:shadow-md hover:brightness-110 transition" onClick={closeMobileMenu}>Marketplace</Link>
                 {user ? (
-                  <>
-                    {creditCount > 0 && (
-                      <div className="mb-3 flex items-center justify-between rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm">
-                        <div className="flex items-center gap-2">
-                          <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400" />
-                          Créditos disponibles: <b>{creditCount}</b>
-                        </div>
-                        <Link
-                          to={publishLink}
-                          className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
-                          onClick={closeMobileMenu}
-                        >
-                          Usar
-                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.8}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14m-6-6 6 6-6 6" />
-                          </svg>
-                        </Link>
-                      </div>
-                    )}
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                    <Link to="/dashboard" className="btn relative bg-white text-[#14212e] hover:bg-white/90" onClick={closeMobileMenu}>
-                      Mi cuenta
-                      {creditCount > 0 && (
-                        <span className="absolute -top-2 -right-2 min-w-[18px] h-[18px] rounded-full bg-emerald-500 px-1 text-center text-[10px] font-bold leading-[18px] text-white">
-                          {creditCount > 9 ? '9+' : creditCount}
-                        </span>
-                      )}
-                    </Link>
-                    <Link to={publishLink} className="btn bg-gradient-to-r from-[#0ea5e9] via-[#2563eb] to-[#1d4ed8] text-white hover:brightness-110" onClick={closeMobileMenu}>Vender</Link>
-                    <Link to="/marketplace" className="btn border border-white/30 bg-transparent text-white hover:bg-white/10" onClick={closeMobileMenu}>Marketplace</Link>
-                    <Link to={`/dashboard?tab=${encodeURIComponent('Cerrar sesión')}`} className="btn border border-white/30 bg-transparent text-white hover:bg-white/10" onClick={closeMobileMenu}>Cerrar sesión</Link>
-                    </div>
-                  </>
+                  <Link
+                    to={publishLink}
+                    className="w-full inline-flex items-center justify-center rounded-2xl bg-gradient-to-r from-[#0ea5e9] via-[#2563eb] to-[#1d4ed8] px-4 py-3 text-base font-semibold text-white shadow-[0_10px_28px_rgba(37,99,235,0.28)] hover:brightness-110"
+                    onClick={closeMobileMenu}
+                  >
+                    Vender
+                  </Link>
                 ) : (
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <button type="button" className="btn bg-white text-[#14212e] hover:bg-white/90" onClick={() => { setLoginOpen(true); closeMobileMenu() }}>Ingresar</button>
-                    <Link to="/register" className="btn border border-white/30 bg-transparent text-white hover:bg-white/10" onClick={closeMobileMenu}>Crear cuenta</Link>
-                    <Link to="/marketplace" className="btn border border-white/30 bg-transparent text-white hover:bg-white/10" onClick={closeMobileMenu}>Marketplace</Link>
-                    <Link to={publishLink} className="btn bg-gradient-to-r from-[#0ea5e9] via-[#2563eb] to-[#1d4ed8] text-white hover:brightness-110" onClick={closeMobileMenu}>Vender</Link>
-                  </div>
+                  <Link to="/register" className="w-full inline-flex items-center justify-center rounded-full border border-black/10 bg-white px-4 py-3 text-base font-semibold text-[#14212e] shadow hover:bg-white/90" onClick={closeMobileMenu}>Registrarse</Link>
                 )}
               </div>
 
-              <div className="grid gap-2">
-                {MEGA.map((item, idx) => {
-                  const opened = mobileCategoryOpen === idx
-                  return (
-                    <div key={idx} className="rounded-xl border border-black/10 overflow-hidden">
-                      <button
-                        type="button"
-                        className="w-full flex items-center justify-between px-3 py-3 text-sm font-semibold"
-                        onClick={() => toggleMobileCategory(idx)}
-                      >
-                        <span>{item.label}</span>
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          viewBox="0 0 20 20"
-                          className={`h-4 w-4 transition-transform ${opened ? 'rotate-180' : 'rotate-0'}`}
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth={1.5}
-                        >
-                          <path strokeLinecap="round" strokeLinejoin="round" d="m6 8 4 4 4-4" />
-                        </svg>
-                      </button>
-                      {opened && (
-                        <div className="border-t border-black/10 bg-black/5 px-3 py-2 grid gap-1">
-                          {item.cols.flatMap((col) => col.links).map((link, linkIdx) => (
-                            <Link
-                              key={`${item.label}-${linkIdx}`}
-                              to={link.to}
-                              className="text-sm text-black/70 hover:text-mb-primary"
-                              onClick={closeMobileMenu}
-                            >
-                              {link.label}
-                            </Link>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
+              {/* 2) Tiendas oficiales (row) */}
+              <div className="border-b border-neutral-200">
+                <Link to="/tiendas" className="flex items-center justify-between py-3 text-base font-medium text-[#14212e]" onClick={closeMobileMenu}>
+                  <span>Tiendas oficiales</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                  </svg>
+                </Link>
               </div>
 
-              <div className="grid gap-2 text-sm">
-                <Link
-                  to="/tiendas"
-                  onClick={closeMobileMenu}
-                  className="inline-flex items-center justify-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-semibold text-[#14212e] shadow hover:bg-white/90"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 9h18l-2 11H5L3 9Zm1-3 2-3h12l2 3" />
-                  </svg>
-                  Tiendas oficiales
-                </Link>
-                <Link
-                  to="/como-publicar"
-                  onClick={closeMobileMenu}
-                  className="inline-flex items-center justify-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-semibold text-[#14212e] shadow hover:bg-white/90"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 4h12v16H4zM8 4v16M4 8h12" />
-                  </svg>
-                  Cómo publicar
+              {/* 3) Main navigation accordions */}
+              <div className="divide-y divide-neutral-200">
+                {/* Bicicletas */}
+                <div>
+                  <button type="button" className="w-full flex items-center justify-between py-3 text-base font-semibold text-[#14212e]" onClick={() => toggleSection('Bicicletas')} aria-expanded={!!mobileSectionOpen['Bicicletas']} aria-controls="m-bikes">
+                    <span>Bicicletas</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" className={`h-5 w-5 transition-transform ${mobileSectionOpen['Bicicletas'] ? 'rotate-180' : 'rotate-0'}`} fill="none" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="m6 8 4 4 4-4" /></svg>
+                  </button>
+                  <div id="m-bikes" className={`overflow-hidden transition-all ${mobileSectionOpen['Bicicletas'] ? 'max-h-[1200px] pb-2' : 'max-h-0'}`}>
+                    {/* Second level groups */}
+                    {bikesMega?.cols?.map((group) => (
+                      <div key={group.title} className="pl-3">
+                        <button type="button" className="w-full flex items-center justify-between py-2 text-sm font-semibold text-[#14212e]" onClick={() => toggleBikeGroup(group.title)} aria-expanded={!!mobileBikeGroupsOpen[group.title]} aria-controls={`m-bikes-${group.title}`}>
+                          <span>{group.title}</span>
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" className={`h-4 w-4 transition-transform ${mobileBikeGroupsOpen[group.title] ? 'rotate-180' : 'rotate-0'}`} fill="none" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="m6 8 4 4 4-4" /></svg>
+                        </button>
+                        <div id={`m-bikes-${group.title}`} className={`overflow-hidden transition-all ${mobileBikeGroupsOpen[group.title] ? 'max-h-[800px]' : 'max-h-0'}`}>
+                          <ul className="mb-2 space-y-1 pl-3">
+                            {(group.links || []).map((link) => (
+                              <li key={link.label}>
+                                <Link to={link.to} className="block py-1 text-sm text-[#14212e]/80 hover:text-[#14212e]" onClick={closeMobileMenu}>{link.label}</Link>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Accesorios */}
+                <div>
+                  <button type="button" className="w-full flex items-center justify-between py-3 text-base font-semibold text-[#14212e]" onClick={() => toggleSection('Accesorios')} aria-expanded={!!mobileSectionOpen['Accesorios']} aria-controls="m-acc">
+                    <span>Accesorios</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" className={`h-5 w-5 transition-transform ${mobileSectionOpen['Accesorios'] ? 'rotate-180' : 'rotate-0'}`} fill="none" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="m6 8 4 4 4-4" /></svg>
+                  </button>
+                  <div id="m-acc" className={`overflow-hidden transition-all ${mobileSectionOpen['Accesorios'] ? 'max-h-[1200px] pb-2' : 'max-h-0'}`}>
+                    <ul className="pl-3 space-y-1">
+                      {(accesoriosMega?.cols || []).flatMap((c) => c.links).map((link) => (
+                        <li key={`acc-${link.label}`}>
+                          <Link to={link.to} className="block py-1 text-sm text-[#14212e]/80 hover:text-[#14212e]" onClick={closeMobileMenu}>{link.label}</Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Indumentaria */}
+                <div>
+                  <button type="button" className="w-full flex items-center justify-between py-3 text-base font-semibold text-[#14212e]" onClick={() => toggleSection('Indumentaria')} aria-expanded={!!mobileSectionOpen['Indumentaria']} aria-controls="m-ind">
+                    <span>Indumentaria</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" className={`h-5 w-5 transition-transform ${mobileSectionOpen['Indumentaria'] ? 'rotate-180' : 'rotate-0'}`} fill="none" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="m6 8 4 4 4-4" /></svg>
+                  </button>
+                  <div id="m-ind" className={`overflow-hidden transition-all ${mobileSectionOpen['Indumentaria'] ? 'max-h-[1200px] pb-2' : 'max-h-0'}`}>
+                    <ul className="pl-3 space-y-1">
+                      {(indumentariaMega?.cols || []).flatMap((c) => c.links).map((link) => (
+                        <li key={`ind-${link.label}`}>
+                          <Link to={link.to} className="block py-1 text-sm text-[#14212e]/80 hover:text-[#14212e]" onClick={closeMobileMenu}>{link.label}</Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Nutrición */}
+                <div>
+                  <button type="button" className="w-full flex items-center justify-between py-3 text-base font-semibold text-[#14212e]" onClick={() => toggleSection('Nutrición')} aria-expanded={!!mobileSectionOpen['Nutrición']} aria-controls="m-nut">
+                    <span>Nutrición</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" className={`h-5 w-5 transition-transform ${mobileSectionOpen['Nutrición'] ? 'rotate-180' : 'rotate-0'}`} fill="none" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="m6 8 4 4 4-4" /></svg>
+                  </button>
+                  <div id="m-nut" className={`overflow-hidden transition-all ${mobileSectionOpen['Nutrición'] ? 'max-h-[1200px] pb-2' : 'max-h-0'}`}>
+                    <ul className="pl-3 space-y-1">
+                      {(nutricionMega?.cols || []).flatMap((c) => c.links).map((link) => (
+                        <li key={`nut-${link.label}`}>
+                          <Link to={link.to} className="block py-1 text-sm text-[#14212e]/80 hover:text-[#14212e]" onClick={closeMobileMenu}>{link.label}</Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Cómo publicar (direct) */}
+                <div>
+                  <Link to="/como-publicar" className="flex items-center justify-between py-3 text-base font-semibold text-[#14212e]" onClick={closeMobileMenu}>
+                    <span>Cómo publicar</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                  </Link>
+                </div>
+              </div>
+
+              {/* 4) Separator */}
+              <div className="border-t border-neutral-200" />
+
+              {/* 5) Account / secondary */}
+              <div className="divide-y divide-neutral-200">
+                {user ? (
+                  <>
+                    <Link to="/dashboard" className="flex items-center justify-between py-3 text-sm font-medium text-[#14212e]" onClick={closeMobileMenu}>
+                      <span>Mi cuenta</span>
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                    </Link>
+                    <Link to={`/dashboard?tab=${encodeURIComponent('Cerrar sesión')}`} className="flex items-center justify-between py-3 text-sm font-medium text-[#14212e]" onClick={closeMobileMenu}>
+                      <span>Cerrar sesión</span>
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <button type="button" className="w-full flex items-center justify-between py-3 text-sm font-medium text-[#14212e]" onClick={() => { setLoginOpen(true); closeMobileMenu() }}>
+                      <span>Ingresar</span>
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                    </button>
+                    <Link to="/register" className="flex items-center justify-between py-3 text-sm font-medium text-[#14212e]" onClick={closeMobileMenu}>
+                      <span>Registrarse</span>
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                    </Link>
+                  </>
+                )}
+                <Link to="/ayuda" className="flex items-center justify-between py-3 text-sm font-medium text-[#14212e]" onClick={closeMobileMenu}>
+                  <span>Ayuda</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
                 </Link>
               </div>
             </div>

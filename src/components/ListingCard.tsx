@@ -25,6 +25,7 @@ export default function ListingCard({ l, storeLogoUrl, priority = false, likeCou
   const slug = l.slug ?? buildListingSlug({ id: l.id, title: l.title, brand: l.brand, model: l.model, category: l.category })
   const highlighted = hasPaidPlan(l.sellerPlan ?? (l.plan as any), l.sellerPlanExpires)
   const discountPct = hasOffer ? Math.round((1 - l.price / (l.originalPrice as number)) * 100) : null
+  const isLifestyle = l.category === 'Indumentaria' || l.category === 'Nutrición'
   const city = l.location?.split(',')[0]?.trim() || null
   const cityDisplay = (() => {
     if (!city) return null
@@ -77,6 +78,14 @@ export default function ListingCard({ l, storeLogoUrl, priority = false, likeCou
     })()
     const condition = condFromExtras || condFromDesc || null
     metaDisplay = [bikeType, condition, cityDisplay || null].filter(Boolean) as string[]
+  }
+  // Nutrición: "Tipo (Barra, Gel, Sales…) • Ciudad"
+  else if (l.category === 'Nutrición') {
+    const typeValue = getExtraValue('Tipo') || l.subcategory || null
+    metaDisplay = [
+      typeValue ? `Tipo: ${typeValue}` : null,
+      cityDisplay || null,
+    ].filter(Boolean) as string[]
   }
   // Indumentaria: "Género (Masculino/Femenino/Unisex) • Talle(s) • Condición • Ciudad"
   else if (l.category === 'Indumentaria') {
@@ -181,7 +190,7 @@ export default function ListingCard({ l, storeLogoUrl, priority = false, likeCou
         </div>
       </div>
       <Link to={`/listing/${slug}`} className="card-flat group flex h-full flex-col overflow-hidden">
-        <div className="aspect-[5/4] sm:aspect-video relative overflow-hidden rounded-2xl bg-transparent">
+        <div className={`relative overflow-hidden rounded-2xl aspect-[5/4] sm:aspect-video ${isLifestyle ? 'bg-white' : 'bg-transparent'}`}>
           {hasImage ? (
             <img
               src={imageSrc}
@@ -200,7 +209,7 @@ export default function ListingCard({ l, storeLogoUrl, priority = false, likeCou
                 }
                 setImageLoaded(true)
               }}
-              className={`h-full w-full object-cover object-center ${imageStatusClass}`}
+              className={`${isLifestyle ? 'h-full w-auto mx-auto object-contain' : 'h-full w-full object-cover object-center'} ${imageStatusClass}`}
             />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center text-xs font-medium uppercase tracking-wide text-black/40">

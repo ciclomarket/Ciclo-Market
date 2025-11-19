@@ -12,4 +12,7 @@ export const KEYWORDS: string[] = [
   "Rodillo","Ciclocomputadora","GPS","Luces","Cascos","Zapatillas",
   "Carbono","Aluminio","Acero","Titanio",
   "Tubeless","Clincher","TPI","Aero","Compact","1x","2x","Monoplato"
+  ,
+  // Nutrición
+  "Nutrición","Geles","Isotónica","Hidratación","Sales","Proteína","Barras","Snacks","Recovery"
 ];

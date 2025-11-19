@@ -23,13 +23,16 @@ import { resolveSiteOrigin, toAbsoluteUrl as absoluteUrl, buildBreadcrumbList, c
 import { trackMetaPixel } from '../lib/metaPixel'
 import { track, trackOncePerSession } from '../services/track'
 import { useToast } from '../context/ToastContext'
-import { useSweepstakes } from '../context/SweepstakesContext'
 import ListingQuestionsSection from '../components/ListingQuestionsSection'
+import HorizontalSlider from '../components/HorizontalSlider'
+import ListingCard from '../components/ListingCard'
+import { fetchListingsBySeller } from '../services/listings'
 import { submitShareBoost } from '../services/shareBoost'
 import useUpload from '../hooks/useUpload'
 import { FALLBACK_PLANS } from '../services/plans'
 import { buildPublicUrlSafe } from '../lib/supabaseImages'
 import { canonicalPlanCode } from '../utils/planCodes'
+import { extractListingId } from '../utils/slug'
 
 export default function ListingDetail() {
   const params = useParams()
@@ -38,7 +41,6 @@ export default function ListingDetail() {
   const { user, isModerator } = useAuth()
   const { format, fx } = useCurrency()
   const { show: showToast } = useToast()
-  const { active: activeSweepstake } = useSweepstakes()
   const siteOrigin = useMemo(() => resolveSiteOrigin(), [])
   const [listing, setListing] = useState<Listing | null>(null)
   const [loading, setLoading] = useState(true)
@@ -63,6 +65,8 @@ export default function ListingDetail() {
   const [editFieldName, setEditFieldName] = useState<string>('')
   const [editFieldType, setEditFieldType] = useState<'text' | 'number' | 'textarea'>('text')
   const [editFieldValue, setEditFieldValue] = useState('')
+  // Related items by seller (used in desktop slider) — must be before any early return
+  const [sellerRelated, setSellerRelated] = useState<Listing[]>([])
 
   const openEditField = (name: string, value: string | number | null | undefined, type: 'text'|'number'|'textarea' = 'text') => {
     setEditFieldName(name)
@@ -95,6 +99,27 @@ export default function ListingDetail() {
     return { title: `${productName} en venta`, description, canonicalPath, ogImageUrl }
   }, [listing, listingKey, fallbackCanonicalPath])
   
+  const parseExtrasMap = (extras?: string | null) => {
+    const out: Record<string, string> = {}
+    if (!extras) return out
+    const parts = extras.split('•').map((p) => p.trim()).filter(Boolean)
+    for (const p of parts) {
+      const idx = p.indexOf(':')
+      if (idx === -1) continue
+      const k = p.slice(0, idx).trim()
+      const v = p.slice(idx + 1).trim()
+      if (k) out[k] = v
+    }
+    return out
+  }
+  const getExtra = (map: Record<string,string>, key: string) => {
+    const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    const keyNorm = norm(key)
+    for (const k of Object.keys(map)) {
+      if (norm(k) === keyNorm) return map[k]
+    }
+    return ''
+  }
 
   useEffect(() => {
     let active = true
@@ -159,6 +184,32 @@ export default function ListingDetail() {
       active = false
     }
   }, [listingKey, user?.id])
+
+  // Load seller-related items once listing is known; runs before any return
+  useEffect(() => {
+    let active = true
+    const load = async () => {
+      if (!listing?.sellerId) { setSellerRelated([]); return }
+      const all = await fetchListingsBySeller(listing.sellerId)
+      if (!active || !Array.isArray(all)) return
+      const currentId = listing.id
+      const groupFor = (cat: Listing['category']) => {
+        if (cat === 'Nutrición') return 'Nutrición'
+        if (cat === 'Indumentaria') return 'Indumentaria'
+        return 'bikes'
+      }
+      const targetGroup = groupFor(listing.category)
+      const allowed = all.filter((l) => {
+        if (!l || l.id === currentId) return false
+        const g = groupFor(l.category)
+        if (targetGroup === 'bikes') return g === 'bikes'
+        return g === targetGroup
+      })
+      setSellerRelated(allowed)
+    }
+    void load()
+    return () => { active = false }
+  }, [listing?.id, listing?.sellerId, listing?.category])
 
   useEffect(() => {
     const loadSellerProfile = async () => {
@@ -244,14 +295,16 @@ export default function ListingDetail() {
     }
   }, [listing?.sellerId])
 
-  // Normalizar URL a slug canónico si es distinto al parámetro actual
+  // Normalizar URL a slug canónico solo cuando el listing cargado
+  // corresponde al parámetro actual (evita "rebote" al cambiar de aviso)
   useEffect(() => {
-    const target = listing?.slug
     const current = params.slug || ''
-    if (target && current && current !== target) {
-      navigate(`/listing/${encodeURIComponent(target)}`, { replace: true })
+    if (!listing || !current || !listing.slug) return
+    const currentId = extractListingId(current)
+    if (currentId === listing.id && current !== listing.slug) {
+      navigate(`/listing/${encodeURIComponent(listing.slug)}`, { replace: true })
     }
-  }, [listing?.slug, params.slug, navigate])
+  }, [listing?.id, listing?.slug, params.slug, navigate])
 
   // Oferta deshabilitada
 
@@ -282,22 +335,7 @@ export default function ListingDetail() {
     }
   }
 
-  const computeSweepstakeFallbackEnd = () => {
-    const now = new Date()
-    const year = now.getFullYear()
-    const end = new Date(year, 10, 15, 23, 59, 59).getTime()
-    return end > now.getTime() ? end : new Date(year + 1, 10, 15, 23, 59, 59).getTime()
-  }
-  const computeSweepstakeFallbackStart = () => {
-    const now = new Date()
-    return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0).getTime()
-  }
-  const sweepstakeWindowStart = activeSweepstake?.startAt ?? computeSweepstakeFallbackStart()
-  const sweepstakeWindowEnd = activeSweepstake?.endAt ?? computeSweepstakeFallbackEnd()
-  const showSweepstakeBadge =
-    typeof listing.createdAt === 'number' &&
-    listing.createdAt >= sweepstakeWindowStart &&
-    listing.createdAt <= sweepstakeWindowEnd
+  
 
   const listingSlugOrId = listing.slug ?? listing.id
   const listingPath = `/listing/${listingSlugOrId}`
@@ -322,7 +360,7 @@ export default function ListingDetail() {
   const greetingPrefix = greetingName ? `¡Hola ${greetingName}!` : '¡Hola!'
   const listingTitleForMessage = (listing.title || '').trim()
   const contactMessage = `${greetingPrefix} Desde ciclomarket.ar vi tu anuncio: ${listingTitleForMessage} ${previewUrl} y me interesa saber más información.`.trim()
-  const sellerWhatsappRaw = listing.sellerWhatsapp ?? sellerProfile?.whatsapp_number ?? ''
+  const sellerWhatsappRaw = listing.sellerWhatsapp ?? sellerProfile?.whatsapp_number ?? sellerProfile?.store_phone ?? ''
   const sellerWhatsappNumber = normaliseWhatsapp(sellerWhatsappRaw)
   const waLink = buildWhatsappUrl(sellerWhatsappNumber ?? sellerWhatsappRaw, contactMessage)
   const emailSubject = `Consulta sobre ${listing.title}`
@@ -386,6 +424,29 @@ export default function ListingDetail() {
   const specMotor = extractToken('Motor')
   const specCharge = extractToken('Carga')
   const isBikeCategory = listing.category !== 'Accesorios' && listing.category !== 'Indumentaria'
+
+  // Tipo de transmisión: prioriza token explícito, si no infiere por grupo/detalle
+  const inferTxType = (text?: string | null): 'Mecánico' | 'Electrónico' | null => {
+    const t = (text || '').toLowerCase()
+    if (!t) return null
+    if (t.includes('electr')) return 'Electrónico'
+    if (t.includes('mec')) return 'Mecánico'
+    if (t.includes('di2') || t.includes('etap') || t.includes('axs') || t.includes('eps') || t.includes('steps')) return 'Electrónico'
+    return 'Mecánico'
+  }
+  const specTxFromToken = extractToken('Tipo de transmisi[óo]n') || extractToken('Transmisi[óo]n') || null
+  const specTxType = ((): string | null => {
+    if (specTxFromToken) {
+      const inferred = inferTxType(specTxFromToken)
+      return inferred ?? specTxFromToken
+    }
+    // intentar derivar desde drivetrain_detail o drivetrain
+    const fromDetail = inferTxType(listing.drivetrainDetail)
+    if (fromDetail) return fromDetail
+    const fromGroup = inferTxType(listing.drivetrain)
+    if (fromGroup) return fromGroup
+    return null
+  })()
 
   const openShareWindow = (url: string) => {
     if (typeof window === 'undefined') return
@@ -627,9 +688,11 @@ export default function ListingDetail() {
 
     const items: Array<{ id: string; label: string; onClick?: () => void; href?: string; icon: ReactNode; disabled?: boolean; className?: string }> = []
     const emailRecipient = sellerAuthEmail || sellerProfile?.email || listing.sellerEmail || null
+    const isStoreLocal = Boolean(sellerProfile?.store_enabled)
+    const canShowWhatsapp = Boolean(waLink && !isOwner && !listingUnavailable && (hadBasicOrPremium || isStoreLocal))
 
     // WhatsApp habilitado para publicaciones Básica o Premium (aunque el destaque haya vencido)
-    if (waLink && !isOwner && !listingUnavailable && hadBasicOrPremium) {
+    if (canShowWhatsapp) {
       items.push({
         id: 'whatsapp',
         label: 'Abrir WhatsApp',
@@ -702,9 +765,10 @@ export default function ListingDetail() {
             )
           )}
         </div>
-        {!hadBasicOrPremium && (
+        {/* Mensaje de gating solo para personas (no tiendas) cuando sí hay número y el bloqueo es por plan */}
+        {waLink && !isOwner && !listingUnavailable && !isStoreLocal && !hadBasicOrPremium ? (
           <p className="mt-2 text-xs text-[#14212e]/60">El contacto por WhatsApp está disponible con planes Básica o Premium.</p>
-        )}
+        ) : null}
       </div>
     )
   }
@@ -720,15 +784,295 @@ export default function ListingDetail() {
   )
 
   // Detailed SEO (JSON-LD, etc.) moved out to avoid hook order issues; using early minimal config instead.
+  const isLifestyle = listing.category === 'Nutrición' || listing.category === 'Indumentaria'
 
   return (
     <>
       <SeoHead {...seoHeadConfig} />
       <div className="bg-[#14212e]">
         <Container>
-          <div className="grid w-full gap-4 lg:gap-6 lg:grid-cols-[2fr_1fr]">
-          <div className="order-2 w-full min-w-0 lg:col-start-2 lg:row-start-1 lg:self-start lg:sticky lg:top-32">
+          <div className={isLifestyle
+            ? 'flex flex-col w-full gap-5 lg:gap-6 lg:grid lg:grid-cols-[2fr_3fr]'
+            : 'grid grid-cols-1 w-full gap-5 lg:gap-6 lg:grid-cols-[2fr_1fr]'}>
+          {/* Fotos (siempre primero en mobile; desktop: col 1) */}
+          <div className="w-full min-w-0 lg:col-start-1 lg:row-start-1">
+            {isLifestyle ? (
+              <ImageCarousel images={listing.images} aspect="auto" fit="contain" bg="light" maxHeightClass="lg:max-h-[500px]" thumbWhiteBg />
+            ) : (
+              <ImageCarousel images={listing.images} />
+            )}
+            {isModerator && listing && (
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <Link to={`/publicar/nueva?id=${encodeURIComponent(listing.id)}`}>
+                  <Button>
+                    Editar en formulario
+                  </Button>
+                </Link>
+              </div>
+            )}
+          </div>
+          {/* Desktop only (non-lifestyle): left column shows specs + description beneath images */}
+          {!isLifestyle && (
+            <div className="hidden lg:block w-full min-w-0 lg:col-start-1 lg:row-start-2 lg:space-y-6">
+              <section className="card p-6">
+                <h2 className="text-lg font-semibold text-[#14212e]">Especificaciones</h2>
+                <div className="mt-4 grid grid-cols-2 gap-3">
+                  <Spec label="Marca" value={listing.brand} canEdit={isModerator} onEdit={() => openEditField('brand', listing.brand, 'text')} />
+                  <Spec label="Modelo" value={listing.model} canEdit={isModerator} onEdit={() => openEditField('model', listing.model, 'text')} />
+                  {listing.year ? <Spec label="Año" value={String(listing.year)} canEdit={isModerator} onEdit={() => openEditField('year', listing.year ?? '', 'number')} /> : null}
+                  <Spec label="Categoría" value={listing.category} />
+                  {/* Bike/Accesorios branch (non-lifestyle) */}
+                  {(() => {
+                    const parts = (listing.extras || '')
+                      .split('•')
+                      .map((p) => p.trim())
+                      .filter(Boolean)
+                    const token = parts.find((p) => p.toLowerCase().startsWith('talles:'))
+                    const multi = token ? token.split(':').slice(1).join(':').trim() : ''
+                    const sizeField = multi || listing.frameSize || null
+                    return (
+                      <>
+                        {listing.material ? <Spec label="Material" value={listing.material} canEdit={isModerator} onEdit={() => openEditField('material', listing.material, 'text')} /> : null}
+                        {listing.category === 'MTB' && specFork ? <Spec label="Horquilla" value={specFork} /> : null}
+                        {sizeField ? <Spec label="Talle / Medida" value={String(sizeField)} /> : null}
+                        {listing.wheelset ? <Spec label="Ruedas" value={listing.wheelset} /> : null}
+                        {listing.wheelSize ? <Spec label="Rodado" value={listing.wheelSize} /> : null}
+                        {(listing.drivetrain || listing.drivetrainDetail) ? (
+                          <Spec label="Grupo" value={(listing.drivetrain || listing.drivetrainDetail) as string} />
+                        ) : null}
+                        {isBikeCategory && specTxType ? <Spec label="Tipo de transmisión" value={specTxType} /> : null}
+                        {isBikeCategory && specBrake ? <Spec label="Freno" value={specBrake} /> : null}
+                        {listing.category === 'Fixie' && specFixieRatio ? <Spec label="Relación" value={specFixieRatio} /> : null}
+                        {listing.category === 'E-Bike' && specMotor ? <Spec label="Motor" value={specMotor} /> : null}
+                        {listing.category === 'E-Bike' && specCharge ? <Spec label="Batería / Carga" value={specCharge} /> : null}
+                        {isBikeCategory && specCondition ? <Spec label="Condición" value={specCondition} /> : null}
+                        {listing.extras ? <Spec label="Extras" value={listing.extras} fullWidth /> : null}
+                      </>
+                    )
+                  })()}
+                </div>
+              </section>
+              <section className="card p-6">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg font-semibold text-[#14212e]">Descripción</h2>
+                </div>
+                <p className="mt-3 text-sm leading-relaxed text-[#14212e]/80 whitespace-pre-wrap">
+                  {listing.description}
+                </p>
+              </section>
+            </div>
+          )}
+          <div className={`order-2 lg:order-none w-full min-w-0 mt-5 lg:mt-0 ${isLifestyle ? 'lg:col-start-2 lg:row-start-1 self-start' : 'lg:col-start-2 lg:row-start-1 self-start sticky top-[calc(var(--header-h)+16px)]'}`}>
             <div className="card p-6 lg:p-5">
+              {/* Desktop (lg): unified two-column content for Nutrición/Indumentaria */}
+              {isLifestyle && (
+                <div className="hidden lg:grid lg:grid-cols-2 lg:gap-6 lg:divide-x lg:divide-[#14212e]/10">
+                  {/* Left subcolumn: Especificaciones + Descripción */}
+                  <div className="space-y-6">
+                    <section>
+                      <h2 className="text-lg font-semibold text-[#14212e]">Especificaciones</h2>
+                      <div className="mt-4 grid grid-cols-2 gap-3">
+                        <Spec label="Marca" value={listing.brand} canEdit={isModerator} onEdit={() => openEditField('brand', listing.brand, 'text')} />
+                        <Spec label="Modelo" value={listing.model} canEdit={isModerator} onEdit={() => openEditField('model', listing.model, 'text')} />
+                        {listing.year ? <Spec label="Año" value={String(listing.year)} canEdit={isModerator} onEdit={() => openEditField('year', listing.year ?? '', 'number')} /> : null}
+                        <Spec label="Categoría" value={listing.category} />
+                        {listing.category === 'Nutrición' ? (
+                          (() => {
+                            const map = parseExtrasMap(listing.extras)
+                            const porcion = getExtra(map, 'Porción') || getExtra(map, 'Porcion')
+                            const carbs = getExtra(map, 'Carbohidratos')
+                            const sodio = getExtra(map, 'Sodio')
+                            const cafeina = getExtra(map, 'Cafeína') || getExtra(map, 'Cafeina')
+                            const calorias = getExtra(map, 'Calorías') || getExtra(map, 'Calorias')
+                            const porciones = getExtra(map, 'Porciones')
+                            const sabor = getExtra(map, 'Sabor')
+                            const vence = getExtra(map, 'Vence')
+                            const ingredientes = getExtra(map, 'Ingredientes')
+                            const alerg = getExtra(map, 'Alérgenos') || getExtra(map, 'Alergenos')
+                            return (
+                              <>
+                                {listing.subcategory ? <Spec label="Tipo" value={listing.subcategory} /> : null}
+                                {porcion ? <Spec label="Porción" value={porcion} /> : null}
+                                {porciones ? <Spec label="Porciones" value={porciones} /> : null}
+                                {carbs ? <Spec label="Carbohidratos" value={`${carbs}`} /> : null}
+                                {sodio ? <Spec label="Sodio" value={`${sodio}`} /> : null}
+                                {cafeina ? <Spec label="Cafeína" value={`${cafeina}`} /> : null}
+                                {calorias ? <Spec label="Calorías" value={`${calorias}`} /> : null}
+                                {sabor ? <Spec label="Sabor" value={sabor} /> : null}
+                                {vence ? <Spec label="Vencimiento" value={vence} /> : null}
+                                {ingredientes ? <Spec label="Ingredientes" value={ingredientes} fullWidth /> : null}
+                                {alerg ? <Spec label="Alérgenos" value={alerg} fullWidth /> : null}
+                              </>
+                            )
+                          })()
+                        ) : (
+                          <>
+                            {listing.material ? <Spec label="Material" value={listing.material} canEdit={isModerator} onEdit={() => openEditField('material', listing.material, 'text')} /> : null}
+                            {listing.category === 'MTB' && specFork ? <Spec label="Horquilla" value={specFork} /> : null}
+                            {(() => {
+                              const parts = (listing.extras || '')
+                                .split('•')
+                                .map((p) => p.trim())
+                                .filter(Boolean)
+                              const token = parts.find((p) => p.toLowerCase().startsWith('talles:'))
+                              const multi = token ? token.split(':').slice(1).join(':').trim() : ''
+                              if (multi) return <Spec label="Talles" value={multi} />
+                              return listing.frameSize ? <Spec label="Talle / Medida" value={listing.frameSize} canEdit={isModerator} onEdit={() => openEditField('frameSize', listing.frameSize, 'text')} /> : null
+                            })()}
+                            {listing.wheelset ? <Spec label="Ruedas" value={listing.wheelset} canEdit={isModerator} onEdit={() => openEditField('wheelset', listing.wheelset, 'text')} /> : null}
+                            {listing.wheelSize ? <Spec label="Rodado" value={listing.wheelSize} canEdit={isModerator} onEdit={() => openEditField('wheelSize', listing.wheelSize, 'text')} /> : null}
+                          </>
+                        )}
+                      </div>
+                    </section>
+                    <section>
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-lg font-semibold text-[#14212e]">Descripción</h2>
+                        {isModerator && (
+                          <button
+                            type="button"
+                            className="rounded-full border border-[#14212e]/20 p-1 text-[#14212e] hover:bg-white/50"
+                            aria-label="Editar descripción"
+                            onClick={() => { setEditDescValue(listing.description || ''); setEditDescOpen(true) }}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25Zm14.71-9.04a1 1 0 0 0 0-1.41l-1.51-1.51a1 1 0 0 0-1.41 0l-1.13 1.13 3.75 3.75 1.3-1.46Z"/></svg>
+                          </button>
+                        )}
+                      </div>
+                      <p className="mt-3 text-sm leading-relaxed text-[#14212e]/80 whitespace-pre-wrap">
+                        {listing.description}
+                      </p>
+                    </section>
+                  </div>
+                  {/* Right subcolumn: Title/Price + Seller + CTAs */}
+                  <div className="space-y-4 lg:pl-6">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h1 className="text-xl font-bold text-[#14212e] leading-tight">{listing.title}</h1>
+                          {isModerator && (
+                            <button
+                              type="button"
+                              className="rounded-full border border-[#14212e]/20 p-1 text-[#14212e] hover:bg-white/50"
+                              aria-label="Editar título"
+                              onClick={() => { setEditTitleValue(listing.title || ''); setEditTitleOpen(true) }}
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25Zm14.71-9.04a1 1 0 0 0 0-1.41l-1.51-1.51a1 1 0 0 0-1.41 0l-1.13 1.13 3.75 3.75 1.3-1.46Z"/></svg>
+                            </button>
+                          )}
+                        </div>
+                        <p className="mt-1 text-sm text-[#14212e]/70">{listing.location}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {(() => {
+                          const displayCount = likeCount > 0 ? likeCount : (isFav ? 1 : 0)
+                          const content = displayCount > 0 ? `❤️ ${displayCount}` : '🤍'
+                          if (canLike) {
+                            return (
+                              <button
+                                type="button"
+                                className={`rounded-full px-2 py-1 text-xs ${isFav ? 'bg-white/90 text-[#14212e]' : 'bg-[#14212e]/70 text-white/80'} border border-white/20`}
+                                aria-label={isFav ? 'Quitar me gusta' : 'Me gusta'}
+                                onClick={() => toggleFav()}
+                              >
+                                {content}
+                              </button>
+                            )
+                          }
+                          return (
+                            <span
+                              className={`rounded-full px-2 py-1 text-xs ${displayCount > 0 ? 'bg-white/90 text-[#14212e]' : 'bg-[#14212e]/70 text-white/80'} border border-white/20`}
+                              aria-label={`Me gusta: ${displayCount}`}
+                            >
+                              {content}
+                            </span>
+                          )
+                        })()}
+                        <IconButton label={inCompare ? 'Quitar de comparativa' : 'Agregar a comparativa'} onClick={() => toggleCompare(listing.id)}>
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
+                            <path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4V4Zm2 0v16h6a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-6Z" />
+                          </svg>
+                        </IconButton>
+                      </div>
+                    </div>
+                    <div className="flex items-end gap-3">
+                      <span className="text-2xl font-extrabold text-[#14212e]">{formattedPrice}</span>
+                      {originalPriceLabel && <span className="text-sm text-[#14212e]/60 line-through">{originalPriceLabel}</span>}
+                    </div>
+                    {isLifestyle && <hr className="my-3 border-t border-[#14212e]/20" />}
+                    {isOwner && (
+                      <div className="rounded-2xl border border-[#14212e]/10 bg-white/80 px-4 py-3 text-xs text-[#14212e]/80">
+                        <p className="font-semibold uppercase tracking-[0.3em] text-[#14212e]/60">Tu publicación</p>
+                        <div className="mt-2 space-y-1">
+                          <div>Publicación: {publicationRemainingLabel ?? 'sin vencimiento'}</div>
+                          {listingPlanName ? (
+                            <div>Plan: {listingPlanDuration ? `${listingPlanName} · ${listingPlanDuration} días` : listingPlanName}</div>
+                          ) : null}
+                          <div>Destaque: {highlightRemainingLabel ?? 'sin destaque'}</div>
+                        </div>
+                      </div>
+                    )}
+                    {/* Seller info + CTAs */}
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        {sellerAvatarUrl && (
+                          <img
+                            src={buildPublicUrlSafe(sellerAvatarUrl) || ''}
+                            sizes="40px"
+                            alt={formatNameWithInitial(listing.sellerName, 'Vendedor')}
+                            className="h-10 w-10 rounded-full object-cover border border-[#14212e]/10"
+                            loading="lazy"
+                            decoding="async"
+                          />
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-sm text-[#14212e]/70">Publicado por</p>
+                          <h3 className="text-lg font-semibold text-[#14212e]">
+                            {isStore ? (
+                              <Link to={storeLink!} className="inline-flex items-center gap-2 transition hover:text-mb-primary">
+                                <span className="truncate">{sellerDisplayName}</span>
+                                <span className="text-[#14212e]/40">|</span>
+                                <VerifiedCheck />
+                                <span className="text-sm text-[#14212e]/80">Tienda oficial</span>
+                              </Link>
+                            ) : (
+                              <Link to={`/vendedor/${listing.sellerId}`} className="inline-flex items-center gap-2 transition hover:text-mb-primary">
+                                {sellerDisplayName}
+                                {(() => {
+                                  const c = trustColorClasses(sellerTrustLevel)
+                                  return (
+                                    <span className={`relative -top-1 inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[12px] leading-none font-semibold ${trustBadgeBgClasses(sellerTrustLevel)} text-white border-[#0f1924]`}>
+                                      {trustLabel(sellerTrustLevel, 'short')}
+                                    </span>
+                                  )
+                                })()}
+                              </Link>
+                            )}
+                          </h3>
+                          {sellerRating && sellerRating.count > 0 && (
+                            <div className="mt-1 flex items-center gap-2 text-xs text-[#14212e]/70">
+                              <StarRating value={sellerRating.avg} />
+                              <span>({sellerRating.count})</span>
+                            </div>
+                          )}
+                          {isStore && (
+                            <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-[#14212e]/70">
+                              {sellerProfile?.store_website && (
+                                <a href={sellerProfile.store_website} target="_blank" rel="noreferrer" className="underline">Sitio web</a>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      {/* Visible divider before contact actions (lifestyle desktop) */}
+                      {isLifestyle && <hr className="my-3 border-t border-[#14212e]/20" />}
+                      <ContactIcons />
+                    </div>
+                  </div>
+                </div>
+              )}
+              {/* Mobile: keep existing seller content; Desktop: hide for Lifestyle */}
+              <div className={isLifestyle ? 'block lg:hidden' : ''}>
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <div className="flex items-center gap-2">
@@ -793,6 +1137,10 @@ export default function ListingDetail() {
                   </button>
                 )}
               </div>
+              {/* Lifestyle mobile: no divider under price */}
+              {isLifestyle && <div className="hidden lg:block"><hr className="my-3 border-t border-[#14212e]/20" /></div>}
+              {/* Remove second spacer under price on mobile */}
+              <div className={isLifestyle ? 'hidden' : 'hidden'} />
               {isOwner && (
                 <div className="mt-4 rounded-2xl border border-[#14212e]/10 bg-white/80 px-4 py-3 text-xs text-[#14212e]/80">
                   <p className="font-semibold uppercase tracking-[0.3em] text-[#14212e]/60">Tu publicación</p>
@@ -805,20 +1153,13 @@ export default function ListingDetail() {
                   </div>
                 </div>
               )}
-              {showSweepstakeBadge && (
-                <div className="mt-3">
-                  <span className="inline-flex items-center gap-2 rounded-full bg-[#ff6b00] px-3 py-1 text-[12px] font-semibold text-white shadow shadow-[#ff6b00]/30">
-                    <span aria-hidden="true">🏆</span>
-                    <span>Participa por 1 año de Strava Premium</span>
-                  </span>
-                </div>
-              )}
+              
               {/* Sección de información de la tienda (teléfono/dirección) removida a pedido */}
               <p className="mt-4 text-xs text-[#14212e]/60 lg:hidden">
                 Guardá o compará esta bici para decidir más tarde.
               </p>
 
-              <div className="mt-5 lg:mt-4 space-y-3 lg:space-y-2 border-t border-[#14212e]/10 pt-5 lg:pt-4">
+              <div className={`mt-5 lg:mt-4 space-y-3 lg:space-y-2 border-t pt-5 lg:pt-4 ${isLifestyle ? 'border-[#14212e]/20' : 'border-[#14212e]/10'}` }>
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0">
                     {sellerAvatarUrl && (
@@ -855,9 +1196,7 @@ export default function ListingDetail() {
                           </Link>
                         )}
                       </h3>
-                      {!isStore && (
-                        <p className="text-xs text-[#14212e]/60">{listing.sellerLocation || 'Ubicación reservada'}</p>
-                      )}
+                      {/* Ubicación bajo vendedor removida para evitar duplicado con la ubicación bajo el título */}
                       {sellerRating && sellerRating.count > 0 && (
                         <div className="mt-1 flex items-center gap-2 text-xs text-[#14212e]/70">
                           <StarRating value={sellerRating.avg} />
@@ -874,6 +1213,8 @@ export default function ListingDetail() {
                     </div>
                   </div>
                 </div>
+                {/* Quitar línea en mobile entre precio y publicado por; mantener solo en desktop si hiciera falta */}
+                <div className={isLifestyle ? 'hidden lg:block my-3 h-px w-full bg-[#14212e]/30' : 'hidden'} />
                 <div className="text-xs text-[#14212e]/60">
                   {isStore ? (
                     <Link to={storeLink!} className="inline-flex items-center gap-1 text-[#14212e] underline">
@@ -884,10 +1225,12 @@ export default function ListingDetail() {
                       Ver perfil del vendedor
                     </Link>
                   )}
-                  {isFeaturedListing && <p className="mt-1 text-[11px] text-[#14212e]/60">Publicación destacada en el marketplace.</p>}
+                  {/* Mensaje de destacado removido a pedido */}
                 </div>
                 <div className="space-y-3">
                   {/* Botón de oferta removido */}
+                  {/* Quitar línea antes de Contactate (mobile lifestyle).*/}
+                  <div className={isLifestyle ? 'hidden lg:block my-3 h-px w-full bg-[#14212e]/30' : 'hidden'} />
                   <ContactIcons />
                   {isOwner && (
                     <div className="pt-2 border-t border-[#14212e]/10">
@@ -904,7 +1247,7 @@ export default function ListingDetail() {
                   )}
                   {/* Mensaje de ofertas removido */}
                 </div>
-                <div className="mt-3 pt-3 border-t border-[#14212e]/10">
+                <div className={`mt-3 pt-3 border-t ${isLifestyle ? 'border-[#14212e]/20' : 'border-[#14212e]/10'}`}>
                   <p className="text-xs text-[#14212e]/60 uppercase tracking-wide">Compartir publicación</p>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <IconCircleButton
@@ -949,11 +1292,7 @@ export default function ListingDetail() {
                   )}
                 </div>
                 {/* Texto relacionado a ofertas removido en mobile */}
-                {isFeaturedListing && (
-                  <p className="text-xs font-semibold text-[#14212e] lg:hidden">
-                    Esta publicación está destacada con prioridad en la sección de destacados.
-                  </p>
-                )}
+                {/* Mensaje de destacado en mobile removido a pedido */}
                 {sellerVerified && (
                   <p className="text-xs text-[#14212e]/70 lg:hidden">Vendedor verificado por el equipo de moderación.</p>
                 )}
@@ -1115,21 +1454,9 @@ export default function ListingDetail() {
               </div>
             </div>
           </div>
-          <div className="order-1 w-full min-w-0 lg:col-start-1 lg:row-start-1">
-            <ImageCarousel images={listing.images} />
-            {isModerator && listing && (
-              <div className="mt-3 flex flex-wrap items-center gap-3">
-                <Link to={`/publicar/nueva?id=${encodeURIComponent(listing.id)}`}>
-                  <Button>
-                    Editar en formulario
-                  </Button>
-                </Link>
-              </div>
-            )}
           
-          </div>
 
-          <div className="order-3 w-full min-w-0 lg:col-start-1 lg:row-start-2">
+          <div className={`${isLifestyle ? 'order-3 lg:hidden' : 'order-3 lg:hidden'} w-full min-w-0 mt-5 lg:mt-0 ${isLifestyle ? 'lg:col-start-3' : 'lg:col-start-1'} lg:row-start-2`}>
             <section className="card p-6">
               <h2 className="text-lg font-semibold text-[#14212e]">Especificaciones</h2>
               <div className="mt-4 grid grid-cols-2 gap-3">
@@ -1137,39 +1464,75 @@ export default function ListingDetail() {
                 <Spec label="Modelo" value={listing.model} canEdit={isModerator} onEdit={() => openEditField('model', listing.model, 'text')} />
                 {listing.year ? <Spec label="Año" value={String(listing.year)} canEdit={isModerator} onEdit={() => openEditField('year', listing.year ?? '', 'number')} /> : null}
                 <Spec label="Categoría" value={listing.category} />
-                {/* Orden: Material + Horquilla (si existe) + Talle */}
-                {listing.material ? <Spec label="Material" value={listing.material} canEdit={isModerator} onEdit={() => openEditField('material', listing.material, 'text')} /> : null}
-                {listing.category === 'MTB' && specFork ? <Spec label="Horquilla" value={specFork} /> : null}
-                {(() => {
-                  const parts = (listing.extras || '')
-                    .split('•')
-                    .map((p) => p.trim())
-                    .filter(Boolean)
-                  const token = parts.find((p) => p.toLowerCase().startsWith('talles:'))
-                  const multi = token ? token.split(':').slice(1).join(':').trim() : ''
-                  if (multi) return <Spec label="Talles" value={multi} />
-                  return listing.frameSize ? <Spec label="Talle / Medida" value={listing.frameSize} canEdit={isModerator} onEdit={() => openEditField('frameSize', listing.frameSize, 'text')} /> : null
-                })()}
-                {/* Luego Ruedas + Rodado */}
-                {listing.wheelset ? <Spec label="Ruedas" value={listing.wheelset} canEdit={isModerator} onEdit={() => openEditField('wheelset', listing.wheelset, 'text')} /> : null}
-                {listing.wheelSize ? <Spec label="Rodado" value={listing.wheelSize} canEdit={isModerator} onEdit={() => openEditField('wheelSize', listing.wheelSize, 'text')} /> : null}
-                {/* Grupo de transmisión */}
-                {(listing.drivetrain || listing.drivetrainDetail) ? (
-                  <Spec label="Grupo" value={(listing.drivetrain || listing.drivetrainDetail) as string} canEdit={isModerator} onEdit={() => openEditField('drivetrain', (listing.drivetrain || listing.drivetrainDetail) as string, 'text')} />
-                ) : null}
-                {/* Tipo de freno */}
-                {isBikeCategory && specBrake ? <Spec label="Freno" value={specBrake} /> : null}
-                {/* Opcionales según categoría */}
-                {listing.category === 'Fixie' && specFixieRatio ? <Spec label="Relación" value={specFixieRatio} /> : null}
-                {listing.category === 'E-Bike' && specMotor ? <Spec label="Motor" value={specMotor} /> : null}
-                {listing.category === 'E-Bike' && specCharge ? <Spec label="Batería / Carga" value={specCharge} /> : null}
-                {isBikeCategory && specCondition ? <Spec label="Condición" value={specCondition} /> : null}
-                {listing.extras ? <Spec label="Extras" value={listing.extras} fullWidth canEdit={isModerator} onEdit={() => openEditField('extras', listing.extras, 'textarea')} /> : null}
+
+                {listing.category === 'Nutrición' ? (
+                  (() => {
+                    const map = parseExtrasMap(listing.extras)
+                    const porcion = getExtra(map, 'Porción') || getExtra(map, 'Porcion')
+                    const carbs = getExtra(map, 'Carbohidratos')
+                    const sodio = getExtra(map, 'Sodio')
+                    const cafeina = getExtra(map, 'Cafeína') || getExtra(map, 'Cafeina')
+                    const calorias = getExtra(map, 'Calorías') || getExtra(map, 'Calorias')
+                    const porciones = getExtra(map, 'Porciones')
+                    const sabor = getExtra(map, 'Sabor')
+                    const vence = getExtra(map, 'Vence')
+                    const ingredientes = getExtra(map, 'Ingredientes')
+                    const alerg = getExtra(map, 'Alérgenos') || getExtra(map, 'Alergenos')
+                    return (
+                      <>
+                        {listing.subcategory ? <Spec label="Tipo" value={listing.subcategory} /> : null}
+                        {porcion ? <Spec label="Porción" value={porcion} /> : null}
+                        {porciones ? <Spec label="Porciones" value={porciones} /> : null}
+                        {carbs ? <Spec label="Carbohidratos" value={`${carbs}`} /> : null}
+                        {sodio ? <Spec label="Sodio" value={`${sodio}`} /> : null}
+                        {cafeina ? <Spec label="Cafeína" value={`${cafeina}`} /> : null}
+                        {calorias ? <Spec label="Calorías" value={`${calorias}`} /> : null}
+                        {sabor ? <Spec label="Sabor" value={sabor} /> : null}
+                        {vence ? <Spec label="Vencimiento" value={vence} /> : null}
+                        {ingredientes ? <Spec label="Ingredientes" value={ingredientes} fullWidth /> : null}
+                        {alerg ? <Spec label="Alérgenos" value={alerg} fullWidth /> : null}
+                      </>
+                    )
+                  })()
+                ) : (
+                  <>
+                    {/* Orden: Material + Horquilla (si existe) + Talle */}
+                    {listing.material ? <Spec label="Material" value={listing.material} canEdit={isModerator} onEdit={() => openEditField('material', listing.material, 'text')} /> : null}
+                    {listing.category === 'MTB' && specFork ? <Spec label="Horquilla" value={specFork} /> : null}
+                    {(() => {
+                      const parts = (listing.extras || '')
+                        .split('•')
+                        .map((p) => p.trim())
+                        .filter(Boolean)
+                      const token = parts.find((p) => p.toLowerCase().startsWith('talles:'))
+                      const multi = token ? token.split(':').slice(1).join(':').trim() : ''
+                      if (multi) return <Spec label="Talles" value={multi} />
+                      return listing.frameSize ? <Spec label="Talle / Medida" value={listing.frameSize} canEdit={isModerator} onEdit={() => openEditField('frameSize', listing.frameSize, 'text')} /> : null
+                    })()}
+                    {/* Luego Ruedas + Rodado */}
+                    {listing.wheelset ? <Spec label="Ruedas" value={listing.wheelset} canEdit={isModerator} onEdit={() => openEditField('wheelset', listing.wheelset, 'text')} /> : null}
+                    {listing.wheelSize ? <Spec label="Rodado" value={listing.wheelSize} canEdit={isModerator} onEdit={() => openEditField('wheelSize', listing.wheelSize, 'text')} /> : null}
+                    {/* Grupo de transmisión */}
+                    {(listing.drivetrain || listing.drivetrainDetail) ? (
+                      <Spec label="Grupo" value={(listing.drivetrain || listing.drivetrainDetail) as string} canEdit={isModerator} onEdit={() => openEditField('drivetrain', (listing.drivetrain || listing.drivetrainDetail) as string, 'text')} />
+                    ) : null}
+                    {/* Tipo de transmisión */}
+                    {isBikeCategory && specTxType ? <Spec label="Tipo de transmisión" value={specTxType} /> : null}
+                    {/* Tipo de freno */}
+                    {isBikeCategory && specBrake ? <Spec label="Freno" value={specBrake} /> : null}
+                    {/* Opcionales según categoría */}
+                    {listing.category === 'Fixie' && specFixieRatio ? <Spec label="Relación" value={specFixieRatio} /> : null}
+                    {listing.category === 'E-Bike' && specMotor ? <Spec label="Motor" value={specMotor} /> : null}
+                    {listing.category === 'E-Bike' && specCharge ? <Spec label="Batería / Carga" value={specCharge} /> : null}
+                    {isBikeCategory && specCondition ? <Spec label="Condición" value={specCondition} /> : null}
+                    {listing.extras ? <Spec label="Extras" value={listing.extras} fullWidth canEdit={isModerator} onEdit={() => openEditField('extras', listing.extras, 'textarea')} /> : null}
+                  </>
+                )}
               </div>
             </section>
           </div>
 
-          <div className="order-4 w-full min-w-0 lg:col-start-1 lg:row-start-3">
+          <div className={`${isLifestyle ? 'order-4 lg:hidden' : 'order-4 lg:hidden'} w-full min-w-0 mt-5 lg:mt-0 ${isLifestyle ? 'lg:col-start-2' : 'lg:col-start-1'} lg:row-start-3`}>
             <section className="card p-6">
               <div className="flex items-center gap-2">
                 <h2 className="text-lg font-semibold text-[#14212e]">Descripción</h2>
@@ -1192,7 +1555,30 @@ export default function ListingDetail() {
 
           
 
-          <div className="order-6 w-full min-w-0 lg:col-start-1 lg:row-start-4">
+          </div>
+        </div>
+        {/* Slider: Productos del vendedor (desktop) */}
+        {sellerRelated.length > 0 && (
+          <div className="hidden lg:block mt-8">
+            <HorizontalSlider
+              title="Productos del vendedor"
+              subtitle={(() => {
+                const c = listing.category
+                if (c === 'Nutrición') return 'Más productos de Nutrición'
+                if (c === 'Indumentaria') return 'Más productos de Indumentaria'
+                return 'Más bicicletas del mismo vendedor'
+              })()}
+              items={sellerRelated.slice(0, 20)}
+              maxItems={20}
+              initialLoad={8}
+              tone="dark"
+              renderCard={(it) => <ListingCard l={it} priority={false} />}
+            />
+          </div>
+        )}
+        {/* Q&A: fuera de la grilla, sección aparte */}
+        <div className="mt-5 lg:mt-8">
+          <div className="lg:w-[70%] lg:mx-auto">
             <ListingQuestionsSection listing={listing} listingUnavailable={listingUnavailable} />
           </div>
         </div>

@@ -1,4 +1,4 @@
-export type Category = 'Ruta'|'MTB'|'Gravel'|'Urbana'|'Fixie'|'Accesorios'|'E-Bike'|'Niños'|'Pista'|'Triatlón'|'Indumentaria'
+export type Category = 'Ruta'|'MTB'|'Gravel'|'Urbana'|'Fixie'|'Accesorios'|'E-Bike'|'Niños'|'Pista'|'Triatlón'|'Indumentaria'|'Nutrición'
 
 export type SellerPlan = 'basic' | 'premium' | 'featured' | 'pro'
 
@@ -105,11 +105,4 @@ export interface Subscription {
   autoRenew?: boolean
 }
 
-export interface Sweepstake {
-  id: string
-  slug: string
-  title: string
-  startAt: number
-  endAt: number
-  createdAt?: number | null
-}
+ 

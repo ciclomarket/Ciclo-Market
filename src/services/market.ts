@@ -27,6 +27,7 @@ export type MarketSearchParams = {
   year?: string[]
   size?: string[]
   location?: string[]
+  transmissionType?: string[]
   limit?: number
   offset?: number
 }
@@ -61,6 +62,7 @@ export async function fetchMarket(params: MarketSearchParams): Promise<{ items: 
   appendAll('year', params.year)
   appendAll('size', params.size)
   appendAll('location', params.location)
+  appendAll('transmissionType', params.transmissionType)
 
   let headers: Record<string, string> | undefined
   if (supabaseEnabled) {

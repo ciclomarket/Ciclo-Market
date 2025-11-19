@@ -25,20 +25,29 @@ const MATERIAL_OPTIONS = ['Aluminio','Carbono','Aluminio + Carbono','Titanio','A
 const DRIVETRAIN_OPTIONS = [
   'Otro',
   // Shimano Ruta / Gravel
-  'Shimano Claris 8v','Shimano Sora 9v','Shimano Tiagra 4700','Shimano 105 R7000','Shimano 105 12v Di2',
-  'Shimano Ultegra R8000','Shimano Ultegra 8170 Di2','Shimano Dura-Ace 9000','Shimano Dura-Ace 9150 Di2',
-  'Shimano Dura-Ace 9200 Di2','Shimano Dura-Ace 7970 Di2','Shimano GRX 600','Shimano GRX 810','Shimano GRX 12v',
+  'Shimano Claris 8v','Shimano Sora 9v','Shimano Tiagra 4700',
+  'Shimano 105 5800','Shimano 105 R7000','Shimano 105 7150 Di2','Shimano 105 12v Di2',
+  'Shimano Ultegra 6800','Shimano Ultegra R8000','Shimano Ultegra 8170 Di2',
+  'Shimano Dura-Ace 9000','Shimano Dura-Ace 9100','Shimano Dura-Ace 9150 Di2',
+  'Shimano Dura-Ace 9200 Di2','Shimano Dura-Ace 9250 Di2','Shimano Dura-Ace 9270 Di2','Shimano Dura-Ace 7970 Di2',
+  'Shimano GRX 400','Shimano GRX 600','Shimano GRX 810','Shimano GRX 12v','Shimano GRX 820 12v',
   // Shimano MTB / E-Bike
-  'Shimano Deore 10v','Shimano Deore 12v','Shimano SLX 12v','Shimano XT M8100','Shimano XTR M9100','Shimano Steps E-Bike',
+  'Shimano Deore 10v','Shimano Deore 12v','Shimano SLX M7000 11v','Shimano SLX 12v','Shimano XT M8000 11v','Shimano XT M8100','Shimano XTR M9100','Shimano Steps E-Bike',
   // SRAM Ruta / Gravel
-  'SRAM Apex 1','SRAM Apex XPLR','SRAM Rival 22','SRAM Rival eTap AXS','SRAM Force 22','SRAM Force eTap AXS',
+  'SRAM Apex 1','SRAM Apex XPLR','SRAM Apex eTap AXS','SRAM Rival 22','SRAM Rival eTap AXS','SRAM Force 22','SRAM Force eTap AXS','SRAM Force D2 eTap AXS',
   'SRAM Red 22','SRAM Red eTap AXS','SRAM Red eTap 11v',
   // SRAM MTB
-  'SRAM NX Eagle','SRAM GX Eagle','SRAM GX Eagle Transmission','SRAM X01 Eagle','SRAM XX1 Eagle','SRAM XX Eagle Transmission',
+  'SRAM SX Eagle','SRAM NX Eagle','SRAM GX Eagle','SRAM GX Eagle Transmission','SRAM X0 Eagle Transmission','SRAM X01 Eagle','SRAM XX1 Eagle','SRAM XX Eagle Transmission','SRAM XX SL Eagle Transmission',
   // Campagnolo / Otros
-  'Campagnolo Centaur','Campagnolo Chorus 12v','Campagnolo Chorus EPS','Campagnolo Record 12v','Campagnolo Record EPS',
+  'Campagnolo Centaur','Campagnolo Potenza 11v','Campagnolo Chorus 12v','Campagnolo Chorus EPS','Campagnolo Record 12v','Campagnolo Record EPS',
 'Campagnolo Super Record 12v','Campagnolo Super Record EPS','Campagnolo Ekar 13v',
 ]
+
+function inferTransmissionType(group: string): 'Mecánico' | 'Electrónico' {
+  const g = (group || '').toLowerCase()
+  if (g.includes('di2') || g.includes('etap') || g.includes('axs') || g.includes('eps') || g.includes('steps')) return 'Electrónico'
+  return 'Mecánico'
+}
 
 const ACCESSORY_TYPES = [
   'Componentes y partes',
@@ -69,6 +78,10 @@ export default function NewListingForm() {
   const { show: showToast } = useToast()
   const listingId = searchParams.get('id')
   const listingTypeParam = searchParams.get('type')
+  if (listingTypeParam === 'nutrition') {
+    // Redirigir por seguridad si se cae el router: el formulario dedicado maneja nutrición
+    window.location.replace('/publicar/nueva?type=nutrition')
+  }
   const listingType: 'bike' | 'accessory' | 'apparel' =
     listingTypeParam === 'accessory'
       ? 'accessory'
@@ -273,6 +286,7 @@ export default function NewListingForm() {
   const [frameSizesMulti, setFrameSizesMulti] = useState('')
   const [drivetrain, setDrivetrain] = useState(DRIVETRAIN_OPTIONS[0])
   const [drivetrainOther, setDrivetrainOther] = useState('')
+  const [transmissionType, setTransmissionType] = useState<'Mecánico' | 'Electrónico'>(inferTransmissionType(DRIVETRAIN_OPTIONS[0]))
   const [wheelset, setWheelset] = useState('')
   const [wheelSize, setWheelSize] = useState('')
   const [extras, setExtras] = useState('')
@@ -331,6 +345,9 @@ export default function NewListingForm() {
 
   const materialValue = isAccessory || isApparel ? '' : (material === 'Otro' ? customMaterial.trim() : material)
   const drivetrainValue = drivetrain === 'Otro' ? drivetrainOther.trim() : drivetrain
+  // Consistencia: si el grupo elegido sugiere un tipo distinto al seleccionado, avisar sin bloquear
+  const inferredTxFromGroup = useMemo(() => (drivetrain && drivetrain !== 'Otro' ? inferTransmissionType(drivetrain) : null), [drivetrain])
+  const txMismatch = useMemo(() => Boolean(inferredTxFromGroup && transmissionType && inferredTxFromGroup !== transmissionType), [inferredTxFromGroup, transmissionType])
   const priceNumber = Number(priceInput) || 0
 
   const apparelSizeOptions = useMemo(
@@ -411,6 +428,7 @@ export default function NewListingForm() {
       if (typeof draft.frameSizesMulti === 'string') setFrameSizesMulti(draft.frameSizesMulti)
       if (typeof draft.drivetrain === 'string') setDrivetrain(draft.drivetrain)
       if (typeof draft.drivetrainOther === 'string') setDrivetrainOther(draft.drivetrainOther)
+      if (typeof draft.transmissionType === 'string' && (draft.transmissionType === 'Mecánico' || draft.transmissionType === 'Electrónico')) setTransmissionType(draft.transmissionType)
       if (typeof draft.wheelset === 'string') setWheelset(draft.wheelset)
       if (typeof draft.wheelSize === 'string') setWheelSize(draft.wheelSize)
       if (typeof draft.extras === 'string') setExtras(draft.extras)
@@ -466,6 +484,7 @@ export default function NewListingForm() {
         frameSizesMulti,
         drivetrain,
         drivetrainOther,
+        transmissionType,
         wheelset,
         wheelSize,
         extras,
@@ -507,6 +526,7 @@ export default function NewListingForm() {
     frameSizesMulti,
     drivetrain,
     drivetrainOther,
+    transmissionType,
     wheelset,
     wheelSize,
     extras,
@@ -705,9 +725,13 @@ export default function NewListingForm() {
           if (drivetrainFromDb && DRIVETRAIN_OPTIONS.includes(drivetrainFromDb)) {
             setDrivetrain(drivetrainFromDb)
             setDrivetrainOther('')
+            setTransmissionType(inferTransmissionType(drivetrainFromDb))
           } else if (drivetrainFromDb) {
             setDrivetrain('Otro')
             setDrivetrainOther(existing.drivetrainDetail ?? drivetrainFromDb)
+            // Intentar inferir tipo a partir del detalle o valor
+            const base = existing.drivetrainDetail || drivetrainFromDb
+            setTransmissionType(inferTransmissionType(base))
           }
           setWheelset(existing.wheelset ?? '')
           setWheelSize(existing.wheelSize ?? '')
@@ -1037,7 +1061,16 @@ export default function NewListingForm() {
         material: (isAccessory || isApparel) ? undefined : (materialValue || undefined),
         frame_size: (isAccessory || isApparel) ? undefined : (frameSize || undefined),
         drivetrain: (isAccessory || isApparel) ? undefined : (drivetrain === 'Otro' ? undefined : drivetrain),
-        drivetrain_detail: (isAccessory || isApparel) ? undefined : (drivetrain === 'Otro' ? (drivetrainOther.trim() || undefined) : undefined),
+        drivetrain_detail: (isAccessory || isApparel)
+          ? undefined
+          : (() => {
+              const other = drivetrain === 'Otro' ? (drivetrainOther.trim() || '') : ''
+              // Canonizar tipo: si el grupo elegido implica Electrónico/Mecánico, priorizarlo
+              const inferred = drivetrain && drivetrain !== 'Otro' ? inferTransmissionType(drivetrain) : null
+              const type = inferred || transmissionType
+              const combined = other ? `${other} · ${type}` : type
+              return combined || undefined
+            })(),
         wheelset: (isAccessory || isApparel) ? undefined : (wheelset.trim() || undefined),
         wheel_size: (isAccessory || isApparel) ? undefined : (wheelSize || undefined),
         extras: safeExtras,
@@ -1184,7 +1217,7 @@ export default function NewListingForm() {
     if (!priceNumber) return '—'
     const locale = priceCurrency === 'ARS' ? 'es-AR' : 'en-US'
     const code = priceCurrency
-    const formatted = new Intl.NumberFormat(locale, { style: 'currency', currency: code, maximumFractionDigits: 0 }).format(priceNumber)
+    const formatted = new Intl.NumberFormat(locale, { style: 'currency', currency: code, maximumFractionDigits: 2, minimumFractionDigits: 0 }).format(priceNumber)
     return `${formatted} ${code}`
   }
 
@@ -1591,10 +1624,21 @@ export default function NewListingForm() {
                       ))}
                     </select>
                   </Field>
+                  <Field label="Tipo de transmisión">
+                    <select className="select" value={transmissionType} onChange={(e) => setTransmissionType(e.target.value as 'Mecánico' | 'Electrónico')}>
+                      <option value="Mecánico">Mecánico</option>
+                      <option value="Electrónico">Electrónico</option>
+                    </select>
+                  </Field>
                   {drivetrain === 'Otro' && (
                     <Field label="Especificá el grupo">
                       <input className="input" value={drivetrainOther} onChange={(e) => setDrivetrainOther(e.target.value)} placeholder="Detalle del grupo" />
                     </Field>
+                  )}
+                  {txMismatch && (
+                    <div className="sm:col-span-2 -mt-2">
+                      <p className="text-xs text-[#b45309]">Notamos una posible contradicción entre el grupo seleccionado y el tipo de transmisión. Si el grupo es, por ejemplo, Di2/eTap/AXS/EPS debería ser “Electrónico”.</p>
+                    </div>
                   )}
                 </div>
 
@@ -1783,7 +1827,7 @@ export default function NewListingForm() {
                     </select>
                     <input
                       className="input w-full max-w-none text-right"
-                      type="number" min={0} value={priceInput} onChange={(e) => setPriceInput(e.target.value)} placeholder="0"
+                      type="number" min={0} step="0.01" inputMode="decimal" value={priceInput} onChange={(e) => setPriceInput(e.target.value)} placeholder="0"
                     />
                   </div>
                 </Field>
@@ -1939,6 +1983,13 @@ export default function NewListingForm() {
                   <div className="flex justify-between gap-4">
                     <dt className="font-medium text-black/80">Grupo</dt>
                     <dd>{drivetrainValue}</dd>
+                  </div>
+                )}
+                {/* Tipo de transmisión */}
+                {(!isAccessory && !isApparel) && (
+                  <div className="flex justify-between gap-4">
+                    <dt className="font-medium text-black/80">Tipo de transmisión</dt>
+                    <dd>{transmissionType}</dd>
                   </div>
                 )}
                 {/* Freno y Condición */}

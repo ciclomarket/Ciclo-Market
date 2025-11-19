@@ -528,6 +528,34 @@ export default function Plans() {
                   </div>
                 </button>
               ))}
+              {isStore && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/publicar/nueva?type=nutrition&plan=pro')}
+                  className="group flex h-full flex-col gap-4 rounded-3xl border border-white/10 bg-white/5 p-6 text-left transition hover:border-white/30 hover:bg-white/10"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="grid size-12 place-content-center rounded-2xl border border-white/15 bg-white/10 text-white/80 transition group-hover:border-white/40 group-hover:text-white">
+                      {/* Simple nutrition icon */}
+                      <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={1.6}>
+                        <path d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7Z" />
+                        <path d="M10 10a2 2 0 1 0 4 0" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between gap-4">
+                        <h2 className="text-xl font-semibold text-white">Nutrición</h2>
+                      </div>
+                      <p className="mt-2 text-sm text-white/70">Geles, hidratación y suplementos. Disponible para Tiendas Oficiales.</p>
+                    </div>
+                  </div>
+                  <div className="mt-auto flex w-full justify-center">
+                    <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition group-hover:border-white/40 group-hover:bg-white/20">
+                      Seleccionar
+                    </span>
+                  </div>
+                </button>
+              )}
             </div>
           </div>
         </Container>
@@ -552,6 +580,9 @@ export default function Plans() {
                   {LISTING_TYPE_COPY[t].cta}
                 </Button>
               ))}
+              <Button onClick={() => navigate('/publicar/nueva?type=nutrition&plan=pro')} className="bg-white text-[#14212e] hover:bg-white/90">
+                Publicar nutrición
+              </Button>
             </div>
           </div>
         </Container>
