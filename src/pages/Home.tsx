@@ -53,6 +53,44 @@ const BRAND_LOGOS: Record<(typeof BRANDS)[number]['slug'], string> = {
   colner: colnerLogo,
 }
 
+function shuffleArray<T>(input: T[], limit?: number): T[] {
+  const arr = input.slice()
+  for (let i = arr.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[arr[i], arr[j]] = [arr[j], arr[i]]
+  }
+  return typeof limit === 'number' ? arr.slice(0, limit) : arr
+}
+
+function buildStoreRoundRobin(listings: Listing[], storeLogos: Record<string, string | null>, limit: number): Listing[] {
+  const groups = new Map<string, Listing[]>()
+  for (const listing of listings) {
+    if (!listing?.sellerId) continue
+    if (!(listing.sellerId in storeLogos)) continue
+    const bucket = groups.get(listing.sellerId)
+    if (bucket) bucket.push(listing)
+    else groups.set(listing.sellerId, [listing])
+  }
+  if (!groups.size) return []
+  const sellers = shuffleArray(Array.from(groups.keys()))
+  const pools = sellers.map((sellerId) => ({
+    sellerId,
+    items: shuffleArray(groups.get(sellerId) ?? []),
+  }))
+  const result: Listing[] = []
+  let added = true
+  while (result.length < limit && added) {
+    added = false
+    for (const pool of pools) {
+      if (!pool.items.length) continue
+      result.push(pool.items.shift()!)
+      added = true
+      if (result.length >= limit) break
+    }
+  }
+  return result
+}
+
 function HeroBackground() {
   // Imagen LCP con soporte WebP y múltiple densidad (360/720/1520)
   return (
@@ -69,7 +107,6 @@ function HeroBackground() {
         width={1520}
         height={1305}
         alt=""
-        fetchPriority="high"
         loading="eager"
         decoding="async"
         className="absolute inset-0 -z-20 size-full object-cover md:[object-position:50%_28%]"
@@ -267,7 +304,6 @@ export default function Home() {
   // Filtros simples
   const [brand, setBrand] = useState<string>('')
   const navigate = useNavigate()
-
   useEffect(() => {
     let active = true
     const load = async () => {
@@ -290,12 +326,6 @@ export default function Home() {
   }, [])
 
   const loading = dataStatus !== 'ready'
-
-  // Ofertas: originalPrice > price
-  const offers = useMemo(
-    () => listings.filter((l: any) => typeof l.originalPrice === 'number' && l.price < l.originalPrice),
-    [listings]
-  )
 
   const featuredListings = useMemo(() => {
     const now = Date.now()
@@ -320,6 +350,13 @@ export default function Home() {
       }),
     [listings, brand]
   )
+
+  const [storeLogos, setStoreLogos] = useState<Record<string, string | null>>({})
+
+  const routeListings = useMemo(() => shuffleArray(listings.filter((l) => l.category === 'Ruta'), 24), [listings])
+  const mtbListings = useMemo(() => shuffleArray(listings.filter((l) => l.category === 'MTB'), 24), [listings])
+  const triListings = useMemo(() => shuffleArray(listings.filter((l) => l.category === 'Triatlón'), 24), [listings])
+  const officialStoreListings = useMemo(() => buildStoreRoundRobin(listings, storeLogos, 24), [listings, storeLogos])
 
   const clearBrand = () => setBrand('')
 
@@ -358,9 +395,11 @@ export default function Home() {
 
   // Like counts (batch) for sections
   const [likesFeatured, setLikesFeatured] = useState<Record<string, number>>({})
-  const [likesOffers, setLikesOffers] = useState<Record<string, number>>({})
+  const [likesRoute, setLikesRoute] = useState<Record<string, number>>({})
+  const [likesMtb, setLikesMtb] = useState<Record<string, number>>({})
+  const [likesTri, setLikesTri] = useState<Record<string, number>>({})
+  const [likesStores, setLikesStores] = useState<Record<string, number>>({})
   const [likesRecent, setLikesRecent] = useState<Record<string, number>>({})
-  const [storeLogos, setStoreLogos] = useState<Record<string, string | null>>({})
 
   useEffect(() => {
     const ids = featuredListings.slice(0, 24).map((l) => l.id)
@@ -378,19 +417,64 @@ export default function Home() {
   }, [featuredListings.map((l) => l.id).join(',')])
 
   useEffect(() => {
-    const ids = offers.slice(0, 20).map((l: any) => l.id)
-    if (!ids.length) { setLikesOffers({}); return }
+    const ids = routeListings.map((l) => l.id)
+    if (!ids.length) { setLikesRoute({}); return }
     let active = true
     ;(async () => {
       try {
         const map = await fetchLikeCounts(ids)
-        if (active) setLikesOffers(map)
+        if (active) setLikesRoute(map)
       } catch (error) {
-        console.warn('[home] offers likes fetch failed', error)
+        console.warn('[home] route likes fetch failed', error)
       }
     })()
     return () => { active = false }
-  }, [offers.map((l: any) => l.id).join(',')])
+  }, [routeListings.map((l) => l.id).join(',')])
+
+  useEffect(() => {
+    const ids = mtbListings.map((l) => l.id)
+    if (!ids.length) { setLikesMtb({}); return }
+    let active = true
+    ;(async () => {
+      try {
+        const map = await fetchLikeCounts(ids)
+        if (active) setLikesMtb(map)
+      } catch (error) {
+        console.warn('[home] mtb likes fetch failed', error)
+      }
+    })()
+    return () => { active = false }
+  }, [mtbListings.map((l) => l.id).join(',')])
+
+  useEffect(() => {
+    const ids = triListings.map((l) => l.id)
+    if (!ids.length) { setLikesTri({}); return }
+    let active = true
+    ;(async () => {
+      try {
+        const map = await fetchLikeCounts(ids)
+        if (active) setLikesTri(map)
+      } catch (error) {
+        console.warn('[home] tri likes fetch failed', error)
+      }
+    })()
+    return () => { active = false }
+  }, [triListings.map((l) => l.id).join(',')])
+
+  useEffect(() => {
+    const ids = officialStoreListings.map((l) => l.id)
+    if (!ids.length) { setLikesStores({}); return }
+    let active = true
+    ;(async () => {
+      try {
+        const map = await fetchLikeCounts(ids)
+        if (active) setLikesStores(map)
+      } catch (error) {
+        console.warn('[home] stores likes fetch failed', error)
+      }
+    })()
+    return () => { active = false }
+  }, [officialStoreListings.map((l) => l.id).join(',')])
 
   useEffect(() => {
     const ids = filtered.slice(0, 20).map((l) => l.id)
@@ -501,34 +585,93 @@ export default function Home() {
         </section>
       )}
 
-      {/* OFERTAS DESTACADAS */}
-      <section className="relative isolate overflow-hidden bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] pt-8 pb-8">
-        <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
-          <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
-          <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
-        </div>
-        <Container className="text-white">
-          {offers.length ? (
+      {routeListings.length > 0 && (
+        <section className="relative isolate overflow-hidden bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] pt-8 pb-8">
+          <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
+            <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
+            <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
+          </div>
+          <Container className="text-white">
             <HorizontalSlider
-              title="Ofertas destacadas"
-              subtitle="Bicicletas con precio reducido recientemente"
-              items={offers}
-              maxItems={20}
+              title="Bicicletas de ruta"
+              subtitle="Modelos listos para el asfalto y las largas distancias"
+              items={routeListings}
+              maxItems={24}
               initialLoad={8}
-              renderCard={(l:any, idx?: number) => <ListingCard l={l} storeLogoUrl={storeLogos[l.sellerId] || null} priority={(idx ?? 0) < 4} likeCount={likesOffers[l.id]} />}
+              renderCard={(l: any, idx?: number) => (
+                <ListingCard l={l} storeLogoUrl={storeLogos[l.sellerId] || null} priority={(idx ?? 0) < 4} likeCount={likesRoute[l.id]} />
+              )}
               tone="dark"
             />
-          ) : (
-            <>
-              <div className="flex items-center justify-between mb-4 text-white">
-                <h2 className="text-xl font-semibold">Ofertas destacadas</h2>
-                <span className="text-sm text-white/70">Bicicletas con precio rebajado</span>
-              </div>
-              <EmptyState title="Sin ofertas por ahora" subtitle="Cuando una publicación tenga rebaja, aparecerá acá." />
-            </>
-          )}
-        </Container>
-      </section>
+          </Container>
+        </section>
+      )}
+
+      {mtbListings.length > 0 && (
+        <section className="relative isolate overflow-hidden bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] pt-6 pb-8">
+          <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
+            <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
+            <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
+          </div>
+          <Container className="text-white">
+            <HorizontalSlider
+              title="Bicicletas de MTB"
+              subtitle="Rigidas y doble suspensión para dominar los senderos"
+              items={mtbListings}
+              maxItems={24}
+              initialLoad={8}
+              renderCard={(l: any, idx?: number) => (
+                <ListingCard l={l} storeLogoUrl={storeLogos[l.sellerId] || null} priority={(idx ?? 0) < 4} likeCount={likesMtb[l.id]} />
+              )}
+              tone="dark"
+            />
+          </Container>
+        </section>
+      )}
+
+      {triListings.length > 0 && (
+        <section className="relative isolate overflow-hidden bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] pt-6 pb-8">
+          <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
+            <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
+            <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
+          </div>
+          <Container className="text-white">
+            <HorizontalSlider
+              title="Bicicletas de triatlón"
+              subtitle="Geometría y aerodinámica pensadas para ganar tiempo"
+              items={triListings}
+              maxItems={24}
+              initialLoad={8}
+              renderCard={(l: any, idx?: number) => (
+                <ListingCard l={l} storeLogoUrl={storeLogos[l.sellerId] || null} priority={(idx ?? 0) < 4} likeCount={likesTri[l.id]} />
+              )}
+              tone="dark"
+            />
+          </Container>
+        </section>
+      )}
+
+      {officialStoreListings.length > 0 && (
+        <section className="relative isolate overflow-hidden bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] pt-6 pb-10">
+          <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
+            <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
+            <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
+          </div>
+          <Container className="text-white">
+            <HorizontalSlider
+              title="Tiendas oficiales"
+              subtitle="Productos seleccionados de tiendas verificadas"
+              items={officialStoreListings}
+              maxItems={24}
+              initialLoad={8}
+              renderCard={(l: any, idx?: number) => (
+                <ListingCard l={l} storeLogoUrl={storeLogos[l.sellerId] || null} priority={(idx ?? 0) < 4} likeCount={likesStores[l.id]} />
+              )}
+              tone="dark"
+            />
+          </Container>
+        </section>
+      )}
 
       {/* ÚLTIMAS PUBLICADAS */}
       <section id="explorar" className="relative isolate overflow-hidden bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] pt-8 pb-10">
@@ -602,7 +745,7 @@ export default function Home() {
                 description: 'Energía e hidratación',
                 image: '/design/Banners/4.webp',
                 imageMobile: '/design/Banners-Mobile/4.webp',
-                to: '/marketplace?q=nutricion',
+                to: '/marketplace?cat=Nutrici%C3%B3n',
               },
             ].map((card) => (
               <Link

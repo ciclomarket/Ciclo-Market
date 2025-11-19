@@ -377,6 +377,102 @@ async function recordPayment({ userId, listingId, amount, currency = 'ARS', stat
   }
 }
 
+async function reservePaymentProcessing(paymentId) {
+  if (!supabaseService) return { ok: true, reason: 'no_service' }
+  const key = String(paymentId)
+  try {
+    const { error: insertError } = await supabaseService
+      .from('processed_payments')
+      .insert({ payment_id: key, status: 'processing' })
+
+    if (!insertError) return { ok: true, reason: 'inserted' }
+
+    if (insertError?.code !== '23505') {
+      console.warn('[processed_payments] reserve failed', insertError)
+      return { ok: true, reason: 'insert_failed' }
+    }
+
+    const { data: existing, error: fetchError } = await supabaseService
+      .from('processed_payments')
+      .select('status')
+      .eq('payment_id', key)
+      .maybeSingle()
+
+    if (fetchError) {
+      console.warn('[processed_payments] fetch existing failed', fetchError)
+      return { ok: true, reason: 'fetch_failed' }
+    }
+
+    if (!existing) return { ok: true, reason: 'missing_after_conflict' }
+
+    if (existing.status === 'done') return { ok: false, reason: 'already_processed' }
+    if (existing.status === 'processing') return { ok: false, reason: 'in_progress' }
+
+    if (existing.status === 'failed' || existing.status === 'pending') {
+      const { error: updateError } = await supabaseService
+        .from('processed_payments')
+        .update({ status: 'processing', error: null })
+        .eq('payment_id', key)
+      if (updateError) {
+        console.warn('[processed_payments] reset status failed', updateError)
+        return { ok: false, reason: 'reset_failed' }
+      }
+      return { ok: true, reason: existing.status }
+    }
+
+    return { ok: false, reason: 'unhandled_status' }
+  } catch (err) {
+    console.warn('[processed_payments] reserve error', err?.message || err)
+    return { ok: true, reason: 'exception' }
+  }
+}
+
+async function markPaymentProcessingDone(paymentId) {
+  if (!supabaseService) return
+  const key = String(paymentId)
+  try {
+    const nowIso = new Date().toISOString()
+    const { error } = await supabaseService
+      .from('processed_payments')
+      .update({ status: 'done', processed_at: nowIso, error: null })
+      .eq('payment_id', key)
+    if (error) console.warn('[processed_payments] mark done failed', error)
+  } catch (err) {
+    console.warn('[processed_payments] mark done error', err?.message || err)
+  }
+}
+
+async function markPaymentProcessingPending(paymentId) {
+  if (!supabaseService) return
+  const key = String(paymentId)
+  try {
+    const { error } = await supabaseService
+      .from('processed_payments')
+      .update({ status: 'pending', processed_at: null })
+      .eq('payment_id', key)
+    if (error) console.warn('[processed_payments] mark pending failed', error)
+  } catch (err) {
+    console.warn('[processed_payments] mark pending error', err?.message || err)
+  }
+}
+
+async function markPaymentProcessingFailed(paymentId, errLike) {
+  if (!supabaseService) return
+  const key = String(paymentId)
+  const message = errLike instanceof Error ? errLike.message : String(errLike)
+  try {
+    const { error } = await supabaseService
+      .from('processed_payments')
+      .update({ status: 'failed', error: message })
+      .eq('payment_id', key)
+    if (error) console.warn('[processed_payments] mark failed failed', error)
+  } catch (err) {
+    console.warn('[processed_payments] mark failed error', err?.message || err)
+  }
+}
+
+
+
 /* ----------------------------- Track events ------------------------------- */
 app.post('/api/track', async (req, res) => {
   try {
@@ -2990,17 +3086,34 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
       topic === 'payment' ||
       (typeof action === 'string' && action.startsWith('payment.'))
     if (isPaymentNotification && paymentId) {
+      const paymentKey = String(paymentId)
+      let processingReservation = null
+      if (supabaseService) {
+        processingReservation = await reservePaymentProcessing(paymentKey)
+        if (!processingReservation?.ok) {
+          const reason = processingReservation?.reason || 'unknown'
+          if (reason === 'already_processed') {
+            console.log('[MP webhook] duplicate payment ignored', { paymentId: paymentKey })
+          } else if (reason === 'in_progress') {
+            console.log('[MP webhook] payment processing in progress', { paymentId: paymentKey })
+          } else {
+            console.log('[MP webhook] skipping payment processing', { paymentId: paymentKey, reason })
+          }
+          return
+        }
+      }
+
       try {
         const { Payment } = require('mercadopago')
         const paymentClient = new Payment(mpClient)
-        const mpPayment = await paymentClient.get({ id: String(paymentId) })
+        const mpPayment = await paymentClient.get({ id: paymentKey })
         const statusRaw = (mpPayment && mpPayment.status) ? String(mpPayment.status) : 'pending'
         const status = statusRaw === 'approved' ? 'succeeded' : statusRaw
         const amount = typeof mpPayment?.transaction_amount === 'number' ? mpPayment.transaction_amount : null
         const currency = mpPayment?.currency_id || 'ARS'
         // Extraer metadata útil
         const meta = (mpPayment && typeof mpPayment.metadata === 'object') ? mpPayment.metadata : {}
-        console.log('[MP webhook] payment metadata', { paymentId: String(paymentId), meta })
+        console.log('[MP webhook] payment metadata', { paymentId: paymentKey, meta })
         const externalRef = (mpPayment && mpPayment.external_reference) ? String(mpPayment.external_reference) : null
         let userId = typeof meta?.userId === 'string' && meta.userId ? meta.userId : null
         let planCode = normalisePlanCode(meta?.planCode || meta?.planId)
@@ -3013,6 +3126,11 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
           ? listingSlugRaw.trim() || null
           : (listingSlugRaw ? String(listingSlugRaw) : null)
         const metaIntent = typeof meta?.intent === 'string' ? meta.intent : null
+        const highlightDaysRaw = meta?.highlightDays ?? meta?.highlight_days ?? 0
+        const highlightDays = Number(highlightDaysRaw || 0)
+        let highlightListingSlug = upgradeListingSlug
+        let highlightListingIdCandidate = upgradeListingId
+
 
         if ((!userId || !planCode || !upgradeListingId) && externalRef) {
           try {
@@ -3047,6 +3165,11 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
             console.warn('[MP webhook] external_reference fallback failed', refErr?.message || refErr)
           }
         }
+        if (!highlightListingSlug && upgradeListingSlug) highlightListingSlug = upgradeListingSlug
+        if (!highlightListingIdCandidate && upgradeListingId) highlightListingIdCandidate = upgradeListingId
+        const hasHighlightTarget = Boolean(highlightListingSlug || highlightListingIdCandidate)
+        const isHighlightPurchase = Number.isFinite(highlightDays) && highlightDays > 0 && hasHighlightTarget
+
 
         // Intentar resolver correctamente el preference_id a partir del merchant_order
         // Nota: mpPayment.order.id es merchant_order id, NO el preference_id
@@ -3074,7 +3197,7 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
           console.warn('[MP webhook] merchant_order resolve error', e?.message || e)
         }
         // Registrar pago con userId cuando esté disponible
-        await recordPayment({ userId, listingId: upgradeListingId, amount, currency, status, providerRef: String(paymentId) })
+        await recordPayment({ userId, listingId: upgradeListingId, amount, currency, status, providerRef: paymentKey })
         // Upsert/Update crédito según estado del pago
         if (supabaseService && (planCode === 'basic' || planCode === 'premium')) {
           const creditStatus = status === 'succeeded' ? 'available' : (status === 'pending' ? 'pending' : 'cancelled')
@@ -3084,7 +3207,7 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
             plan_code: planCode,
             status: creditStatus,
             provider: 'mercadopago',
-            provider_ref: String(paymentId),
+            provider_ref: paymentKey,
             preference_id: prefId,
             expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
             ...(upgradeListingId ? { listing_id: upgradeListingId } : {}),
@@ -3096,7 +3219,7 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
                 .from('publish_credits')
                 .update({
                   status: creditStatus,
-                  provider_ref: String(paymentId),
+                  provider_ref: paymentKey,
                   preference_id: prefId,
                   expires_at: baseUpdate.expires_at,
                   ...(upgradeListingId ? { listing_id: upgradeListingId } : {}),
@@ -3141,20 +3264,20 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
                 .eq('user_id', userId)
                 .eq('plan_code', planCode)
                 .eq('status', 'pending')
-                .neq('provider_ref', String(paymentId))
+                .neq('provider_ref', paymentKey)
               if (cancelErr) console.warn('[webhook] cleanup pending credits failed', cancelErr)
             } catch (e) {
               console.warn('[webhook] cleanup pending credits error', e?.message || e)
             }
           }
-          if (status === 'succeeded' && metaIntent === 'listing_upgrade' && upgradeListingId) {
+          if (status === 'succeeded' && metaIntent === 'listing_upgrade' && upgradeListingId && !isHighlightPurchase) {
             try {
               const applyResult = await applyCheckoutUpgrade({
                 planCode,
                 listingId: upgradeListingId,
                 listingSlug: upgradeListingSlug,
                 userId,
-                providerRef: String(paymentId),
+                providerRef: paymentKey,
                 preferenceId: prefId
               })
               if (!applyResult.ok && applyResult.reason !== 'already_applied') {
@@ -3168,93 +3291,108 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
 
         // Auto-aplicar destaque para pagos de "Highlight" (idempotente)
         try {
-          if (supabaseService && status === 'succeeded') {
-            const listingSlugCandidate = meta?.listingSlug ?? meta?.listing_slug ?? null
-            const listingSlug = typeof listingSlugCandidate === 'string' ? (listingSlugCandidate.trim() || null) : null
-            const listingIdCandidate = meta?.listingId ?? meta?.listing_id ?? null
-            const highlightDaysRaw = meta?.highlightDays ?? meta?.highlight_days ?? 0
-            const highlightDays = Number(highlightDaysRaw || 0)
-
-            if (listingSlug && Number.isFinite(highlightDays) && highlightDays > 0) {
-              console.log('[webhook/highlight] applying', { listingSlug, highlightDays, paymentId: String(paymentId) })
-              // Evitar aplicar más de una vez por pago
-              let alreadyApplied = false
-              try {
-                const { data: payRow } = await supabaseService
-                  .from('payments')
-                  .select('applied')
-                  .eq('provider', 'mercadopago')
-                  .eq('provider_ref', String(paymentId))
+          if (
+            supabaseService &&
+            status === 'succeeded' &&
+            Number.isFinite(highlightDays) &&
+            highlightDays > 0 &&
+            hasHighlightTarget
+          ) {
+            console.log('[webhook/highlight] applying', {
+              listingSlug: highlightListingSlug,
+              listingId: highlightListingIdCandidate,
+              highlightDays,
+              paymentId: paymentKey
+            })
+            let alreadyApplied = false
+            try {
+              const { data: payRow } = await supabaseService
+                .from('payments')
+                .select('applied')
+                .eq('provider', 'mercadopago')
+                .eq('provider_ref', paymentKey)
+                .maybeSingle()
+              alreadyApplied = Boolean(payRow?.applied)
+            } catch {}
+            if (!alreadyApplied) {
+              let listing = null
+              if (highlightListingSlug) {
+                const { data: listingBySlug } = await supabaseService
+                  .from('listings')
+                  .select('id, highlight_expires')
+                  .eq('slug', highlightListingSlug)
                   .maybeSingle()
-                alreadyApplied = Boolean(payRow?.applied)
-              } catch {}
-
-              if (!alreadyApplied) {
-                // Buscar listing por slug o id
-                const { data: listingBySlug } = listingSlug
-                  ? await supabaseService
-                      .from('listings')
-                      .select('id, highlight_expires')
-                      .eq('slug', listingSlug)
-                      .maybeSingle()
-                  : { data: null }
-                let listing = listingBySlug || null
-                if (!listing) {
-                  const listingIdLookup = listingIdCandidate || listingSlug
-                  if (listingIdLookup) {
-                    const { data: listingById } = await supabaseService
-                      .from('listings')
-                      .select('id, highlight_expires')
-                      .eq('id', listingIdLookup)
-                      .maybeSingle()
-                    listing = listingById || null
-                  }
-                }
-
-                if (listing && listing.id) {
-                  const now = Date.now()
-                  const base = listing.highlight_expires ? Math.max(new Date(listing.highlight_expires).getTime(), now) : now
-                  const next = new Date(base + highlightDays * 24 * 60 * 60 * 1000).toISOString()
-                  const { error: upd } = await supabaseService
-                    .from('listings')
-                    .update({ highlight_expires: next })
-                    .eq('id', listing.id)
-                  if (upd) {
-                    console.error('[webhook/highlight] failed to update listing', upd)
-                  } else {
-                    console.log('[webhook/highlight] updated listing', { listingId: listing.id, prev: listing.highlight_expires, next })
-                    // Marcar crédito como aplicado (si existe)
+                listing = listingBySlug || null
+              }
+              if (!listing && highlightListingIdCandidate) {
+                const { data: listingById } = await supabaseService
+                  .from('listings')
+                  .select('id, highlight_expires')
+                  .eq('id', highlightListingIdCandidate)
+                  .maybeSingle()
+                listing = listingById || null
+              }
+              if (listing && listing.id) {
+                const now = Date.now()
+                const base = listing.highlight_expires ? Math.max(new Date(listing.highlight_expires).getTime(), now) : now
+                const next = new Date(base + highlightDays * 24 * 60 * 60 * 1000).toISOString()
+                const { error: upd } = await supabaseService
+                  .from('listings')
+                  .update({ highlight_expires: next })
+                  .eq('id', listing.id)
+                if (upd) {
+                  console.error('[webhook/highlight] failed to update listing', upd)
+                } else {
+                  console.log('[webhook/highlight] updated listing', { listingId: listing.id, prev: listing.highlight_expires, next })
+                  try {
+                    const nowIso = new Date().toISOString()
+                    const payUpdate = await supabaseService
+                      .from('payments')
+                      .update({ applied: true, applied_at: nowIso })
+                      .eq('provider', 'mercadopago')
+                      .eq('provider_ref', paymentKey)
+                    if (payUpdate?.error) throw payUpdate.error
+                  } catch (e3) {
+                    console.warn('[webhook/highlight] mark applied failed', e3?.message || e3)
                     try {
-                      const nowIso = new Date().toISOString()
-                      const payUpdate = await supabaseService
-                        .from('payments')
-                        .update({ applied: true, applied_at: nowIso })
+                      await supabaseService
+                        .from('publish_credits')
+                        .update({ applied: true, applied_at: new Date().toISOString() })
                         .eq('provider', 'mercadopago')
-                        .eq('provider_ref', String(paymentId))
-                      if (payUpdate?.error) throw payUpdate.error
-                    } catch (e3) {
-                      console.warn('[webhook/highlight] mark applied failed', e3?.message || e3)
-                      try {
-                        await supabaseService
-                          .from('publish_credits')
-                          .update({ applied: true, applied_at: new Date().toISOString() })
-                          .eq('provider', 'mercadopago')
-                          .eq('provider_ref', String(paymentId))
-                      } catch (fallbackErr) {
-                        console.warn('[webhook/highlight] mark applied fallback failed', fallbackErr?.message || fallbackErr)
-                      }
+                        .eq('provider_ref', paymentKey)
+                    } catch (fallbackErr) {
+                      console.warn('[webhook/highlight] mark applied fallback failed', fallbackErr?.message || fallbackErr)
                     }
                   }
-                } else {
-                  console.warn('[webhook/highlight] listing not found for', listingSlug)
                 }
+              } else {
+                console.warn('[webhook/highlight] listing not found for payment', {
+                  listingSlug: highlightListingSlug,
+                  listingId: highlightListingIdCandidate,
+                  paymentId: paymentKey
+                })
               }
             }
           }
         } catch (e) {
           console.warn('[webhook/highlight] handler error', e?.message || e)
         }
+
+        const stillPending = status === 'pending' || status === 'in_process'
+        if (supabaseService && processingReservation?.ok) {
+          if (status === 'succeeded') {
+            await markPaymentProcessingDone(paymentKey)
+          } else if (stillPending) {
+            await markPaymentProcessingPending(paymentKey)
+          } else {
+            await markPaymentProcessingDone(paymentKey)
+          }
+        }
+
       } catch (err) {
+        if (supabaseService && processingReservation?.ok) {
+          await markPaymentProcessingFailed(paymentKey, err)
+        }
         console.error('[MP webhook] payment fetch/record failed', err)
       }
     }

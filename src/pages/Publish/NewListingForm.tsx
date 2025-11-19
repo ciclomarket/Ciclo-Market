@@ -107,6 +107,18 @@ export default function NewListingForm() {
   const upgradePending = Boolean(listingId && upgradeStatusParam === 'pending')
   const upgradeFailure = Boolean(listingId && upgradeStatusParam === 'failure')
 
+  useEffect(() => {
+    if (!listingId) return
+    if (upgradeStatusParam) return
+    if (upgradePlanParam !== 'basic' && upgradePlanParam !== 'premium') return
+    const next = new URLSearchParams()
+    next.set('tab', 'Publicaciones')
+    next.set('plan', upgradePlanParam)
+    next.set('listing', listingId)
+    next.set('legacy', '1')
+    navigate(`/dashboard?${next.toString()}`, { replace: true })
+  }, [listingId, upgradePlanParam, upgradeStatusParam, navigate])
+
   /** 1) Plan seleccionado por query (?plan=free|basic|premium|pro)
    * Prioriza coincidencia literal (code/id/name) con el parámetro.
    * Si no hay, usa coincidencia por alias (resolvePlanCode).
@@ -1239,7 +1251,7 @@ export default function NewListingForm() {
   }, [isAccessory, isApparel, category])
 
   // Gateo inicial: en flujo plan=free y gate no terminado, no mostrar el formulario todavía
-  if (planCode === 'free' && !editingListing && !freeGateDone) {
+  if (planCode === 'free' && !listingId && !freeGateDone) {
     return (
       <Container>
         <div className="mx-auto mt-12 max-w-xl rounded-2xl border border-black/10 bg-white p-6 text-center text-sm text-black/60 shadow">

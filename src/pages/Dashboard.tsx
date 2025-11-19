@@ -174,6 +174,7 @@ export default function Dashboard() {
   const favouriteIds = favouriteIdsRemote.length ? favouriteIdsRemote : favouriteIdsLocal
   const favouritesCount = favouriteIds.length
   const [credits, setCredits] = useState<Credit[]>([])
+  const { show: showToast } = useToast()
   const availableCredits = useMemo(() => credits.filter((c) => c.status === 'available').length, [credits])
   const availableBasic = useMemo(() => credits.filter((c) => c.status === 'available' && c.plan_code === 'basic').length, [credits])
   const availablePremium = useMemo(() => credits.filter((c) => c.status === 'available' && c.plan_code === 'premium').length, [credits])
@@ -188,6 +189,7 @@ export default function Dashboard() {
   const [giftExpires, setGiftExpires] = useState('')
   const [giftCreating, setGiftCreating] = useState(false)
   const [giftCode, setGiftCode] = useState<string | null>(null)
+  const [upgradeIntent, setUpgradeIntent] = useState<{ listingId: string; plan: 'basic' | 'premium' } | null>(null)
 
   const loadData = useCallback(async () => {
     if (!user?.id) {
@@ -292,6 +294,27 @@ export default function Dashboard() {
     }
   }, [searchParams, isMobile])
 
+  useEffect(() => {
+    const planParam = canonicalPlanCode(searchParams.get('plan'))
+    const listingParam = searchParams.get('listing')?.trim()
+    if (!listingParam || (planParam !== 'basic' && planParam !== 'premium')) return
+    if (loading) return
+    const targetListing = sellerListings.find((listing) => listing.id === listingParam)
+    if (!targetListing) return
+    if (profile?.store_enabled) return
+    if (activeTab !== 'Publicaciones') {
+      setActiveTab('Publicaciones')
+      if (isMobile) setMobileActiveTab('Publicaciones')
+    }
+    setUpgradeIntent({ listingId: listingParam, plan: planParam })
+    showToast(`Abrimos las opciones para mejorar "${targetListing.title}". Elegí el plan ${planParam === 'premium' ? 'Premium' : 'Básico'} desde el menú de opciones.`, { variant: 'info' })
+    const next = new URLSearchParams(searchParams)
+    next.delete('plan')
+    next.delete('listing')
+    next.delete('legacy')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, loading, sellerListings, activeTab, isMobile, showToast, setSearchParams, profile?.store_enabled])
+
   const profileNeedsInfo = useMemo(() => {
     if (!user) return false
     const preferredBike = profile?.preferred_bike ?? ''
@@ -328,6 +351,10 @@ export default function Dashboard() {
     handleSelectTab('Editar perfil')
   }, [handleSelectTab])
 
+  const handleUpgradeIntentConsumed = useCallback(() => {
+    setUpgradeIntent(null)
+  }, [])
+
   const renderSection = (tab: SellerTab) => {
     switch (tab) {
       case 'Perfil':
@@ -353,6 +380,8 @@ export default function Dashboard() {
             profile={profile}
             onRefresh={loadData}
             onRequireWhatsapp={() => handleSelectTab('Editar perfil')}
+            upgradeIntent={upgradeIntent}
+            onUpgradeIntentConsumed={handleUpgradeIntentConsumed}
           />
         )
       case 'Notificaciones':
@@ -1265,12 +1294,16 @@ function ListingsView({
   profile,
   onRefresh,
   onRequireWhatsapp,
+  upgradeIntent,
+  onUpgradeIntentConsumed,
 }: {
   listings: Listing[]
   credits: Credit[]
   profile?: UserProfileRecord | null
   onRefresh?: () => Promise<void> | void
   onRequireWhatsapp?: () => void
+  upgradeIntent?: { listingId: string; plan: 'basic' | 'premium' } | null
+  onUpgradeIntentConsumed?: () => void
 }) {
   const navigate = useNavigate()
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
@@ -1439,6 +1472,28 @@ function ListingsView({
       setProcessingPaymentKey(null)
     }
   }, [API_BASE, planCatalog, showToast, userId])
+
+  useEffect(() => {
+    if (!upgradeIntent) return
+    const { listingId, plan } = upgradeIntent
+    const target = listings.find((l) => l.id === listingId)
+    if (!target) {
+      onUpgradeIntentConsumed?.()
+      return
+    }
+    setOpenMenuFor(listingId)
+    const planLabel = plan === 'premium' ? 'Premium' : 'Básico'
+    showToast(`Elegí el plan ${planLabel} en el menú de "${target.title}" para completar la mejora.`, { variant: 'info' })
+    if (typeof window !== 'undefined') {
+      window.requestAnimationFrame(() => {
+        const node = document.getElementById(`dashboard-listing-${listingId}`)
+        if (node) {
+          node.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }
+      })
+    }
+    onUpgradeIntentConsumed?.()
+  }, [upgradeIntent, listings, showToast, onUpgradeIntentConsumed])
 
   useEffect(() => {
     if (!successMessage || typeof window === 'undefined') return
@@ -1625,7 +1680,7 @@ function ListingsView({
           const premiumUpgradeLabel = getUpgradeLabel(listingPlanCode, 'premium')
           const isExpired = listing.status === 'expired' || (typeof listing.expiresAt === 'number' && listing.expiresAt > 0 && listing.expiresAt < now)
           return (
-            <div key={listing.id} className="space-y-3">
+            <div key={listing.id} id={`dashboard-listing-${listing.id}`} className="space-y-3">
               <ListingCard l={listing} />
               <div className="rounded-2xl border border-[#14212e]/10 bg-white/80 px-3 py-2 text-xs text-[#14212e]/70">
                 <p className="font-semibold uppercase tracking-[0.25em] text-[#14212e]/60">Estado</p>

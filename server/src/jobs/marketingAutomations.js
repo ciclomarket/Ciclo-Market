@@ -48,7 +48,7 @@ async function fetchSellerProfiles(supabase, sellerIds) {
   try {
     const { data, error } = await supabase
       .from('users')
-      .select('id,email,full_name')
+      .select('id,email,full_name,store_enabled')
       .in('id', sellerIds)
     if (error) {
       console.warn('[marketingAutomations] no se pudieron obtener perfiles', error)
@@ -60,6 +60,7 @@ async function fetchSellerProfiles(supabase, sellerIds) {
       map.set(row.id, {
         email: typeof row.email === 'string' ? row.email.trim() : null,
         fullName: typeof row.full_name === 'string' ? row.full_name.trim() : null,
+        storeEnabled: Boolean(row.store_enabled),
       })
     }
     return map
@@ -170,18 +171,14 @@ function buildEmailLayout({ baseFront, title, introHtml, bodyHtml, extraFooterHt
 function buildExpiredEmail({ listing, profile, baseFront }) {
   const cleanBase = (baseFront || 'https://www.ciclomarket.ar').replace(/\/$/, '')
   const dashboardUrl = `${cleanBase}/dashboard?tab=${encodeURIComponent('Publicaciones')}`
-  const basicUrl = `${cleanBase}/publicar/nueva?id=${encodeURIComponent(listing.id)}&plan=basic`
-  const premiumUrl = `${cleanBase}/publicar/nueva?id=${encodeURIComponent(listing.id)}&plan=premium`
   const intro = `
     <p style="margin:0 0 12px">Hola ${escapeHtml(profile?.fullName || 'vendedor')},</p>
     <p style="margin:0 0 12px">Tu publicación <strong>${escapeHtml(listing.title)}</strong> venció y la pausamos para que no siga apareciendo en el marketplace.</p>
-    <p style="margin:0 0 18px">Si todavía la tenés disponible (o querés volver a publicarla), reactivala desde tu panel y aprovechá los planes destacados para triplicar tus chances de venta.</p>
+    <p style="margin:0 0 18px">Si todavía la tenés disponible, entrá al panel y reactivala desde “Opciones &gt; Renovar publicación”. Desde ese mismo menú podés elegir un plan Básico o Premium para ganar visibilidad extra.</p>
   `
   const buttons = `
     <div style="margin:18px 0;text-align:center">
       <a href="${dashboardUrl}" style="display:inline-block;padding:12px 18px;background:#14212e;color:#fff;text-decoration:none;border-radius:12px;font-weight:600;margin:4px">Renovar desde el panel</a>
-      <a href="${basicUrl}" style="display:inline-block;padding:12px 18px;background:#2563eb;color:#fff;text-decoration:none;border-radius:12px;font-weight:600;margin:4px">Plan Básico</a>
-      <a href="${premiumUrl}" style="display:inline-block;padding:12px 18px;background:#d97706;color:#fff;text-decoration:none;border-radius:12px;font-weight:600;margin:4px">Plan Premium</a>
     </div>
   `
   const listingCard = buildListingCardHtml(listing, cleanBase)
@@ -206,8 +203,6 @@ function buildExpiredEmail({ listing, profile, baseFront }) {
     `Hola ${profile?.fullName || 'vendedor'},`,
     `Tu publicación "${listing.title}" venció y la pausamos.`,
     `Renová desde tu panel: ${dashboardUrl}`,
-    `Plan Básico: ${basicUrl}`,
-    `Plan Premium: ${premiumUrl}`,
     buildListingCardText(listing, cleanBase),
     'Beneficios:',
     '- Plan Básico: 60 días, WhatsApp y prioridad.',
@@ -223,8 +218,7 @@ function buildExpiredEmail({ listing, profile, baseFront }) {
 
 function buildFreeExpiringEmail({ listing, profile, baseFront, daysLeft }) {
   const cleanBase = (baseFront || 'https://www.ciclomarket.ar').replace(/\/$/, '')
-  const basicUrl = `${cleanBase}/publicar/nueva?id=${encodeURIComponent(listing.id)}&plan=basic`
-  const premiumUrl = `${cleanBase}/publicar/nueva?id=${encodeURIComponent(listing.id)}&plan=premium`
+  const dashboardUrl = `${cleanBase}/dashboard?tab=${encodeURIComponent('Publicaciones')}`
   const plural = daysLeft === 1 ? 'día' : 'días'
   const intro = `
     <p style="margin:0 0 12px">Hola ${escapeHtml(profile?.fullName || 'vendedor')},</p>
@@ -233,8 +227,7 @@ function buildFreeExpiringEmail({ listing, profile, baseFront, daysLeft }) {
   `
   const buttons = `
     <div style="margin:18px 0;text-align:center">
-      <a href="${basicUrl}" style="display:inline-block;padding:12px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:12px;font-weight:600;margin:4px">Mejorar a Básico</a>
-      <a href="${premiumUrl}" style="display:inline-block;padding:12px 20px;background:#d97706;color:#fff;text-decoration:none;border-radius:12px;font-weight:600;margin:4px">Subir a Premium</a>
+      <a href="${dashboardUrl}" style="display:inline-block;padding:12px 20px;background:#14212e;color:#fff;text-decoration:none;border-radius:12px;font-weight:600;margin:4px">Renovar desde el panel</a>
     </div>
   `
   const listingCard = buildListingCardHtml(listing, cleanBase)
@@ -259,8 +252,7 @@ function buildFreeExpiringEmail({ listing, profile, baseFront, daysLeft }) {
   const text = [
     `Hola ${profile?.fullName || 'vendedor'},`,
     `Tu publicación "${listing.title}" vence en ${daysLeft} ${plural}.`,
-    `Mejorar a Básico: ${basicUrl}`,
-    `Subir a Premium: ${premiumUrl}`,
+    `Abrí tu panel para renovarla o hacer upgrade: ${dashboardUrl}`,
     buildListingCardText(listing, cleanBase),
     'Beneficios: WhatsApp activo, 60 días de duración, más exposición.',
   ].join('\n')
@@ -389,7 +381,7 @@ async function runMarketingAutomationsOnce() {
     const profiles = await fetchSellerProfiles(supabase, sellerIds)
     for (const listing of filtered) {
       const profile = profiles.get(listing.seller_id)
-      if (!profile?.email) continue
+      if (!profile?.email || profile?.storeEnabled) continue
       try {
         const email = buildExpiredEmail({ listing, profile, baseFront })
         await sendMail({
@@ -426,7 +418,7 @@ async function runMarketingAutomationsOnce() {
     const profiles = await fetchSellerProfiles(supabase, sellerIds)
     for (const { listing, daysLeft } of candidates) {
       const profile = profiles.get(listing.seller_id)
-      if (!profile?.email) continue
+      if (!profile?.email || profile?.storeEnabled) continue
       try {
         const email = buildFreeExpiringEmail({ listing, profile, baseFront, daysLeft })
         await sendMail({
@@ -461,7 +453,7 @@ async function runMarketingAutomationsOnce() {
     const profiles = await fetchSellerProfiles(supabase, sellerIds)
     for (const listing of candidates) {
       const profile = profiles.get(listing.seller_id)
-      if (!profile?.email) continue
+      if (!profile?.email || profile?.storeEnabled) continue
       try {
         const email = buildHighlightEmail({ listing, profile, baseFront })
         await sendMail({
