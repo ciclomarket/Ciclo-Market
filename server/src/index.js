@@ -3342,8 +3342,39 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
 
         // Auto-aplicar destaque para pagos de "Highlight" (idempotente)
         try {
-          if (
-            supabaseService &&
+          if (supabaseService && status === 'succeeded' && isHighlightPurchase) {
+            const supabase = supabaseService
+            let targetId = highlightListingIdCandidate ? String(highlightListingIdCandidate) : null
+            if (!targetId && highlightListingSlug) {
+              try {
+                const { data } = await supabase
+                  .from('listings')
+                  .select('id')
+                  .eq('slug', String(highlightListingSlug))
+                  .maybeSingle()
+                if (data?.id) targetId = String(data.id)
+              } catch {}
+            }
+            if (targetId && Number.isFinite(highlightDays) && highlightDays > 0) {
+              const { data: listing } = await supabase
+                .from('listings')
+                .select('id, highlight_expires')
+                .eq('id', targetId)
+                .maybeSingle()
+              const now = Date.now()
+              const base = listing?.highlight_expires ? Math.max(new Date(listing.highlight_expires).getTime(), now) : now
+              const next = new Date(base + highlightDays * 24 * 60 * 60 * 1000).toISOString()
+              await supabase
+                .from('listings')
+                .update({ highlight_expires: next })
+                .eq('id', targetId)
+            }
+          }
+        } catch (err) {
+          console.error('[MP webhook] payment fetch/record failed', err)
+        }
+        // Fin de bloque interno principal del pago
+      } catch (err) {
         console.error('[MP webhook] payment fetch/record failed', err)
       }
     }
