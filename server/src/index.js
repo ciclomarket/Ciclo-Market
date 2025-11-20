@@ -446,7 +446,7 @@ app.get('/sitemap.xml', async (_req, res) => {
   </sitemap>`
     }).join('')
 
-    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <sitemap>
     <loc>${origin}/sitemap-static.xml</loc>
@@ -458,6 +458,10 @@ app.get('/sitemap.xml', async (_req, res) => {
   </sitemap>
   <sitemap>
     <loc>${origin}/sitemap-stores.xml</loc>
+    <lastmod>${lastmod}</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>${origin}/sitemap-shopping.xml</loc>
     <lastmod>${lastmod}</lastmod>
   </sitemap>
   ${listingEntries}
@@ -654,7 +658,7 @@ app.get('/merchant-feed.xml', async (_req, res) => {
     const supabase = getServerSupabaseClient()
     const nowIso = new Date().toISOString()
     // Fetch up to 2000 latest active listings
-    const PAGE_SIZE = 2000
+    const PAGE_SIZE = 1000
     const { data, error } = await supabase
       .from('listings')
       .select('id, slug, title, description, price, original_price, price_currency, images, status, created_at, expires_at, brand, category, subcategory')
