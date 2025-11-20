@@ -7,3 +7,4 @@ Sitemap: https://www.ciclomarket.ar/sitemap-static.xml
 Sitemap: https://www.ciclomarket.ar/sitemap-stores.xml
 Sitemap: https://www.ciclomarket.ar/sitemap-categories.xml
 Sitemap: https://www.ciclomarket.ar/sitemap-listings-1.xml
+Sitemap: https://www.ciclomarket.ar/sitemap-shopping.xml

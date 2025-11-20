@@ -70,6 +70,18 @@
         "destination": "https://ciclo-market.onrender.com/sitemap-listings-:page.xml",
         "type": 301
       }
+      ,
+      {
+        "source": "/merchant-feed.xml",
+        "destination": "https://ciclo-market.onrender.com/merchant-feed.xml",
+        "type": 301
+      }
+      ,
+      {
+        "source": "/sitemap-shopping.xml",
+        "destination": "https://ciclo-market.onrender.com/sitemap-shopping.xml",
+        "type": 301
+      }
     ],
     "rewrites": [
       { "source": "**", "destination": "/index.html" }

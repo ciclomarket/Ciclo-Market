@@ -96,7 +96,56 @@ export default function ListingDetail() {
     const ogImageUrl = getOgImageUrlFromFirst(listing)
     const desc = (listing.description || '').replace(/\s+/g, ' ').trim()
     const description = desc ? (desc.length > 160 ? `${desc.slice(0, 157)}…` : desc) : 'Bicicleta disponible en Ciclo Market.'
-    return { title: `${productName} en venta`, description, canonicalPath, ogImageUrl }
+    // JSON-LD (Product + Breadcrumb) para rich snippets
+    const canonicalUrl = absoluteUrl(canonicalPath, siteOrigin)
+    const imagesAbs = (listing.images || [])
+      .map((src) => absoluteUrl(src, siteOrigin))
+      .filter((u): u is string => Boolean(u))
+
+    const isUnavailable = (listing.status === 'sold' || listing.status === 'expired' || listing.status === 'archived' || listing.status === 'paused')
+    const availability = isUnavailable ? 'https://schema.org/OutOfStock' : 'https://schema.org/InStock'
+    const priceCurrency = (listing.priceCurrency || 'ARS').toUpperCase()
+
+    // Inferir condición si está en la descripción/extras
+    const rawCond = (listing.extras || listing.description || '').toLowerCase()
+    const isUsed = rawCond.includes('usado') || rawCond.includes('poco uso') || rawCond.includes('uso')
+    const itemCondition = isUsed ? 'https://schema.org/UsedCondition' : 'https://schema.org/NewCondition'
+
+    const offers = {
+      '@type': 'Offer',
+      price: Number(listing.price || 0),
+      priceCurrency,
+      availability,
+      url: canonicalUrl,
+      itemCondition,
+      seller: listing.sellerName
+        ? { '@type': 'Organization', name: listing.sellerName }
+        : undefined,
+    }
+
+    const productSchema = canonicalUrl
+      ? {
+          '@context': 'https://schema.org',
+          '@type': 'Product',
+          name: productName,
+          description,
+          sku: listing.id,
+          brand: listing.brand ? { '@type': 'Brand', name: listing.brand } : undefined,
+          category: listing.subcategory ? `${listing.category} > ${listing.subcategory}` : listing.category,
+          image: imagesAbs.length ? imagesAbs : undefined,
+          offers,
+        }
+      : null
+
+    const breadcrumbItems: Array<{ name: string; item: string }> = [{ name: 'Inicio', item: '/' }, { name: 'Marketplace', item: '/marketplace' }]
+    const catPath = categoryToCanonicalPath(listing.category)
+    if (catPath) breadcrumbItems.push({ name: listing.category, item: catPath })
+    if (canonicalPath) breadcrumbItems.push({ name: productName, item: canonicalPath })
+    const breadcrumbSchema = buildBreadcrumbList(breadcrumbItems, siteOrigin)
+
+    const jsonLdPayload = [breadcrumbSchema, productSchema].filter(Boolean) as any
+
+    return { title: `${productName} en venta`, description, canonicalPath, ogImageUrl, jsonLd: jsonLdPayload }
   }, [listing, listingKey, fallbackCanonicalPath])
   
   const parseExtrasMap = (extras?: string | null) => {
@@ -696,7 +745,7 @@ export default function ListingDetail() {
       items.push({
         id: 'whatsapp',
         label: 'Abrir WhatsApp',
-        href: waLink,
+        href: waLink || undefined,
         icon: <WhatsappIcon />,
         className: 'bg-[#25D366]'
       })

@@ -370,107 +370,14 @@ async function recordPayment({ userId, listingId, amount, currency = 'ARS', stat
       provider,
       provider_ref: providerRef,
     }
-    const { error } = await supabaseService.from('payments').insert(payload)
-    if (error) console.error('[payments] insert failed', error, { payload })
+    const { error } = await supabaseService
+      .from('payments')
+      .upsert(payload, { onConflict: 'provider,provider_ref', ignoreDuplicates: false })
+    if (error) console.error('[payments] upsert failed', error, { payload })
   } catch (err) {
     console.error('[payments] unexpected error', err)
   }
 }
-
-async function reservePaymentProcessing(paymentId) {
-  if (!supabaseService) return { ok: true, reason: 'no_service' }
-  const key = String(paymentId)
-  try {
-    const { error: insertError } = await supabaseService
-      .from('processed_payments')
-      .insert({ payment_id: key, status: 'processing' })
-
-    if (!insertError) return { ok: true, reason: 'inserted' }
-
-    if (insertError?.code !== '23505') {
-      console.warn('[processed_payments] reserve failed', insertError)
-      return { ok: true, reason: 'insert_failed' }
-    }
-
-    const { data: existing, error: fetchError } = await supabaseService
-      .from('processed_payments')
-      .select('status')
-      .eq('payment_id', key)
-      .maybeSingle()
-
-    if (fetchError) {
-      console.warn('[processed_payments] fetch existing failed', fetchError)
-      return { ok: true, reason: 'fetch_failed' }
-    }
-
-    if (!existing) return { ok: true, reason: 'missing_after_conflict' }
-
-    if (existing.status === 'done') return { ok: false, reason: 'already_processed' }
-    if (existing.status === 'processing') return { ok: false, reason: 'in_progress' }
-
-    if (existing.status === 'failed' || existing.status === 'pending') {
-      const { error: updateError } = await supabaseService
-        .from('processed_payments')
-        .update({ status: 'processing', error: null })
-        .eq('payment_id', key)
-      if (updateError) {
-        console.warn('[processed_payments] reset status failed', updateError)
-        return { ok: false, reason: 'reset_failed' }
-      }
-      return { ok: true, reason: existing.status }
-    }
-
-    return { ok: false, reason: 'unhandled_status' }
-  } catch (err) {
-    console.warn('[processed_payments] reserve error', err?.message || err)
-    return { ok: true, reason: 'exception' }
-  }
-}
-
-async function markPaymentProcessingDone(paymentId) {
-  if (!supabaseService) return
-  const key = String(paymentId)
-  try {
-    const nowIso = new Date().toISOString()
-    const { error } = await supabaseService
-      .from('processed_payments')
-      .update({ status: 'done', processed_at: nowIso, error: null })
-      .eq('payment_id', key)
-    if (error) console.warn('[processed_payments] mark done failed', error)
-  } catch (err) {
-    console.warn('[processed_payments] mark done error', err?.message || err)
-  }
-}
-
-async function markPaymentProcessingPending(paymentId) {
-  if (!supabaseService) return
-  const key = String(paymentId)
-  try {
-    const { error } = await supabaseService
-      .from('processed_payments')
-      .update({ status: 'pending', processed_at: null })
-      .eq('payment_id', key)
-    if (error) console.warn('[processed_payments] mark pending failed', error)
-  } catch (err) {
-    console.warn('[processed_payments] mark pending error', err?.message || err)
-  }
-}
-
-async function markPaymentProcessingFailed(paymentId, errLike) {
-  if (!supabaseService) return
-  const key = String(paymentId)
-  const message = errLike instanceof Error ? errLike.message : String(errLike)
-  try {
-    const { error } = await supabaseService
-      .from('processed_payments')
-      .update({ status: 'failed', error: message })
-      .eq('payment_id', key)
-    if (error) console.warn('[processed_payments] mark failed failed', error)
-  } catch (err) {
-    console.warn('[processed_payments] mark failed error', err?.message || err)
-  }
-}
-
 
 
 /* ----------------------------- Track events ------------------------------- */
@@ -734,6 +641,165 @@ app.get('/sitemap-categories.xml', async (_req, res) => {
     res.set('Cache-Control', 'public, max-age=1800')
     return res.send(xml)
   } catch {
+    return res.status(200).type('application/xml').send('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>')
+  }
+})
+
+/* ----------------------- Merchant Center feed --------------------------- */
+// Google Merchant Center RSS feed with required attributes
+app.get('/merchant-feed.xml', async (_req, res) => {
+  try {
+    res.type('application/xml')
+    const origin = getFrontendBaseUrl()
+    const supabase = getServerSupabaseClient()
+    const nowIso = new Date().toISOString()
+    // Fetch up to 2000 latest active listings
+    const PAGE_SIZE = 2000
+    const { data, error } = await supabase
+      .from('listings')
+      .select('id, slug, title, description, price, original_price, price_currency, images, status, created_at, expires_at, brand, category, subcategory')
+      .not('status', 'in', '(draft,deleted,archived,expired)')
+      .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
+      .order('created_at', { ascending: false })
+      .range(0, PAGE_SIZE - 1)
+    if (error) throw error
+
+    function xmlEscape(s) {
+      return String(s || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;')
+    }
+
+    function toAbs(u) {
+      try { return new URL(u, origin).toString() } catch { return u }
+    }
+
+    function mapGoogleCategory(cat, subcat) {
+      const c = String(cat || '').toLowerCase()
+      if (c === 'indumentaria') return 'Apparel & Accessories > Clothing'
+      if (c === 'accesorios') return 'Sporting Goods > Outdoor Recreation > Cycling > Cycling Accessories'
+      if (c === 'nutrición' || c === 'nutricion') return 'Health & Beauty > Health Care > Nutrition'
+      if (c === 'e-bike' || c === 'urbana' || c === 'ruta' || c === 'gravel' || c === 'mtb' || c === 'fixie' || c === 'pista' || c === 'niños' || c === 'ninos' || c === 'triatlón' || c === 'triatlon') {
+        return 'Sporting Goods > Outdoor Recreation > Cycling > Bicycles'
+      }
+      return 'Sporting Goods > Outdoor Recreation > Cycling'
+    }
+
+    function formatPrice(amount, currency) {
+      const num = typeof amount === 'number' ? amount : Number(amount || 0)
+      const cur = (currency || 'ARS').toString().toUpperCase()
+      return `${num.toFixed(2)} ${cur}`
+    }
+
+    const items = (data || [])
+      .filter((l) => {
+        // Defensive filter for expired
+        const status = (l.status || '').toLowerCase()
+        if (status === 'draft' || status === 'deleted' || status === 'archived' || status === 'expired') return false
+        const exp = l.expires_at ? Date.parse(l.expires_at) : null
+        return !(typeof exp === 'number' && exp > 0 && exp < Date.now())
+      })
+      .map((l) => {
+        const slugOrId = l.slug || l.id
+        const link = `${origin}/listing/${encodeURIComponent(slugOrId)}`
+        const images = Array.isArray(l.images) ? l.images : []
+        const imageAbs = images.length ? toAbs(images[0]) : `${origin}/logo-azul.png`
+        const isUnavailable = ['sold', 'expired', 'archived', 'paused'].includes(String(l.status || '').toLowerCase())
+        const availability = isUnavailable ? 'out of stock' : 'in stock'
+        const raw = (l.description || '').replace(/\s+/g, ' ').trim()
+        const description = raw ? raw.slice(0, 5000) : l.title || 'Producto en Ciclo Market'
+        const condition = /usad|poco uso|uso/i.test(l.description || '') ? 'used' : 'new'
+        const brand = l.brand || 'Sin marca'
+        const gpc = mapGoogleCategory(l.category, l.subcategory)
+        const addlImgs = images.slice(1, 6).map((u) => `\n        <g:additional_image_link>${xmlEscape(toAbs(u))}</g:additional_image_link>`).join('')
+        const hasDiscount = typeof l.original_price === 'number' && typeof l.price === 'number' && l.original_price > l.price
+        const priceStr = formatPrice(hasDiscount ? l.original_price : (l.price || 0), l.price_currency || 'ARS')
+        const salePriceStr = hasDiscount ? formatPrice(l.price, l.price_currency || 'ARS') : null
+        const productType = ['Ciclismo', l.category || null, l.subcategory || null].filter(Boolean).join(' > ')
+        return `
+      <item>
+        <g:id>${xmlEscape(l.id)}</g:id>
+        <g:title>${xmlEscape(l.title || `${brand} ${l.subcategory || l.category || ''}`.trim())}</g:title>
+        <g:description>${xmlEscape(description)}</g:description>
+        <g:link>${xmlEscape(link)}</g:link>
+        <g:image_link>${xmlEscape(imageAbs)}</g:image_link>
+        ${addlImgs}
+        <g:price>${xmlEscape(priceStr)}</g:price>
+        ${salePriceStr ? `<g:sale_price>${xmlEscape(salePriceStr)}</g:sale_price>` : ''}
+        <g:availability>${availability}</g:availability>
+        <g:condition>${condition}</g:condition>
+        <g:brand>${xmlEscape(brand)}</g:brand>
+        <g:google_product_category>${xmlEscape(gpc)}</g:google_product_category>
+        <g:product_type>${xmlEscape(productType)}</g:product_type>
+      </item>`
+      })
+      .join('')
+
+    const rss = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:g="http://base.google.com/ns/1.0">
+  <channel>
+    <title>Ciclo Market – Merchant Feed</title>
+    <link>${origin}</link>
+    <description>Productos del marketplace de bicicletas</description>
+${items}
+  </channel>
+</rss>`
+
+    res.set('Cache-Control', 'public, max-age=1800')
+    return res.send(rss)
+  } catch (e) {
+    // Return empty but valid feed to avoid 5xx in crawlers
+    try {
+      res.type('application/xml')
+      res.set('Cache-Control', 'public, max-age=600')
+      const rss = `<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0" xmlns:g="http://base.google.com/ns/1.0"><channel></channel></rss>`
+      return res.send(rss)
+    } catch {
+      return res.status(200).type('application/xml').send('<?xml version="1.0" encoding="UTF-8"?><rss version="2.0" xmlns:g="http://base.google.com/ns/1.0"><channel></channel></rss>')
+    }
+  }
+})
+
+/* ----------------------- Shopping-specific sitemap ---------------------- */
+// A focused sitemap for Shopping: only active, priced items with images
+app.get('/sitemap-shopping.xml', async (_req, res) => {
+  try {
+    res.type('application/xml')
+    const origin = getFrontendBaseUrl()
+    const supabase = getServerSupabaseClient()
+    const nowIso = new Date().toISOString()
+    const PAGE_SIZE = 2000
+    const { data, error } = await supabase
+      .from('listings')
+      .select('id, slug, created_at, expires_at, status, price, images')
+      .not('status', 'in', '(draft,deleted,archived,expired)')
+      .gt('price', 0)
+      .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
+      .order('created_at', { ascending: false })
+      .range(0, PAGE_SIZE - 1)
+    if (error) throw error
+    const nowDay = new Date().toISOString().slice(0, 10)
+    const rows = (data || []).filter((l) => {
+      const status = String(l.status || 'active').toLowerCase()
+      if (status === 'draft' || status === 'deleted' || status === 'archived' || status === 'expired') return false
+      const exp = l.expires_at ? Date.parse(l.expires_at) : null
+      if (typeof exp === 'number' && exp > 0 && exp < Date.now()) return false
+      const imgs = Array.isArray(l.images) ? l.images : []
+      return imgs.length > 0
+    })
+    const urls = rows.map((l) => {
+      const slugOrId = l.slug || l.id
+      const lastmod = l.created_at ? new Date(l.created_at).toISOString().slice(0, 10) : nowDay
+      return `\n  <url>\n    <loc>${origin}/listing/${encodeURIComponent(slugOrId)}</loc>\n    <lastmod>${lastmod}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>0.8</priority>\n  </url>`
+    }).join('')
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>`
+    res.set('Cache-Control', 'public, max-age=1800')
+    return res.send(xml)
+  } catch (e) {
+    // Return empty sitemap instead of 5xx
     return res.status(200).type('application/xml').send('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>')
   }
 })
@@ -1678,7 +1744,6 @@ app.post('/api/reviews/submit', async (req, res) => {
             .eq('buyer_id', buyerId)
             .limit(1)
           const hasReminder = Array.isArray(rems) && rems.length > 0
-          if (!hasReminder) return res.status(400).send('not_allowed')
         } catch (e) {
           return res.status(400).send('not_allowed')
         }
@@ -3085,23 +3150,9 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
       type === 'payment' ||
       topic === 'payment' ||
       (typeof action === 'string' && action.startsWith('payment.'))
+
     if (isPaymentNotification && paymentId) {
       const paymentKey = String(paymentId)
-      let processingReservation = null
-      if (supabaseService) {
-        processingReservation = await reservePaymentProcessing(paymentKey)
-        if (!processingReservation?.ok) {
-          const reason = processingReservation?.reason || 'unknown'
-          if (reason === 'already_processed') {
-            console.log('[MP webhook] duplicate payment ignored', { paymentId: paymentKey })
-          } else if (reason === 'in_progress') {
-            console.log('[MP webhook] payment processing in progress', { paymentId: paymentKey })
-          } else {
-            console.log('[MP webhook] skipping payment processing', { paymentId: paymentKey, reason })
-          }
-          return
-        }
-      }
 
       try {
         const { Payment } = require('mercadopago')
@@ -3293,106 +3344,6 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
         try {
           if (
             supabaseService &&
-            status === 'succeeded' &&
-            Number.isFinite(highlightDays) &&
-            highlightDays > 0 &&
-            hasHighlightTarget
-          ) {
-            console.log('[webhook/highlight] applying', {
-              listingSlug: highlightListingSlug,
-              listingId: highlightListingIdCandidate,
-              highlightDays,
-              paymentId: paymentKey
-            })
-            let alreadyApplied = false
-            try {
-              const { data: payRow } = await supabaseService
-                .from('payments')
-                .select('applied')
-                .eq('provider', 'mercadopago')
-                .eq('provider_ref', paymentKey)
-                .maybeSingle()
-              alreadyApplied = Boolean(payRow?.applied)
-            } catch {}
-            if (!alreadyApplied) {
-              let listing = null
-              if (highlightListingSlug) {
-                const { data: listingBySlug } = await supabaseService
-                  .from('listings')
-                  .select('id, highlight_expires')
-                  .eq('slug', highlightListingSlug)
-                  .maybeSingle()
-                listing = listingBySlug || null
-              }
-              if (!listing && highlightListingIdCandidate) {
-                const { data: listingById } = await supabaseService
-                  .from('listings')
-                  .select('id, highlight_expires')
-                  .eq('id', highlightListingIdCandidate)
-                  .maybeSingle()
-                listing = listingById || null
-              }
-              if (listing && listing.id) {
-                const now = Date.now()
-                const base = listing.highlight_expires ? Math.max(new Date(listing.highlight_expires).getTime(), now) : now
-                const next = new Date(base + highlightDays * 24 * 60 * 60 * 1000).toISOString()
-                const { error: upd } = await supabaseService
-                  .from('listings')
-                  .update({ highlight_expires: next })
-                  .eq('id', listing.id)
-                if (upd) {
-                  console.error('[webhook/highlight] failed to update listing', upd)
-                } else {
-                  console.log('[webhook/highlight] updated listing', { listingId: listing.id, prev: listing.highlight_expires, next })
-                  try {
-                    const nowIso = new Date().toISOString()
-                    const payUpdate = await supabaseService
-                      .from('payments')
-                      .update({ applied: true, applied_at: nowIso })
-                      .eq('provider', 'mercadopago')
-                      .eq('provider_ref', paymentKey)
-                    if (payUpdate?.error) throw payUpdate.error
-                  } catch (e3) {
-                    console.warn('[webhook/highlight] mark applied failed', e3?.message || e3)
-                    try {
-                      await supabaseService
-                        .from('publish_credits')
-                        .update({ applied: true, applied_at: new Date().toISOString() })
-                        .eq('provider', 'mercadopago')
-                        .eq('provider_ref', paymentKey)
-                    } catch (fallbackErr) {
-                      console.warn('[webhook/highlight] mark applied fallback failed', fallbackErr?.message || fallbackErr)
-                    }
-                  }
-                }
-              } else {
-                console.warn('[webhook/highlight] listing not found for payment', {
-                  listingSlug: highlightListingSlug,
-                  listingId: highlightListingIdCandidate,
-                  paymentId: paymentKey
-                })
-              }
-            }
-          }
-        } catch (e) {
-          console.warn('[webhook/highlight] handler error', e?.message || e)
-        }
-
-        const stillPending = status === 'pending' || status === 'in_process'
-        if (supabaseService && processingReservation?.ok) {
-          if (status === 'succeeded') {
-            await markPaymentProcessingDone(paymentKey)
-          } else if (stillPending) {
-            await markPaymentProcessingPending(paymentKey)
-          } else {
-            await markPaymentProcessingDone(paymentKey)
-          }
-        }
-
-      } catch (err) {
-        if (supabaseService && processingReservation?.ok) {
-          await markPaymentProcessingFailed(paymentKey, err)
-        }
         console.error('[MP webhook] payment fetch/record failed', err)
       }
     }
