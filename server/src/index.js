@@ -3953,6 +3953,554 @@ app.post('/api/credits/revert-unused', async (req, res) => {
   }
 })
 
+/* ----------------------------- Saved searches ----------------------------- */
+// List saved searches for current user
+app.get('/api/saved-searches', async (req, res) => {
+  try {
+    const supabase = supabaseService || getServerSupabaseClient()
+    if (!supabase) return res.status(503).json({ error: 'service_unavailable' })
+    const user = await getAuthUser(req, supabase)
+    if (!user) return res.status(401).json({ error: 'unauthorized' })
+    const { data, error } = await supabase
+      .from('saved_searches')
+      .select('id,user_id,name,criteria,is_active,created_at')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+    if (error) return res.status(500).json({ error: 'query_failed' })
+    return res.json(Array.isArray(data) ? data : [])
+  } catch (err) {
+    console.error('[saved-searches:list] failed', err)
+    return res.status(500).json({ error: 'unexpected_error' })
+  }
+})
+
+// Create a saved search for current user
+app.post('/api/saved-searches', async (req, res) => {
+  try {
+    const supabase = supabaseService || getServerSupabaseClient()
+    if (!supabase) return res.status(503).json({ error: 'service_unavailable' })
+    const user = await getAuthUser(req, supabase)
+    if (!user) return res.status(401).json({ error: 'unauthorized' })
+
+    const rawCriteria = req.body?.criteria
+    if (!rawCriteria || typeof rawCriteria !== 'object') {
+      return res.status(400).json({ error: 'invalid_criteria' })
+    }
+
+    const sanitizeCriteria = (value) => {
+      if (!value || typeof value !== 'object') return {}
+      const output = {}
+      for (const [key, val] of Object.entries(value)) {
+        if (val === null || val === undefined) continue
+        if (typeof val === 'string') {
+          const trimmed = val.trim()
+          if (!trimmed) continue
+          if (key === 'cat' && trimmed.toLowerCase() === 'todos') continue
+          if (key === 'deal' && trimmed !== '1') continue
+          if (key === 'store' && trimmed !== '1') continue
+          output[key] = trimmed
+          continue
+        }
+        if (Array.isArray(val)) {
+          const arr = val.map((item) => (typeof item === 'string' ? item.trim() : item)).filter((item) => {
+            if (typeof item === 'string') return Boolean(item)
+            if (item === null || item === undefined) return false
+            return true
+          })
+          if (arr.length) output[key] = Array.from(new Set(arr))
+          continue
+        }
+        output[key] = val
+      }
+      return output
+    }
+
+    const criteria = sanitizeCriteria(rawCriteria)
+    if (!Object.keys(criteria).length) {
+      return res.status(400).json({ error: 'empty_criteria' })
+    }
+
+    const name = (req.body?.name ? String(req.body.name) : '').trim().slice(0, 255) || null
+    const isActive = typeof req.body?.is_active === 'boolean' ? req.body.is_active : true
+
+    const { data, error } = await supabase
+      .from('saved_searches')
+      .insert({
+        user_id: user.id,
+        name,
+        criteria,
+        is_active: isActive,
+      })
+      .select('id,user_id,name,criteria,is_active,created_at')
+      .maybeSingle()
+
+    if (error || !data) return res.status(500).json({ error: 'insert_failed' })
+    return res.status(201).json(data)
+  } catch (err) {
+    console.error('[saved-searches:create] failed', err)
+    return res.status(500).json({ error: 'unexpected_error' })
+  }
+})
+
+// Delete a saved search (only owner)
+app.delete('/api/saved-searches/:id', async (req, res) => {
+  try {
+    const supabase = supabaseService || getServerSupabaseClient()
+    if (!supabase) return res.status(503).json({ error: 'service_unavailable' })
+    const user = await getAuthUser(req, supabase)
+    if (!user) return res.status(401).json({ error: 'unauthorized' })
+    const id = Number(req.params.id)
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'invalid_id' })
+
+    const { data: row, error: fetchErr } = await supabase
+      .from('saved_searches')
+      .select('id,user_id')
+      .eq('id', id)
+      .maybeSingle()
+    if (fetchErr) return res.status(500).json({ error: 'lookup_failed' })
+    if (!row) return res.status(404).json({ error: 'not_found' })
+    if (row.user_id !== user.id) return res.status(403).json({ error: 'forbidden' })
+
+    const { error } = await supabase
+      .from('saved_searches')
+      .delete()
+      .eq('id', id)
+    if (error) return res.status(500).json({ error: 'delete_failed' })
+    return res.json({ ok: true })
+  } catch (err) {
+    console.error('[saved-searches:delete] failed', err)
+    return res.status(500).json({ error: 'unexpected_error' })
+  }
+})
+
+const BIKE_CATEGORY_SET = new Set(['Ruta', 'MTB', 'Gravel', 'Triatlón', 'Urbana', 'Fixie', 'E-Bike', 'Niños', 'Pista'])
+
+function resolveFrontendBaseUrl() {
+  const raw = (process.env.FRONTEND_URL || process.env.FRONTEND_URL_BASE || '').split(',')[0]?.trim()
+  if (raw) return raw.replace(/\/$/, '')
+  return 'https://www.ciclomarket.ar'
+}
+
+function formatCurrency(value, currency) {
+  const n = Number(value)
+  if (!Number.isFinite(n) || n <= 0) return null
+  const cur = typeof currency === 'string' && currency.trim() ? currency.trim().toUpperCase() : 'ARS'
+  try {
+    return new Intl.NumberFormat('es-AR', { style: 'currency', currency: cur, maximumFractionDigits: cur === 'ARS' ? 0 : 2 }).format(n)
+  } catch {
+    return `${n.toLocaleString('es-AR')} ${cur}`
+  }
+}
+
+function normalizeString(value) {
+  if (value === null || value === undefined) return ''
+  return String(value).trim()
+}
+
+function normalizeKey(value) {
+  const txt = normalizeString(value)
+  return txt ? txt.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase() : ''
+}
+
+function arrayToNormalizedSet(values) {
+  const set = new Set()
+  if (!values) return set
+  const arr = Array.isArray(values) ? values : [values]
+  for (const item of arr) {
+    const key = normalizeKey(item)
+    if (key) set.add(key)
+  }
+  return set
+}
+
+function extractExtrasMapBackend(extras) {
+  const map = {}
+  if (!extras || typeof extras !== 'string') return map
+  extras
+    .split('•')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .forEach((part) => {
+      const [rawKey, ...rawValue] = part.split(':')
+      if (!rawKey || !rawValue.length) return
+      const key = normalizeKey(rawKey)
+      const value = rawValue.join(':').trim()
+      if (!key || !value) return
+      map[key] = value
+    })
+  return map
+}
+
+function inferTransmissionTypeBackend(text) {
+  const t = normalizeKey(text)
+  if (!t) return null
+  if (t.includes('di2') || t.includes('etap') || t.includes('axs') || t.includes('eps') || t.includes('steps')) return 'Electrónico'
+  return 'Mecánico'
+}
+
+function extractConditionBackend(listing, extrasMap) {
+  if (extrasMap.condicion) return extrasMap.condicion.trim()
+  const description = normalizeString(listing?.description)
+  if (description) {
+    const match = description.match(/condici[oó]n:\s*([^\n•]+)/i)
+    if (match && match[1]) return match[1].trim()
+  }
+  return null
+}
+
+function extractBrakeBackend(listing, extrasMap) {
+  if (extrasMap['tipo de freno']) return extrasMap['tipo de freno'].trim()
+  if (extrasMap.freno) return extrasMap.freno.trim()
+  const description = normalizeString(listing?.description)
+  if (description) {
+    const match = description.match(/freno[s]?\s*:?\s*([^\n•]+)/i)
+    if (match && match[1]) return match[1].trim()
+  }
+  return null
+}
+
+function extractApparelSizesBackend(extrasMap) {
+  const value = extrasMap.talle || extrasMap.talles || null
+  if (!value) return []
+  return value.split(',').map((v) => v.trim()).filter(Boolean)
+}
+
+function parseListingLocationBackend(location) {
+  const values = []
+  const raw = normalizeString(location)
+  if (!raw) return values
+  raw
+    .split(/[,\/·]/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .forEach((part) => values.push(part))
+  return values
+}
+
+function parseImagesArrayBackend(images) {
+  if (Array.isArray(images)) return images
+  if (typeof images === 'string') {
+    try {
+      const parsed = JSON.parse(images)
+      return Array.isArray(parsed) ? parsed : []
+    } catch {
+      return []
+    }
+  }
+  return []
+}
+
+function buildListingMatchContext(listing, { storeEnabled }) {
+  const extrasMap = extractExtrasMapBackend(listing?.extras)
+  const sizes = new Set()
+  const frameSize = normalizeString(listing?.frame_size)
+  if (frameSize) sizes.add(frameSize)
+  const sizeField = normalizeString(listing?.size)
+  if (sizeField) sizes.add(sizeField)
+  for (const value of extractApparelSizesBackend(extrasMap)) {
+    if (value) sizes.add(value)
+  }
+
+  const locationSet = arrayToNormalizedSet(parseListingLocationBackend(listing?.location))
+  const brandSet = arrayToNormalizedSet(listing?.brand)
+  const materialSet = arrayToNormalizedSet(listing?.material)
+  const wheelSizeSet = arrayToNormalizedSet(listing?.wheel_size)
+  const drivetrainSet = arrayToNormalizedSet([listing?.drivetrain, listing?.drivetrain_detail])
+  const condition = extractConditionBackend(listing, extrasMap)
+  const conditionSet = arrayToNormalizedSet(condition ? [condition] : [])
+  const brake = extractBrakeBackend(listing, extrasMap)
+  const brakeSet = arrayToNormalizedSet(brake ? [brake] : [])
+  const transmissionType = inferTransmissionTypeBackend(listing?.drivetrain_detail) || inferTransmissionTypeBackend(listing?.drivetrain)
+  const transmissionSet = arrayToNormalizedSet(transmissionType ? [transmissionType] : [])
+  const yearValue = listing?.year ? String(listing.year) : null
+  const searchText = [listing?.title, listing?.brand, listing?.model, listing?.description]
+    .map((part) => normalizeString(part).toLowerCase())
+    .filter(Boolean)
+    .join(' ')
+
+  return {
+    listing,
+    price: Number(listing?.price) || 0,
+    priceCurrency: normalizeString(listing?.price_currency).toUpperCase() || 'ARS',
+    originalPrice: Number(listing?.original_price) || 0,
+    category: normalizeString(listing?.category) || null,
+    subcategory: normalizeString(listing?.subcategory) || null,
+    brandSet,
+    materialSet,
+    wheelSizeSet,
+    drivetrainSet,
+    conditionSet,
+    brakeSet,
+    transmissionSet,
+    yearValue,
+    sizesNormalized: arrayToNormalizedSet(Array.from(sizes)),
+    locationSet,
+    storeEnabled: Boolean(storeEnabled),
+    isDeal: Number(listing?.original_price) > Number(listing?.price || 0),
+    searchText,
+    firstImage: parseImagesArrayBackend(listing?.images)[0] || null,
+  }
+}
+
+function matchesSavedSearchCriteria(criteria, context) {
+  if (!criteria || typeof criteria !== 'object') return false
+
+  const cat = typeof criteria.cat === 'string' ? criteria.cat.trim() : ''
+  if (cat && context.category && cat !== 'Todos') {
+    if (normalizeKey(cat) !== normalizeKey(context.category)) return false
+  }
+  if (cat && !context.category && cat !== 'Todos') return false
+
+  const subcat = typeof criteria.subcat === 'string' ? criteria.subcat.trim() : ''
+  if (subcat) {
+    if (!context.subcategory || normalizeKey(subcat) !== normalizeKey(context.subcategory)) return false
+  }
+
+  if (Array.isArray(criteria.brand) && criteria.brand.length) {
+    const want = criteria.brand.map((v) => normalizeKey(v)).filter(Boolean)
+    if (!want.length || !want.some((v) => context.brandSet.has(v))) return false
+  }
+
+  if (Array.isArray(criteria.material) && criteria.material.length) {
+    const want = criteria.material.map((v) => normalizeKey(v)).filter(Boolean)
+    if (!want.length || !want.some((v) => context.materialSet.has(v))) return false
+  }
+
+  if (Array.isArray(criteria.wheelSize) && criteria.wheelSize.length) {
+    const want = criteria.wheelSize.map((v) => normalizeKey(v)).filter(Boolean)
+    if (!want.length || !want.some((v) => context.wheelSizeSet.has(v))) return false
+  }
+
+  if (Array.isArray(criteria.drivetrain) && criteria.drivetrain.length) {
+    const want = criteria.drivetrain.map((v) => normalizeKey(v)).filter(Boolean)
+    if (!want.length || !want.some((v) => context.drivetrainSet.has(v))) return false
+  }
+
+  if (Array.isArray(criteria.condition) && criteria.condition.length) {
+    const want = criteria.condition.map((v) => normalizeKey(v)).filter(Boolean)
+    if (!want.length || !want.some((v) => context.conditionSet.has(v))) return false
+  }
+
+  if (Array.isArray(criteria.brake) && criteria.brake.length) {
+    const want = criteria.brake.map((v) => normalizeKey(v)).filter(Boolean)
+    if (!want.length || !want.some((v) => context.brakeSet.has(v))) return false
+  }
+
+  if (Array.isArray(criteria.transmissionType) && criteria.transmissionType.length) {
+    const want = criteria.transmissionType.map((v) => normalizeKey(v)).filter(Boolean)
+    if (!want.length || !want.some((v) => context.transmissionSet.has(v))) return false
+  }
+
+  if (Array.isArray(criteria.size) && criteria.size.length) {
+    const want = criteria.size.map((v) => normalizeKey(v)).filter(Boolean)
+    if (!want.length || !want.some((v) => context.sizesNormalized.has(v))) return false
+  }
+
+  if (Array.isArray(criteria.frameSize) && criteria.frameSize.length) {
+    const want = criteria.frameSize.map((v) => normalizeKey(v)).filter(Boolean)
+    if (!want.length || !want.some((v) => context.sizesNormalized.has(v))) return false
+  }
+
+  if (Array.isArray(criteria.location) && criteria.location.length) {
+    const want = criteria.location.map((v) => normalizeKey(v)).filter(Boolean)
+    if (!want.length || !want.some((v) => context.locationSet.has(v))) return false
+  }
+
+  if (Array.isArray(criteria.year) && criteria.year.length) {
+    const want = criteria.year.map((v) => String(v).trim()).filter(Boolean)
+    if (!want.length || !context.yearValue || !want.includes(context.yearValue)) return false
+  }
+
+  if (criteria.priceCur) {
+    const cur = String(criteria.priceCur).trim().toUpperCase()
+    if (cur && cur !== context.priceCurrency) return false
+  }
+
+  if (typeof criteria.priceMin === 'number' && Number.isFinite(criteria.priceMin)) {
+    if (context.price < Number(criteria.priceMin)) return false
+  }
+
+  if (typeof criteria.priceMax === 'number' && Number.isFinite(criteria.priceMax)) {
+    if (context.price > Number(criteria.priceMax)) return false
+  }
+
+  if (criteria.deal === '1' && !context.isDeal) return false
+  if (criteria.store === '1' && !context.storeEnabled) return false
+  if (criteria.bikes === '1' && context.category && !BIKE_CATEGORY_SET.has(context.category)) return false
+
+  if (criteria.q && typeof criteria.q === 'string') {
+    const needle = criteria.q.trim().toLowerCase()
+    if (needle && !context.searchText.includes(needle)) return false
+  }
+
+  return true
+}
+
+function buildSavedSearchEmail({ listing, listingUrl, searchUrl, alertName, context }) {
+  const priceLabel = formatCurrency(context.price, context.priceCurrency)
+  const subject = alertName ? `Nuevo ingreso: ${alertName}` : 'Nuevo ingreso en Ciclo Market'
+  const title = normalizeString(listing?.title) || normalizeString([listing?.brand, listing?.model, listing?.year].filter(Boolean).join(' ')) || 'Nuevo producto'
+  const pieces = [
+    `<strong>${title}</strong>`,
+    priceLabel ? `Precio: ${priceLabel}` : null,
+    context.category ? `Categoría: ${context.category}` : null,
+    context.subcategory ? `Subcategoría: ${context.subcategory}` : null,
+  ].filter(Boolean)
+
+  const heroImage = context.firstImage ? `<img src="${context.firstImage}" alt="${title}" style="max-width:100%;border-radius:16px;margin:0 0 16px" />` : ''
+  const searchLink = searchUrl ? `<a href="${searchUrl}" style="display:inline-block;margin:8px 0 0;font-size:14px;color:#0c72ff;text-decoration:underline;">Ver búsqueda guardada</a>` : ''
+
+  const html = `
+    <div style="font-family:'Inter','Segoe UI',sans-serif;background:#f4f6fb;padding:24px;">
+      <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:20px;padding:28px;box-shadow:0 15px 40px rgba(15,23,36,0.08);">
+        <h1 style="font-size:20px;margin:0 0 12px;color:#14212e;">Encontramos algo que coincide con tu alerta${alertName ? ` “${alertName}”` : ''}</h1>
+        <p style="margin:0 0 20px;color:#4b5563;">Revisá la publicación y contactá al vendedor si te interesa. Actualizamos las alertas apenas ingresan nuevas coincidencias.</p>
+        ${heroImage}
+        <div style="margin-bottom:24px;color:#1f2937;font-size:15px;line-height:1.6;">${pieces.join('<br />')}</div>
+        <a href="${listingUrl}" style="display:inline-block;padding:12px 20px;border-radius:9999px;background:#0c72ff;color:#ffffff;text-decoration:none;font-weight:600;">Ver publicación</a>
+        ${searchLink}
+        <p style="margin:24px 0 0;font-size:12px;color:#9ca3af;">Si ya no querés recibir alertas podés desactivar o borrar la búsqueda desde tu cuenta en Ciclo Market.</p>
+      </div>
+    </div>
+  `
+
+  const textParts = [
+    'Encontramos una publicación que coincide con tu búsqueda guardada.',
+    title ? `Título: ${title}` : null,
+    priceLabel ? `Precio: ${priceLabel}` : null,
+    listingUrl ? `Ver publicación: ${listingUrl}` : null,
+    searchUrl ? `Ver búsqueda: ${searchUrl}` : null,
+  ].filter(Boolean)
+
+  return { subject, html, text: textParts.join('\n') }
+}
+
+async function runSavedSearchAlert(listingId) {
+  if (!listingId) return
+  const supabase = supabaseService || getServerSupabaseClient()
+  if (!supabase) {
+    console.warn('[saved-search-alert] supabase service not configured')
+    return
+  }
+
+  try {
+    const { data: listing, error: listingErr } = await supabase
+      .from('listings')
+      .select('id,slug,title,brand,model,year,category,subcategory,price,price_currency,original_price,location,description,material,frame_size,size,wheel_size,drivetrain,drivetrain_detail,extras,seller_id,images')
+      .eq('id', listingId)
+      .maybeSingle()
+
+    if (listingErr) {
+      console.error('[saved-search-alert] listing fetch failed', listingErr)
+      return
+    }
+    if (!listing) return
+
+    const sellerId = listing.seller_id ? String(listing.seller_id) : null
+    let sellerStoreEnabled = false
+    if (sellerId) {
+      try {
+        const { data: sellerProfile } = await supabase
+          .from('users')
+          .select('id,store_enabled')
+          .eq('id', sellerId)
+          .maybeSingle()
+        sellerStoreEnabled = Boolean(sellerProfile?.store_enabled)
+      } catch (err) {
+        console.warn('[saved-search-alert] seller store lookup failed', err)
+      }
+    }
+
+    const context = buildListingMatchContext(listing, { storeEnabled: sellerStoreEnabled })
+
+    const categoryFilter = {}
+    if (context.category) categoryFilter.cat = context.category
+    if (context.subcategory) categoryFilter.subcat = context.subcategory
+
+    let query = supabase
+      .from('saved_searches')
+      .select('id,user_id,name,criteria,is_active,created_at')
+      .eq('is_active', true)
+
+    if (Object.keys(categoryFilter).length) {
+      query = query.contains('criteria', categoryFilter)
+    }
+
+    const { data: searches, error: searchesErr } = await query
+    if (searchesErr) {
+      console.error('[saved-search-alert] saved searches query failed', searchesErr)
+      return
+    }
+
+    const matchedAlerts = (searches || []).filter((row) => {
+      if (!row?.criteria || typeof row.criteria !== 'object') return false
+      if (row.user_id && sellerId && row.user_id === sellerId) return false
+      return matchesSavedSearchCriteria(row.criteria, context)
+    })
+
+    if (!matchedAlerts.length) return
+
+    const userIds = Array.from(new Set(matchedAlerts.map((row) => row.user_id).filter(Boolean)))
+    if (!userIds.length) return
+
+    const { data: usersRows, error: usersErr } = await supabase
+      .from('users')
+      .select('id,email,full_name')
+      .in('id', userIds)
+
+    if (usersErr) {
+      console.error('[saved-search-alert] users fetch failed', usersErr)
+      return
+    }
+
+    const usersMap = new Map()
+    for (const row of usersRows || []) {
+      if (row?.id) usersMap.set(row.id, row)
+    }
+
+    if (!isMailConfigured()) {
+      console.warn('[saved-search-alert] email disabled, skip notifications')
+      return
+    }
+
+    const frontendBase = resolveFrontendBaseUrl()
+    const listingPath = listing.slug ? `/listing/${listing.slug}` : `/listing/${listing.id}`
+    const listingUrl = `${frontendBase}${listingPath}`
+    const from = process.env.SMTP_FROM || `Ciclo Market <${process.env.SMTP_USER || 'no-reply@ciclomarket.ar'}>`
+    const sentKeys = new Set()
+
+    for (const alert of matchedAlerts) {
+      const profile = usersMap.get(alert.user_id)
+      if (!profile?.email) continue
+      const dedupeKey = `${profile.email}:${listing.id}`
+      if (sentKeys.has(dedupeKey)) continue
+
+      const searchUrl = alert?.criteria?.url
+        ? `${frontendBase}${String(alert.criteria.url).startsWith('/') ? '' : '/'}${String(alert.criteria.url).replace(/^\//, '')}`
+        : null
+      const { subject, html, text } = buildSavedSearchEmail({
+        listing,
+        listingUrl,
+        searchUrl,
+        alertName: alert?.name || null,
+        context,
+      })
+
+      try {
+        await sendMail({ from, to: profile.email, subject, html, text })
+        sentKeys.add(dedupeKey)
+      } catch (err) {
+        console.error('[saved-search-alert] send failed', err)
+      }
+    }
+  } catch (err) {
+    console.error('[saved-search-alert] unexpected error', err)
+  }
+}
+
+// Permit calling the alert runner from other modules/tests
+module.exports.runSavedSearchAlert = runSavedSearchAlert
+
 /* ----------------------------- Payment confirm (manual) ------------------- */
 // Admin-triggered endpoint to confirm a payment by id (fallback if webhooks fail)
 // Requires x-cron-secret header to prevent abuse
@@ -4376,6 +4924,18 @@ app.post('/api/listings/:id/apply-plan', async (req, res) => {
       .select('*')
       .maybeSingle()
     if (upd || !updated) return res.status(500).json({ error: 'update_failed' })
+
+    const status = String(updated.status || '').toLowerCase()
+    if (status === 'active' || status === 'published') {
+      try {
+        runSavedSearchAlert(updated.id).catch((err) => {
+          console.error('[apply-plan] saved search alert failed', err)
+        })
+      } catch (err) {
+        console.error('[apply-plan] saved search alert threw', err)
+      }
+    }
+
     return res.json({ ok: true, plan: planCode, expiresAt: nextExpires, highlightExpires: nextHighlightIso })
   } catch (err) {
     console.error('[apply-plan] failed', err)

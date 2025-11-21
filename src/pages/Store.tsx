@@ -30,6 +30,14 @@ function subcatIs(l: Listing, ...values: string[]) {
   return values.some((v) => sc === v.toLowerCase() || sc.includes(v.toLowerCase()))
 }
 
+const isJsonLdObject = (value: unknown): value is Record<string, unknown> => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  return Object.keys(value as Record<string, unknown>).length > 0
+}
+
+const filterJsonLdArray = (input: unknown[]): Record<string, unknown>[] =>
+  input.filter(isJsonLdObject) as Record<string, unknown>[]
+
 const FILTERS: FilterSection[] = [
   {
     id: 'road',
@@ -1279,7 +1287,7 @@ export default function Store() {
 const categorySummary = useMemo(() => {
   const categories = listings
     .map((listing) => listing.category)
-    .filter((value): value is string => Boolean(value))
+    .filter((value): value is NonNullable<Listing['category']> => Boolean(value))
   const unique = Array.from(new Set(categories))
   return {
     values: unique,
@@ -1444,7 +1452,7 @@ const handleClearFilters = useCallback(() => {
       .replace(/\s+/g, ' ')
       .trim()
 
-    const jsonLd = [organizationSchema, itemListSchema, breadcrumbSchema].filter(Boolean)
+    const jsonLd = filterJsonLdArray([organizationSchema, itemListSchema, breadcrumbSchema])
 
     return {
       config: {

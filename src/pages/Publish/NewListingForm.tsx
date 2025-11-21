@@ -591,11 +591,19 @@ export default function NewListingForm() {
             // Validar ciudad con la provincia del perfil (si existe)
             const provName = profileProvince || province
             const matchProv = PROVINCES.find((p) => p.name === provName)
-            if (matchProv && matchProv.cities?.includes(profileCity as (typeof matchProv.cities)[number])) {
-              setCity(profileCity)
-            } else {
-              setCity(OTHER_CITY_OPTION)
-              setCityOther(profileCity)
+            if (profileCity) {
+              if (matchProv) {
+                const cityList = Array.isArray(matchProv.cities) ? (matchProv.cities as string[]) : []
+                if (cityList.some((candidate) => candidate === profileCity)) {
+                  setCity(profileCity)
+                } else {
+                  setCity(OTHER_CITY_OPTION)
+                  setCityOther(profileCity)
+                }
+              } else {
+                setCity(OTHER_CITY_OPTION)
+                setCityOther(profileCity)
+              }
             }
           }
         }

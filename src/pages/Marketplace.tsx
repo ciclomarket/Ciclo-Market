@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useSearchParams, Link, useLocation } from 'react-router-dom'
+import { useSearchParams, Link, useLocation, useNavigate } from 'react-router-dom'
 import Container from '../components/Container'
 import ListingCard from '../components/ListingCard'
 import { buildImageSource } from '../lib/imageUrl'
@@ -10,6 +10,8 @@ import { mockListings } from '../mock/mockData'
 import { fetchListings } from '../services/listings'
 import { fetchMarket } from '../services/market'
 import { supabaseEnabled } from '../services/supabase'
+import { useAuth } from '../context/AuthContext'
+import { saveSearch } from '../services/savedSearches'
 import type { Listing } from '../types'
 import { useCurrency } from '../context/CurrencyContext'
 import { hasPaidPlan } from '../utils/plans'
@@ -136,6 +138,11 @@ const CATEGORY_SEO_CONTENT: Record<CategorySeoKey, { descriptor: string; summary
     summary: 'Sobre indumentaria para ciclismo',
     copy: `Esta sección agrupa jerseys, culottes, cascos, zapatillas y accesorios técnicos para entrenar o competir. Indicamos la tabla de talles declarada, el ajuste recomendado y si la prenda fue usada en competencias, salidas casuales o permanece nueva. Los filtros permiten ordenar por marca, categoría, género y talle para evitar pruebas innecesarias. También se destacan las tecnologías de los tejidos, ventilaciones y protecciones integradas. Las tiendas oficiales suelen publicar colecciones completas con posibilidad de cambios, mientras que los ciclistas privados liberan prendas en muy buen estado para renovar guardarropa. Sumá tus favoritos a la lista de seguimiento y recibí alertas cuando aparezcan talles difíciles. Si vas a vender, una guía rápida sobre medidas y fotos con buena luz ayudan a que otro ciclista confíe en tu publicación.`,
   },
+  Nutrición: {
+    descriptor: 'nutrición deportiva para ciclistas',
+    summary: 'Sobre nutrición para ciclismo',
+    copy: `En Nutrición reunimos geles, barras, suplementos y bebidas isotónicas pensados para sostener tus entrenamientos. Cada publicación destaca fecha de vencimiento, sabores disponibles y presentaciones individuales o en pack para que planifiques tu stock sin sorpresas. Podés filtrar por disciplina, objetivo (energía inmediata, recuperación o hidratación) y tipo de producto para comparar marcas. Las tiendas oficiales suelen ofrecer combos y asesoramiento profesional, mientras que los vendedores particulares aclaran cómo almacenaron los productos y por qué los están liberando. Guardá tus favoritos para recibir alertas y aprovechar cuando ingresan ediciones limitadas o promociones especiales.`,
+  },
   'E-Bike': {
     descriptor: 'bicicletas eléctricas asistidas',
     summary: 'Sobre bicicletas eléctricas',
@@ -181,6 +188,14 @@ const normalizeText = (value: string) => value
       .trim()
       .toLowerCase()
   : ''
+
+const isJsonLdObject = (value: unknown): value is Record<string, unknown> => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  return Object.keys(value as Record<string, unknown>).length > 0
+}
+
+const filterJsonLdArray = (input: unknown[]): Record<string, unknown>[] =>
+  input.filter(isJsonLdObject) as Record<string, unknown>[]
 
 const uniqueInsensitive = (values: string[]) => {
   const seen = new Set<string>()
@@ -1806,6 +1821,41 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
 
   const countLabel = formatResultsCount(typeof totalResults === 'number' ? totalResults : filtered.length)
   const locationSuffix = primaryLocation ? ` en ${primaryLocation}` : ''
+
+  const navigate = useNavigate()
+  const { user } = useAuth()
+
+  const handleSaveSearch = useCallback(async () => {
+    try {
+      if (!user?.id || !supabaseEnabled) {
+        navigate(`/login?redirect=${encodeURIComponent(location.pathname + location.search)}`)
+        return
+      }
+      const params = filtersToSearchParams(searchParams, filters)
+      const urlPath = `${baseMarketplacePath}${params.toString() ? `?${params.toString()}` : ''}`
+      const nameParts: string[] = []
+      if (filters.cat && filters.cat !== 'Todos') nameParts.push(String(filters.cat))
+      const size = (filters.size && filters.size.length ? filters.size[0] : '') || ''
+      if (size) nameParts.push(`Talle ${size}`)
+      if (typeof filters.priceMax === 'number' && filters.priceMax > 0) {
+        const cur = filters.priceCur === 'USD' || filters.priceCur === 'ARS' ? filters.priceCur : 'USD'
+        nameParts.push(`Hasta ${filters.priceMax} ${cur}`)
+      }
+      if (filters.brand && filters.brand.length) nameParts.push(`Marca ${filters.brand[0]}`)
+      const suggested = nameParts.length ? nameParts.join(', ') : 'Búsqueda guardada'
+      const name = window.prompt('Nombre para tu búsqueda', suggested) || suggested
+      const criteriaPayload: Record<string, unknown> = { ...filters, url: urlPath }
+      const created = await saveSearch(criteriaPayload, name)
+      if (created?.id) {
+        window.alert('Búsqueda guardada')
+      } else {
+        window.alert('No se pudo guardar la búsqueda. Intentá más tarde.')
+      }
+    } catch (err) {
+      console.warn('[save-search] failed', err)
+      window.alert('No se pudo guardar la búsqueda. Intentá más tarde.')
+    }
+  }, [user?.id, supabaseEnabled, searchParams, filters, baseMarketplacePath, location.pathname, location.search, navigate])
   const filterSentence = highlightTokens.length ? ` Filtrá por ${formatList(highlightTokens, highlightTokens.length)}.` : ''
   const dealsSentence = effectiveDealActive
     ? ' Aprovechá descuentos validados, seguí las bajas de precio y contactá directo al vendedor.'
@@ -1883,7 +1933,10 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
     }
   }, [topListings, siteOrigin, canonicalUrl, titleCore])
 
-  const baseJsonLd = useMemo(() => [breadcrumbSchema, itemListSchema].filter(Boolean), [breadcrumbSchema, itemListSchema])
+  const baseJsonLd = useMemo<Record<string, unknown>[]>(
+    () => filterJsonLdArray([breadcrumbSchema, itemListSchema]),
+    [breadcrumbSchema, itemListSchema],
+  )
 
   const otherOverrides = useMemo(() => {
     if (!seoOverrides) return {}
@@ -1891,14 +1944,15 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
     return rest
   }, [seoOverrides])
 
-  const overrideJsonLd = useMemo(() => {
+  const overrideJsonLd = useMemo<Record<string, unknown>[]>(() => {
     const raw = seoOverrides?.jsonLd
     if (!raw) return []
-    return Array.isArray(raw) ? raw.filter(Boolean) : [raw]
+    if (Array.isArray(raw)) return filterJsonLdArray(raw)
+    return filterJsonLdArray([raw])
   }, [seoOverrides?.jsonLd])
 
-  const jsonLdPayload = useMemo(() => {
-    const merged = [...baseJsonLd, ...overrideJsonLd]
+  const jsonLdPayload = useMemo<Record<string, unknown>[] | undefined>(() => {
+    const merged = filterJsonLdArray([...baseJsonLd, ...overrideJsonLd])
     return merged.length ? merged : undefined
   }, [baseJsonLd, overrideJsonLd])
 
@@ -2079,6 +2133,17 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
             </div>
 
             <div className="sm:hidden text-xs text-white/70">{(serverMode && serverTotal != null) ? serverTotal : filtered.length} resultados</div>
+            {user ? (
+              <div className="sm:hidden mt-2">
+                <button
+                  type="button"
+                  onClick={handleSaveSearch}
+                  className="w-full rounded-full bg-white px-4 py-2 text-center text-sm font-semibold text-[#14212e] shadow hover:bg-white/95"
+                >
+                  Guardar búsqueda
+                </button>
+              </div>
+            ) : null}
 
             <div className="space-y-4">
               {breadcrumbs && breadcrumbs.length ? (
@@ -2114,6 +2179,16 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
                     <option value="desc">Precio: mayor a menor</option>
                     <option value="asc">Precio: menor a mayor</option>
                   </select>
+                  {user ? (
+                    <button
+                      type="button"
+                      onClick={handleSaveSearch}
+                      className="btn ml-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#14212e] hover:bg-white/90"
+                      title="Guardá esta búsqueda para volver rápido"
+                    >
+                      Guardar búsqueda
+                    </button>
+                  ) : null}
                 </div>
               </div>
 
@@ -2287,7 +2362,6 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
                         storeLogoUrl={storeLogos[listing.sellerId] || null}
                         priority={idx < 4}
                         likeCount={likeCounts[listing.id]}
-                        showSweepstakeBadge
                       />
                     </div>
                   ))}
@@ -2585,3 +2659,5 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
     </>
   )
 }
+
+export type { Cat }
