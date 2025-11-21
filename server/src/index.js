@@ -41,6 +41,11 @@ const { buildStoreAnalyticsHTML } = (() => {
 const path = require('path')
 // const https = require('https') // removed: used only for Google rating proxy
 
+// Optional service-scoped Supabase client placeholder (used in legacy code paths).
+// If you need a long-lived service client, wire it here; otherwise handlers will
+// fallback to getServerSupabaseClient() on each request.
+const supabaseService = null
+
 function normalizeOrigin(frontendUrlEnv) {
   const raw = (frontendUrlEnv || '').split(',')[0]?.trim()
   if (!raw) return 'https://www.ciclomarket.ar'
@@ -464,6 +469,7 @@ app.get('/api/market/search', async (req, res) => {
       .from('listings')
       .select('id,slug,title,brand,model,year,category,subcategory,price,price_currency,original_price,location,description,material,frame_size,wheel_size,drivetrain,drivetrain_detail,wheelset,extras,seller_id,seller_name,seller_plan,seller_plan_expires,seller_location,seller_whatsapp,seller_email,seller_avatar,plan,highlight_expires,contact_methods,expires_at,renewal_notified_at,status,created_at,images')
       .in('status', ['active', 'published'])
+      .eq('moderation_state', 'approved')
       .order('created_at', { ascending: false })
       .limit(500)
 
@@ -479,13 +485,36 @@ app.get('/api/market/search', async (req, res) => {
     const sellerIds = items.map((r) => r?.seller_id).filter(Boolean)
     const storeMap = await fetchStoreFlags(supabase, sellerIds)
     const filtered = []
+    const now = Date.now()
     for (const listing of items) {
       const sellerId = listing?.seller_id ? String(listing.seller_id) : null
       const storeEnabled = sellerId ? Boolean(storeMap.get(sellerId)) : false
+      // Ocultar vencidas para usuarios comunes: si expires_at ya pasó, no incluir
+      try {
+        const exp = listing?.expires_at ? Date.parse(listing.expires_at) : null
+        if (typeof exp === 'number' && !Number.isNaN(exp) && exp > 0 && exp < now) continue
+      } catch { /* noop */ }
       const context = buildListingMatchContext(listing, { storeEnabled })
-      if (!matchesSavedSearchCriteria(criteria, context)) continue
+      // Aplicar coincidencia general SIN obligar currency; el rango de precio se filtra abajo con conversión
+      const { priceCur: _pc, priceMin: _pmin, priceMax: _pmax, ...criteriaNoPrice } = criteria
+      if (!matchesSavedSearchCriteria(criteriaNoPrice, context)) continue
       if (criteria.store === '1' && !storeEnabled) continue
-      filtered.push(listing)
+      // Filtrado por precio con conversión a la moneda seleccionada (si corresponde)
+      const fx = Number(req.query.fx) || 0
+      const priceCur = typeof criteria.priceCur === 'string' ? criteria.priceCur.toUpperCase() : null
+      const cur = String(listing.price_currency || 'ARS').toUpperCase()
+      let priceSel = Number(listing.price) || 0
+      if (priceCur && priceCur !== cur) {
+        if (priceCur === 'USD' && cur === 'ARS' && fx > 0) priceSel = priceSel / fx
+        else if (priceCur === 'ARS' && cur === 'USD' && fx > 0) priceSel = priceSel * fx
+      }
+      if (typeof criteria.priceMin === 'number' && Number.isFinite(criteria.priceMin)) {
+        if (priceSel < Number(criteria.priceMin)) continue
+      }
+      if (typeof criteria.priceMax === 'number' && Number.isFinite(criteria.priceMax)) {
+        if (priceSel > Number(criteria.priceMax)) continue
+      }
+      filtered.push({ ...listing, __store_enabled: storeEnabled })
     }
 
     const fx = Number(req.query.fx) || 0
@@ -506,6 +535,25 @@ app.get('/api/market/search', async (req, res) => {
         const pa = priceInSelected(a)
         const pb = priceInSelected(b)
         return sort === 'asc' ? pa - pb : pb - pa
+      })
+    } else {
+      // relevance: 1) destacadas (highlight_expires futuro, más recientes primero)
+      //            2) tiendas oficiales
+      //            3) no destacadas
+      ordered = [...filtered].sort((a, b) => {
+        const nowTs = Date.now()
+        const aHl = a.highlight_expires ? new Date(a.highlight_expires).getTime() > nowTs : false
+        const bHl = b.highlight_expires ? new Date(b.highlight_expires).getTime() > nowTs : false
+        const aStore = Boolean(a.__store_enabled)
+        const bStore = Boolean(b.__store_enabled)
+        const rank = (hl, st) => (hl ? 2 : (st ? 1 : 0))
+        const rA = rank(aHl, aStore)
+        const rB = rank(bHl, bStore)
+        if (rB !== rA) return rB - rA
+        // dentro del grupo, más recientes primero
+        const da = new Date(a.created_at || 0).getTime()
+        const db = new Date(b.created_at || 0).getTime()
+        return db - da
       })
     }
 
@@ -551,6 +599,81 @@ app.get('/api/credits/history', async (req, res) => {
     return res.json(Array.isArray(data) ? data : [])
   } catch {
     return res.status(500).json([])
+  }
+})
+
+// Canjear un crédito disponible (no cambia estado; devuelve uno para usar)
+app.post('/api/credits/redeem', async (req, res) => {
+  try {
+    const userId = String(req.body?.userId || '').trim()
+    const planCodeRaw = String(req.body?.planCode || '').trim().toLowerCase()
+    const planCode = planCodeRaw === 'premium' ? 'premium' : (planCodeRaw === 'basic' ? 'basic' : null)
+    if (!userId || !planCode) return res.status(400).json({ ok: false, error: 'invalid_params' })
+    const supabase = getServerSupabaseClient()
+    const { data: rows, error } = await supabase
+      .from('publish_credits')
+      .select('id,plan_code,status,expires_at')
+      .eq('user_id', userId)
+      .eq('plan_code', planCode)
+      .eq('status', 'available')
+      .order('expires_at', { ascending: true, nullsFirst: false })
+      .limit(1)
+    if (error) return res.status(500).json({ ok: false, error: 'query_failed' })
+    const credit = Array.isArray(rows) && rows[0] ? rows[0] : null
+    if (!credit) return res.status(404).json({ ok: false, error: 'not_found' })
+    return res.json({ ok: true, creditId: credit.id, planCode: credit.plan_code })
+  } catch (err) {
+    console.error('[credits/redeem] failed', err)
+    return res.status(500).json({ ok: false, error: 'unexpected_error' })
+  }
+})
+
+// Asociar un crédito a un listing y marcarlo como usado
+app.post('/api/credits/attach', async (req, res) => {
+  try {
+    const userId = String(req.body?.userId || '').trim()
+    const creditId = String(req.body?.creditId || '').trim()
+    const listingId = String(req.body?.listingId || '').trim()
+    if (!userId || !creditId || !listingId) return res.status(400).json({ ok: false, error: 'invalid_params' })
+    const supabase = getServerSupabaseClient()
+
+    // Verificar que el listing pertenezca al usuario
+    const { data: listing, error: listingErr } = await supabase
+      .from('listings')
+      .select('id,seller_id')
+      .eq('id', listingId)
+      .maybeSingle()
+    if (listingErr || !listing) return res.status(404).json({ ok: false, error: 'listing_not_found' })
+    if (String(listing.seller_id) !== userId) return res.status(403).json({ ok: false, error: 'forbidden' })
+
+    // Marcar crédito como usado y asociarlo al listing (solo si estaba disponible)
+    const nowIso = new Date().toISOString()
+    const { data: updated, error: updErr } = await supabase
+      .from('publish_credits')
+      .update({ status: 'used', used_at: nowIso, listing_id: listingId })
+      .eq('id', creditId)
+      .eq('user_id', userId)
+      .eq('status', 'available')
+      .select('id')
+      .maybeSingle()
+    if (updErr) return res.status(500).json({ ok: false, error: 'update_failed' })
+    if (!updated) {
+      // Si ya está usado con el mismo listing, consideramos idempotente
+      const { data: row } = await supabase
+        .from('publish_credits')
+        .select('id,status,listing_id')
+        .eq('id', creditId)
+        .eq('user_id', userId)
+        .maybeSingle()
+      if (row && row.status === 'used' && String(row.listing_id || '') === listingId) {
+        return res.json({ ok: true, creditId })
+      }
+      return res.status(409).json({ ok: false, error: 'credit_unavailable' })
+    }
+    return res.json({ ok: true, creditId })
+  } catch (err) {
+    console.error('[credits/attach] failed', err)
+    return res.status(500).json({ ok: false, error: 'unexpected_error' })
   }
 })
 
