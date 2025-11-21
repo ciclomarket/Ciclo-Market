@@ -303,50 +303,71 @@ function buildSavedSearchEmail({ listing, listingUrl, searchUrl, alertName, cont
 }
 
 function buildSavedSearchDigestEmail({ alertName, matches, searchUrl, frontendBase }) {
-  const subject = alertName
-    ? `Tu alerta “${alertName}” tiene novedades`
-    : 'Nuevas publicaciones que coinciden con tu búsqueda'
-
-  const cardsHtml = matches.map(({ listing, context, listingUrl }) => {
-    const title = normalizeString(listing?.title) || normalizeString([listing?.brand, listing?.model, listing?.year].filter(Boolean).join(' ')) || 'Publicación'
-    const priceLabel = formatCurrency(context.price, context.priceCurrency) || ''
-    const image = context.firstImage
-      ? `<img src="${context.firstImage}" alt="${title}" style="width:100%;height:180px;object-fit:cover;border-radius:14px 14px 0 0;" />`
-      : `<div style="width:100%;height:180px;border-radius:14px 14px 0 0;background:#e2e8f0;display:flex;align-items:center;justify-content:center;color:#475569;font-weight:600;">Ciclo Market</div>`
-    const descParts = [
-      context.category ? context.category : null,
-      context.subcategory ? context.subcategory : null,
-      priceLabel,
-    ].filter(Boolean)
-    return `
-      <a href="${listingUrl}" style="display:block;border-radius:16px;background:#ffffff;overflow:hidden;text-decoration:none;color:#111827;box-shadow:0 10px 25px rgba(15,23,42,0.08);">
-        ${image}
-        <div style="padding:16px 18px;">
-          <h3 style="margin:0 0 6px;font-size:16px;font-weight:700;color:#0f172a;">${title}</h3>
-          <p style="margin:0 0 12px;font-size:13px;color:#475569;">${descParts.join(' · ')}</p>
-          <span style="display:inline-block;padding:8px 14px;border-radius:999px;background:#0c72ff;color:#ffffff;font-size:13px;font-weight:600;">Ver detalles</span>
-        </div>
-      </a>
-    `
-  }).join('<div style="height:18px;"></div>')
+  const subjectBase = 'Nuevos ingresos que coinciden con tu búsqueda'
+  const subject = alertName ? `${subjectBase} “${alertName}”` : subjectBase
 
   const safeSearchUrl = searchUrl
     ? (searchUrl.startsWith('http') ? searchUrl : `${frontendBase}${searchUrl.startsWith('/') ? '' : '/'}${searchUrl.replace(/^\//, '')}`)
     : null
 
+  const logoUrl = `${frontendBase}/site-logo.png`
+
+  const toHtmlCell = ({ listing, context, listingUrl }) => {
+    const title = normalizeString(listing?.title) || normalizeString([listing?.brand, listing?.model, listing?.year].filter(Boolean).join(' ')) || 'Publicación'
+    const priceLabel = formatCurrency(context.price, context.priceCurrency) || ''
+    const categoryLabel = context.category || ''
+    const locationLabel = context.locationSet.size ? Array.from(context.locationSet)[0] : ''
+    const storeBadge = context.storeEnabled
+      ? '<span style="display:inline-block;margin-right:6px;padding:4px 8px;border-radius:999px;background:#0c72ff1a;color:#0c72ff;font-size:11px;font-weight:600;">Tienda oficial</span>'
+      : ''
+    const image = context.firstImage
+      ? `<img src="${context.firstImage}" alt="${title.replace(/"/g, '&quot;')}" style="width:100%;height:180px;object-fit:cover;border-radius:14px 14px 0 0;" />`
+      : `<div style="width:100%;height:180px;border-radius:14px 14px 0 0;background:#e2e8f0;display:flex;align-items:center;justify-content:center;color:#475569;font-weight:600;">Ciclo Market</div>`
+    return `
+      <td style="padding:10px;vertical-align:top;">
+        <a href="${listingUrl}" style="display:block;border-radius:18px;background:#ffffff;overflow:hidden;text-decoration:none;color:#111827;box-shadow:0 12px 28px rgba(15,23,42,0.08);">
+          ${image}
+          <div style="padding:18px;">
+            <div style="margin-bottom:8px;display:flex;align-items:center;flex-wrap:wrap;gap:6px;">
+              ${storeBadge}
+              <span style="display:inline-block;border-radius:999px;background:#f1f5f9;color:#1e293b;font-size:11px;font-weight:600;padding:4px 10px;">${categoryLabel || 'General'}</span>
+            </div>
+            <h3 style="margin:0 0 6px;font-size:17px;font-weight:700;color:#0f172a;line-height:1.35;">${title.replace(/</g, '&lt;')}</h3>
+            ${priceLabel ? `<p style="margin:0 0 6px;font-size:16px;font-weight:700;color:#0c1723;">${priceLabel}</p>` : ''}
+            <p style="margin:0 0 16px;font-size:13px;color:#475569;">${locationLabel || 'Ubicación coordinable con el vendedor'}</p>
+            <span style="display:inline-block;padding:10px 16px;border-radius:12px;background:#0c72ff;color:#ffffff;font-size:13px;font-weight:600;">Ver detalles</span>
+          </div>
+        </a>
+      </td>
+    `
+  }
+
+  const rows = []
+  for (let i = 0; i < matches.length; i += 2) {
+    const slice = matches.slice(i, i + 2)
+    const cells = slice.map(toHtmlCell)
+    if (cells.length === 1) cells.push('<td style="padding:10px;"></td>')
+    rows.push(`<tr>${cells.join('')}</tr>`)
+  }
+
   const html = `
-    <div style="font-family:'Inter','Segoe UI',sans-serif;background:#f3f6fb;padding:28px;">
-      <div style="max-width:620px;margin:0 auto;">
-        <div style="margin-bottom:18px;">
-          <span style="display:inline-block;padding:6px 14px;border-radius:999px;background:#0c72ff;color:#ffffff;font-size:12px;text-transform:uppercase;letter-spacing:0.08em;">Alertas Ciclo Market</span>
+    <div style="font-family:'Inter','Segoe UI',sans-serif;background:#eef2f7;padding:32px 16px;">
+      <div style="max-width:660px;margin:0 auto;background:#ffffff;border-radius:24px;overflow:hidden;box-shadow:0 24px 48px rgba(15,23,42,0.12);">
+        <div style="padding:28px 24px;text-align:center;background:#f8fafc;">
+          <img src="${logoUrl}" alt="Ciclo Market" style="height:56px;width:auto;margin-bottom:12px;" />
+          <h1 style="margin:0;font-size:22px;color:#0f172a;">${subjectBase}</h1>
+          ${alertName ? `<p style="margin:8px 0 0;font-size:14px;color:#475569;">Alerta: “${alertName.replace(/</g, '&lt;')}”</p>` : ''}
         </div>
-        <h1 style="margin:0 0 10px;font-size:24px;color:#0f172a;">${alertName ? `Actualizamos “${alertName}”` : 'Encontramos coincidencias para vos'}</h1>
-        <p style="margin:0 0 24px;font-size:15px;color:#475569;">Elegimos las publicaciones más relevantes para tu búsqueda guardada. Revisalas y contactá a los vendedores antes de que se agoten.</p>
-        <div style="display:grid;gap:18px;">
-          ${cardsHtml}
+        <div style="padding:24px;">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+            ${rows.join('')}
+          </table>
+          ${safeSearchUrl ? `
+            <p style="margin:28px 0 0;text-align:center;">
+              <a href="${safeSearchUrl}" style="display:inline-block;padding:12px 28px;border-radius:999px;background:#0c72ff;color:#ffffff;text-decoration:none;font-weight:600;">Ver más coincidencias</a>
+            </p>` : ''}
+          <p style="margin:32px 0 0;font-size:12px;color:#94a3b8;text-align:center;">¿Querés ajustar o desactivar esta alerta? Iniciá sesión en Ciclo Market y editá tus búsquedas guardadas.</p>
         </div>
-        ${safeSearchUrl ? `<p style="margin:28px 0 0;font-size:14px;"><a href="${safeSearchUrl}" style="color:#0c72ff;text-decoration:underline;">Ver todas las coincidencias</a></p>` : ''}
-        <p style="margin:32px 0 0;font-size:12px;color:#94a3b8;">¿Ya no querés recibir estas alertas? Iniciá sesión en Ciclo Market y desactivá o borrá la búsqueda guardada.</p>
       </div>
     </div>
   `
@@ -354,16 +375,18 @@ function buildSavedSearchDigestEmail({ alertName, matches, searchUrl, frontendBa
   const textItems = matches.map(({ listing, context, listingUrl }) => {
     const title = normalizeString(listing?.title) || normalizeString([listing?.brand, listing?.model, listing?.year].filter(Boolean).join(' ')) || listingUrl
     const priceLabel = formatCurrency(context.price, context.priceCurrency)
+    const locationLabel = context.locationSet.size ? Array.from(context.locationSet)[0] : ''
     return [
       `• ${title}`,
       priceLabel ? `  Precio: ${priceLabel}` : null,
       context.category ? `  Categoría: ${context.category}` : null,
+      locationLabel ? `  Ubicación: ${locationLabel}` : null,
       `  Ver: ${listingUrl}`,
     ].filter(Boolean).join('\n')
   })
 
   const textParts = [
-    alertName ? `Actualizamos tu alerta “${alertName}”.` : 'Encontramos nuevas publicaciones que coinciden con tu búsqueda.',
+    alertName ? `Nuevos ingresos para tu alerta “${alertName}”.` : subjectBase,
     ...textItems,
     safeSearchUrl ? `Ver todas las coincidencias: ${safeSearchUrl}` : null,
   ].filter(Boolean)
