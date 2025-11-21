@@ -822,6 +822,32 @@ export default function Dashboard() {
                     Crear regalo
                   </button>
                 )}
+                {isModerator && (
+                  (() => {
+                    const envBase = (import.meta.env.VITE_ADMIN_BASE_URL as string | undefined) || '/admin/'
+                    const adminHref = (() => {
+                      try {
+                        if (import.meta.env.DEV && typeof window !== 'undefined') {
+                          const proto = window.location.protocol
+                          const host = window.location.hostname
+                          return `${proto}//${host}:5273/`
+                        }
+                      } catch {}
+                      return envBase
+                    })()
+                    return (
+                      <a
+                        href={adminHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="rounded-full border border-white/30 px-4 py-2 text-sm font-semibold text-white hover:border-white/60"
+                        aria-label="Abrir panel admin"
+                      >
+                        Panel admin
+                      </a>
+                    )
+                  })()
+                )}
                 {profile?.store_enabled && profile?.store_slug && (
                   <Button to={`/tienda/${profile.store_slug}`} variant="ghost" className="border-white/30 text-white hover:bg-white/10">
                     Tu tienda

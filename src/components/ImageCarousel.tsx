@@ -161,14 +161,19 @@ export default function ImageCarousel({ images, slides, aspect = 'video', fit = 
               aria-label={`Ver imagen ${idx + 1}`}
             >
               <picture>
-              {shouldTranscodeToWebp(src) ? (
-                <source
-                  type="image/webp"
-                  srcSet={buildSupabaseSrc(src, 320, { resize: (fit === 'contain' || aspect === 'auto') ? 'contain' : 'cover', format: 'webp', quality: SUPABASE_RECOMMENDED_QUALITY, background: bg === 'light' ? 'ffffff' : undefined })}
-                />
-              ) : null}
+              {(() => {
+                const thumbW = 320
+                const useContain = (fit === 'contain' || aspect === 'auto')
+                const commonCover = useContain ? {} : { height: ratioFor(thumbW) }
+                return shouldTranscodeToWebp(src) ? (
+                  <source
+                    type="image/webp"
+                    srcSet={buildSupabaseSrc(src, thumbW, { resize: useContain ? 'contain' : 'cover', format: 'webp', quality: SUPABASE_RECOMMENDED_QUALITY, background: bg === 'light' ? 'ffffff' : undefined, ...(commonCover as any) })}
+                  />
+                ) : null
+              })()}
                 <img
-                  src={buildSupabaseSrc(src, 320, { resize: (fit === 'contain' || aspect === 'auto') ? 'contain' : 'cover', background: bg === 'light' ? 'ffffff' : undefined })}
+                  src={buildSupabaseSrc(src, 320, { resize: (fit === 'contain' || aspect === 'auto') ? 'contain' : 'cover', background: bg === 'light' ? 'ffffff' : undefined, ...(fit === 'contain' || aspect === 'auto' ? {} : { height: ratioFor(320) }) })}
                   alt="Miniatura de la publicación"
                   className={`h-full w-full ${imgFitClass} object-center`}
                   loading="lazy"

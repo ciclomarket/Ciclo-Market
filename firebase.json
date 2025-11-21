@@ -11,6 +11,12 @@
     ],
     "headers": [
       {
+        "source": "/storage/v1/render/image/**",
+        "headers": [
+          { "key": "Cache-Control", "value": "public, max-age=2592000, s-maxage=2592000, immutable" }
+        ]
+      },
+      {
         "source": "/index.html",
         "headers": [
           { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
@@ -24,6 +30,12 @@
       },
       {
         "source": "/assets/**",
+        "headers": [
+          { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+        ]
+      },
+      {
+        "source": "/admin/assets/**",
         "headers": [
           { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
         ]
@@ -84,6 +96,8 @@
       }
     ],
     "rewrites": [
+      { "source": "/storage/v1/render/image/**", "function": "imageProxy" },
+      { "source": "/admin/**", "destination": "/admin/index.html" },
       { "source": "**", "destination": "/index.html" }
     ]
   }

@@ -69,22 +69,22 @@ const CATEGORY_CARDS: Array<{ cat: Cat; label: string; description: string; imag
     cat: 'Todos',
     label: 'Bicicletas',
     description: 'Solo bicicletas',
-    image: '/design/Banners/1.png',
-    imageMobile: '/design/Banners-Mobile/1.png'
+    image: '/design/Banners/1.webp',
+    imageMobile: '/design/Banners-Mobile/1.webp'
   },
   {
     cat: 'Accesorios',
     label: 'Accesorios',
     description: 'Componentes y upgrades',
-    image: '/design/Banners/2.png',
-    imageMobile: '/design/Banners-Mobile/2.png'
+    image: '/design/Banners/2.webp',
+    imageMobile: '/design/Banners-Mobile/2.webp'
   },
   {
     cat: 'Indumentaria',
     label: 'Indumentaria',
     description: 'Ropa técnica y casual',
-    image: '/design/Banners/3.png',
-    imageMobile: '/design/Banners-Mobile/3.png'
+    image: '/design/Banners/3.webp',
+    imageMobile: '/design/Banners-Mobile/3.webp'
   }
 ]
 

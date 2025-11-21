@@ -34,8 +34,8 @@ const PROFILE_DEFAULTS: Record<ImageProfile, ProfileConfig> = {
     width: 1200,
     height: 800,
     resize: 'cover',
-    // avoid letterbox; background not needed for cover
-    quality: 75,
+    // stronger compression for cards
+    quality: 45,
     format: 'auto',
     widths: [600, 800, 1000, 1200, 1400],
     sizes: '(max-width: 1279px) 50vw, 33vw',
@@ -78,10 +78,18 @@ export function buildImageSource(url: string | undefined | null, options: BuildI
 
   const overrides = options.overrides ?? {}
   const background = overrides.background ?? config.background
+  const effectiveResize = overrides.resize ?? config.resize
+  const aspectRatio = config.width && config.height ? (config.height / config.width) : undefined
+  const heightFor = (w?: number): number | undefined => {
+    // Evitar height cuando usamos 'contain' para prevenir 400 del render
+    if (effectiveResize === 'contain') return undefined
+    if (typeof overrides.height === 'number') return overrides.height
+    if (typeof w === 'number' && aspectRatio) return Math.round(w * aspectRatio)
+    return undefined
+  }
 
   const baseTransform: TransformOpts = {
-    height: overrides.height ?? config.height,
-    resize: overrides.resize ?? config.resize,
+    resize: effectiveResize,
     background: background ? background.replace(/^#/, '') : undefined,
     quality: overrides.quality ?? config.quality,
   }
@@ -89,24 +97,32 @@ export function buildImageSource(url: string | undefined | null, options: BuildI
   let desiredFormat = overrides.format ?? config.format
   if (desiredFormat === 'auto') desiredFormat = undefined
 
+  // Avoid WebP for PNG when using contain (+background) as Supabase may return 400
+  const origExt = inferImageFormat(url)
+  const avoidWebp = (effectiveResize === 'contain') && (origExt === 'png')
+
   if (!desiredFormat || desiredFormat === 'webp') {
-    if (shouldTranscodeToWebp(url)) {
+    if (!avoidWebp && shouldTranscodeToWebp(url)) {
       desiredFormat = 'webp'
     } else if (desiredFormat === 'webp') {
       desiredFormat = undefined
     }
   }
-  // If we didn't choose webp (Safari or already webp), still request JPEG to apply quality/compress
-  if (!desiredFormat) {
-    const ext = inferImageFormat(url)
-    if (ext !== 'webp') desiredFormat = 'jpeg'
-  }
+  // Do not force JPEG; keep original format unless explicitly transcoding
 
-  const transform: TransformOpts = { ...baseTransform, format: desiredFormat }
   const targetWidth = typeof baseWidth === 'number' ? baseWidth : undefined
+  const transformBase: Omit<TransformOpts, 'width' | 'height'> = { ...baseTransform, format: desiredFormat }
 
-  const src = targetWidth ? buildSupabaseSrc(url, targetWidth, transform) : buildSupabaseSrc(url, undefined, transform)
-  const srcSet = widths && widths.length ? buildSupabaseSrcSet(url, widths, transform) : undefined
+  const src = targetWidth
+    ? buildSupabaseSrc(url, targetWidth, { ...transformBase, height: heightFor(targetWidth) })
+    : buildSupabaseSrc(url, undefined, transformBase)
+
+  const srcSet = (widths && widths.length)
+    ? widths.map((w) => {
+        const tw = Math.floor(w)
+        return `${buildSupabaseSrc(url, tw, { ...transformBase, height: heightFor(tw) })} ${tw}w`
+      }).join(', ')
+    : undefined
 
   return {
     src,

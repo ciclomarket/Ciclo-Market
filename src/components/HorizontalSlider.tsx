@@ -40,13 +40,18 @@ export default function HorizontalSlider({
     [items, count]
   );
 
+  const tickingRef = useRef(false);
   const handleScroll = () => {
     const el = viewportRef.current;
-    if (!el) return;
-    const nearEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 400;
-    if (nearEnd && count < maxToShow) {
-      setCount((c) => Math.min(c + 4, maxToShow));
-    }
+    if (!el || tickingRef.current) return;
+    tickingRef.current = true;
+    requestAnimationFrame(() => {
+      const nearEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 400;
+      if (nearEnd && count < maxToShow) {
+        setCount((c) => Math.min(c + 4, maxToShow));
+      }
+      tickingRef.current = false;
+    });
   };
 
   const scrollByCards = (dir: 1 | -1) => {

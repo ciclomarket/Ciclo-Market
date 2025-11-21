@@ -84,9 +84,25 @@ app.use((req, res, next) => {
 const distDir = path.join(__dirname, '..', '..', 'dist')
 // Static assets live at project-root/public (not server/public)
 const publicDir = path.join(__dirname, '..', '..', 'public')
+// Admin panel (built separately)
+const adminDistDir = path.join(__dirname, '..', '..', 'dist-admin')
 
 app.use(
   express.static(distDir, {
+    fallthrough: true,
+    setHeaders(res, filePath) {
+      if (filePath.endsWith('index.html')) {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+      } else if (/\.(?:js|css|png|jpe?g|webp|avif|svg|ico|gif|woff2?)$/i.test(filePath)) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+      }
+    },
+  })
+)
+// Serve admin build under /admin
+app.use(
+  '/admin',
+  express.static(adminDistDir, {
     fallthrough: true,
     setHeaders(res, filePath) {
       if (filePath.endsWith('index.html')) {
@@ -230,6 +246,50 @@ function buildParticipantsCsv(rows) {
       csvEscapeValue(row.created_at),
     ].join(',')
   )
+  return [header, ...lines].join('\n')
+}
+
+// Construye un CSV con listados. Se usa para exportaciones administrativas.
+function buildListingsCsv(rows) {
+  const header = [
+    'id',
+    'slug',
+    'title',
+    'brand',
+    'model',
+    'year',
+    'category',
+    'subcategory',
+    'price',
+    'price_currency',
+    'original_price',
+    'location',
+    'description',
+    'images',
+    'status',
+    'created_at',
+  ].join(',')
+  const lines = rows.map((row) => {
+    const images = Array.isArray(row.images) ? row.images.join('|') : ''
+    return [
+      csvEscapeValue(row.id),
+      csvEscapeValue(row.slug || ''),
+      csvEscapeValue(row.title || ''),
+      csvEscapeValue(row.brand || ''),
+      csvEscapeValue(row.model || ''),
+      csvEscapeValue(row.year ?? ''),
+      csvEscapeValue(row.category || ''),
+      csvEscapeValue(row.subcategory || ''),
+      csvEscapeValue(typeof row.price === 'number' ? row.price : ''),
+      csvEscapeValue(row.price_currency || ''),
+      csvEscapeValue(typeof row.original_price === 'number' ? row.original_price : ''),
+      csvEscapeValue(row.location || ''),
+      csvEscapeValue(row.description || ''),
+      csvEscapeValue(images),
+      csvEscapeValue(row.status || ''),
+      csvEscapeValue(row.created_at || ''),
+    ].join(',')
+  })
   return [header, ...lines].join('\n')
 }
 
@@ -474,6 +534,96 @@ app.get('/sitemap.xml', async (_req, res) => {
     } catch {
       return res.status(500).send('')
     }
+  }
+})
+
+/* ----------------------------- Exports (CSV) ------------------------------ */
+// Exporta publicaciones creadas en un rango (por defecto: hoy UTC) en CSV.
+// Seguridad: requiere header x-admin-key / Authorization con CRON_SECRET.
+app.get('/api/exports/listings.csv', async (req, res) => {
+  try {
+    if (!ensureAdminAuthorized(req, res)) return
+
+    // Rango de fechas
+    const q = req.query || {}
+    const dateStr = typeof q.date === 'string' ? q.date.trim() : '' // YYYY-MM-DD
+    const fromStr = typeof q.from === 'string' ? q.from.trim() : '' // ISO
+    const toStr = typeof q.to === 'string' ? q.to.trim() : '' // ISO
+
+    let start
+    let end
+    if (fromStr && toStr) {
+      const fs = new Date(fromStr)
+      const ts = new Date(toStr)
+      start = isNaN(fs.getTime()) ? null : fs
+      end = isNaN(ts.getTime()) ? null : ts
+    } else if (dateStr) {
+      // Interpretar como día UTC completo
+      const m = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(dateStr)
+      if (m) {
+        const y = Number(m[1])
+        const mo = Number(m[2]) - 1
+        const d = Number(m[3])
+        start = new Date(Date.UTC(y, mo, d, 0, 0, 0))
+        end = new Date(Date.UTC(y, mo, d + 1, 0, 0, 0))
+      }
+    }
+    if (!start || !end) {
+      const now = new Date()
+      start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0))
+      end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0))
+    }
+
+    const startIso = start.toISOString()
+    const endIso = end.toISOString()
+
+    const supabase = getServerSupabaseClient()
+    let query = supabase
+      .from('listings')
+      .select(
+        [
+          'id',
+          'slug',
+          'title',
+          'brand',
+          'model',
+          'year',
+          'category',
+          'subcategory',
+          'price',
+          'price_currency',
+          'original_price',
+          'location',
+          'description',
+          'images',
+          'status',
+          'created_at',
+        ].join(',')
+      )
+      .gte('created_at', startIso)
+      .lt('created_at', endIso)
+
+    // Excluir deleted por defecto
+    const includeDeleted = String(q.include_deleted || '').toLowerCase() === 'true'
+    if (!includeDeleted) {
+      query = query.neq('status', 'deleted')
+    }
+
+    const { data, error } = await query.limit(10000)
+    if (error) return res.status(500).json({ error: 'fetch_failed' })
+
+    const csv = buildListingsCsv(data || [])
+    const filenameDate = (dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr))
+      ? dateStr
+      : startIso.slice(0, 10)
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache')
+    res.setHeader('Content-Disposition', `attachment; filename="listings-${filenameDate}.csv"`)
+    return res.status(200).send(csv)
+  } catch (err) {
+    console.error('[exports] listings.csv failed', err)
+    return res.status(500).json({ error: 'unexpected_error' })
   }
 })
 
@@ -4261,4 +4411,10 @@ app.post('/api/admin/fx', (req, res) => {
   } catch (e) {
     return res.status(500).json({ ok: false })
   }
+})
+/* Admin SPA fallback */
+app.get('/admin/*', (req, res, next) => {
+  return res.sendFile(path.join(adminDistDir, 'index.html'), (err) => {
+    if (err) next(err)
+  })
 })

@@ -1,7 +1,46 @@
 const { onRequest } = require('firebase-functions/v2/https')
+const { Readable } = require('stream')
 
 // Render origin for backend that generates OG meta tags
 const RENDER_ORIGIN = process.env.RENDER_ORIGIN || 'https://www.ciclomarket.ar'
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://jmtsgywgeysagnfgdovr.supabase.co'
+
+exports.imageProxy = onRequest({ region: 'us-central1' }, async (req, res) => {
+  if (req.method !== 'GET') {
+    res.set('Allow', 'GET')
+    return res.status(405).send('Method Not Allowed')
+  }
+
+  try {
+    const upstreamUrl = new URL(req.originalUrl || req.url, SUPABASE_URL)
+
+    const headers = {}
+    const authHeader = req.get('authorization')
+    if (authHeader) headers.authorization = authHeader
+
+    const upstream = await fetch(upstreamUrl.toString(), { method: 'GET', headers })
+
+    if (!upstream.body) {
+      const fallbackText = await upstream.text().catch(() => '')
+      return res.status(upstream.status || 502).send(fallbackText || 'Upstream error')
+    }
+
+    res.status(upstream.status)
+
+    const contentType = upstream.headers.get('content-type')
+    if (contentType) res.setHeader('Content-Type', contentType)
+
+    res.setHeader(
+      'Cache-Control',
+      'public, max-age=2592000, s-maxage=2592000, immutable'
+    )
+
+    Readable.fromWeb(upstream.body).pipe(res)
+  } catch (err) {
+    console.error('[functions/imageProxy] error', err)
+    res.status(502).send('Bad Gateway')
+  }
+})
 
 exports.shareListing = onRequest({ region: 'us-central1', memory: '256MiB' }, async (req, res) => {
   try {

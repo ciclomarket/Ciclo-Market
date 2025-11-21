@@ -724,32 +724,32 @@ const STORE_CATEGORY_BANNERS: Array<{ key: 'all' | 'acc' | 'app' | 'nut'; label:
     label: 'Bicicletas',
     section: '',
     description: 'Solo bicicletas',
-    image: '/design/Banners/1.png',
-    imageMobile: '/design/Banners-Mobile/1.png'
+    image: '/design/Banners/1.webp',
+    imageMobile: '/design/Banners-Mobile/1.webp'
   },
   {
     key: 'acc',
     label: 'Accesorios',
     section: 'accessories',
     description: 'Componentes y upgrades',
-    image: '/design/Banners/2.png',
-    imageMobile: '/design/Banners-Mobile/2.png'
+    image: '/design/Banners/2.webp',
+    imageMobile: '/design/Banners-Mobile/2.webp'
   },
   {
     key: 'app',
     label: 'Indumentaria',
     section: 'apparel',
     description: 'Ropa técnica y casual',
-    image: '/design/Banners/3.png',
-    imageMobile: '/design/Banners-Mobile/3.png'
+    image: '/design/Banners/3.webp',
+    imageMobile: '/design/Banners-Mobile/3.webp'
   },
   {
     key: 'nut',
     label: 'Nutrición',
     section: 'nutrition',
     description: 'Geles, hidratación y recovery',
-    image: '/design/Banners/4.png',
-    imageMobile: '/design/Banners-Mobile/4.png'
+    image: '/design/Banners/4.webp',
+    imageMobile: '/design/Banners-Mobile/4.webp'
   }
 ]
 
@@ -791,7 +791,8 @@ export default function Store() {
 
   useEffect(() => {
     if (!hoursOpen) return
-    const computePosition = () => {
+    let raf = 0
+    const measureAndSet = () => {
       const root = hoursRef.current
       if (!root) return
       const rect = root.getBoundingClientRect()
@@ -801,9 +802,13 @@ export default function Store() {
       const desired = vw < 480 ? Math.min(320, vw - padding * 2) : Math.min(360, vw - padding * 2)
       const centerX = rect.left + rect.width / 2
       const left = Math.max(padding, Math.min(centerX - desired / 2, vw - desired - padding))
-      const top = Math.min(rect.bottom + 8, vh - 16) // evita pegarse al borde inferior
+      const top = Math.min(rect.bottom + 8, vh - 16)
       setHoursStyle({ position: 'fixed', top, left, width: desired })
       setHoursArrowLeft(Math.max(16, Math.min(desired - 16, centerX - left)))
+    }
+    const schedule = () => {
+      if (raf) cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(measureAndSet)
     }
     const handleClickAway = (e: MouseEvent) => {
       const root = hoursRef.current
@@ -812,14 +817,15 @@ export default function Store() {
       if (!root.contains(target)) setHoursOpen(false)
     }
     const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setHoursOpen(false) }
-    computePosition()
-    window.addEventListener('resize', computePosition)
-    window.addEventListener('scroll', computePosition, { passive: true })
+    schedule()
+    window.addEventListener('resize', schedule)
+    window.addEventListener('scroll', schedule, { passive: true })
     document.addEventListener('mousedown', handleClickAway)
     document.addEventListener('keydown', handleKey)
     return () => {
-      window.removeEventListener('resize', computePosition)
-      window.removeEventListener('scroll', computePosition)
+      if (raf) cancelAnimationFrame(raf)
+      window.removeEventListener('resize', schedule)
+      window.removeEventListener('scroll', schedule)
       document.removeEventListener('mousedown', handleClickAway)
       document.removeEventListener('keydown', handleKey)
     }

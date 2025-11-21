@@ -95,7 +95,16 @@ function HeroBackground() {
   // Imagen LCP con soporte WebP y múltiple densidad (360/720/1520)
   return (
     <picture>
+      {/* Mobile: usar versión optimizada específica */}
       <source
+        media="(max-width: 767px)"
+        type="image/webp"
+        srcSet={'/bicicletas-home_mobile.webp 946w'}
+        sizes="100vw"
+      />
+      {/* Desktop: mantener actual */}
+      <source
+        media="(min-width: 768px)"
         type="image/webp"
         srcSet={'/bicicletas-home.webp 1520w'}
         sizes="100vw"
@@ -108,6 +117,7 @@ function HeroBackground() {
         height={1305}
         alt=""
         loading="eager"
+        fetchPriority="high"
         decoding="async"
         className="absolute inset-0 -z-20 size-full object-cover md:[object-position:50%_28%]"
       />
@@ -719,24 +729,24 @@ export default function Home() {
                 key: 'bikes',
                 label: 'Bicicletas',
                 description: 'Solo bicicletas',
-                image: '/design/Banners/1.png',
-                imageMobile: '/design/Banners-Mobile/1.png',
+                image: '/design/Banners/1.webp',
+                imageMobile: '/design/Banners-Mobile/1.webp',
                 to: '/marketplace?bikes=1',
               },
               {
                 key: 'acc',
                 label: 'Accesorios',
                 description: 'Componentes y upgrades',
-                image: '/design/Banners/2.png',
-                imageMobile: '/design/Banners-Mobile/2.png',
+                image: '/design/Banners/2.webp',
+                imageMobile: '/design/Banners-Mobile/2.webp',
                 to: '/marketplace?cat=Accesorios',
               },
               {
                 key: 'app',
                 label: 'Indumentaria',
                 description: 'Ropa técnica y casual',
-                image: '/design/Banners/3.png',
-                imageMobile: '/design/Banners-Mobile/3.png',
+                image: '/design/Banners/3.webp',
+                imageMobile: '/design/Banners-Mobile/3.webp',
                 to: '/marketplace?cat=Indumentaria',
               },
               {

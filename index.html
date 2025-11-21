@@ -14,8 +14,15 @@
     <!-- Preconnect to API (Render) to reduce initial request latency -->
     <link rel="preconnect" href="https://ciclo-market.onrender.com" crossorigin>
     <link rel="dns-prefetch" href="https://ciclo-market.onrender.com">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=optional">
+    <!-- Load Google Fonts CSS without render-blocking -->
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=optional">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=optional" media="print" onload="this.media='all'">
+    <noscript>
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=optional">
+    </noscript>
     <link rel="stylesheet" href="/src/index.css">
+    <!-- Preload LCP hero (prefer WebP) -->
+    <link rel="preload" as="image" href="/bicicletas-home.webp" imagesizes="100vw" fetchpriority="high">
     <link rel="preload" as="image" href="/bicicletas-home-card-small.jpg" imagesrcset="/bicicletas-home-card-small.jpg 360w, /bicicletas-home-card.jpg 720w, /bicicletas-home.jpg 1520w" imagesizes="100vw">
     <link rel="icon" type="image/png" href="/favicon.png" />
 

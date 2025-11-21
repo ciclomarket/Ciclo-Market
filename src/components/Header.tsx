@@ -520,13 +520,30 @@ export default function Header() {
   const headerRef = useRef<HTMLElement | null>(null)
   useEffect(() => {
     const root = document.documentElement
-    const update = () => {
+    let raf = 0
+    const updateNow = () => {
       const h = headerRef.current?.getBoundingClientRect().height || 0
       root.style.setProperty('--header-h', `${Math.max(0, Math.round(h))}px`)
     }
-    update()
-    window.addEventListener('resize', update)
-    return () => { window.removeEventListener('resize', update) }
+    const schedule = () => {
+      if (raf) cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(updateNow)
+    }
+    schedule()
+    // Prefer ResizeObserver to avoid layout thrash on window resize
+    const el = headerRef.current
+    let ro: ResizeObserver | null = null
+    if (typeof ResizeObserver !== 'undefined' && el) {
+      ro = new ResizeObserver(() => schedule())
+      ro.observe(el)
+    } else {
+      window.addEventListener('resize', schedule)
+    }
+    return () => {
+      if (raf) cancelAnimationFrame(raf)
+      if (ro && el) ro.unobserve(el)
+      window.removeEventListener('resize', schedule)
+    }
   }, [])
 
   const header = (
@@ -737,13 +754,13 @@ export default function Header() {
         </div>
 
         {openIdx !== null && (
-          <div className="absolute inset-x-0 top-full z-40" onMouseEnter={cancelCloseMega} onMouseLeave={() => { scheduleCloseMega() }}>
-            <div className="max-w-6xl mx-auto px-6">
+          <div className="absolute inset-x-0 top-full z-40 pointer-events-none">
+            <div className="max-w-6xl mx-auto px-6 pointer-events-auto" onMouseEnter={cancelCloseMega} onMouseLeave={() => { scheduleCloseMega() }}>
               <div className="mt-1 rounded-2xl border border-black/10 bg-white shadow-xl">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-x-12 gap-y-6 p-6 items-stretch min-h-[360px]">
                   {(() => {
-                    const item = MEGA[openIdx]
-                    const cols = item.cols || []
+                    const item = megaItems[openIdx]
+                    const cols = item?.cols || []
                     // Group columns for Accesorios/Indumentaria so each column has top+bottom blocks aligned
                     const needsPairing = (item.label === 'Accesorios' || item.label === 'Indumentaria') && cols.length >= 6
                     const columns = needsPairing
@@ -779,8 +796,8 @@ export default function Header() {
         )}
 
         {storesOpen && (
-          <div className="absolute inset-x-0 top-full z-40" onMouseEnter={cancelCloseMega} onMouseLeave={() => { scheduleCloseMega() }}>
-            <div className="max-w-6xl mx-auto px-6">
+          <div className="absolute inset-x-0 top-full z-40 pointer-events-none">
+            <div className="max-w-6xl mx-auto px-6 pointer-events-auto" onMouseEnter={cancelCloseMega} onMouseLeave={() => { scheduleCloseMega() }}>
               <div className="mt-1 rounded-2xl border border-black/10 bg-white shadow-xl">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 p-6 min-h-[360px]">
                   {[0,1,2].map((colIdx) => {

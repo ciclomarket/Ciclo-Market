@@ -4,10 +4,10 @@ import SeoHead from '../../components/SeoHead'
 
 export default function Nutricion() {
   const tiles = [
-    { key: 'gel', label: 'Geles', desc: 'Energía inmediata', to: '/marketplace?q=gel', image: '/design/Banners/2.png', imageMobile: '/design/Banners-Mobile/2.png' },
-    { key: 'hidra', label: 'Hidratación', desc: 'Isotónicas y sales', to: '/marketplace?q=isotonica%20hidratacion%20sales', image: '/design/Banners/1.png', imageMobile: '/design/Banners-Mobile/1.png' },
-    { key: 'supp', label: 'Suplementación', desc: 'Recuperación post-entreno', to: '/marketplace?q=proteina%20bcaa%20recovery', image: '/design/Banners/3.png', imageMobile: '/design/Banners-Mobile/3.png' },
-    { key: 'snack', label: 'Barras y snacks', desc: 'Carbohidratos por porción', to: '/marketplace?q=barra%20snack', image: '/design/Banners/2.png', imageMobile: '/design/Banners-Mobile/2.png' },
+    { key: 'gel', label: 'Geles', desc: 'Energía inmediata', to: '/marketplace?q=gel', image: '/design/Banners/2.webp', imageMobile: '/design/Banners-Mobile/2.webp' },
+    { key: 'hidra', label: 'Hidratación', desc: 'Isotónicas y sales', to: '/marketplace?q=isotonica%20hidratacion%20sales', image: '/design/Banners/1.webp', imageMobile: '/design/Banners-Mobile/1.webp' },
+    { key: 'supp', label: 'Suplementación', desc: 'Recuperación post-entreno', to: '/marketplace?q=proteina%20bcaa%20recovery', image: '/design/Banners/3.webp', imageMobile: '/design/Banners-Mobile/3.webp' },
+    { key: 'snack', label: 'Barras y snacks', desc: 'Carbohidratos por porción', to: '/marketplace?q=barra%20snack', image: '/design/Banners/2.webp', imageMobile: '/design/Banners-Mobile/2.webp' },
   ]
   return (
     <div className="bg-[#0c1723] text-white">

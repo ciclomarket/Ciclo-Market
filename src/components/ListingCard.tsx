@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Listing } from '../types'
 import { buildCardImageUrlSafe } from '../lib/supabaseImages'
+import { buildImageSource } from '../lib/imageUrl'
 import { useListingLike } from '../hooks/useServerLikes'
 import { useCurrency } from '../context/CurrencyContext'
 import { formatListingPrice } from '../utils/pricing'
@@ -117,7 +118,16 @@ export default function ListingCard({ l, storeLogoUrl, priority = false, likeCou
   const statusLabel = isSold ? 'Vendida' : isArchived ? 'Archivada' : isExpired ? 'Vencida' : null
   const imageStatusClass = (isArchived || isExpired) ? 'opacity-60 grayscale' : isSold ? 'opacity-85' : ''
   const primaryImage = typeof l.images?.[0] === 'string' ? l.images[0] : null
-  const imageSrc = useMemo(() => buildCardImageUrlSafe(primaryImage) || '/no-image.webp', [primaryImage])
+  const media = useMemo(() => {
+    if (!primaryImage) return null
+    const sizes = '(max-width: 1279px) 50vw, 33vw'
+    // Para indumentaria/nutrición mostramos la imagen completa (contain)
+    const overrides = isLifestyle ? { resize: 'contain' as const, background: 'ffffff' } : undefined
+    return buildImageSource(primaryImage, { profile: 'card', sizes, overrides })
+  }, [primaryImage, isLifestyle])
+  const imageSrc = media?.src || buildCardImageUrlSafe(primaryImage) || '/no-image.webp'
+  const imageSrcSet = media?.srcSet
+  const imageSizes = media?.sizes
   const hasImage = Boolean(imageSrc)
 
   useEffect(() => {
@@ -194,6 +204,8 @@ export default function ListingCard({ l, storeLogoUrl, priority = false, likeCou
           {hasImage ? (
             <img
               src={imageSrc}
+              srcSet={imageSrcSet}
+              sizes={imageSizes}
               alt={l.title}
               loading={priority ? 'eager' : 'lazy'}
               decoding="async"
@@ -202,8 +214,9 @@ export default function ListingCard({ l, storeLogoUrl, priority = false, likeCou
               onError={(e) => {
                 try {
                   const el = e.currentTarget as HTMLImageElement
-                  // final fallback to placeholder if public URL fails
-                  if (el && !el.src.endsWith('/no-image.webp')) el.src = '/no-image.webp'
+                  // fallback al original público si falla la transformación
+                  const fallback = buildCardImageUrlSafe(primaryImage) || '/no-image.webp'
+                  if (el && el.src !== fallback) el.src = fallback
                 } catch {
                   void 0
                 }

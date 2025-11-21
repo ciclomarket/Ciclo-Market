@@ -19,7 +19,8 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: resolve(__dirname, '../dist-admin'),
+    // Emit admin build inside the main web dist so static hosting can serve /admin
+    outDir: resolve(__dirname, '../dist/admin'),
     emptyOutDir: true,
     sourcemap: true,
   },

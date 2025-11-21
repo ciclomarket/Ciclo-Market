@@ -2,8 +2,8 @@ import { useMemo, useEffect, Suspense, lazy } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import Header from './components/Header'
 import Footer from './components/Footer'
-import Newsletter from './components/Newsletter'
-import CookieConsent from './components/CookieConsent'
+const Newsletter = lazyWithRetry(() => import('./components/Newsletter'))
+const CookieConsent = lazyWithRetry(() => import('./components/CookieConsent'))
 import ErrorBoundary from './components/ErrorBoundary'
 import Home from './pages/Home'
 import { lazyWithRetry } from './utils/lazyWithRetry'
@@ -45,7 +45,7 @@ const Marketplace = lazy(() => import('./pages/Marketplace'))
 const Compare = lazy(() => import('./pages/Compare'))
 const IgLinks = lazyWithRetry(() => import('./pages/IgLinks'))
 import { CompareProvider } from './context/CompareContext'
-import CompareTray from './components/CompareTray'
+const CompareTray = lazyWithRetry(() => import('./components/CompareTray'))
 import { PlanProvider } from './context/PlanContext'
 import { NotificationsProvider } from './context/NotificationContext'
 import { ToastProvider } from './context/ToastContext'
@@ -507,10 +507,12 @@ export default function App() {
                     </ErrorBoundary>
                   </main>
 
-                  {!isInstagramLanding && <CompareTray />}
-                  {!isInstagramLanding && <Newsletter />}
-                  <CookieConsent />
-                  {!isInstagramLanding && <Footer />}
+                  <Suspense fallback={null}>
+                    {!isInstagramLanding && <CompareTray />}
+                    {!isInstagramLanding && <Newsletter />}
+                    <CookieConsent />
+                    {!isInstagramLanding && <Footer />}
+                  </Suspense>
                 </div>
                 </CompareProvider>
             </ToastProvider>
