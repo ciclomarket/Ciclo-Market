@@ -1,0 +1,381 @@
+const BIKE_CATEGORY_SET = new Set(['Ruta', 'MTB', 'Gravel', 'Triatlón', 'Urbana', 'Fixie', 'E-Bike', 'Niños', 'Pista'])
+
+function resolveFrontendBaseUrl() {
+  const raw = (process.env.FRONTEND_URL || process.env.FRONTEND_URL_BASE || '').split(',')[0]?.trim()
+  if (!raw) return 'https://www.ciclomarket.ar'
+  return raw.replace(/\/$/, '')
+}
+
+function formatCurrency(value, currency) {
+  const n = Number(value)
+  if (!Number.isFinite(n) || n <= 0) return null
+  const cur = typeof currency === 'string' && currency.trim() ? currency.trim().toUpperCase() : 'ARS'
+  try {
+    return new Intl.NumberFormat('es-AR', {
+      style: 'currency',
+      currency: cur,
+      maximumFractionDigits: cur === 'ARS' ? 0 : 2,
+    }).format(n)
+  } catch {
+    return `${n.toLocaleString('es-AR')} ${cur}`
+  }
+}
+
+function normalizeString(value) {
+  if (value === null || value === undefined) return ''
+  return String(value).trim()
+}
+
+function normalizeKey(value) {
+  const txt = normalizeString(value)
+  return txt ? txt.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase() : ''
+}
+
+function arrayToNormalizedSet(values) {
+  const set = new Set()
+  if (!values) return set
+  const arr = Array.isArray(values) ? values : [values]
+  for (const item of arr) {
+    const key = normalizeKey(item)
+    if (key) set.add(key)
+  }
+  return set
+}
+
+function extractExtrasMapBackend(extras) {
+  const map = {}
+  if (!extras || typeof extras !== 'string') return map
+  extras
+    .split('•')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .forEach((part) => {
+      const [rawKey, ...rawValue] = part.split(':')
+      if (!rawKey || !rawValue.length) return
+      const key = normalizeKey(rawKey)
+      const value = rawValue.join(':').trim()
+      if (!key || !value) return
+      map[key] = value
+    })
+  return map
+}
+
+function inferTransmissionTypeBackend(text) {
+  const t = normalizeKey(text)
+  if (!t) return null
+  if (t.includes('di2') || t.includes('etap') || t.includes('axs') || t.includes('eps') || t.includes('steps')) return 'Electrónico'
+  return 'Mecánico'
+}
+
+function extractConditionBackend(listing, extrasMap) {
+  if (extrasMap.condicion) return extrasMap.condicion.trim()
+  const description = normalizeString(listing?.description)
+  if (description) {
+    const match = description.match(/condici[oó]n:\s*([^\n•]+)/i)
+    if (match && match[1]) return match[1].trim()
+  }
+  return null
+}
+
+function extractBrakeBackend(listing, extrasMap) {
+  if (extrasMap['tipo de freno']) return extrasMap['tipo de freno'].trim()
+  if (extrasMap.freno) return extrasMap.freno.trim()
+  const description = normalizeString(listing?.description)
+  if (description) {
+    const match = description.match(/freno[s]?\s*:?[\s-]*([^\n•]+)/i)
+    if (match && match[1]) return match[1].trim()
+  }
+  return null
+}
+
+function extractApparelSizesBackend(extrasMap) {
+  const value = extrasMap.talle || extrasMap.talles || null
+  if (!value) return []
+  return value.split(',').map((v) => v.trim()).filter(Boolean)
+}
+
+function parseListingLocationBackend(location) {
+  const values = []
+  const raw = normalizeString(location)
+  if (!raw) return values
+  raw
+    .split(/[,/·]/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .forEach((part) => values.push(part))
+  return values
+}
+
+function parseImagesArrayBackend(images) {
+  if (Array.isArray(images)) return images
+  if (typeof images === 'string') {
+    try {
+      const parsed = JSON.parse(images)
+      return Array.isArray(parsed) ? parsed : []
+    } catch {
+      return []
+    }
+  }
+  return []
+}
+
+function buildListingMatchContext(listing, { storeEnabled }) {
+  const extrasMap = extractExtrasMapBackend(listing?.extras)
+  const sizes = new Set()
+  const frameSize = normalizeString(listing?.frame_size)
+  if (frameSize) sizes.add(frameSize)
+  for (const value of extractApparelSizesBackend(extrasMap)) {
+    if (value) sizes.add(value)
+  }
+
+  const locationSet = arrayToNormalizedSet(parseListingLocationBackend(listing?.location))
+  const brandSet = arrayToNormalizedSet(listing?.brand)
+  const materialSet = arrayToNormalizedSet(listing?.material)
+  const wheelSizeSet = arrayToNormalizedSet(listing?.wheel_size)
+  const drivetrainSet = arrayToNormalizedSet([listing?.drivetrain, listing?.drivetrain_detail])
+  const condition = extractConditionBackend(listing, extrasMap)
+  const conditionSet = arrayToNormalizedSet(condition ? [condition] : [])
+  const brake = extractBrakeBackend(listing, extrasMap)
+  const brakeSet = arrayToNormalizedSet(brake ? [brake] : [])
+  const transmissionType = inferTransmissionTypeBackend(listing?.drivetrain_detail) || inferTransmissionTypeBackend(listing?.drivetrain)
+  const transmissionSet = arrayToNormalizedSet(transmissionType ? [transmissionType] : [])
+  const yearValue = listing?.year ? String(listing.year) : null
+  const searchText = [listing?.title, listing?.brand, listing?.model, listing?.description]
+    .map((part) => normalizeString(part).toLowerCase())
+    .filter(Boolean)
+    .join(' ')
+
+  return {
+    listing,
+    price: Number(listing?.price) || 0,
+    priceCurrency: normalizeString(listing?.price_currency).toUpperCase() || 'ARS',
+    originalPrice: Number(listing?.original_price) || 0,
+    category: normalizeString(listing?.category) || null,
+    subcategory: normalizeString(listing?.subcategory) || null,
+    brandSet,
+    materialSet,
+    wheelSizeSet,
+    drivetrainSet,
+    conditionSet,
+    brakeSet,
+    transmissionSet,
+    yearValue,
+    sizesNormalized: arrayToNormalizedSet(Array.from(sizes)),
+    locationSet,
+    storeEnabled: Boolean(storeEnabled),
+    isDeal: Number(listing?.original_price) > Number(listing?.price || 0),
+    searchText,
+    firstImage: parseImagesArrayBackend(listing?.images)[0] || null,
+  }
+}
+
+function matchesSavedSearchCriteria(criteria, context) {
+  if (!criteria || typeof criteria !== 'object') return false
+
+  const cat = typeof criteria.cat === 'string' ? criteria.cat.trim() : ''
+  if (cat && context.category && cat !== 'Todos') {
+    if (normalizeKey(cat) !== normalizeKey(context.category)) return false
+  }
+  if (cat && !context.category && cat !== 'Todos') return false
+
+  const subcat = typeof criteria.subcat === 'string' ? criteria.subcat.trim() : ''
+  if (subcat) {
+    if (!context.subcategory || normalizeKey(subcat) !== normalizeKey(context.subcategory)) return false
+  }
+
+  if (Array.isArray(criteria.brand) && criteria.brand.length) {
+    const want = criteria.brand.map((v) => normalizeKey(v)).filter(Boolean)
+    if (!want.length || !want.some((v) => context.brandSet.has(v))) return false
+  }
+
+  if (Array.isArray(criteria.material) && criteria.material.length) {
+    const want = criteria.material.map((v) => normalizeKey(v)).filter(Boolean)
+    if (!want.length || !want.some((v) => context.materialSet.has(v))) return false
+  }
+
+  if (Array.isArray(criteria.wheelSize) && criteria.wheelSize.length) {
+    const want = criteria.wheelSize.map((v) => normalizeKey(v)).filter(Boolean)
+    if (!want.length || !want.some((v) => context.wheelSizeSet.has(v))) return false
+  }
+
+  if (Array.isArray(criteria.drivetrain) && criteria.drivetrain.length) {
+    const want = criteria.drivetrain.map((v) => normalizeKey(v)).filter(Boolean)
+    if (!want.length || !want.some((v) => context.drivetrainSet.has(v))) return false
+  }
+
+  if (Array.isArray(criteria.condition) && criteria.condition.length) {
+    const want = criteria.condition.map((v) => normalizeKey(v)).filter(Boolean)
+    if (!want.length || !want.some((v) => context.conditionSet.has(v))) return false
+  }
+
+  if (Array.isArray(criteria.brake) && criteria.brake.length) {
+    const want = criteria.brake.map((v) => normalizeKey(v)).filter(Boolean)
+    if (!want.length || !want.some((v) => context.brakeSet.has(v))) return false
+  }
+
+  if (Array.isArray(criteria.transmissionType) && criteria.transmissionType.length) {
+    const want = criteria.transmissionType.map((v) => normalizeKey(v)).filter(Boolean)
+    if (!want.length || !want.some((v) => context.transmissionSet.has(v))) return false
+  }
+
+  if (Array.isArray(criteria.size) && criteria.size.length) {
+    const want = criteria.size.map((v) => normalizeKey(v)).filter(Boolean)
+    if (!want.length || !want.some((v) => context.sizesNormalized.has(v))) return false
+  }
+
+  if (Array.isArray(criteria.frameSize) && criteria.frameSize.length) {
+    const want = criteria.frameSize.map((v) => normalizeKey(v)).filter(Boolean)
+    if (!want.length || !want.some((v) => context.sizesNormalized.has(v))) return false
+  }
+
+  if (Array.isArray(criteria.location) && criteria.location.length) {
+    const want = criteria.location.map((v) => normalizeKey(v)).filter(Boolean)
+    if (!want.length || !want.some((v) => context.locationSet.has(v))) return false
+  }
+
+  if (Array.isArray(criteria.year) && criteria.year.length) {
+    const want = criteria.year.map((v) => String(v).trim()).filter(Boolean)
+    if (!want.length || !context.yearValue || !want.includes(context.yearValue)) return false
+  }
+
+  if (criteria.priceCur) {
+    const cur = String(criteria.priceCur).trim().toUpperCase()
+    if (cur && cur !== context.priceCurrency) return false
+  }
+
+  if (typeof criteria.priceMin === 'number' && Number.isFinite(criteria.priceMin)) {
+    if (context.price < Number(criteria.priceMin)) return false
+  }
+
+  if (typeof criteria.priceMax === 'number' && Number.isFinite(criteria.priceMax)) {
+    if (context.price > Number(criteria.priceMax)) return false
+  }
+
+  if (criteria.deal === '1' && !context.isDeal) return false
+  if (criteria.store === '1' && !context.storeEnabled) return false
+  if (criteria.bikes === '1' && context.category && !BIKE_CATEGORY_SET.has(context.category)) return false
+
+  if (criteria.q && typeof criteria.q === 'string') {
+    const needle = criteria.q.trim().toLowerCase()
+    if (needle && !context.searchText.includes(needle)) return false
+  }
+
+  return true
+}
+
+function buildSavedSearchEmail({ listing, listingUrl, searchUrl, alertName, context }) {
+  const priceLabel = formatCurrency(context.price, context.priceCurrency)
+  const subject = alertName ? `Nuevo ingreso: ${alertName}` : 'Nuevo ingreso en Ciclo Market'
+  const title = normalizeString(listing?.title) || normalizeString([listing?.brand, listing?.model, listing?.year].filter(Boolean).join(' ')) || 'Nuevo producto'
+  const pieces = [
+    `<strong>${title}</strong>`,
+    priceLabel ? `Precio: ${priceLabel}` : null,
+    context.category ? `Categoría: ${context.category}` : null,
+    context.subcategory ? `Subcategoría: ${context.subcategory}` : null,
+  ].filter(Boolean)
+
+  const heroImage = context.firstImage ? `<img src="${context.firstImage}" alt="${title}" style="max-width:100%;border-radius:16px;margin:0 0 16px" />` : ''
+  const searchLink = searchUrl ? `<a href="${searchUrl}" style="display:inline-block;margin:8px 0 0;font-size:14px;color:#0c72ff;text-decoration:underline;">Ver búsqueda guardada</a>` : ''
+
+  const html = `
+    <div style="font-family:'Inter','Segoe UI',sans-serif;background:#f4f6fb;padding:24px;">
+      <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:20px;padding:28px;box-shadow:0 15px 40px rgba(15,23,36,0.08);">
+        <h1 style="font-size:20px;margin:0 0 12px;color:#14212e;">Encontramos algo que coincide con tu alerta${alertName ? ` “${alertName}”` : ''}</h1>
+        <p style="margin:0 0 20px;color:#4b5563;">Revisá la publicación y contactá al vendedor si te interesa. Actualizamos las alertas apenas ingresan nuevas coincidencias.</p>
+        ${heroImage}
+        <div style="margin-bottom:24px;color:#1f2937;font-size:15px;line-height:1.6;">${pieces.join('<br />')}</div>
+        <a href="${listingUrl}" style="display:inline-block;padding:12px 20px;border-radius:9999px;background:#0c72ff;color:#ffffff;text-decoration:none;font-weight:600;">Ver publicación</a>
+        ${searchLink}
+        <p style="margin:24px 0 0;font-size:12px;color:#9ca3af;">Si ya no querés recibir alertas podés desactivar o borrar la búsqueda desde tu cuenta en Ciclo Market.</p>
+      </div>
+    </div>
+  `
+
+  const textParts = [
+    'Encontramos una publicación que coincide con tu búsqueda guardada.',
+    title ? `Título: ${title}` : null,
+    priceLabel ? `Precio: ${priceLabel}` : null,
+    listingUrl ? `Ver publicación: ${listingUrl}` : null,
+    searchUrl ? `Ver búsqueda: ${searchUrl}` : null,
+  ].filter(Boolean)
+
+  return { subject, html, text: textParts.join('\n') }
+}
+
+function buildSavedSearchDigestEmail({ alertName, matches, searchUrl, frontendBase }) {
+  const subject = alertName
+    ? `Tu alerta “${alertName}” tiene novedades`
+    : 'Nuevas publicaciones que coinciden con tu búsqueda'
+
+  const cardsHtml = matches.map(({ listing, context, listingUrl }) => {
+    const title = normalizeString(listing?.title) || normalizeString([listing?.brand, listing?.model, listing?.year].filter(Boolean).join(' ')) || 'Publicación'
+    const priceLabel = formatCurrency(context.price, context.priceCurrency) || ''
+    const image = context.firstImage
+      ? `<img src="${context.firstImage}" alt="${title}" style="width:100%;height:180px;object-fit:cover;border-radius:14px 14px 0 0;" />`
+      : `<div style="width:100%;height:180px;border-radius:14px 14px 0 0;background:#e2e8f0;display:flex;align-items:center;justify-content:center;color:#475569;font-weight:600;">Ciclo Market</div>`
+    const descParts = [
+      context.category ? context.category : null,
+      context.subcategory ? context.subcategory : null,
+      priceLabel,
+    ].filter(Boolean)
+    return `
+      <a href="${listingUrl}" style="display:block;border-radius:16px;background:#ffffff;overflow:hidden;text-decoration:none;color:#111827;box-shadow:0 10px 25px rgba(15,23,42,0.08);">
+        ${image}
+        <div style="padding:16px 18px;">
+          <h3 style="margin:0 0 6px;font-size:16px;font-weight:700;color:#0f172a;">${title}</h3>
+          <p style="margin:0 0 12px;font-size:13px;color:#475569;">${descParts.join(' · ')}</p>
+          <span style="display:inline-block;padding:8px 14px;border-radius:999px;background:#0c72ff;color:#ffffff;font-size:13px;font-weight:600;">Ver detalles</span>
+        </div>
+      </a>
+    `
+  }).join('<div style="height:18px;"></div>')
+
+  const safeSearchUrl = searchUrl
+    ? (searchUrl.startsWith('http') ? searchUrl : `${frontendBase}${searchUrl.startsWith('/') ? '' : '/'}${searchUrl.replace(/^\//, '')}`)
+    : null
+
+  const html = `
+    <div style="font-family:'Inter','Segoe UI',sans-serif;background:#f3f6fb;padding:28px;">
+      <div style="max-width:620px;margin:0 auto;">
+        <div style="margin-bottom:18px;">
+          <span style="display:inline-block;padding:6px 14px;border-radius:999px;background:#0c72ff;color:#ffffff;font-size:12px;text-transform:uppercase;letter-spacing:0.08em;">Alertas Ciclo Market</span>
+        </div>
+        <h1 style="margin:0 0 10px;font-size:24px;color:#0f172a;">${alertName ? `Actualizamos “${alertName}”` : 'Encontramos coincidencias para vos'}</h1>
+        <p style="margin:0 0 24px;font-size:15px;color:#475569;">Elegimos las publicaciones más relevantes para tu búsqueda guardada. Revisalas y contactá a los vendedores antes de que se agoten.</p>
+        <div style="display:grid;gap:18px;">
+          ${cardsHtml}
+        </div>
+        ${safeSearchUrl ? `<p style="margin:28px 0 0;font-size:14px;"><a href="${safeSearchUrl}" style="color:#0c72ff;text-decoration:underline;">Ver todas las coincidencias</a></p>` : ''}
+        <p style="margin:32px 0 0;font-size:12px;color:#94a3b8;">¿Ya no querés recibir estas alertas? Iniciá sesión en Ciclo Market y desactivá o borrá la búsqueda guardada.</p>
+      </div>
+    </div>
+  `
+
+  const textItems = matches.map(({ listing, context, listingUrl }) => {
+    const title = normalizeString(listing?.title) || normalizeString([listing?.brand, listing?.model, listing?.year].filter(Boolean).join(' ')) || listingUrl
+    const priceLabel = formatCurrency(context.price, context.priceCurrency)
+    return [
+      `• ${title}`,
+      priceLabel ? `  Precio: ${priceLabel}` : null,
+      context.category ? `  Categoría: ${context.category}` : null,
+      `  Ver: ${listingUrl}`,
+    ].filter(Boolean).join('\n')
+  })
+
+  const textParts = [
+    alertName ? `Actualizamos tu alerta “${alertName}”.` : 'Encontramos nuevas publicaciones que coinciden con tu búsqueda.',
+    ...textItems,
+    safeSearchUrl ? `Ver todas las coincidencias: ${safeSearchUrl}` : null,
+  ].filter(Boolean)
+
+  return { subject, html, text: textParts.join('\n\n') }
+}
+
+module.exports = {
+  resolveFrontendBaseUrl,
+  formatCurrency,
+  buildListingMatchContext,
+  matchesSavedSearchCriteria,
+  buildSavedSearchEmail,
+  buildSavedSearchDigestEmail,
+}
