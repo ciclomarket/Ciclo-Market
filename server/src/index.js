@@ -4382,6 +4382,7 @@ async function runSavedSearchAlert(listingId) {
   }
 
   try {
+    console.info('[saved-search-alert] start', { listingId })
     const { data: listing, error: listingErr } = await supabase
       .from('listings')
       .select('id,slug,title,brand,model,year,category,subcategory,price,price_currency,original_price,location,description,material,frame_size,wheel_size,drivetrain,drivetrain_detail,extras,seller_id,images')
@@ -4392,7 +4393,10 @@ async function runSavedSearchAlert(listingId) {
       console.error('[saved-search-alert] listing fetch failed', listingErr)
       return
     }
-    if (!listing) return
+    if (!listing) {
+      console.warn('[saved-search-alert] listing not found', { listingId })
+      return
+    }
 
     const sellerId = listing.seller_id ? String(listing.seller_id) : null
     let sellerStoreEnabled = false
@@ -4436,7 +4440,10 @@ async function runSavedSearchAlert(listingId) {
       return matchesSavedSearchCriteria(row.criteria, context)
     })
 
-    if (!matchedAlerts.length) return
+    if (!matchedAlerts.length) {
+      console.info('[saved-search-alert] no matches', { listingId })
+      return
+    }
 
     const userIds = Array.from(new Set(matchedAlerts.map((row) => row.user_id).filter(Boolean)))
     if (!userIds.length) return
@@ -4487,10 +4494,12 @@ async function runSavedSearchAlert(listingId) {
       try {
         await sendMail({ from, to: profile.email, subject, html, text })
         sentKeys.add(dedupeKey)
+        console.info('[saved-search-alert] email sent', { listingId, alertId: alert.id, to: profile.email })
       } catch (err) {
         console.error('[saved-search-alert] send failed', err)
       }
     }
+    console.info('[saved-search-alert] completed', { listingId, sent: sentKeys.size })
   } catch (err) {
     console.error('[saved-search-alert] unexpected error', err)
   }
