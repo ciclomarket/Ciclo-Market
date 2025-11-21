@@ -306,36 +306,64 @@ function buildSavedSearchDigestEmail({ alertName, matches, searchUrl, frontendBa
   const subjectBase = 'Nuevos ingresos que coinciden con tu búsqueda'
   const subject = alertName ? `${subjectBase} “${alertName}”` : subjectBase
 
-  const safeSearchUrl = searchUrl
-    ? (searchUrl.startsWith('http') ? searchUrl : `${frontendBase}${searchUrl.startsWith('/') ? '' : '/'}${searchUrl.replace(/^\//, '')}`)
-    : null
+  let safeSearchUrl = null
+  if (searchUrl) {
+    try {
+      safeSearchUrl = new URL(searchUrl, frontendBase).toString()
+    } catch {
+      try {
+        safeSearchUrl = new URL('/marketplace', frontendBase).toString()
+      } catch {
+        safeSearchUrl = null
+      }
+    }
+  }
 
   const logoUrl = `${frontendBase}/site-logo.png`
+  let heroCtaUrl
+  try {
+    heroCtaUrl = new URL('/marketplace', frontendBase).toString()
+  } catch {
+    heroCtaUrl = `${frontendBase}/marketplace`
+  }
+  const heroSubtitle = 'Todos los días se suben bicicletas nuevas. Activá las alertas y llegá primero.'
 
   const toHtmlCell = ({ listing, context, listingUrl }) => {
     const title = normalizeString(listing?.title) || normalizeString([listing?.brand, listing?.model, listing?.year].filter(Boolean).join(' ')) || 'Publicación'
     const priceLabel = formatCurrency(context.price, context.priceCurrency) || ''
-    const categoryLabel = context.category || ''
-    const locationLabel = context.locationSet.size ? Array.from(context.locationSet)[0] : ''
+    const categoryLabel = context.category || 'Marketplace'
+    const locationDisplay = normalizeString(listing?.location) || 'Coordiná la entrega con el vendedor'
     const storeBadge = context.storeEnabled
-      ? '<span style="display:inline-block;margin-right:6px;padding:4px 8px;border-radius:999px;background:#0c72ff1a;color:#0c72ff;font-size:11px;font-weight:600;">Tienda oficial</span>'
+      ? '<span style="display:inline-block;margin-right:8px;padding:4px 12px;border-radius:999px;background:rgba(20,33,46,0.08);color:#14212E;font-size:11px;font-weight:600;">Tienda oficial</span>'
       : ''
     const image = context.firstImage
-      ? `<img src="${context.firstImage}" alt="${title.replace(/"/g, '&quot;')}" style="width:100%;height:180px;object-fit:cover;border-radius:14px 14px 0 0;" />`
-      : `<div style="width:100%;height:180px;border-radius:14px 14px 0 0;background:#e2e8f0;display:flex;align-items:center;justify-content:center;color:#475569;font-weight:600;">Ciclo Market</div>`
+      ? `<img src="${context.firstImage}" alt="${title.replace(/"/g, '&quot;')}" style="width:100%;height:200px;object-fit:cover;border-radius:20px 20px 0 0;" />`
+      : `<div style="width:100%;height:200px;border-radius:20px 20px 0 0;background:#e2e8f0;display:flex;align-items:center;justify-content:center;color:#475569;font-weight:600;">Ciclo Market</div>`
+    const frameSizeLabel = normalizeString(listing?.frame_size)
+    const drivetrainLabel = normalizeString(listing?.drivetrain_detail) || normalizeString(listing?.drivetrain)
+    const wheelSizeLabel = normalizeString(listing?.wheel_size)
+    const infoChips = []
+    if (context.yearValue) infoChips.push(context.yearValue)
+    if (frameSizeLabel) infoChips.push(`Talle ${frameSizeLabel}`)
+    if (drivetrainLabel) infoChips.push(drivetrainLabel)
+    if (infoChips.length < 3 && wheelSizeLabel) infoChips.push(wheelSizeLabel)
+    const chipsHtml = infoChips.length
+      ? `<div style="margin:0 0 18px;display:flex;flex-wrap:wrap;gap:8px;">${infoChips.map((chip) => `<span style="display:inline-block;padding:6px 12px;border-radius:999px;background:rgba(20,33,46,0.08);color:#14212E;font-size:12px;font-weight:600;">${chip.replace(/</g, '&lt;')}</span>`).join('')}</div>`
+      : ''
     return `
-      <td style="padding:10px;vertical-align:top;">
-        <a href="${listingUrl}" style="display:block;border-radius:18px;background:#ffffff;overflow:hidden;text-decoration:none;color:#111827;box-shadow:0 12px 28px rgba(15,23,42,0.08);">
+      <td style="padding:12px;vertical-align:top;">
+        <a href="${listingUrl}" style="display:block;border-radius:24px;background:#ffffff;border:1px solid #e2e8f0;overflow:hidden;text-decoration:none;color:#0f172a;box-shadow:0 18px 40px rgba(20,33,46,0.14);">
           ${image}
-          <div style="padding:18px;">
-            <div style="margin-bottom:8px;display:flex;align-items:center;flex-wrap:wrap;gap:6px;">
+          <div style="padding:22px;">
+            <div style="margin-bottom:12px;display:flex;align-items:center;flex-wrap:wrap;gap:10px;">
               ${storeBadge}
-              <span style="display:inline-block;border-radius:999px;background:#f1f5f9;color:#1e293b;font-size:11px;font-weight:600;padding:4px 10px;">${categoryLabel || 'General'}</span>
+              <span style="display:inline-block;border-radius:999px;background:#dbe3ff;color:#14212E;font-size:11px;font-weight:600;padding:4px 12px;">${categoryLabel.replace(/</g, '&lt;')}</span>
             </div>
-            <h3 style="margin:0 0 6px;font-size:17px;font-weight:700;color:#0f172a;line-height:1.35;">${title.replace(/</g, '&lt;')}</h3>
-            ${priceLabel ? `<p style="margin:0 0 6px;font-size:16px;font-weight:700;color:#0c1723;">${priceLabel}</p>` : ''}
-            <p style="margin:0 0 16px;font-size:13px;color:#475569;">${locationLabel || 'Ubicación coordinable con el vendedor'}</p>
-            <span style="display:inline-block;padding:10px 16px;border-radius:12px;background:#0c72ff;color:#ffffff;font-size:13px;font-weight:600;">Ver detalles</span>
+            <h3 style="margin:0 0 10px;font-size:18px;font-weight:700;color:#0f172a;line-height:1.35;">${title.replace(/</g, '&lt;')}</h3>
+            ${priceLabel ? `<p style="margin:0 0 10px;font-size:18px;font-weight:700;color:#14212E;">${priceLabel}</p>` : ''}
+            ${chipsHtml}
+            <p style="margin:0 0 20px;font-size:13px;color:#475569;">${locationDisplay.replace(/</g, '&lt;')}</p>
+            <span style="display:inline-flex;align-items:center;gap:8px;padding:12px 20px;border-radius:999px;background:#14212E;color:#ffffff;font-size:13px;font-weight:600;">Ver detalles&nbsp;&rarr;</span>
           </div>
         </a>
       </td>
@@ -346,28 +374,40 @@ function buildSavedSearchDigestEmail({ alertName, matches, searchUrl, frontendBa
   for (let i = 0; i < matches.length; i += 2) {
     const slice = matches.slice(i, i + 2)
     const cells = slice.map(toHtmlCell)
-    if (cells.length === 1) cells.push('<td style="padding:10px;"></td>')
+    if (cells.length === 1) cells.push('<td style="padding:12px;"></td>')
     rows.push(`<tr>${cells.join('')}</tr>`)
   }
 
   const html = `
-    <div style="font-family:'Inter','Segoe UI',sans-serif;background:#eef2f7;padding:32px 16px;">
-      <div style="max-width:660px;margin:0 auto;background:#ffffff;border-radius:24px;overflow:hidden;box-shadow:0 24px 48px rgba(15,23,42,0.12);">
-        <div style="padding:28px 24px;text-align:center;background:#f8fafc;">
-          <img src="${logoUrl}" alt="Ciclo Market" style="height:56px;width:auto;margin-bottom:12px;" />
-          <h1 style="margin:0;font-size:22px;color:#0f172a;">${subjectBase}</h1>
-          ${alertName ? `<p style="margin:8px 0 0;font-size:14px;color:#475569;">Alerta: “${alertName.replace(/</g, '&lt;')}”</p>` : ''}
-        </div>
-        <div style="padding:24px;">
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-            ${rows.join('')}
-          </table>
-          ${safeSearchUrl ? `
-            <p style="margin:28px 0 0;text-align:center;">
-              <a href="${safeSearchUrl}" style="display:inline-block;padding:12px 28px;border-radius:999px;background:#0c72ff;color:#ffffff;text-decoration:none;font-weight:600;">Ver más coincidencias</a>
-            </p>` : ''}
-          <p style="margin:32px 0 0;font-size:12px;color:#94a3b8;text-align:center;">¿Querés ajustar o desactivar esta alerta? Iniciá sesión en Ciclo Market y editá tus búsquedas guardadas.</p>
-        </div>
+    <div style="margin:0;padding:36px 16px;background:#eef1f6;font-family:'Inter','Segoe UI',sans-serif;">
+      <div style="max-width:700px;margin:0 auto;background:#ffffff;border-radius:28px;overflow:hidden;box-shadow:0 32px 70px rgba(20,33,46,0.18);">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+          <tbody>
+            <tr>
+              <td style="padding:36px 40px;text-align:center;background:linear-gradient(135deg,#ffffff 0%,#f3f6fb 100%);">
+                <img src="${logoUrl}" alt="Ciclo Market" style="height:62px;width:auto;margin-bottom:18px;" />
+                <h1 style="margin:0;font-size:24px;color:#0f172a;">${subjectBase}</h1>
+                ${alertName ? `<p style="margin:10px 0 0;font-size:15px;color:#475569;">Alerta “${alertName.replace(/</g, '&lt;')}”</p>` : ''}
+                <p style="margin:18px 0 26px;font-size:15px;color:#4b5563;line-height:1.6;">${heroSubtitle}</p>
+                <a href="${heroCtaUrl}" style="display:inline-block;padding:14px 30px;border-radius:999px;background:#14212E;color:#ffffff;text-decoration:none;font-weight:600;">Explorar marketplace</a>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:32px 36px 40px;background:#ffffff;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;">
+                  <tbody>
+                    ${rows.join('')}
+                  </tbody>
+                </table>
+                ${safeSearchUrl ? `
+                  <p style="margin:32px 0 0;text-align:center;">
+                    <a href="${safeSearchUrl}" style="display:inline-block;padding:14px 30px;border-radius:999px;background:#14212E;color:#ffffff;text-decoration:none;font-weight:600;">Ver más coincidencias</a>
+                  </p>` : ''}
+                <p style="margin:36px 0 0;font-size:12px;color:#94a3b8;text-align:center;">¿Querés ajustar o desactivar esta alerta? Iniciá sesión en Ciclo Market y editá tus búsquedas guardadas.</p>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   `
@@ -375,7 +415,7 @@ function buildSavedSearchDigestEmail({ alertName, matches, searchUrl, frontendBa
   const textItems = matches.map(({ listing, context, listingUrl }) => {
     const title = normalizeString(listing?.title) || normalizeString([listing?.brand, listing?.model, listing?.year].filter(Boolean).join(' ')) || listingUrl
     const priceLabel = formatCurrency(context.price, context.priceCurrency)
-    const locationLabel = context.locationSet.size ? Array.from(context.locationSet)[0] : ''
+    const locationLabel = normalizeString(listing?.location)
     return [
       `• ${title}`,
       priceLabel ? `  Precio: ${priceLabel}` : null,
@@ -387,8 +427,11 @@ function buildSavedSearchDigestEmail({ alertName, matches, searchUrl, frontendBa
 
   const textParts = [
     alertName ? `Nuevos ingresos para tu alerta “${alertName}”.` : subjectBase,
+    'Todos los días se suben bicicletas nuevas. Activá las alertas y llegá primero.',
     ...textItems,
-    safeSearchUrl ? `Ver todas las coincidencias: ${safeSearchUrl}` : null,
+    safeSearchUrl ? `Ver más coincidencias: ${safeSearchUrl}` : null,
+    heroCtaUrl ? `Explorar marketplace: ${heroCtaUrl}` : null,
+    'Podés ajustar o desactivar la alerta desde tu cuenta en Ciclo Market.',
   ].filter(Boolean)
 
   return { subject, html, text: textParts.join('\n\n') }

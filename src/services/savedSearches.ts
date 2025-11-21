@@ -5,7 +5,7 @@ export type SavedSearch = {
   id: number
   user_id: string
   name: string | null
-  criteria: Record<string, any>
+  criteria: Record<string, any> | null
   is_active: boolean
   created_at: string | null
 }
@@ -55,4 +55,18 @@ export async function deleteSearch(id: number | string): Promise<boolean> {
   const headers = await authHeaders()
   const res = await fetch(endpoint, { method: 'DELETE', headers })
   return res.ok
+}
+
+export async function updateSearch(id: number | string, payload: { name?: string | null; is_active?: boolean }): Promise<SavedSearch | null> {
+  const base = API_BASE || ''
+  const endpoint = base ? `${base}/api/saved-searches/${encodeURIComponent(String(id))}` : `/api/saved-searches/${encodeURIComponent(String(id))}`
+  const headers: Record<string, string> = { 'Content-Type': 'application/json', ...(await authHeaders()) }
+  const res = await fetch(endpoint, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) return null
+  const data = await res.json().catch(() => null)
+  return (data && typeof data === 'object') ? (data as SavedSearch) : null
 }

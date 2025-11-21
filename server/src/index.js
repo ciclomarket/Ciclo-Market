@@ -245,6 +245,172 @@ function csvEscapeValue(value) {
 return { subject, html, text: textParts.join('\n') }
 }
 
+
+/* ----------------------------- Saved searches ----------------------------- */
+function sanitizeSavedSearchCriteria(value) {
+  if (!value || typeof value !== 'object') return {}
+  const output = {}
+  for (const [key, rawVal] of Object.entries(value)) {
+    if (rawVal === null || rawVal === undefined) continue
+    if (typeof rawVal === 'string') {
+      const trimmed = rawVal.trim()
+      if (!trimmed) continue
+      if (key === 'cat' && trimmed.toLowerCase() === 'todos') continue
+      if (key === 'deal' && trimmed !== '1') continue
+      if (key === 'store' && trimmed !== '1') continue
+      output[key] = trimmed
+      continue
+    }
+    if (Array.isArray(rawVal)) {
+      const arr = rawVal
+        .map((item) => (typeof item === 'string' ? item.trim() : item))
+        .filter((item) => {
+          if (typeof item === 'string') return Boolean(item)
+          return item !== null && item !== undefined
+        })
+      if (arr.length) output[key] = Array.from(new Set(arr))
+      continue
+    }
+    output[key] = rawVal
+  }
+  return output
+}
+
+app.get('/api/saved-searches', async (req, res) => {
+  try {
+    const supabase = supabaseService || getServerSupabaseClient()
+    if (!supabase) return res.status(503).json({ error: 'service_unavailable' })
+    const user = await getAuthUser(req, supabase)
+    if (!user) return res.status(401).json({ error: 'unauthorized' })
+    const { data, error } = await supabase
+      .from('saved_searches')
+      .select('id,user_id,name,criteria,is_active,created_at')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+    if (error) return res.status(500).json({ error: 'query_failed' })
+    return res.json(Array.isArray(data) ? data : [])
+  } catch (err) {
+    console.error('[saved-searches:list] failed', err)
+    return res.status(500).json({ error: 'unexpected_error' })
+  }
+})
+
+app.post('/api/saved-searches', async (req, res) => {
+  try {
+    const supabase = supabaseService || getServerSupabaseClient()
+    if (!supabase) return res.status(503).json({ error: 'service_unavailable' })
+    const user = await getAuthUser(req, supabase)
+    if (!user) return res.status(401).json({ error: 'unauthorized' })
+
+    const rawCriteria = req.body?.criteria
+    if (!rawCriteria || typeof rawCriteria !== 'object') {
+      return res.status(400).json({ error: 'invalid_criteria' })
+    }
+
+    const criteria = sanitizeSavedSearchCriteria(rawCriteria)
+    if (!Object.keys(criteria).length) {
+      return res.status(400).json({ error: 'empty_criteria' })
+    }
+
+    const name = (req.body?.name ? String(req.body.name) : '').trim().slice(0, 255) || null
+    const isActive = typeof req.body?.is_active === 'boolean' ? req.body.is_active : true
+
+    const { data, error } = await supabase
+      .from('saved_searches')
+      .insert({
+        user_id: user.id,
+        name,
+        criteria,
+        is_active: isActive,
+      })
+      .select('id,user_id,name,criteria,is_active,created_at')
+      .maybeSingle()
+
+    if (error || !data) return res.status(500).json({ error: 'insert_failed' })
+    return res.status(201).json(data)
+  } catch (err) {
+    console.error('[saved-searches:create] failed', err)
+    return res.status(500).json({ error: 'unexpected_error' })
+  }
+})
+
+app.patch('/api/saved-searches/:id', async (req, res) => {
+  try {
+    const supabase = supabaseService || getServerSupabaseClient()
+    if (!supabase) return res.status(503).json({ error: 'service_unavailable' })
+    const user = await getAuthUser(req, supabase)
+    if (!user) return res.status(401).json({ error: 'unauthorized' })
+    const id = Number(req.params.id)
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'invalid_id' })
+
+    const { data: row, error: fetchErr } = await supabase
+      .from('saved_searches')
+      .select('id,user_id,name,criteria,is_active,created_at')
+      .eq('id', id)
+      .maybeSingle()
+    if (fetchErr) return res.status(500).json({ error: 'lookup_failed' })
+    if (!row) return res.status(404).json({ error: 'not_found' })
+    if (row.user_id !== user.id) return res.status(403).json({ error: 'forbidden' })
+
+    const updates = {}
+    if (typeof req.body?.name === 'string') {
+      const trimmed = req.body.name.trim().slice(0, 255)
+      updates.name = trimmed || null
+    }
+    if (typeof req.body?.is_active === 'boolean') {
+      updates.is_active = req.body.is_active
+    }
+
+    if (!Object.keys(updates).length) {
+      return res.status(400).json({ error: 'nothing_to_update' })
+    }
+
+    const { data: updated, error: updErr } = await supabase
+      .from('saved_searches')
+      .update(updates)
+      .eq('id', id)
+      .select('id,user_id,name,criteria,is_active,created_at')
+      .maybeSingle()
+    if (updErr || !updated) return res.status(500).json({ error: 'update_failed' })
+
+    return res.json(updated)
+  } catch (err) {
+    console.error('[saved-searches:update] failed', err)
+    return res.status(500).json({ error: 'unexpected_error' })
+  }
+})
+
+app.delete('/api/saved-searches/:id', async (req, res) => {
+  try {
+    const supabase = supabaseService || getServerSupabaseClient()
+    if (!supabase) return res.status(503).json({ error: 'service_unavailable' })
+    const user = await getAuthUser(req, supabase)
+    if (!user) return res.status(401).json({ error: 'unauthorized' })
+    const id = Number(req.params.id)
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'invalid_id' })
+
+    const { data: row, error: fetchErr } = await supabase
+      .from('saved_searches')
+      .select('id,user_id')
+      .eq('id', id)
+      .maybeSingle()
+    if (fetchErr) return res.status(500).json({ error: 'lookup_failed' })
+    if (!row) return res.status(404).json({ error: 'not_found' })
+    if (row.user_id !== user.id) return res.status(403).json({ error: 'forbidden' })
+
+    const { error } = await supabase
+      .from('saved_searches')
+      .delete()
+      .eq('id', id)
+    if (error) return res.status(500).json({ error: 'delete_failed' })
+    return res.json({ ok: true })
+  } catch (err) {
+    console.error('[saved-searches:delete] failed', err)
+    return res.status(500).json({ error: 'unexpected_error' })
+  }
+})
+
+
 async function runSavedSearchAlert(listingId) {
   if (!listingId) return
   const supabase = supabaseService || getServerSupabaseClient()

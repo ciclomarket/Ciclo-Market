@@ -31,8 +31,9 @@ import { fetchCreditsHistory, type Credit } from '../services/credits'
 import { trackMetaPixel } from '../lib/metaPixel'
 import { canonicalPlanCode } from '../utils/planCodes'
 import AdminFxPanel from '../components/AdminFxPanel'
+import { listSavedSearches, deleteSearch as deleteSavedSearch, updateSearch as updateSavedSearch, type SavedSearch } from '../services/savedSearches'
 
-const TABS = ['Perfil', 'Publicaciones', 'Créditos', 'Favoritos', 'Notificaciones', 'Editar perfil', 'Editar tienda', 'Analítica', 'Verificá tu perfil', 'Cerrar sesión'] as const
+const TABS = ['Perfil', 'Publicaciones', 'Créditos', 'Favoritos', 'Alertas', 'Notificaciones', 'Editar perfil', 'Editar tienda', 'Analítica', 'Verificá tu perfil', 'Cerrar sesión'] as const
 type SellerTab = (typeof TABS)[number]
 
 const TAB_METADATA: Record<SellerTab, { title: string; description: string }> = {
@@ -47,6 +48,10 @@ const TAB_METADATA: Record<SellerTab, { title: string; description: string }> = 
   Favoritos: {
     title: 'Favoritos',
     description: 'Tus bicicletas guardadas para seguirlas de cerca',
+  },
+  Alertas: {
+    title: 'Búsquedas guardadas',
+    description: 'Gestioná alertas y recordatorios de nuevas publicaciones',
   },
   Notificaciones: {
     title: 'Notificaciones',
@@ -158,6 +163,48 @@ function facebookUrl(value?: string | null): string | null {
   return `https://facebook.com/${trimmed.replace(/^@+/, '')}`
 }
 
+function summarizeSavedSearchCriteria(criteria: Record<string, any> | null | undefined): string[] {
+  if (!criteria || typeof criteria !== 'object') return []
+  const summary: string[] = []
+  const currency = typeof criteria.priceCur === 'string' && criteria.priceCur.trim()
+    ? criteria.priceCur.trim().toUpperCase()
+    : 'ARS'
+
+  if (typeof criteria.cat === 'string' && criteria.cat && criteria.cat !== 'Todos') {
+    summary.push(`Categoría · ${criteria.cat}`)
+  }
+  if (Array.isArray(criteria.brand) && criteria.brand.length) {
+    summary.push(`Marca · ${criteria.brand.filter(Boolean).slice(0, 3).join(', ')}`)
+  }
+  if (Array.isArray(criteria.location) && criteria.location.length) {
+    summary.push(`Ubicación · ${criteria.location.filter(Boolean).slice(0, 3).join(', ')}`)
+  }
+  if (typeof criteria.q === 'string' && criteria.q.trim()) {
+    summary.push(`Texto · “${criteria.q.trim()}”`)
+  }
+  const priceParts: string[] = []
+  if (typeof criteria.priceMin === 'number' && Number.isFinite(criteria.priceMin)) {
+    priceParts.push(`desde ${currency} ${Math.round(criteria.priceMin).toLocaleString(currency === 'USD' ? 'en-US' : 'es-AR')}`)
+  }
+  if (typeof criteria.priceMax === 'number' && Number.isFinite(criteria.priceMax)) {
+    priceParts.push(`hasta ${currency} ${Math.round(criteria.priceMax).toLocaleString(currency === 'USD' ? 'en-US' : 'es-AR')}`)
+  }
+  if (priceParts.length) summary.push(`Precio · ${priceParts.join(' ')}`)
+  if (Array.isArray(criteria.year) && criteria.year.length) {
+    summary.push(`Año · ${criteria.year.slice(0, 3).join(', ')}`)
+  }
+  if (Array.isArray(criteria.size) && criteria.size.length) {
+    summary.push(`Talle · ${criteria.size.slice(0, 3).join(', ')}`)
+  }
+  if (Array.isArray(criteria.transmissionType) && criteria.transmissionType.length) {
+    summary.push(`Transmisión · ${criteria.transmissionType.slice(0, 2).join(', ')}`)
+  }
+  if (criteria.deal === '1') summary.push('Sólo descuentos')
+  if (criteria.store === '1') summary.push('Sólo tiendas oficiales')
+  if (criteria.bikes === '1') summary.push('Sólo bicicletas')
+  return summary
+}
+
 export default function Dashboard() {
   const { user, logout, isModerator } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -190,6 +237,9 @@ export default function Dashboard() {
   const [giftCreating, setGiftCreating] = useState(false)
   const [giftCode, setGiftCode] = useState<string | null>(null)
   const [upgradeIntent, setUpgradeIntent] = useState<{ listingId: string; plan: 'basic' | 'premium' } | null>(null)
+  const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([])
+  const [savedSearchesLoading, setSavedSearchesLoading] = useState(false)
+  const [savedSearchMutating, setSavedSearchMutating] = useState<number | null>(null)
 
   const loadData = useCallback(async () => {
     if (!user?.id) {
@@ -266,6 +316,93 @@ export default function Dashboard() {
   useEffect(() => {
     setMobileNavOpen(false)
   }, [activeTab])
+
+  const handleToggleSavedSearch = useCallback(async (search: SavedSearch) => {
+    if (!supabaseEnabled) {
+      showToast('Necesitás tener sesión iniciada para administrar tus alertas.', { variant: 'info' } as any)
+      return
+    }
+    setSavedSearchMutating(search.id)
+    try {
+      const updated = await updateSavedSearch(search.id, { is_active: !search.is_active })
+      if (!updated) throw new Error('update_failed')
+      setSavedSearches((prev) => prev.map((item) => (item.id === updated.id ? updated : item)))
+      showToast(updated.is_active ? 'Activamos tu alerta.' : 'Pausamos tu alerta.', { variant: 'success' } as any)
+    } catch (err) {
+      console.warn('[dashboard] toggle saved search failed', err)
+      showToast('No pudimos actualizar la alerta. Intentá nuevamente.', { variant: 'error' } as any)
+    } finally {
+      setSavedSearchMutating(null)
+    }
+  }, [supabaseEnabled, showToast])
+
+  const handleRenameSavedSearch = useCallback(async (search: SavedSearch) => {
+    if (!supabaseEnabled) {
+      showToast('Necesitás tener sesión iniciada para administrar tus alertas.', { variant: 'info' } as any)
+      return
+    }
+    const current = search.name ?? ''
+    const next = window.prompt('Nuevo nombre para la búsqueda', current)
+    if (next === null) return
+    const trimmed = next.trim()
+    setSavedSearchMutating(search.id)
+    try {
+      const updated = await updateSavedSearch(search.id, { name: trimmed || null })
+      if (!updated) throw new Error('update_failed')
+      setSavedSearches((prev) => prev.map((item) => (item.id === updated.id ? updated : item)))
+      showToast('Guardamos el nuevo nombre de la alerta.', { variant: 'success' } as any)
+    } catch (err) {
+      console.warn('[dashboard] rename saved search failed', err)
+      showToast('No pudimos renombrar la alerta. Intentá nuevamente.', { variant: 'error' } as any)
+    } finally {
+      setSavedSearchMutating(null)
+    }
+  }, [supabaseEnabled, showToast])
+
+  const handleDeleteSavedSearch = useCallback(async (search: SavedSearch) => {
+    if (!supabaseEnabled) {
+      showToast('Necesitás tener sesión iniciada para administrar tus alertas.', { variant: 'info' } as any)
+      return
+    }
+    const confirmDelete = window.confirm('¿Querés eliminar esta búsqueda guardada?')
+    if (!confirmDelete) return
+    setSavedSearchMutating(search.id)
+    try {
+      const ok = await deleteSavedSearch(search.id)
+      if (!ok) throw new Error('delete_failed')
+      setSavedSearches((prev) => prev.filter((item) => item.id !== search.id))
+      showToast('Eliminamos la alerta guardada.', { variant: 'success' } as any)
+    } catch (err) {
+      console.warn('[dashboard] delete saved search failed', err)
+      showToast('No pudimos eliminar la alerta. Intentá nuevamente.', { variant: 'error' } as any)
+    } finally {
+      setSavedSearchMutating(null)
+    }
+  }, [supabaseEnabled, showToast])
+
+  const loadSavedSearches = useCallback(async () => {
+    if (!user?.id || !supabaseEnabled) {
+      setSavedSearches([])
+      setSavedSearchesLoading(false)
+      return
+    }
+    setSavedSearchesLoading(true)
+    try {
+      const items = await listSavedSearches()
+      setSavedSearches(Array.isArray(items) ? items : [])
+    } catch (err) {
+      console.warn('[dashboard] saved searches load failed', err)
+      showToast('No pudimos cargar tus alertas guardadas.', { variant: 'error' } as any)
+    } finally {
+      setSavedSearchesLoading(false)
+    }
+  }, [user?.id, supabaseEnabled, showToast])
+
+  useEffect(() => {
+    if (activeTab === 'Alertas') {
+      void loadSavedSearches()
+    }
+  }, [activeTab, loadSavedSearches])
 
   useEffect(() => {
     if (!mobileNavOpen) return
@@ -390,6 +527,19 @@ export default function Dashboard() {
         return <CreditsView credits={credits} />
       case 'Favoritos':
         return <FavoritesView favouriteIds={favouriteIdsRemote.length ? favouriteIdsRemote : favouriteIdsLocal} />
+      case 'Alertas':
+        return (
+          <SavedSearchesView
+            searches={savedSearches}
+            loading={savedSearchesLoading}
+            mutatingId={savedSearchMutating}
+            onRefresh={loadSavedSearches}
+            onToggle={handleToggleSavedSearch}
+            onRename={handleRenameSavedSearch}
+            onDelete={handleDeleteSavedSearch}
+            supabaseActive={supabaseEnabled}
+          />
+        )
       case 'Editar perfil':
         return (
           <EditProfileView
@@ -420,6 +570,155 @@ export default function Dashboard() {
       default:
         return null
     }
+  }
+
+  function SavedSearchesView({
+    searches,
+    loading,
+    mutatingId,
+    onRefresh,
+    onToggle,
+    onRename,
+    onDelete,
+    supabaseActive,
+  }: {
+    searches: SavedSearch[]
+    loading: boolean
+    mutatingId: number | null
+    onRefresh: () => Promise<void> | void
+    onToggle: (search: SavedSearch) => void
+    onRename: (search: SavedSearch) => void
+    onDelete: (search: SavedSearch) => void
+    supabaseActive: boolean
+  }) {
+    const canManage = supabaseActive && Boolean(user?.id)
+
+    const renderLinkButton = (search: SavedSearch) => {
+      const rawUrl = typeof search.criteria?.url === 'string' ? search.criteria.url : ''
+      const fallbackUrl = '/marketplace'
+      const href = rawUrl || fallbackUrl
+      const isExternal = /^https?:\/\//i.test(href)
+      const label = 'Ver coincidencias'
+      const className = 'inline-flex items-center justify-center rounded-full bg-[#14212e] px-4 py-2 text-sm font-semibold text-white shadow hover:bg-[#0f1d2b]'
+      if (isExternal) {
+        return (
+          <a href={href} target="_blank" rel="noopener noreferrer" className={className}>
+            {label}
+          </a>
+        )
+      }
+      return (
+        <Link to={href} className={className}>
+          {label}
+        </Link>
+      )
+    }
+
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-semibold text-[#14212e]">Alertas guardadas</h2>
+            <p className="text-sm text-[#14212e]/70">Recibís novedades cuando ingresan publicaciones similares.</p>
+          </div>
+          {canManage ? (
+            <button
+              type="button"
+              onClick={() => onRefresh()}
+              disabled={loading}
+              className="rounded-full border border-[#14212e]/20 px-4 py-2 text-sm font-semibold text-[#14212e] hover:bg-[#14212e]/10 disabled:opacity-50"
+            >
+              {loading ? 'Actualizando…' : 'Actualizar'}
+            </button>
+          ) : null}
+        </div>
+
+        {!supabaseActive ? (
+          <div className="rounded-2xl border border-[#14212e]/10 bg-white/40 p-5 text-sm text-[#14212e]/70">
+            Iniciá sesión para guardar búsquedas y recibir correos con nuevos ingresos.
+          </div>
+        ) : loading && searches.length === 0 ? (
+          <div className="rounded-2xl border border-[#14212e]/10 bg-white/60 p-5 text-sm text-[#14212e]/70">
+            Cargando tus alertas guardadas…
+          </div>
+        ) : searches.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-[#14212e]/20 bg-white/30 p-8 text-center text-sm text-[#14212e]/70">
+            No guardaste alertas todavía. Configurá tus filtros en el marketplace y tocá “Guardar búsqueda” para recibir novedades.
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {searches.map((search) => {
+              const summary = summarizeSavedSearchCriteria(search.criteria)
+              const createdLabel = search.created_at ? relativeTimeFromNow(search.created_at) : ''
+              const disabled = mutatingId === search.id
+              return (
+                <div key={search.id} className="rounded-3xl border border-[#14212e]/10 bg-white p-6 shadow-sm">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-lg font-semibold text-[#14212e]">
+                        {search.name?.trim() || 'Búsqueda guardada'}
+                      </h3>
+                      <div className="mt-2 flex items-center gap-2 text-xs font-semibold">
+                        <span className={`inline-flex items-center rounded-full px-3 py-1 ${search.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-[#14212e]/10 text-[#14212e]/70'}`}>
+                          {search.is_active ? 'Activa' : 'Pausada'}
+                        </span>
+                        {createdLabel ? (
+                          <span className="text-[#14212e]/50">Guardada {createdLabel}</span>
+                        ) : null}
+                      </div>
+                    </div>
+                    {renderLinkButton(search)}
+                  </div>
+
+                  {summary.length ? (
+                    <ul className="mt-4 flex flex-wrap gap-2 text-xs text-[#14212e]/80">
+                      {summary.map((item, idx) => (
+                        <li key={`${search.id}-crit-${idx}`} className="rounded-full bg-[#14212e]/5 px-3 py-1">
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-4 text-sm text-[#14212e]/70">
+                      Sin filtros adicionales. Te enviaremos novedades generales del marketplace.
+                    </p>
+                  )}
+
+                  {canManage ? (
+                    <div className="mt-5 flex flex-wrap gap-3">
+                      <button
+                        type="button"
+                        onClick={() => onToggle(search)}
+                        disabled={disabled}
+                        className="inline-flex items-center justify-center rounded-full border border-[#14212e]/20 px-4 py-2 text-sm font-semibold text-[#14212e] hover:bg-[#14212e]/10 disabled:opacity-50"
+                      >
+                        {search.is_active ? 'Pausar alerta' : 'Activar alerta'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onRename(search)}
+                        disabled={disabled}
+                        className="inline-flex items-center justify-center rounded-full border border-[#14212e]/20 px-4 py-2 text-sm font-semibold text-[#14212e] hover:bg-[#14212e]/10 disabled:opacity-50"
+                      >
+                        Renombrar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onDelete(search)}
+                        disabled={disabled}
+                        className="inline-flex items-center justify-center rounded-full border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+                      >
+                        Eliminar
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    )
   }
 
   function StoreAnalyticsView({ enabled }: { enabled: boolean }) {
@@ -2094,6 +2393,13 @@ function TabIcon({ tab }: { tab: SellerTab }) {
           <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.04-4.5-4.55-4.5-1.74 0-3.42 1.008-4.45 2.708C10.97 4.758 9.29 3.75 7.55 3.75 5.04 3.75 3 5.765 3 8.25c0 5.25 7.5 9 9 9s9-3.75 9-9z" />
         </svg>
       )
+    case 'Alertas':
+      return (
+        <svg {...common}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M11 5.25a5.75 5.75 0 104.21 9.64l3.82 3.82-1.06 1.06-3.82-3.82A5.75 5.75 0 1011 5.25z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M11 7.5v3.75l2.25 1.5" />
+        </svg>
+      )
     case 'Notificaciones':
       return (
         <svg {...common}>
@@ -2114,11 +2420,26 @@ function TabIcon({ tab }: { tab: SellerTab }) {
           <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5v6a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 16.5V8.25A2.25 2.25 0 016.75 6h6" />
         </svg>
       )
+    case 'Editar tienda':
+      return (
+        <svg {...common}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 9l1.5-5.25h12L19.5 9M3 9h18v9.75a1.5 1.5 0 01-1.5 1.5H4.5a1.5 1.5 0 01-1.5-1.5V9z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 14.25h6v5.25H9z" />
+        </svg>
+      )
     case 'Analítica':
       return (
         <svg {...common}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l3-3 3 3 6-6 3 3" />
           <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 19.5h16.5M3.75 4.5h16.5M4.5 4.5v15M19.5 4.5v15" />
+        </svg>
+      )
+    case 'Verificá tu perfil':
+      return (
+        <svg {...common}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.75a3.75 3.75 0 103.75 3.75A3.75 3.75 0 0012 6.75z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 20.25A6.75 6.75 0 0118.75 15" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 15.75l1.5 1.5 3-3" />
         </svg>
       )
     case 'Cerrar sesión':
