@@ -72,6 +72,9 @@ const PROFILE_DEFAULTS: Record<ImageProfile, ProfileConfig> = {
 
 export function buildImageSource(url: string | undefined | null, options: BuildImageSourceOptions): ImageSource | null {
   if (!url) return null
+  // Si la URL no es absoluta (p.ej. 'listings/2025/...'), delegamos al builder seguro
+  // para evitar imágenes rotas por rutas relativas en <img src>.
+  if (!/^https?:\/\//i.test(url)) return null
   const config = PROFILE_DEFAULTS[options.profile]
   const widths = options.widths ?? config.widths
   const baseWidth = options.width ?? config.width ?? (Array.isArray(widths) ? widths[widths.length - 1] : undefined)
