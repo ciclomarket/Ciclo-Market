@@ -410,6 +410,150 @@ app.delete('/api/saved-searches/:id', async (req, res) => {
   }
 })
 
+/* ----------------------------- Marketplace search ------------------------ */
+async function fetchStoreFlags(supabase, sellerIds) {
+  const unique = Array.from(new Set((sellerIds || []).filter(Boolean)))
+  if (!unique.length) return new Map()
+  try {
+    const { data } = await supabase
+      .from('users')
+      .select('id, store_enabled')
+      .in('id', unique)
+    const map = new Map()
+    for (const row of data || []) {
+      if (!row?.id) continue
+      map.set(String(row.id), Boolean(row.store_enabled))
+    }
+    return map
+  } catch {
+    return new Map()
+  }
+}
+
+app.get('/api/market/search', async (req, res) => {
+  try {
+    const supabase = getServerSupabaseClient()
+    const limit = Math.max(1, Math.min(300, Number(req.query.limit) || 48))
+    const offset = Math.max(0, Number(req.query.offset) || 0)
+    const sort = String(req.query.sort || 'relevance')
+
+    const rawCriteria = {
+      cat: req.query.cat,
+      subcat: req.query.subcat,
+      brand: req.query.brand,
+      material: req.query.material,
+      frameSize: req.query.frameSize,
+      wheelSize: req.query.wheelSize,
+      drivetrain: req.query.drivetrain,
+      condition: req.query.condition,
+      brake: req.query.brake,
+      year: req.query.year,
+      size: req.query.size,
+      location: req.query.location,
+      transmissionType: req.query.transmissionType,
+      q: req.query.q,
+      deal: req.query.deal,
+      store: req.query.store,
+      priceCur: req.query.price_cur,
+      priceMin: req.query.price_min ? Number(req.query.price_min) : undefined,
+      priceMax: req.query.price_max ? Number(req.query.price_max) : undefined,
+    }
+    const criteria = sanitizeSavedSearchCriteria(rawCriteria)
+
+    let query = supabase
+      .from('listings')
+      .select('id,slug,title,brand,model,year,category,subcategory,price,price_currency,original_price,location,description,material,frame_size,wheel_size,drivetrain,drivetrain_detail,wheelset,extras,seller_id,seller_name,seller_plan,seller_plan_expires,seller_location,seller_whatsapp,seller_email,seller_avatar,plan,highlight_expires,contact_methods,expires_at,renewal_notified_at,status,created_at,images')
+      .in('status', ['active', 'published'])
+      .order('created_at', { ascending: false })
+      .limit(500)
+
+    const cat = typeof criteria.cat === 'string' ? criteria.cat.trim() : ''
+    if (cat && cat !== 'Todos') query = query.eq('category', cat)
+    const subcat = typeof criteria.subcat === 'string' ? criteria.subcat.trim() : ''
+    if (subcat) query = query.eq('subcategory', subcat)
+
+    const { data: rows, error } = await query
+    if (error) return res.status(500).json({ error: 'query_failed' })
+    const items = Array.isArray(rows) ? rows : []
+
+    const sellerIds = items.map((r) => r?.seller_id).filter(Boolean)
+    const storeMap = await fetchStoreFlags(supabase, sellerIds)
+    const filtered = []
+    for (const listing of items) {
+      const sellerId = listing?.seller_id ? String(listing.seller_id) : null
+      const storeEnabled = sellerId ? Boolean(storeMap.get(sellerId)) : false
+      const context = buildListingMatchContext(listing, { storeEnabled })
+      if (!matchesSavedSearchCriteria(criteria, context)) continue
+      if (criteria.store === '1' && !storeEnabled) continue
+      filtered.push(listing)
+    }
+
+    const fx = Number(req.query.fx) || 0
+    const priceCur = typeof criteria.priceCur === 'string' ? criteria.priceCur.toUpperCase() : null
+    const priceInSelected = (row) => {
+      const cur = String(row.price_currency || 'ARS').toUpperCase()
+      const price = Number(row.price) || 0
+      if (!priceCur || priceCur === cur) return price
+      if (!fx || !Number.isFinite(fx)) return price
+      return priceCur === 'USD' ? (cur === 'ARS' ? price / fx : price) : (cur === 'USD' ? price * fx : price)
+    }
+
+    let ordered = filtered
+    if (sort === 'newest') {
+      ordered = [...filtered].sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+    } else if (sort === 'asc' || sort === 'desc') {
+      ordered = [...filtered].sort((a, b) => {
+        const pa = priceInSelected(a)
+        const pb = priceInSelected(b)
+        return sort === 'asc' ? pa - pb : pb - pa
+      })
+    }
+
+    const total = ordered.length
+    const sliced = ordered.slice(offset, offset + limit)
+    return res.json({ items: sliced, total })
+  } catch (err) {
+    console.error('[market/search] failed', err)
+    return res.status(500).json({ error: 'unexpected_error' })
+  }
+})
+
+/* ----------------------------- Credits endpoints ------------------------- */
+app.get('/api/credits/me', async (req, res) => {
+  try {
+    const userId = String(req.query.userId || '').trim()
+    if (!userId) return res.status(400).json([])
+    const supabase = getServerSupabaseClient()
+    const { data, error } = await supabase
+      .from('publish_credits')
+      .select('id,created_at,plan_code,status,used_at,expires_at,listing_id')
+      .eq('user_id', userId)
+      .eq('status', 'available')
+      .order('created_at', { ascending: false })
+    if (error) return res.status(500).json([])
+    return res.json(Array.isArray(data) ? data : [])
+  } catch {
+    return res.status(500).json([])
+  }
+})
+
+app.get('/api/credits/history', async (req, res) => {
+  try {
+    const userId = String(req.query.userId || '').trim()
+    if (!userId) return res.status(400).json([])
+    const supabase = getServerSupabaseClient()
+    const { data, error } = await supabase
+      .from('publish_credits')
+      .select('id,created_at,plan_code,status,used_at,expires_at,listing_id')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+    if (error) return res.status(500).json([])
+    return res.json(Array.isArray(data) ? data : [])
+  } catch {
+    return res.status(500).json([])
+  }
+})
+
 
 async function runSavedSearchAlert(listingId) {
   if (!listingId) return
