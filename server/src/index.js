@@ -4195,8 +4195,6 @@ function buildListingMatchContext(listing, { storeEnabled }) {
   const sizes = new Set()
   const frameSize = normalizeString(listing?.frame_size)
   if (frameSize) sizes.add(frameSize)
-  const sizeField = normalizeString(listing?.size)
-  if (sizeField) sizes.add(sizeField)
   for (const value of extractApparelSizesBackend(extrasMap)) {
     if (value) sizes.add(value)
   }
@@ -4386,7 +4384,7 @@ async function runSavedSearchAlert(listingId) {
   try {
     const { data: listing, error: listingErr } = await supabase
       .from('listings')
-      .select('id,slug,title,brand,model,year,category,subcategory,price,price_currency,original_price,location,description,material,frame_size,size,wheel_size,drivetrain,drivetrain_detail,extras,seller_id,images')
+      .select('id,slug,title,brand,model,year,category,subcategory,price,price_currency,original_price,location,description,material,frame_size,wheel_size,drivetrain,drivetrain_detail,extras,seller_id,images')
       .eq('id', listingId)
       .maybeSingle()
 
