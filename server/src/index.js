@@ -283,6 +283,14 @@ app.post('/api/checkout', async (req, res) => {
     const pref = new Preference(mpClient)
     const publicBase = (process.env.PUBLIC_BASE_URL || '').toString().replace(/\/$/, '')
     const notificationUrl = publicBase ? `${publicBase}/api/mp/webhook` : undefined
+    console.info('[checkout] creating preference', {
+      userId,
+      planCode,
+      amount,
+      currency,
+      hasNotificationUrl: Boolean(notificationUrl),
+      notificationUrl,
+    })
     const mp = await pref.create({
       body: {
         items: [
@@ -311,17 +319,23 @@ app.post('/api/checkout', async (req, res) => {
     } catch {}
     try {
       await recordPayment({ userId, listingId: metadata.listingId || null, amount, currency, status: 'pending', provider: 'mercadopago', providerRef: mp?.id || null })
-    } catch {}
+    } catch (e) {
+      console.warn('[checkout] recordPayment pending failed', (e && e.message) || e)
+    }
 
     // Optionally create a pending credit row so UX can reflect it (best-effort)
     if (planCode === 'basic' || planCode === 'premium') {
       try {
         const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
         const svc = supabaseService || getServerSupabaseClient()
-        await svc
+        const { error } = await svc
           .from('publish_credits')
           .insert({ user_id: userId, plan_code: planCode, status: 'pending', provider: 'mercadopago', preference_id: mp.id || null, expires_at: expiresAt, ...(metadata.listingId ? { listing_id: metadata.listingId } : {}) })
-      } catch {}
+        if (error) console.warn('[checkout] insert pending credit failed', error)
+        else console.info('[checkout] pending credit inserted', { userId, planCode, preferenceId: mp?.id || null })
+      } catch (e) {
+        console.warn('[checkout] pending credit insert threw', (e && e.message) || e)
+      }
     }
 
     return res.json({ ok: true, url: initPoint, preference_id: mp?.id || null })
