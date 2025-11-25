@@ -1317,13 +1317,56 @@ async function applyPaymentUpdateByPaymentId(paymentId) {
 // MP sends either GET with query ?id=...&topic=payment or POST with JSON
 app.all('/api/mp/webhook', async (req, res) => {
   try {
-    const queryId = req.query?.id || req.query?.['data.id']
-    const bodyId = req.body?.data?.id || req.body?.id
-    const paymentId = String(queryId || bodyId || '').trim()
-    if (!paymentId) return res.status(400).json({ ok: false })
-    const result = await applyPaymentUpdateByPaymentId(paymentId)
-    if (!result.ok) return res.status(500).json(result)
-    return res.json({ ok: true })
+    const q = req.query || {}
+    const b = (req.body && typeof req.body === 'object') ? req.body : {}
+    const queryTopic = (q.topic || q.type || '').toString()
+    const bodyTopic = (b.topic || b.type || '').toString()
+    const topic = (queryTopic || bodyTopic || '').toLowerCase()
+
+    const queryId = q.id || q['data.id']
+    const bodyId = (b.data && (b.data.id || b.data['id'])) || b.id
+    const rawId = String(queryId || bodyId || '').trim()
+
+    console.info('[webhook] received', { topic, id: rawId })
+
+    // Case 1: payment notification with payment_id
+    if (rawId && (!topic || topic === 'payment')) {
+      const result = await applyPaymentUpdateByPaymentId(rawId)
+      if (!result.ok) return res.status(500).json(result)
+      return res.json({ ok: true })
+    }
+
+    // Case 2: merchant_order notification; need to fetch to get payment id(s)
+    if (rawId && topic === 'merchant_order') {
+      try {
+        const moRes = await fetch(`https://api.mercadolibre.com/merchant_orders/${encodeURIComponent(rawId)}`, {
+          headers: { Authorization: `Bearer ${String(process.env.MERCADOPAGO_ACCESS_TOKEN || '')}` },
+        })
+        if (!moRes.ok) {
+          const txt = await moRes.text().catch(() => '')
+          console.warn('[webhook] merchant_order fetch failed', { id: rawId, status: moRes.status, body: txt })
+          return res.status(200).json({ ok: true })
+        }
+        const mo = await moRes.json().catch(() => null)
+        const payments = Array.isArray(mo?.payments) ? mo.payments : []
+        const approved = payments.find((p) => String(p?.status || '').toLowerCase() === 'approved')
+        const candidate = approved?.id || payments[0]?.id || null
+        if (!candidate) {
+          console.info('[webhook] merchant_order without payments yet', { id: rawId })
+          return res.status(200).json({ ok: true })
+        }
+        const result = await applyPaymentUpdateByPaymentId(String(candidate))
+        if (!result.ok) return res.status(500).json(result)
+        return res.json({ ok: true })
+      } catch (err) {
+        console.error('[webhook] merchant_order handling failed', err)
+        return res.status(200).json({ ok: true })
+      }
+    }
+
+    // Unknown event format; acknowledge to avoid retries, but log
+    console.warn('[webhook] unrecognized payload', { query: q, body: b })
+    return res.status(200).json({ ok: true })
   } catch (err) {
     console.error('[webhook] failed', err)
     return res.status(500).json({ ok: false })
