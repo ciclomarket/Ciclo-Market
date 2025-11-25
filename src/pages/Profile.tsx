@@ -164,7 +164,7 @@ export default function Profile() {
         if (supabaseEnabled) {
           const [profileData, listingsData, reviewsData] = await Promise.all([
             fetchUserProfile(sellerId),
-            fetchListingsBySeller(sellerId),
+            fetchListingsBySeller(sellerId, { includeArchived: Boolean(isModerator) }),
             fetchSellerReviews(sellerId),
           ])
           if (!active) return
@@ -208,7 +208,7 @@ export default function Profile() {
     return () => {
       active = false
     }
-  }, [sellerId])
+  }, [sellerId, isModerator])
 
   useEffect(() => {
     if (!user?.id || !sellerId) {

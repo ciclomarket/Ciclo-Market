@@ -34,6 +34,9 @@ const { startMarketingAutomationsJob, runMarketingAutomationsOnce } = (() => {
 const { startSavedSearchDigestJob, runSavedSearchDigestOnce } = (() => {
   try { return require('./jobs/savedSearchDigest') } catch { return {} }
 })()
+const { startDeletedPurgerJob } = (() => {
+  try { return require('./jobs/deletedPurger') } catch { return {} }
+})()
 const { buildStoreAnalyticsHTML } = (() => {
   try { return require('./emails/storeAnalyticsEmail') } catch { return {} }
 })()
@@ -189,6 +192,7 @@ try { startNewsletterDigestJob && startNewsletterDigestJob() } catch {}
 try { startStoreAnalyticsDigestJob && startStoreAnalyticsDigestJob() } catch {}
 try { startMarketingAutomationsJob && startMarketingAutomationsJob() } catch {}
 try { startSavedSearchDigestJob && startSavedSearchDigestJob() } catch {}
+try { startDeletedPurgerJob && startDeletedPurgerJob() } catch {}
 
 /* Google Reviews endpoints removed */
 
@@ -438,6 +442,15 @@ async function fetchStoreFlags(supabase, sellerIds) {
 app.get('/api/market/search', async (req, res) => {
   try {
     const supabase = getServerSupabaseClient()
+    // Detectar si es moderador para ampliar el alcance
+    let isModeratorUser = false
+    try {
+      const user = await getAuthUser(req, supabase)
+      if (user) {
+        // helper definido más abajo
+        isModeratorUser = await userIsModerator(user.id, supabase)
+      }
+    } catch { /* noop */ }
     const limit = Math.max(1, Math.min(300, Number(req.query.limit) || 48))
     const offset = Math.max(0, Number(req.query.offset) || 0)
     const sort = String(req.query.sort || 'relevance')
@@ -468,10 +481,14 @@ app.get('/api/market/search', async (req, res) => {
     let query = supabase
       .from('listings')
       .select('id,slug,title,brand,model,year,category,subcategory,price,price_currency,original_price,location,description,material,frame_size,wheel_size,drivetrain,drivetrain_detail,wheelset,extras,seller_id,seller_name,seller_plan,seller_plan_expires,seller_location,seller_whatsapp,seller_email,seller_avatar,plan,highlight_expires,contact_methods,expires_at,renewal_notified_at,status,created_at,images')
-      .in('status', ['active', 'published'])
-      .eq('moderation_state', 'approved')
       .order('created_at', { ascending: false })
       .limit(500)
+
+    if (!isModeratorUser) {
+      query = query
+        .in('status', ['active', 'published'])
+        .eq('moderation_state', 'approved')
+    }
 
     const cat = typeof criteria.cat === 'string' ? criteria.cat.trim() : ''
     if (cat && cat !== 'Todos') query = query.eq('category', cat)
@@ -489,11 +506,13 @@ app.get('/api/market/search', async (req, res) => {
     for (const listing of items) {
       const sellerId = listing?.seller_id ? String(listing.seller_id) : null
       const storeEnabled = sellerId ? Boolean(storeMap.get(sellerId)) : false
-      // Ocultar vencidas para usuarios comunes: si expires_at ya pasó, no incluir
-      try {
-        const exp = listing?.expires_at ? Date.parse(listing.expires_at) : null
-        if (typeof exp === 'number' && !Number.isNaN(exp) && exp > 0 && exp < now) continue
-      } catch { /* noop */ }
+      // Ocultar vencidas solo para usuarios comunes
+      if (!isModeratorUser) {
+        try {
+          const exp = listing?.expires_at ? Date.parse(listing.expires_at) : null
+          if (typeof exp === 'number' && !Number.isNaN(exp) && exp > 0 && exp < now) continue
+        } catch { /* noop */ }
+      }
       const context = buildListingMatchContext(listing, { storeEnabled })
       // Aplicar coincidencia general SIN obligar currency; el rango de precio se filtra abajo con conversión
       const { priceCur: _pc, priceMin: _pmin, priceMax: _pmax, ...criteriaNoPrice } = criteria
@@ -1119,6 +1138,23 @@ async function getAuthUser(req, supabase) {
   }
 }
 
+// Helper: consulta role del usuario en tabla user_roles ('moderator' o 'admin')
+async function userIsModerator(userId, supabase) {
+  try {
+    if (!userId) return false
+    const { data, error } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', userId)
+      .maybeSingle()
+    if (error) return false
+    const role = String(data?.role || '').toLowerCase()
+    return role === 'moderator' || role === 'admin'
+  } catch {
+    return false
+  }
+}
+
 /* ----------------------------- Listings ops -------------------------------- */
 // Renovar publicación: suma días a expires_at (15 si free, 60 si basic/premium)
 app.post('/api/listings/:id/renew', async (req, res) => {
@@ -1179,6 +1215,52 @@ app.post('/api/listings/:id/highlight', async (req, res) => {
     return res.json({ ok: true, sellerPlan: 'featured', sellerPlanExpires: next })
   } catch (err) {
     console.error('[highlight] failed', err)
+    return res.status(500).json({ error: 'unexpected_error' })
+  }
+})
+
+// Cleanup imágenes de un listing (borra archivos del bucket asociados)
+app.post('/api/listings/:id/cleanup-images', async (req, res) => {
+  try {
+    const { id } = req.params
+    const supabase = getServerSupabaseClient()
+    const user = await getAuthUser(req, supabase)
+    if (!user) return res.status(401).json({ error: 'unauthorized' })
+
+    const { data: row, error } = await supabase
+      .from('listings')
+      .select('id,seller_id,images,status')
+      .eq('id', id)
+      .maybeSingle()
+    if (error || !row) return res.status(404).json({ error: 'not_found' })
+    // Permitir sólo al owner o moderador
+    const isOwner = String(row.seller_id || '') === String(user.id)
+    const isMod = isOwner ? true : await userIsModerator(user.id, supabase)
+    if (!isMod) return res.status(403).json({ error: 'forbidden' })
+
+    const STORAGE_BUCKET = process.env.SUPABASE_STORAGE_BUCKET || 'listings'
+    const extractKeys = (images) => {
+      const keys = new Set()
+      if (!Array.isArray(images)) return []
+      for (const item of images) {
+        const str = typeof item === 'string' ? item : (item?.path || item?.key || item?.url || item?.uri)
+        if (!str) continue
+        const m = String(str).match(/\/storage\/v1\/object\/public\/([^/]+)\/(.+)$/) || String(str).match(/\/object\/public\/([^/]+)\/(.+)$/)
+        if (m && m[2]) keys.add(m[2])
+        else keys.add(String(str).replace(/^\/+/, ''))
+      }
+      return Array.from(keys)
+    }
+
+    const keys = extractKeys(row.images || [])
+    if (keys.length) {
+      try { await supabase.storage.from(STORAGE_BUCKET).remove(keys) } catch (err) {
+        console.warn('[cleanup-images] storage remove failed', id, err?.message || err)
+      }
+    }
+    return res.json({ ok: true, removed: keys.length })
+  } catch (err) {
+    console.error('[cleanup-images] failed', err)
     return res.status(500).json({ error: 'unexpected_error' })
   }
 })

@@ -313,12 +313,22 @@ function buildHighlightEmail({ listing, profile, baseFront }) {
 }
 
 async function fetchExpiredListings(supabase, limit) {
-  const nowIso = new Date().toISOString()
+  const now = new Date()
+  const nowIso = now.toISOString()
+  const lowerBoundIso = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000).toISOString()
   const { data, error } = await supabase
     .from('listings')
     .select('id,seller_id,title,price,price_currency,images,plan,plan_code,seller_plan,status,slug,expires_at,highlight_expires,location,seller_location')
-    .or(`status.eq.expired,status.eq.sold,expires_at.lte.${nowIso}`)
+    // Considerar vencidas por status=expired o por fecha vencida
+    .or(`status.eq.expired,expires_at.lte.${nowIso}`)
+    // Nunca incluir SOLD ni DELETED
+    .neq('status', 'sold')
+    .neq('status', 'deleted')
     .not('seller_id', 'is', null)
+    // Ventana: últimos 14 días desde el vencimiento
+    .not('expires_at', 'is', null)
+    .gte('expires_at', lowerBoundIso)
+    .lte('expires_at', nowIso)
     .order('expires_at', { ascending: false, nullsLast: false })
     .limit(limit)
   if (error) {
