@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useSearchParams, Link, useLocation, useNavigate } from 'react-router-dom'
+import { useSearchParams, Link, useLocation, useNavigate, useNavigationType } from 'react-router-dom'
 import Container from '../components/Container'
 import ListingCard from '../components/ListingCard'
 import { buildImageSource } from '../lib/imageUrl'
@@ -950,6 +950,7 @@ type MarketplaceProps = {
 }
 export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headingTitle, breadcrumbs, seoOverrides }: MarketplaceProps = {}) {
   const location = useLocation()
+  const navType = useNavigationType()
   const { fx } = useCurrency()
   const siteOrigin = useMemo(() => resolveSiteOrigin(), [])
   const [searchParams, setSearchParams] = useSearchParams()
@@ -963,6 +964,7 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
   const sentinelRef = useRef<HTMLDivElement | null>(null)
   const loadMoreRef = useRef<HTMLDivElement | null>(null)
   const loadingMoreRef = useRef<boolean>(false)
+  const restoringRef = useRef<boolean>(false)
   const [sortMode, setSortMode] = useState<'relevance' | 'newest' | 'asc' | 'desc'>('relevance')
   const [listings, setListings] = useState<Listing[]>([])
   const [serverMode, setServerMode] = useState(false)
@@ -972,6 +974,42 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [mobileSortOpen, setMobileSortOpen] = useState(false)
   const [likeCounts, setLikeCounts] = useState<Record<string, number>>({})
+
+  // Control manual de restauración de scroll
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined' && 'scrollRestoration' in window.history) {
+        (window.history as any).scrollRestoration = 'manual'
+      }
+    } catch { /* noop */ }
+  }, [])
+
+  const scrollKey = useMemo(() => `${location.pathname}${location.search}`, [location.pathname, location.search])
+
+  useEffect(() => {
+    return () => {
+      try { sessionStorage.setItem(`mb_scroll:${scrollKey}`, String(window.scrollY || window.pageYOffset || 0)) } catch { /* noop */ }
+    }
+  }, [scrollKey])
+
+  useEffect(() => {
+    if (navType !== 'POP') return
+    restoringRef.current = true
+    requestAnimationFrame(() => {
+      try {
+        const raw = sessionStorage.getItem(`mb_scroll:${scrollKey}`)
+        const y = raw ? Number(raw) : 0
+        if (Number.isFinite(y) && y > 0) window.scrollTo({ top: y, left: 0, behavior: 'auto' })
+      } catch { /* noop */ }
+    })
+  }, [navType, scrollKey])
+
+  useEffect(() => {
+    if (!restoringRef.current) return
+    if (loading) return
+    const t = window.setTimeout(() => { restoringRef.current = false }, 120)
+    return () => window.clearTimeout(t)
+  }, [loading])
 
   useEffect(() => {
     let active = true
@@ -1495,11 +1533,12 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
 
   useEffect(() => {
     // Menor carga inicial para mejorar LCP en mobile (sólo modo cliente)
-    setCount(12)
-  }, [paramsKey])
+    if (navType !== 'POP') setCount(12)
+  }, [paramsKey, navType])
 
   useEffect(() => {
     if (!sentinelRef.current) return
+    if (restoringRef.current) return
     const el = sentinelRef.current
     const io = new IntersectionObserver((entries) => {
       const entry = entries[0]

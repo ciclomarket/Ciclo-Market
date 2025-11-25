@@ -11,9 +11,19 @@ export async function validateGift(code: string): Promise<{ ok: boolean; plan?: 
 
 export async function redeemGift(code: string, sellerId: string): Promise<{ ok: boolean }> {
   const endpoint = API_BASE ? `${API_BASE}/api/gifts/redeem` : '/api/gifts/redeem'
+  let headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  try {
+    const { getSupabaseClient, supabaseEnabled } = await import('./supabase')
+    if (supabaseEnabled) {
+      const client = getSupabaseClient()
+      const { data } = await client.auth.getSession()
+      const token = data.session?.access_token
+      if (token) headers = { ...headers, Authorization: `Bearer ${token}` }
+    }
+  } catch { /* noop */ }
   const res = await fetch(endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({ code, sellerId })
   })
   if (!res.ok) return { ok: false }
@@ -22,9 +32,19 @@ export async function redeemGift(code: string, sellerId: string): Promise<{ ok: 
 
 export async function createGift(plan: GiftPlan, uses: number = 1, expiresAt?: string): Promise<{ ok: boolean; code?: string }> {
   const endpoint = API_BASE ? `${API_BASE}/api/gifts/create` : '/api/gifts/create'
+  let headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  try {
+    const { getSupabaseClient, supabaseEnabled } = await import('./supabase')
+    if (supabaseEnabled) {
+      const client = getSupabaseClient()
+      const { data } = await client.auth.getSession()
+      const token = data.session?.access_token
+      if (token) headers = { ...headers, Authorization: `Bearer ${token}` }
+    }
+  } catch { /* noop */ }
   const res = await fetch(endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({ plan, uses, expiresAt })
   })
   if (!res.ok) return { ok: false }
@@ -35,9 +55,19 @@ export async function createGift(plan: GiftPlan, uses: number = 1, expiresAt?: s
 export async function claimGift(code: string, userId: string): Promise<{ ok: boolean; creditId?: string; planCode?: 'basic' | 'premium'; error?: string }> {
   const endpoint = API_BASE ? `${API_BASE}/api/gifts/claim` : '/api/gifts/claim'
   try {
+    let headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    try {
+      const { getSupabaseClient, supabaseEnabled } = await import('./supabase')
+      if (supabaseEnabled) {
+        const client = getSupabaseClient()
+        const { data } = await client.auth.getSession()
+        const token = data.session?.access_token
+        if (token) headers = { ...headers, Authorization: `Bearer ${token}` }
+      }
+    } catch { /* noop */ }
     const res = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ code, userId })
     })
     const data = await res.json().catch(() => ({}))

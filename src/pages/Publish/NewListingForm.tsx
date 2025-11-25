@@ -14,7 +14,7 @@ import { usePlans } from '../../context/PlanContext'
 import { canonicalPlanCode, normalisePlanText, resolvePlanCode, type PlanCode } from '../../utils/planCodes'
 import { formatNameWithInitial } from '../../utils/user'
 import { normaliseWhatsapp, extractLocalWhatsapp, sanitizeLocalWhatsappInput } from '../../utils/whatsapp'
-import { fetchListing } from '../../services/listings'
+import { fetchListing, normalizeListingVigencies } from '../../services/listings'
 import { validateGift, redeemGift, claimGift } from '../../services/gifts'
 import { fetchUserProfile, type UserProfileRecord } from '../../services/users'
 import { redeemCredit, attachCreditToListing } from '../../services/credits'
@@ -1142,20 +1142,29 @@ export default function NewListingForm() {
           const { data: session } = await client.auth.getSession()
           const token = session.session?.access_token
           if (token) {
+            const path = `/api/listings/${updated.id}/apply-plan`
             const apiBase = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
-            if (apiBase) {
-              await fetch(`${apiBase}/api/listings/${updated.id}/apply-plan`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                body: JSON.stringify({
-                  planCode: effectivePlanCode,
-                  listingDays: listingDuration,
-                  includedHighlightDays: (selectedPlan?.featuredDays || 0),
+            const endpoints = apiBase ? [path, `${apiBase}${path}`] : [path]
+            for (let i = 0; i < endpoints.length; i += 1) {
+              try {
+                const res = await fetch(endpoints[i], {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                  body: JSON.stringify({
+                    planCode: effectivePlanCode,
+                    listingDays: listingDuration,
+                    includedHighlightDays: (selectedPlan?.featuredDays || 0),
+                  })
                 })
-              })
+                if (res.ok) break
+              } catch { /* try next */ }
             }
           }
         } catch { /* noop */ }
+        // Fallback/asegurador: normalizar vigencias para setear highlight_expires si quedó vacío
+        if ((selectedPlan?.featuredDays || 0) > 0) {
+          try { await normalizeListingVigencies(updated.id) } catch { /* noop */ }
+        }
       }
         clearDraft()
         navigate(`/listing/${updated.slug ?? updated.id}`)
@@ -1208,20 +1217,29 @@ export default function NewListingForm() {
           const { data: session } = await client.auth.getSession()
           const token = session.session?.access_token
           if (token) {
+            const path = `/api/listings/${inserted.id}/apply-plan`
             const apiBase = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
-            if (apiBase) {
-              await fetch(`${apiBase}/api/listings/${inserted.id}/apply-plan`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                body: JSON.stringify({
-                  planCode: effectivePlanCode,
-                  listingDays: listingDuration,
-                  includedHighlightDays: (selectedPlan?.featuredDays || 0),
+            const endpoints = apiBase ? [path, `${apiBase}${path}`] : [path]
+            for (let i = 0; i < endpoints.length; i += 1) {
+              try {
+                const res = await fetch(endpoints[i], {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                  body: JSON.stringify({
+                    planCode: effectivePlanCode,
+                    listingDays: listingDuration,
+                    includedHighlightDays: (selectedPlan?.featuredDays || 0),
+                  })
                 })
-              })
+                if (res.ok) break
+              } catch { /* try next */ }
             }
           }
         } catch { /* noop */ }
+        // Fallback/asegurador: normalizar vigencias para setear highlight_expires si quedó vacío
+        if ((selectedPlan?.featuredDays || 0) > 0) {
+          try { await normalizeListingVigencies(inserted.id) } catch { /* noop */ }
+        }
       }
 
       // Ya pagaste tu plan (si correspondía). Redirigimos al detalle del aviso.

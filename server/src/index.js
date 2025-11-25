@@ -677,6 +677,164 @@ app.post('/api/credits/attach', async (req, res) => {
   }
 })
 
+/* ----------------------------- Gifts endpoints --------------------------- */
+function normalizePlanCode(value) {
+  const v = String(value || '').toLowerCase().trim()
+  return v === 'premium' ? 'premium' : (v === 'basic' ? 'basic' : null)
+}
+
+function isGiftValidRow(row) {
+  if (!row) return false
+  const uses = Number(row.uses_left || 0)
+  if (!Number.isFinite(uses) || uses <= 0) return false
+  if (row.expires_at) {
+    const exp = new Date(row.expires_at).getTime()
+    if (Number.isFinite(exp) && exp > 0 && exp < Date.now()) return false
+  }
+  return true
+}
+
+// Crear código de regalo (requiere sesión o clave admin)
+app.post('/api/gifts/create', async (req, res) => {
+  try {
+    const supabase = getServerSupabaseClient()
+    // Requerir sesión válida para crear regalos
+    const user = await getAuthUser(req, supabase)
+    if (!user) return res.status(401).json({ ok: false, error: 'unauthorized' })
+
+    const plan = normalizePlanCode(req.body?.plan)
+    const uses = Number(req.body?.uses || 1)
+    const expiresAt = req.body?.expiresAt ? new Date(req.body.expiresAt).toISOString() : null
+    if (!plan || !Number.isFinite(uses) || uses <= 0) return res.status(400).json({ ok: false, error: 'invalid_params' })
+
+    function genCode() {
+      const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+      let out = ''
+      for (let i = 0; i < 10; i += 1) out += alphabet[Math.floor(Math.random() * alphabet.length)]
+      return out
+    }
+
+    let code = null
+    for (let i = 0; i < 5; i += 1) {
+      const candidate = genCode()
+      const { data, error } = await supabase
+        .from('gift_codes')
+        .insert({ code: candidate, plan, uses_left: uses, expires_at: expiresAt })
+        .select('code')
+        .maybeSingle()
+      if (!error && data?.code) { code = data.code; break }
+    }
+    if (!code) return res.status(500).json({ ok: false, error: 'create_failed' })
+    return res.json({ ok: true, code })
+  } catch (err) {
+    console.error('[gifts/create] failed', err)
+    return res.status(500).json({ ok: false, error: 'unexpected_error' })
+  }
+})
+
+// Validar código de regalo
+app.get('/api/gifts/validate', async (req, res) => {
+  try {
+    const supabase = getServerSupabaseClient()
+    const code = String(req.query.code || '').trim().toUpperCase()
+    if (!code) return res.status(400).json({ ok: false, error: 'invalid_code' })
+    const { data, error } = await supabase
+      .from('gift_codes')
+      .select('code,plan,uses_left,expires_at')
+      .eq('code', code)
+      .maybeSingle()
+    if (error || !data) return res.json({ ok: false, error: 'not_found' })
+    if (!isGiftValidRow(data)) return res.json({ ok: false, error: 'expired_or_used' })
+    return res.json({ ok: true, plan: normalizePlanCode(data.plan) })
+  } catch (err) {
+    console.error('[gifts/validate] failed', err)
+    return res.status(500).json({ ok: false, error: 'unexpected_error' })
+  }
+})
+
+// Reclamar código: crea un crédito disponible para el usuario (idempotente por provider_ref)
+app.post('/api/gifts/claim', async (req, res) => {
+  try {
+    const supabase = getServerSupabaseClient()
+    const userId = String(req.body?.userId || '').trim()
+    const code = String(req.body?.code || '').trim().toUpperCase()
+    if (!userId || !code) return res.status(400).json({ ok: false, error: 'invalid_params' })
+
+    // Idempotencia: si ya existe un crédito de este gift para el usuario, devolverlo
+    const { data: existing } = await supabase
+      .from('publish_credits')
+      .select('id,plan_code,status')
+      .eq('user_id', userId)
+      .eq('provider', 'gift')
+      .eq('provider_ref', code)
+      .limit(1)
+    if (Array.isArray(existing) && existing[0]) {
+      return res.json({ ok: true, creditId: existing[0].id, planCode: existing[0].plan_code })
+    }
+
+    // Verificar gift válido y descontar uso de forma atómica
+    // Leer fila actual y luego intentar decremento optimista
+    // No atomic decrement supported here; do it with a second guarded update
+    const { data: row } = await supabase
+      .from('gift_codes')
+      .select('code,plan,uses_left,expires_at')
+      .eq('code', code)
+      .maybeSingle()
+    if (!isGiftValidRow(row)) return res.status(409).json({ ok: false, error: 'not_available' })
+
+    const { data: decOne, error: upd } = await supabase
+      .from('gift_codes')
+      .update({ uses_left: (row.uses_left || 1) - 1 })
+      .eq('code', code)
+      .eq('uses_left', row.uses_left)
+      .select('code,plan,uses_left')
+      .maybeSingle()
+    if (upd || !decOne) return res.status(409).json({ ok: false, error: 'conflict' })
+
+    const planCode = normalizePlanCode(row.plan)
+    if (!planCode) return res.status(400).json({ ok: false, error: 'invalid_plan' })
+
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+    const { data: credit, error: insErr } = await supabase
+      .from('publish_credits')
+      .insert({ user_id: userId, plan_code: planCode, status: 'available', provider: 'gift', provider_ref: code, expires_at: expiresAt })
+      .select('id,plan_code')
+      .maybeSingle()
+    if (insErr || !credit) return res.status(500).json({ ok: false, error: 'credit_failed' })
+    return res.json({ ok: true, creditId: credit.id, planCode: credit.plan_code })
+  } catch (err) {
+    console.error('[gifts/claim] failed', err)
+    return res.status(500).json({ ok: false, error: 'unexpected_error' })
+  }
+})
+
+// Redimir (consumir) un gift directamente sin crédito (fallback)
+app.post('/api/gifts/redeem', async (req, res) => {
+  try {
+    const supabase = getServerSupabaseClient()
+    const code = String(req.body?.code || '').trim().toUpperCase()
+    if (!code) return res.status(400).json({ ok: false, error: 'invalid_code' })
+    const { data: row } = await supabase
+      .from('gift_codes')
+      .select('code,uses_left,expires_at')
+      .eq('code', code)
+      .maybeSingle()
+    if (!isGiftValidRow(row)) return res.status(409).json({ ok: false, error: 'not_available' })
+    const { data: decOne, error: upd } = await supabase
+      .from('gift_codes')
+      .update({ uses_left: (row.uses_left || 1) - 1 })
+      .eq('code', code)
+      .eq('uses_left', row.uses_left)
+      .select('code,uses_left')
+      .maybeSingle()
+    if (upd || !decOne) return res.status(409).json({ ok: false, error: 'conflict' })
+    return res.json({ ok: true })
+  } catch (err) {
+    console.error('[gifts/redeem] failed', err)
+    return res.status(500).json({ ok: false, error: 'unexpected_error' })
+  }
+})
+
 
 async function runSavedSearchAlert(listingId) {
   if (!listingId) return

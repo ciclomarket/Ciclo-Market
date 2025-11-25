@@ -18,7 +18,8 @@
     "typecheck": "tsc --noEmit",
     "server": "node server/src/index.js",
     "optimize:images": "node scripts/optimize-public-images.mjs",
-    "supabase:image-matrix": "node scripts/supabase-image-matrix.mjs"
+    "supabase:image-matrix": "node scripts/supabase-image-matrix.mjs",
+    "saved-search:digest:once": "node -e \"require('./server/src/jobs/savedSearchDigest').runSavedSearchDigestOnce().then((n)=>{console.log('[digest] sent',n);process.exit(0)}).catch((e)=>{console.error(e);process.exit(1)})\""
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.75.0",

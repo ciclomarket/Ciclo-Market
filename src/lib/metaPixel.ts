@@ -29,10 +29,40 @@ export function initMetaPixel(pixelId?: string | null): boolean {
     x?.parentNode?.insertBefore(s, x)
   }
 
+  // Build Advanced Matching object (empty if no user variables present)
+  const gm: any = globalThis as any
+  const possible = {
+    em: gm?.userEmail,
+    ph: gm?.userPhone,
+    fn: gm?.firstName,
+    ln: gm?.lastName,
+    ct: gm?.userCity,
+    st: gm?.userState,
+    zp: gm?.userZip,
+    country: gm?.userCountry,
+    db: gm?.userDOB,
+    ge: gm?.userGender,
+    external_id: gm?.userId,
+  }
+  const hasAny = Object.values(possible).some(v => v !== undefined && v !== null && v !== '')
+  const advancedMatching: Record<string, any> = hasAny ? {
+    em: possible.em || '',
+    ph: possible.ph || '',
+    fn: possible.fn || '',
+    ln: possible.ln || '',
+    ct: possible.ct || '',
+    st: possible.st || '',
+    zp: possible.zp || '',
+    country: possible.country || '',
+    db: possible.db || '',
+    ge: possible.ge || '',
+    external_id: possible.external_id || ''
+  } : {}
+
   const tryInit = () => {
     try {
       if (typeof window.fbq === 'function') {
-        window.fbq('init', id)
+        window.fbq('init', id, advancedMatching)
         initialized = true
         pendingInit = false
         return true
