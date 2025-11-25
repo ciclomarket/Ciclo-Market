@@ -211,14 +211,7 @@ export default function Register() {
               Creá tu perfil gratuito, elegí tus disciplinas favoritas y accedé a beneficios exclusivos.
               Validamos vendedores, protegemos pagos y te acompañamos en cada intercambio.
             </p>
-            <div className="mt-2 rounded-2xl border border-white/10 bg-white/10 p-3 text-sm text-white/80">
-              <p className="font-semibold text-white">Tu primera publicación es gratis</p>
-              <ul className="mt-1 list-disc pl-5">
-                <li>Al registrarte recibís un crédito Básico de bienvenida.</li>
-                <li>Creá tu primera publicación y elegí el plan Básico: se aplica automáticamente.</li>
-                <li>Sin pagar nada por esa publicación. Válido 180 días. 1 por usuario.</li>
-              </ul>
-            </div>
+            {/* Removed: anuncio de crédito gratuito de bienvenida */}
             <ul className="space-y-3 text-sm text-white/75">
               <li className="flex items-start gap-3">
                 <span className="mt-1 h-2 w-2 rounded-full bg-mb-primary" />

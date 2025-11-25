@@ -739,46 +739,6 @@ app.get('/api/credits/me', async (req, res) => {
   }
 })
 
-// Grant a one-time welcome Basic credit per user (idempotent)
-app.post('/api/credits/grant-welcome', async (req, res) => {
-  try {
-    const supabase = getServerSupabaseClient()
-    const user = await getAuthUser(req, supabase)
-    if (!user?.id) return res.status(401).json({ ok: false, error: 'unauthorized' })
-
-    // If user already has a welcome credit (any status), do nothing
-    const { data: existing, error: exErr } = await supabase
-      .from('publish_credits')
-      .select('id,plan_code,status,provider,provider_ref')
-      .eq('user_id', user.id)
-      .eq('provider', 'welcome')
-      .limit(1)
-    if (!exErr && Array.isArray(existing) && existing[0]) {
-      return res.json({ ok: true, granted: false })
-    }
-
-    // Insert new Basic credit with 180 days validity
-    const expiresAt = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString()
-    const { data: inserted, error: insErr } = await supabase
-      .from('publish_credits')
-      .insert({
-        user_id: user.id,
-        plan_code: 'basic',
-        status: 'available',
-        provider: 'welcome',
-        provider_ref: 'welcome_basic_v1',
-        expires_at: expiresAt,
-      })
-      .select('id')
-      .maybeSingle()
-    if (insErr || !inserted) return res.status(500).json({ ok: false, error: 'insert_failed' })
-    return res.json({ ok: true, granted: true, creditId: inserted.id })
-  } catch (err) {
-    console.error('[credits/grant-welcome] failed', err)
-    return res.status(500).json({ ok: false, error: 'unexpected_error' })
-  }
-})
-
 app.get('/api/credits/history', async (req, res) => {
   try {
     const userId = String(req.query.userId || '').trim()

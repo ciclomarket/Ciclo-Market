@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Container from '../../components/Container'
 import { Field } from '../../components/FormFields'
 import Button from '../../components/Button'
@@ -14,7 +14,7 @@ import { usePlans } from '../../context/PlanContext'
 import { canonicalPlanCode, normalisePlanText, resolvePlanCode, type PlanCode } from '../../utils/planCodes'
 import { formatNameWithInitial } from '../../utils/user'
 import { normaliseWhatsapp, extractLocalWhatsapp, sanitizeLocalWhatsappInput } from '../../utils/whatsapp'
-import { fetchListing, normalizeListingVigencies } from '../../services/listings'
+import { fetchListing, normalizeListingVigencies, upgradeListingPlan } from '../../services/listings'
 import { validateGift, redeemGift, claimGift } from '../../services/gifts'
 import { fetchUserProfile, type UserProfileRecord } from '../../services/users'
 import { redeemCredit, attachCreditToListing } from '../../services/credits'
@@ -118,6 +118,39 @@ export default function NewListingForm() {
     next.set('legacy', '1')
     navigate(`/dashboard?${next.toString()}`, { replace: true })
   }, [listingId, upgradePlanParam, upgradeStatusParam, navigate])
+
+  // Auto-aplicar upgrade tras volver de MP (success), usando el crédito generado
+  const autoAppliedRef = useRef(false)
+  useEffect(() => {
+    const plan = upgradePlanParam
+    if (!upgradeSuccess || !listingId || !plan) return
+    if (autoAppliedRef.current) return
+    const onceKey = `mb_auto_upgrade_${listingId}_${plan}`
+    if (sessionStorage.getItem(onceKey) === '1') return
+    autoAppliedRef.current = true
+    ;(async () => {
+      try {
+        const result = await upgradeListingPlan({ id: listingId, planCode: plan, useCredit: true })
+        if (result.ok) {
+          try { sessionStorage.setItem(onceKey, '1') } catch { /* noop */ }
+          showToast(`Plan ${upgradePlanLabel} activado en tu publicación.`, { variant: 'success' })
+          return
+        }
+        const code = result.error || ''
+        if (code === 'no_available_credit' || code === 'credit_required' || code === 'credit_conflict') {
+          showToast('Estamos procesando tu pago. Se aplicará el plan automáticamente en minutos.', { variant: 'info' })
+          return
+        }
+        if (code === 'missing_whatsapp') {
+          showToast('Agregá tu WhatsApp en tu perfil y volvé a esta pantalla para completar el upgrade.', { variant: 'error' })
+          return
+        }
+        showToast('No pudimos aplicar el plan. Intentá nuevamente desde tu panel.', { variant: 'error' })
+      } catch {
+        showToast('No pudimos aplicar el plan. Intentá nuevamente desde tu panel.', { variant: 'error' })
+      }
+    })()
+  }, [upgradeSuccess, listingId, upgradePlanParam, upgradePlanLabel, showToast])
 
   /** 1) Plan seleccionado por query (?plan=free|basic|premium|pro)
    * Prioriza coincidencia literal (code/id/name) con el parámetro.
