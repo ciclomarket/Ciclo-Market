@@ -1235,6 +1235,34 @@ app.post('/api/payments/confirm', async (req, res) => {
               .or(`preference_id.eq.${prefId},provider_ref.eq.${prefId}`)
               .select('id')
             updatedCount = Array.isArray(updRows) ? updRows.length : 0
+            console.info('[webhook] credit update by prefId', { updatedCount })
+          } catch {}
+        }
+        if (!prefId && userId && updatedCount === 0) {
+          // Fallback: si no tenemos prefId, actualizar el crédito pending más reciente del usuario/plan
+          try {
+            const svc = supabaseService || getServerSupabaseClient()
+            const since = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString()
+            const { data: pendings } = await svc
+              .from('publish_credits')
+              .select('id,created_at')
+              .eq('provider', 'mercadopago')
+              .eq('user_id', userId)
+              .eq('plan_code', planCode)
+              .eq('status', 'pending')
+              .gte('created_at', since)
+              .order('created_at', { ascending: false })
+              .limit(1)
+            const row = Array.isArray(pendings) && pendings[0] ? pendings[0] : null
+            if (row?.id) {
+              const { data: updRows2 } = await svc
+                .from('publish_credits')
+                .update({ status: creditStatus, provider_ref: String(paymentId), expires_at: expiresAt, ...(upgradeListingId ? { listing_id: upgradeListingId } : {}) })
+                .eq('id', row.id)
+                .select('id')
+              updatedCount = Array.isArray(updRows2) ? updRows2.length : 0
+              console.info('[webhook] credit update by user fallback', { updatedCount, rowId: row.id })
+            }
           } catch {}
         }
         if (updatedCount === 0) {

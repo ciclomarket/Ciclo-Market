@@ -433,7 +433,8 @@ export default function Plans() {
           autoRenew: false,
           amount: typeof plan.price === 'number' ? plan.price : undefined,
           redirectUrls: {
-            success: `${window.location.origin}/publicar?type=${listingType}&payment=success&plan=${planCode}`,
+            // En success volvemos al formulario con el crédito aplicado
+            success: `${window.location.origin}/publicar?type=${listingType}&payment=success&plan=${planCode}&credit=1`,
             failure: `${window.location.origin}/publicar?type=${listingType}&payment=failure&plan=${planCode}`,
             pending: `${window.location.origin}/publicar?type=${listingType}&payment=pending&plan=${planCode}`
           }
