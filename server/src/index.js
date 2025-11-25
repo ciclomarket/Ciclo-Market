@@ -854,6 +854,11 @@ function normalizePlanCode(value) {
   return v === 'premium' ? 'premium' : (v === 'basic' ? 'basic' : null)
 }
 
+// British spelling alias used elsewhere in this file
+function normalisePlanCode(value) {
+  return normalizePlanCode(value)
+}
+
 function isGiftValidRow(row) {
   if (!row) return false
   const uses = Number(row.uses_left || 0)
