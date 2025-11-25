@@ -1313,14 +1313,13 @@ app.post('/api/payments/confirm', async (req, res) => {
         }
         if (updatedCount === 0) {
           const baseUpdate = { user_id: userId, plan_code: planCode, status: creditStatus, provider: 'mercadopago', provider_ref: String(paymentId), preference_id: prefId, expires_at: expiresAt, ...(upgradeListingId ? { listing_id: upgradeListingId } : {}) }
-          try { const svc = supabaseService || getServerSupabaseClient(); await svc.from('publish_credits').upsert(baseUpdate, { onConflict: 'provider_ref,provider' }) } catch {}
-          if (prefId) { try { const svc = supabaseService || getServerSupabaseClient(); await svc.from('publish_credits').upsert(baseUpdate, { onConflict: 'preference_id,provider' }) } catch {} }
+          try { await svc.from('publish_credits').upsert(baseUpdate, { onConflict: 'provider_ref,provider' }) } catch {}
+          if (prefId) { try { await svc.from('publish_credits').upsert(baseUpdate, { onConflict: 'preference_id,provider' }) } catch {} }
         }
 
         // Limpieza: si el pago quedó aprobado, cancelar otros créditos pendientes del mismo usuario/plan
         if (creditStatus === 'available' && userId && planCode) {
           try {
-            const svc = supabaseService || getServerSupabaseClient()
             const { error: cancelErr } = await svc
               .from('publish_credits')
               .update({ status: 'cancelled' })
@@ -1378,36 +1377,55 @@ async function applyPaymentUpdateByPaymentId(paymentId) {
           }
         } catch {}
       }
-      if (!userId || !planCode) {
+      const svc = supabaseService || getServerSupabaseClient()
+      let pendingCredit = null
+      try {
+        let pendingQuery = svc
+          .from('publish_credits')
+          .select('id,user_id,plan_code,status,created_at')
+          .eq('provider', 'mercadopago')
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false })
+          .limit(1)
+        if (prefId) {
+          pendingQuery = pendingQuery.or(`preference_id.eq.${prefId},provider_ref.eq.${prefId}`)
+        } else {
+          pendingQuery = pendingQuery.or(`provider_ref.eq.${paymentId}${userId ? `,user_id.eq.${userId}` : ''}`)
+        }
+        const { data: pendingRows, error: pendingErr } = await pendingQuery
+        if (pendingErr) console.warn('[webhook] pending lookup error', pendingErr)
+        pendingCredit = Array.isArray(pendingRows) ? pendingRows[0] : null
+        if (pendingCredit) {
+          if (!userId && pendingCredit.user_id) {
+            userId = String(pendingCredit.user_id)
+            console.info('[webhook] fallback userId', { userId })
+          }
+          if (!planCode && pendingCredit.plan_code) {
+            planCode = normalisePlanCode(pendingCredit.plan_code)
+            console.info('[webhook] fallback planCode', { planCode })
+          }
+        }
+      } catch (err) {
+        console.warn('[webhook] fallback metadata lookup failed', err?.message || err)
+      }
+      if (!pendingCredit && userId) {
         try {
-          const svc = supabaseService || getServerSupabaseClient()
-          let pendingQuery = svc
+          const { data: fallbackRows, error: fallbackErr } = await svc
             .from('publish_credits')
             .select('id,user_id,plan_code,status,created_at')
             .eq('provider', 'mercadopago')
             .eq('status', 'pending')
+            .eq('user_id', userId)
             .order('created_at', { ascending: false })
             .limit(1)
-          if (prefId) {
-            pendingQuery = pendingQuery.or(`preference_id.eq.${prefId},provider_ref.eq.${prefId}`)
-          } else if (userId) {
-            pendingQuery = pendingQuery.eq('user_id', userId)
-          }
-          const { data: pendingRows, error: pendingErr } = await pendingQuery
-          if (pendingErr) console.warn('[webhook] pending lookup error', pendingErr)
-          const pending = Array.isArray(pendingRows) ? pendingRows[0] : null
-          if (pending) {
-            if (!userId && pending.user_id) {
-              userId = String(pending.user_id)
-              console.info('[webhook] fallback userId', { userId })
-            }
-            if (!planCode && pending.plan_code) {
-              planCode = normalisePlanCode(pending.plan_code)
-              console.info('[webhook] fallback planCode', { planCode })
-            }
-          }
+          if (fallbackErr) console.warn('[webhook] fallback pending lookup error', fallbackErr)
+          pendingCredit = Array.isArray(fallbackRows) ? fallbackRows[0] : null
         } catch (err) {
-          console.warn('[webhook] fallback metadata lookup failed', err?.message || err)
+          console.warn('[webhook] fallback pending lookup failed', err?.message || err)
+        }
+        if (pendingCredit && !planCode && pendingCredit.plan_code) {
+          planCode = normalisePlanCode(pendingCredit.plan_code)
+          console.info('[webhook] fallback planCode', { planCode })
         }
       }
 
@@ -1417,7 +1435,6 @@ async function applyPaymentUpdateByPaymentId(paymentId) {
         let updatedCount = 0
         if (prefId) {
           try {
-            const svc = supabaseService || getServerSupabaseClient()
             const { data: updRows } = await svc
               .from('publish_credits')
               .update({ status: creditStatus, provider_ref: String(paymentId), preference_id: prefId, expires_at: expiresAt, ...(upgradeListingId ? { listing_id: upgradeListingId } : {}) })
@@ -1429,15 +1446,37 @@ async function applyPaymentUpdateByPaymentId(paymentId) {
           } catch {}
         }
         if (updatedCount === 0) {
+          try {
+            const { data: updRows } = await svc
+              .from('publish_credits')
+              .update({ status: creditStatus, provider_ref: String(paymentId), preference_id: prefId || null, expires_at: expiresAt, ...(upgradeListingId ? { listing_id: upgradeListingId } : {}) })
+              .eq('provider', 'mercadopago')
+              .eq('provider_ref', String(paymentId))
+              .select('id')
+            updatedCount = Array.isArray(updRows) ? updRows.length : 0
+            if (updatedCount) console.info('[webhook] credit update by paymentId', { updatedCount })
+          } catch {}
+        }
+        if (updatedCount === 0 && pendingCredit?.id) {
+          try {
+            const { data: updRows } = await svc
+              .from('publish_credits')
+              .update({ status: creditStatus, provider_ref: String(paymentId), preference_id: prefId || null, expires_at: expiresAt, ...(upgradeListingId ? { listing_id: upgradeListingId } : {}) })
+              .eq('id', pendingCredit.id)
+              .select('id')
+            updatedCount = Array.isArray(updRows) ? updRows.length : 0
+            if (updatedCount) console.info('[webhook] credit update by pending id', { updatedCount, id: pendingCredit.id })
+          } catch {}
+        }
+        if (updatedCount === 0) {
           const baseUpdate = { user_id: userId, plan_code: planCode, status: creditStatus, provider: 'mercadopago', provider_ref: String(paymentId), preference_id: prefId, expires_at: expiresAt, ...(upgradeListingId ? { listing_id: upgradeListingId } : {}) }
-          try { const svc = supabaseService || getServerSupabaseClient(); await svc.from('publish_credits').upsert(baseUpdate, { onConflict: 'provider_ref,provider' }) } catch {}
-          if (prefId) { try { const svc = supabaseService || getServerSupabaseClient(); await svc.from('publish_credits').upsert(baseUpdate, { onConflict: 'preference_id,provider' }) } catch {} }
+          try { await svc.from('publish_credits').upsert(baseUpdate, { onConflict: 'provider_ref,provider' }) } catch {}
+          if (prefId) { try { await svc.from('publish_credits').upsert(baseUpdate, { onConflict: 'preference_id,provider' }) } catch {} }
           console.info('[webhook] credit upsert executed', { providerRef: paymentId, prefId })
         }
 
         if (creditStatus === 'available' && userId && planCode) {
           try {
-            const svc = supabaseService || getServerSupabaseClient()
             const { error: cancelErr } = await svc
               .from('publish_credits')
               .update({ status: 'cancelled' })
