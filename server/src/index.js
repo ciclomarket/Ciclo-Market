@@ -89,9 +89,41 @@ async function recordPayment({ userId, listingId, amount, currency = 'ARS', stat
       provider,
       provider_ref: providerRef,
     }
-    await svc.from('payments').insert(payload)
+    if (providerRef) {
+      const { data: existing } = await svc
+        .from('payments')
+        .select('id,applied')
+        .eq('provider', provider)
+        .eq('provider_ref', providerRef)
+        .maybeSingle()
+      if (existing?.id) {
+        await svc
+          .from('payments')
+          .update({ amount: payload.amount, currency: payload.currency, status: payload.status, user_id: payload.user_id, listing_id: payload.listing_id })
+          .eq('id', existing.id)
+      } else {
+        await svc.from('payments').insert({ ...payload, applied: false })
+      }
+    } else {
+      await svc.from('payments').insert({ ...payload, applied: false })
+    }
   } catch (err) {
     console.warn('[payments] recordPayment failed (non-fatal)', err?.message || err)
+  }
+}
+
+async function markPaymentApplied(providerRef) {
+  try {
+    if (!providerRef) return
+    const svc = supabaseService || getServerSupabaseClient()
+    const nowIso = new Date().toISOString()
+    await svc
+      .from('payments')
+      .update({ applied: true, applied_at: nowIso, status: 'succeeded' })
+      .eq('provider', 'mercadopago')
+      .eq('provider_ref', String(providerRef))
+  } catch (err) {
+    console.warn('[payments] markApplied failed', err?.message || err)
   }
 }
 
@@ -1224,6 +1256,8 @@ app.post('/api/payments/confirm', async (req, res) => {
               .neq('provider_ref', String(paymentId))
             if (cancelErr) console.warn('[payments/confirm] cleanup pending credits failed', cancelErr)
           } catch {}
+          // Marcar pago como aplicado
+          try { await markPaymentApplied(paymentId) } catch {}
         }
       }
     } catch {}
@@ -1306,6 +1340,8 @@ async function applyPaymentUpdateByPaymentId(paymentId) {
           } catch {}
         }
       }
+      // Aunque no sea plan de crédito, si el pago está aprobado, marcamos aplicado
+      if (status === 'succeeded') { try { await markPaymentApplied(paymentId) } catch {} }
     } catch {}
     return { ok: true, status }
   } catch (err) {
