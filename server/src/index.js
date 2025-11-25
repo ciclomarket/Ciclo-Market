@@ -1186,7 +1186,7 @@ app.post('/api/payments/confirm', async (req, res) => {
               .from('publish_credits')
               .update({ status: creditStatus, provider_ref: String(paymentId), preference_id: prefId, expires_at: expiresAt, ...(upgradeListingId ? { listing_id: upgradeListingId } : {}) })
               .eq('provider', 'mercadopago')
-              .eq('preference_id', prefId)
+              .or(`preference_id.eq.${prefId},provider_ref.eq.${prefId}`)
               .select('id')
             updatedCount = Array.isArray(updRows) ? updRows.length : 0
           } catch {}
@@ -1256,30 +1256,32 @@ async function applyPaymentUpdateByPaymentId(paymentId) {
           }
         } catch {}
       }
-      if (supabaseService && (planCode === 'basic' || planCode === 'premium')) {
+      if (planCode === 'basic' || planCode === 'premium') {
         const creditStatus = status === 'succeeded' ? 'available' : (status === 'pending' ? 'pending' : 'cancelled')
         const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
         let updatedCount = 0
         if (prefId) {
           try {
-            const { data: updRows } = await supabaseService
+            const svc = supabaseService || getServerSupabaseClient()
+            const { data: updRows } = await svc
               .from('publish_credits')
               .update({ status: creditStatus, provider_ref: String(paymentId), preference_id: prefId, expires_at: expiresAt, ...(upgradeListingId ? { listing_id: upgradeListingId } : {}) })
               .eq('provider', 'mercadopago')
-              .eq('preference_id', prefId)
+              .or(`preference_id.eq.${prefId},provider_ref.eq.${prefId}`)
               .select('id')
             updatedCount = Array.isArray(updRows) ? updRows.length : 0
           } catch {}
         }
         if (updatedCount === 0) {
           const baseUpdate = { user_id: userId, plan_code: planCode, status: creditStatus, provider: 'mercadopago', provider_ref: String(paymentId), preference_id: prefId, expires_at: expiresAt, ...(upgradeListingId ? { listing_id: upgradeListingId } : {}) }
-          try { await supabaseService.from('publish_credits').upsert(baseUpdate, { onConflict: 'provider_ref,provider' }) } catch {}
-          if (prefId) { try { await supabaseService.from('publish_credits').upsert(baseUpdate, { onConflict: 'preference_id,provider' }) } catch {} }
+          try { const svc = supabaseService || getServerSupabaseClient(); await svc.from('publish_credits').upsert(baseUpdate, { onConflict: 'provider_ref,provider' }) } catch {}
+          if (prefId) { try { const svc = supabaseService || getServerSupabaseClient(); await svc.from('publish_credits').upsert(baseUpdate, { onConflict: 'preference_id,provider' }) } catch {} }
         }
 
         if (creditStatus === 'available' && userId && planCode) {
           try {
-            const { error: cancelErr } = await supabaseService
+            const svc = supabaseService || getServerSupabaseClient()
+            const { error: cancelErr } = await svc
               .from('publish_credits')
               .update({ status: 'cancelled' })
               .eq('user_id', userId)
