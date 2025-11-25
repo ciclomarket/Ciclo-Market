@@ -362,7 +362,7 @@ app.post('/api/checkout', async (req, res) => {
         const svc = supabaseService || getServerSupabaseClient()
         const { error } = await svc
           .from('publish_credits')
-          .insert({ user_id: userId, plan_code: planCode, status: 'pending', provider: 'mercadopago', preference_id: mp.id || null, expires_at: expiresAt, ...(metadata.listingId ? { listing_id: metadata.listingId } : {}) })
+          .insert({ user_id: userId, plan_code: planCode, status: 'pending', provider: 'mercadopago', preference_id: mp.id || null, provider_ref: mp.id || null, expires_at: expiresAt, ...(metadata.listingId ? { listing_id: metadata.listingId } : {}) })
         if (error) console.warn('[checkout] insert pending credit failed', error)
         else console.info('[checkout] pending credit inserted', { userId, planCode, preferenceId: mp?.id || null })
       } catch (e) {
@@ -1199,9 +1199,11 @@ app.post('/api/payments/confirm', async (req, res) => {
     await recordPayment({ userId: null, listingId: null, amount, currency, status, providerRef: String(paymentId) })
     // Best-effort: también actualizar créditos si corresponde
     try {
+      const svc = supabaseService || getServerSupabaseClient()
       const meta = (mpPayment && typeof mpPayment.metadata === 'object') ? mpPayment.metadata : {}
-      const userId = typeof meta?.userId === 'string' && meta.userId ? meta.userId : null
-      const planCode = normalisePlanCode(meta?.planCode || meta?.planId)
+      console.info('[webhook] metadata', meta)
+      let userId = typeof meta?.userId === 'string' && meta.userId ? meta.userId : null
+      let planCode = normalisePlanCode(meta?.planCode || meta?.planId)
       const listingIdRaw = meta?.listingId ?? meta?.listing_id ?? null
       const upgradeListingId = typeof listingIdRaw === 'string' ? listingIdRaw.trim() || null : (listingIdRaw ? String(listingIdRaw) : null)
       const merchantOrderId = mpPayment?.order?.id ? String(mpPayment.order.id) : null
@@ -1220,6 +1222,50 @@ app.post('/api/payments/confirm', async (req, res) => {
             if (mo && typeof mo.preference_id === 'string' && mo.preference_id) prefId = mo.preference_id
           }
         } catch {}
+      }
+      if (!userId || !planCode) {
+        try {
+          let pending = null
+          let pendingQuery = svc
+            .from('publish_credits')
+            .select('id,user_id,plan_code,status,created_at')
+            .eq('provider', 'mercadopago')
+            .eq('status', 'pending')
+            .order('created_at', { ascending: false })
+            .limit(1)
+          if (prefId) {
+            pendingQuery = pendingQuery.or(`preference_id.eq.${prefId},provider_ref.eq.${prefId}`)
+          } else {
+            pendingQuery = pendingQuery.eq('provider_ref', String(paymentId))
+          }
+          const { data: pendingRows, error: pendingErr } = await pendingQuery
+          if (pendingErr) console.warn('[webhook] pending lookup error', pendingErr)
+          if (Array.isArray(pendingRows) && pendingRows[0]) pending = pendingRows[0]
+          if (!pending && userId) {
+            const { data: fallbackRows, error: fallbackErr } = await svc
+              .from('publish_credits')
+              .select('id,user_id,plan_code,status,created_at')
+              .eq('provider', 'mercadopago')
+              .eq('status', 'pending')
+              .eq('user_id', userId)
+              .order('created_at', { ascending: false })
+              .limit(1)
+            if (fallbackErr) console.warn('[webhook] fallback pending lookup error', fallbackErr)
+            if (Array.isArray(fallbackRows) && fallbackRows[0]) pending = fallbackRows[0]
+          }
+          if (pending) {
+            if (!userId && pending.user_id) {
+              userId = String(pending.user_id)
+              console.info('[webhook] fallback userId', { userId })
+            }
+            if (!planCode && pending.plan_code) {
+              planCode = normalisePlanCode(pending.plan_code)
+              console.info('[webhook] fallback planCode', { planCode })
+            }
+          }
+        } catch (err) {
+          console.warn('[webhook] fallback metadata lookup failed', err?.message || err)
+        }
       }
       if (planCode === 'basic' || planCode === 'premium') {
         const creditStatus = status === 'succeeded' ? 'available' : (status === 'pending' ? 'pending' : 'cancelled')
@@ -1346,12 +1392,14 @@ async function applyPaymentUpdateByPaymentId(paymentId) {
               .or(`preference_id.eq.${prefId},provider_ref.eq.${prefId}`)
               .select('id')
             updatedCount = Array.isArray(updRows) ? updRows.length : 0
+            console.info('[webhook] credit update by prefId', { updatedCount })
           } catch {}
         }
         if (updatedCount === 0) {
           const baseUpdate = { user_id: userId, plan_code: planCode, status: creditStatus, provider: 'mercadopago', provider_ref: String(paymentId), preference_id: prefId, expires_at: expiresAt, ...(upgradeListingId ? { listing_id: upgradeListingId } : {}) }
           try { const svc = supabaseService || getServerSupabaseClient(); await svc.from('publish_credits').upsert(baseUpdate, { onConflict: 'provider_ref,provider' }) } catch {}
           if (prefId) { try { const svc = supabaseService || getServerSupabaseClient(); await svc.from('publish_credits').upsert(baseUpdate, { onConflict: 'preference_id,provider' }) } catch {} }
+          console.info('[webhook] credit upsert executed', { providerRef: paymentId, prefId })
         }
 
         if (creditStatus === 'available' && userId && planCode) {
@@ -1367,6 +1415,9 @@ async function applyPaymentUpdateByPaymentId(paymentId) {
             if (cancelErr) console.warn('[webhook] cleanup pending credits failed', cancelErr)
           } catch {}
         }
+      }
+      else {
+        console.warn('[webhook] skipping credit update (planCode missing or not eligible)', { planCode, userId })
       }
       // Aunque no sea plan de crédito, si el pago está aprobado, marcamos aplicado
       if (status === 'succeeded') { try { await markPaymentApplied(paymentId) } catch {} }
