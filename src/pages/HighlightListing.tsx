@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import Container from '../components/Container'
 import Button from '../components/Button'
 
@@ -8,7 +8,9 @@ const BASE = import.meta.env.VITE_API_BASE_URL || ''
 export default function HighlightListing() {
   const { slug } = useParams()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [loading, setLoading] = useState<string | null>(null)
+  const listingId = searchParams.get('id')?.trim() || null
 
   const options = useMemo(() => ([
     { id: 'highlight-7', days: 7, price: 3000, title: 'Destacar 7 días', description: 'Más visibilidad por una semana.' },
@@ -42,7 +44,11 @@ export default function HighlightListing() {
           planCurrency: 'ARS',
           autoRenew: false,
           amount: opt.price,
-          metadata: { listingSlug: slug, highlightDays: opt.days },
+          metadata: {
+            listingSlug: slug || null,
+            listingId,
+            highlightDays: opt.days
+          },
           redirectUrls: {
             success: `${window.location.origin}/listing/${slug}?payment=success&highlightDays=${opt.days}`,
             failure: `${window.location.origin}/listing/${slug}?payment=failure`,

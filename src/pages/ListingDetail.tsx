@@ -1284,7 +1284,7 @@ export default function ListingDetail() {
                   {isOwner && (
                     <div className="pt-2 border-t border-[#14212e]/10">
                       <Link
-                        to={`/listing/${listingSlugOrId}/destacar`}
+                        to={`/listing/${listingSlugOrId}/destacar?id=${listing.id}`}
                         className="inline-flex items-center gap-2 rounded-full bg-[#14212e] px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-[#1b2f3f]"
                       >
                         Destacar publicación
