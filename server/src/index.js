@@ -44,10 +44,22 @@ const { buildStoreAnalyticsHTML } = (() => {
 const path = require('path')
 // const https = require('https') // removed: used only for Google rating proxy
 
-// Optional service-scoped Supabase client placeholder (used in legacy code paths).
-// If you need a long-lived service client, wire it here; otherwise handlers will
-// fallback to getServerSupabaseClient() on each request.
-const supabaseService = null
+// Optional service-scoped Supabase client used for server-side writes (payments, credits)
+// Falls back to per-request clients if not configured.
+const supabaseService = (() => {
+  try {
+    const url = process.env.SUPABASE_SERVICE_URL || process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+    if (!url || !key) {
+      console.warn('[server] SUPABASE_SERVICE_ROLE_KEY no configurada; operaciones de pago/creditos usarán fallback')
+      return null
+    }
+    return createSupabaseServerClient(url, key)
+  } catch (err) {
+    console.warn('[server] supabaseService init failed', err?.message || err)
+    return null
+  }
+})()
 
 // Mercado Pago client (used for checkout + payment lookups)
 const mpClient = (() => {
@@ -269,6 +281,8 @@ app.post('/api/checkout', async (req, res) => {
     }
 
     const pref = new Preference(mpClient)
+    const publicBase = (process.env.PUBLIC_BASE_URL || '').toString().replace(/\/$/, '')
+    const notificationUrl = publicBase ? `${publicBase}/api/mp/webhook` : undefined
     const mp = await pref.create({
       body: {
         items: [
@@ -282,6 +296,7 @@ app.post('/api/checkout', async (req, res) => {
         payer: { email: authUser?.email || undefined },
         metadata,
         back_urls: backUrls,
+        ...(notificationUrl ? { notification_url: notificationUrl } : {}),
         auto_return: 'approved',
         statement_descriptor: 'CICLO MARKET',
       },
@@ -289,6 +304,14 @@ app.post('/api/checkout', async (req, res) => {
 
     const initPoint = mp?.init_point || mp?.sandbox_init_point || null
     if (!initPoint) return res.status(500).json({ ok: false, error: 'mp_init_point_missing' })
+
+    // Log + persist checkout intent for observability
+    try {
+      console.info('[checkout:init]', { userId, planCode, amount, currency, preferenceId: mp?.id || null, listingId: metadata.listingId || null })
+    } catch {}
+    try {
+      await recordPayment({ userId, listingId: metadata.listingId || null, amount, currency, status: 'pending', provider: 'mercadopago', providerRef: mp?.id || null })
+    } catch {}
 
     // Optionally create a pending credit row so UX can reflect it (best-effort)
     if (supabaseService && (planCode === 'basic' || planCode === 'premium')) {
@@ -1231,6 +1254,100 @@ app.post('/api/payments/confirm', async (req, res) => {
   } catch (err) {
     console.error('[payments/confirm] failed', err)
     return res.status(500).json({ ok: false, error: 'unexpected_error' })
+  }
+})
+
+/* ----------------------------- Mercado Pago webhook ---------------------- */
+async function applyPaymentUpdateByPaymentId(paymentId) {
+  try {
+    if (!mpClient) return { ok: false, error: 'payments_unavailable' }
+    const { Payment } = require('mercadopago')
+    const paymentClient = new Payment(mpClient)
+    const mpPayment = await paymentClient.get({ id: String(paymentId) })
+    const statusRaw = (mpPayment && mpPayment.status) ? String(mpPayment.status) : 'pending'
+    const status = statusRaw === 'approved' ? 'succeeded' : statusRaw
+    const amount = typeof mpPayment?.transaction_amount === 'number' ? mpPayment.transaction_amount : null
+    const currency = mpPayment?.currency_id || 'ARS'
+    await recordPayment({ userId: null, listingId: null, amount, currency, status, providerRef: String(paymentId) })
+
+    try {
+      const meta = (mpPayment && typeof mpPayment.metadata === 'object') ? mpPayment.metadata : {}
+      const userId = typeof meta?.userId === 'string' && meta.userId ? meta.userId : null
+      const planCode = normalisePlanCode(meta?.planCode || meta?.planId)
+      const listingIdRaw = meta?.listingId ?? meta?.listing_id ?? null
+      const upgradeListingId = typeof listingIdRaw === 'string' ? listingIdRaw.trim() || null : (listingIdRaw ? String(listingIdRaw) : null)
+      const merchantOrderId = mpPayment?.order?.id ? String(mpPayment.order.id) : null
+      let prefId = null
+      if (merchantOrderId) {
+        try {
+          const moAc = new AbortController()
+          const moTimer = setTimeout(() => moAc.abort(), 5000)
+          const moRes = await fetch(`https://api.mercadolibre.com/merchant_orders/${merchantOrderId}`, {
+            headers: { Authorization: `Bearer ${String(process.env.MERCADOPAGO_ACCESS_TOKEN || '')}` },
+            signal: moAc.signal,
+          })
+          clearTimeout(moTimer)
+          if (moRes.ok) {
+            const mo = await moRes.json()
+            if (mo && typeof mo.preference_id === 'string' && mo.preference_id) prefId = mo.preference_id
+          }
+        } catch {}
+      }
+      if (supabaseService && (planCode === 'basic' || planCode === 'premium')) {
+        const creditStatus = status === 'succeeded' ? 'available' : (status === 'pending' ? 'pending' : 'cancelled')
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+        let updatedCount = 0
+        if (prefId) {
+          try {
+            const { data: updRows } = await supabaseService
+              .from('publish_credits')
+              .update({ status: creditStatus, provider_ref: String(paymentId), preference_id: prefId, expires_at: expiresAt, ...(upgradeListingId ? { listing_id: upgradeListingId } : {}) })
+              .eq('provider', 'mercadopago')
+              .eq('preference_id', prefId)
+              .select('id')
+            updatedCount = Array.isArray(updRows) ? updRows.length : 0
+          } catch {}
+        }
+        if (updatedCount === 0) {
+          const baseUpdate = { user_id: userId, plan_code: planCode, status: creditStatus, provider: 'mercadopago', provider_ref: String(paymentId), preference_id: prefId, expires_at: expiresAt, ...(upgradeListingId ? { listing_id: upgradeListingId } : {}) }
+          try { await supabaseService.from('publish_credits').upsert(baseUpdate, { onConflict: 'provider_ref,provider' }) } catch {}
+          if (prefId) { try { await supabaseService.from('publish_credits').upsert(baseUpdate, { onConflict: 'preference_id,provider' }) } catch {} }
+        }
+
+        if (creditStatus === 'available' && userId && planCode) {
+          try {
+            const { error: cancelErr } = await supabaseService
+              .from('publish_credits')
+              .update({ status: 'cancelled' })
+              .eq('user_id', userId)
+              .eq('plan_code', planCode)
+              .eq('status', 'pending')
+              .neq('provider_ref', String(paymentId))
+            if (cancelErr) console.warn('[webhook] cleanup pending credits failed', cancelErr)
+          } catch {}
+        }
+      }
+    } catch {}
+    return { ok: true, status }
+  } catch (err) {
+    console.error('[webhook] apply payment update failed', err)
+    return { ok: false, error: 'unexpected_error' }
+  }
+}
+
+// MP sends either GET with query ?id=...&topic=payment or POST with JSON
+app.all('/api/mp/webhook', async (req, res) => {
+  try {
+    const queryId = req.query?.id || req.query?.['data.id']
+    const bodyId = req.body?.data?.id || req.body?.id
+    const paymentId = String(queryId || bodyId || '').trim()
+    if (!paymentId) return res.status(400).json({ ok: false })
+    const result = await applyPaymentUpdateByPaymentId(paymentId)
+    if (!result.ok) return res.status(500).json(result)
+    return res.json({ ok: true })
+  } catch (err) {
+    console.error('[webhook] failed', err)
+    return res.status(500).json({ ok: false })
   }
 })
 
