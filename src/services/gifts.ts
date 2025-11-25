@@ -1,4 +1,5 @@
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').trim()
+import { getSupabaseClient, supabaseEnabled } from './supabase'
 
 export type GiftPlan = 'basic' | 'premium'
 
@@ -12,15 +13,12 @@ export async function validateGift(code: string): Promise<{ ok: boolean; plan?: 
 export async function redeemGift(code: string, sellerId: string): Promise<{ ok: boolean }> {
   const endpoint = API_BASE ? `${API_BASE}/api/gifts/redeem` : '/api/gifts/redeem'
   let headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  try {
-    const { getSupabaseClient, supabaseEnabled } = await import('./supabase')
-    if (supabaseEnabled) {
-      const client = getSupabaseClient()
-      const { data } = await client.auth.getSession()
-      const token = data.session?.access_token
-      if (token) headers = { ...headers, Authorization: `Bearer ${token}` }
-    }
-  } catch { /* noop */ }
+  if (supabaseEnabled) {
+    const client = getSupabaseClient()
+    const { data } = await client.auth.getSession()
+    const token = data.session?.access_token
+    if (token) headers = { ...headers, Authorization: `Bearer ${token}` }
+  }
   const res = await fetch(endpoint, {
     method: 'POST',
     headers,
@@ -33,15 +31,12 @@ export async function redeemGift(code: string, sellerId: string): Promise<{ ok: 
 export async function createGift(plan: GiftPlan, uses: number = 1, expiresAt?: string): Promise<{ ok: boolean; code?: string }> {
   const endpoint = API_BASE ? `${API_BASE}/api/gifts/create` : '/api/gifts/create'
   let headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  try {
-    const { getSupabaseClient, supabaseEnabled } = await import('./supabase')
-    if (supabaseEnabled) {
-      const client = getSupabaseClient()
-      const { data } = await client.auth.getSession()
-      const token = data.session?.access_token
-      if (token) headers = { ...headers, Authorization: `Bearer ${token}` }
-    }
-  } catch { /* noop */ }
+  if (supabaseEnabled) {
+    const client = getSupabaseClient()
+    const { data } = await client.auth.getSession()
+    const token = data.session?.access_token
+    if (token) headers = { ...headers, Authorization: `Bearer ${token}` }
+  }
   const res = await fetch(endpoint, {
     method: 'POST',
     headers,
@@ -56,15 +51,12 @@ export async function claimGift(code: string, userId: string): Promise<{ ok: boo
   const endpoint = API_BASE ? `${API_BASE}/api/gifts/claim` : '/api/gifts/claim'
   try {
     let headers: Record<string, string> = { 'Content-Type': 'application/json' }
-    try {
-      const { getSupabaseClient, supabaseEnabled } = await import('./supabase')
-      if (supabaseEnabled) {
-        const client = getSupabaseClient()
-        const { data } = await client.auth.getSession()
-        const token = data.session?.access_token
-        if (token) headers = { ...headers, Authorization: `Bearer ${token}` }
-      }
-    } catch { /* noop */ }
+    if (supabaseEnabled) {
+      const client = getSupabaseClient()
+      const { data } = await client.auth.getSession()
+      const token = data.session?.access_token
+      if (token) headers = { ...headers, Authorization: `Bearer ${token}` }
+    }
     const res = await fetch(endpoint, {
       method: 'POST',
       headers,

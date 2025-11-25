@@ -1758,9 +1758,19 @@ function ListingsView({
       })
     } catch { /* noop */ }
     try {
+      let headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      try {
+        const { getSupabaseClient, supabaseEnabled } = await import('../services/supabase')
+        if (supabaseEnabled) {
+          const client = getSupabaseClient()
+          const { data } = await client.auth.getSession()
+          const token = data.session?.access_token
+          if (token) headers = { ...headers, Authorization: `Bearer ${token}` }
+        }
+      } catch { /* noop */ }
       const response = await fetch(`${API_BASE}/api/checkout`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           planId,
           planCode: targetPlan,

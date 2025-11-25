@@ -302,8 +302,9 @@ app.post('/api/checkout', async (req, res) => {
 
     return res.json({ ok: true, url: initPoint, preference_id: mp?.id || null })
   } catch (err) {
+    const msg = (err && (err.message || err.toString())) || 'unknown_error'
     console.error('[checkout] failed', err)
-    return res.status(500).json({ ok: false, error: 'unexpected_error' })
+    return res.status(500).json({ ok: false, error: 'checkout_failed', message: msg })
   }
 })
 

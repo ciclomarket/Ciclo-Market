@@ -22,9 +22,19 @@ export default function HighlightListing() {
     }
     try {
       setLoading(opt.id)
+      let headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      try {
+        const { getSupabaseClient, supabaseEnabled } = await import('../services/supabase')
+        if (supabaseEnabled) {
+          const client = getSupabaseClient()
+          const { data } = await client.auth.getSession()
+          const token = data.session?.access_token
+          if (token) headers = { ...headers, Authorization: `Bearer ${token}` }
+        }
+      } catch { /* noop */ }
       const res = await fetch(`${BASE}/api/checkout`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           planId: opt.id,
           planCode: opt.id,
@@ -40,7 +50,7 @@ export default function HighlightListing() {
           }
         })
       })
-      const data = await res.json()
+      const data = await res.json().catch(() => ({}))
       const url = data?.init_point ?? data?.url
       if (!res.ok || !url) throw new Error('No pudimos iniciar el pago')
       window.location.href = url

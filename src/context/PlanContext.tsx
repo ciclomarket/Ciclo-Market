@@ -48,9 +48,19 @@ export function PlanProvider({ children }: { children: React.ReactNode }) {
   const initiateCheckout = useCallback<PlanContextValue['initiateCheckout']>(async (planId, options = {}) => {
     try {
       if (!API_BASE) throw new Error('VITE_API_BASE_URL no está definido')
+      let headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      try {
+        const { getSupabaseClient, supabaseEnabled } = await import('../services/supabase')
+        if (supabaseEnabled) {
+          const client = getSupabaseClient()
+          const { data } = await client.auth.getSession()
+          const token = data.session?.access_token
+          if (token) headers = { ...headers, Authorization: `Bearer ${token}` }
+        }
+      } catch { /* noop */ }
       const res = await fetch(`${API_BASE}/api/checkout`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         credentials: 'include',
         body: JSON.stringify({ planId, autoRenew: options.autoRenew ?? true })
       })

@@ -409,9 +409,20 @@ export default function Plans() {
           currency: plan.currency || 'ARS'
         })
       } catch { /* noop */ }
+      // Attach Supabase session token for backend auth (Authorization: Bearer)
+      let authHeaders: Record<string, string> = { 'Content-Type': 'application/json' }
+      try {
+        const { getSupabaseClient, supabaseEnabled } = await import('../../services/supabase')
+        if (supabaseEnabled) {
+          const client = getSupabaseClient()
+          const { data } = await client.auth.getSession()
+          const token = data.session?.access_token
+          if (token) authHeaders = { ...authHeaders, Authorization: `Bearer ${token}` }
+        }
+      } catch { /* noop */ }
       const response = await fetch(`${BASE}/api/checkout`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders,
         signal: controller?.signal,
         body: JSON.stringify({
           planId: plan.id ?? planCode,
@@ -428,7 +439,7 @@ export default function Plans() {
           }
         })
       })
-      const data = await response.json()
+      const data = await response.json().catch(() => ({}))
       const redirectUrl = data?.init_point ?? data?.url
       if (!response.ok || !redirectUrl) {
         console.error('[plans] init checkout error', data)

@@ -1,4 +1,5 @@
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+import { getSupabaseClient, supabaseEnabled } from './supabase'
 
 export type Credit = {
   id: string
@@ -75,15 +76,12 @@ export async function grantWelcomeCredit(): Promise<boolean> {
   try {
     const endpoint = API_BASE ? `${API_BASE}/api/credits/grant-welcome` : '/api/credits/grant-welcome'
     let headers: Record<string, string> = { 'Content-Type': 'application/json' }
-    try {
-      const { getSupabaseClient, supabaseEnabled } = await import('./supabase')
-      if (supabaseEnabled) {
-        const client = getSupabaseClient()
-        const { data } = await client.auth.getSession()
-        const token = data.session?.access_token
-        if (token) headers = { ...headers, Authorization: `Bearer ${token}` }
-      }
-    } catch { /* noop */ }
+    if (supabaseEnabled) {
+      const client = getSupabaseClient()
+      const { data } = await client.auth.getSession()
+      const token = data.session?.access_token
+      if (token) headers = { ...headers, Authorization: `Bearer ${token}` }
+    }
     const res = await fetch(endpoint, { method: 'POST', headers })
     const data = await res.json().catch(() => null)
     return Boolean(res.ok && data && data.ok)

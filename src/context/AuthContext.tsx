@@ -81,13 +81,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(sessionUser)
       if (sessionUser) {
         await syncProfileFromAuthUser(sessionUser)
-        // Best-effort: grant welcome credit on first load if logged in
-        try {
-          const ok = await grantWelcomeCredit()
+        // Fire-and-forget: no bloquear carga de la app
+        void grantWelcomeCredit().then((ok) => {
           if (ok && typeof window !== 'undefined') {
             try { window.dispatchEvent(new CustomEvent('mb_credits_updated')) } catch { /* noop */ }
           }
-        } catch { /* noop */ }
+        }).catch(() => {})
       }
       await loadRole(sessionUser?.id ?? null)
       setLoading(false)
@@ -100,13 +99,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false)
       void loadRole(newUser?.id ?? null)
       void syncProfileFromAuthUser(newUser)
-      // Best-effort: grant a welcome Basic credit once per user (idempotent)
-      try {
-        const ok = await grantWelcomeCredit()
+      // Fire-and-forget: grant credit sin bloquear UI
+      void grantWelcomeCredit().then((ok) => {
         if (ok && typeof window !== 'undefined') {
           try { window.dispatchEvent(new CustomEvent('mb_credits_updated')) } catch { /* noop */ }
         }
-      } catch { /* noop */ }
+      }).catch(() => {})
       // (Promo redirections removidas)
     })
     return () => {
