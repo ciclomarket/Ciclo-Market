@@ -394,6 +394,28 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;')
 }
 
+const PHONE_REGEX = /\d+/g
+function normalizeWhatsappForStorage(raw) {
+  if (!raw) return null
+  const digits = String(raw).match(PHONE_REGEX)
+  if (!digits) return null
+  let normalized = digits.join('')
+  normalized = normalized.replace(/^00+/, '')
+  normalized = normalized.replace(/^0+/, '')
+  if (!normalized) return null
+  if (!normalized.startsWith('54')) normalized = `54${normalized}`
+  return normalized
+}
+
+function ensureWhatsappInContactMethods(methods) {
+  const base = Array.isArray(methods) ? methods.filter(Boolean).map((m) => String(m)) : ['email', 'chat']
+  const set = new Set(base)
+  if (!set.has('email')) set.add('email')
+  if (!set.has('chat')) set.add('chat')
+  set.add('whatsapp')
+  return Array.from(set)
+}
+
 function extractAdminKey(req) {
   const header =
     req.headers['x-admin-key'] ||
@@ -1355,6 +1377,7 @@ async function applyPaymentUpdateByPaymentId(paymentId) {
     await recordPayment({ userId: null, listingId: null, amount, currency, status, providerRef: String(paymentId) })
 
     try {
+      const svc = supabaseService || getServerSupabaseClient()
       const meta = (mpPayment && typeof mpPayment.metadata === 'object') ? mpPayment.metadata : {}
       let userId = typeof meta?.userId === 'string' && meta.userId ? meta.userId : null
       let planCode = normalisePlanCode(meta?.planCode || meta?.planId)
@@ -1377,8 +1400,52 @@ async function applyPaymentUpdateByPaymentId(paymentId) {
           }
         } catch {}
       }
-      const svc = supabaseService || getServerSupabaseClient()
       let pendingCredit = null
+      let highlightApplied = false
+
+      const highlightDaysRaw = meta?.highlightDays ?? meta?.highlight_days ?? meta?.highlight_days_number
+      const highlightDays = Number(highlightDaysRaw)
+      if (!Number.isNaN(highlightDays) && highlightDays > 0) {
+        try {
+          const targetSlug = typeof meta?.listingSlug === 'string' && meta.listingSlug ? meta.listingSlug : null
+          let highlightListingId = upgradeListingId
+          if (!highlightListingId && targetSlug) {
+            const { data: slugRow, error: slugErr } = await svc
+              .from('listings')
+              .select('id')
+              .eq('slug', targetSlug)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle()
+            if (!slugErr && slugRow?.id) highlightListingId = slugRow.id
+          }
+          if (highlightListingId) {
+            const { data: current } = await svc
+              .from('listings')
+              .select('highlight_expires')
+              .eq('id', highlightListingId)
+              .maybeSingle()
+            const now = Date.now()
+            const base = current?.highlight_expires ? Math.max(new Date(current.highlight_expires).getTime(), now) : now
+            const next = new Date(base + highlightDays * 24 * 60 * 60 * 1000).toISOString()
+            const { error: updErr } = await svc
+              .from('listings')
+              .update({ highlight_expires: next })
+              .eq('id', highlightListingId)
+            if (!updErr) {
+              highlightApplied = true
+              console.info('[webhook] highlight applied', { listingId: highlightListingId, highlightDays, next })
+            } else {
+              console.warn('[webhook] highlight update failed', updErr)
+            }
+          } else {
+            console.warn('[webhook] highlight metadata without listing reference')
+          }
+        } catch (err) {
+          console.warn('[webhook] highlight apply exception', err?.message || err)
+        }
+      }
+
       try {
         let pendingQuery = svc
           .from('publish_credits')
@@ -1489,10 +1556,16 @@ async function applyPaymentUpdateByPaymentId(paymentId) {
         }
       }
       else {
-        console.warn('[webhook] skipping credit update (planCode missing or not eligible)', { planCode, userId })
+        if (highlightApplied) {
+          console.info('[webhook] highlight-only payment applied', { paymentId })
+        } else {
+          console.warn('[webhook] skipping credit update (planCode missing or not eligible)', { planCode, userId })
+        }
       }
-      // Aunque no sea plan de crédito, si el pago está aprobado, marcamos aplicado
-      if (status === 'succeeded') { try { await markPaymentApplied(paymentId) } catch {} }
+      // Marcar pago como aplicado si terminó en algo útil (crédito o highlight)
+      if (status === 'succeeded' && (highlightApplied || (planCode === 'basic' || planCode === 'premium'))) {
+        try { await markPaymentApplied(paymentId) } catch {}
+      }
     } catch {}
     return { ok: true, status }
   } catch (err) {
