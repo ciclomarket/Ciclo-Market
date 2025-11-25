@@ -1357,8 +1357,8 @@ async function applyPaymentUpdateByPaymentId(paymentId) {
 
     try {
       const meta = (mpPayment && typeof mpPayment.metadata === 'object') ? mpPayment.metadata : {}
-      const userId = typeof meta?.userId === 'string' && meta.userId ? meta.userId : null
-      const planCode = normalisePlanCode(meta?.planCode || meta?.planId)
+      let userId = typeof meta?.userId === 'string' && meta.userId ? meta.userId : null
+      let planCode = normalisePlanCode(meta?.planCode || meta?.planId)
       const listingIdRaw = meta?.listingId ?? meta?.listing_id ?? null
       const upgradeListingId = typeof listingIdRaw === 'string' ? listingIdRaw.trim() || null : (listingIdRaw ? String(listingIdRaw) : null)
       const merchantOrderId = mpPayment?.order?.id ? String(mpPayment.order.id) : null
@@ -1378,6 +1378,39 @@ async function applyPaymentUpdateByPaymentId(paymentId) {
           }
         } catch {}
       }
+      if (!userId || !planCode) {
+        try {
+          const svc = supabaseService || getServerSupabaseClient()
+          let pendingQuery = svc
+            .from('publish_credits')
+            .select('id,user_id,plan_code,status,created_at')
+            .eq('provider', 'mercadopago')
+            .eq('status', 'pending')
+            .order('created_at', { ascending: false })
+            .limit(1)
+          if (prefId) {
+            pendingQuery = pendingQuery.or(`preference_id.eq.${prefId},provider_ref.eq.${prefId}`)
+          } else if (userId) {
+            pendingQuery = pendingQuery.eq('user_id', userId)
+          }
+          const { data: pendingRows, error: pendingErr } = await pendingQuery
+          if (pendingErr) console.warn('[webhook] pending lookup error', pendingErr)
+          const pending = Array.isArray(pendingRows) ? pendingRows[0] : null
+          if (pending) {
+            if (!userId && pending.user_id) {
+              userId = String(pending.user_id)
+              console.info('[webhook] fallback userId', { userId })
+            }
+            if (!planCode && pending.plan_code) {
+              planCode = normalisePlanCode(pending.plan_code)
+              console.info('[webhook] fallback planCode', { planCode })
+            }
+          }
+        } catch (err) {
+          console.warn('[webhook] fallback metadata lookup failed', err?.message || err)
+        }
+      }
+
       if (planCode === 'basic' || planCode === 'premium') {
         const creditStatus = status === 'succeeded' ? 'available' : (status === 'pending' ? 'pending' : 'cancelled')
         const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
