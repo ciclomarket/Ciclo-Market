@@ -49,6 +49,40 @@ const path = require('path')
 // fallback to getServerSupabaseClient() on each request.
 const supabaseService = null
 
+// Mercado Pago client (used for checkout + payment lookups)
+const mpClient = (() => {
+  const token = String(process.env.MERCADOPAGO_ACCESS_TOKEN || '').trim()
+  if (!token) {
+    console.warn('[payments] MERCADOPAGO_ACCESS_TOKEN no configurado; /api/checkout deshabilitado')
+    return null
+  }
+  try {
+    return new MercadoPagoConfig({ accessToken: token })
+  } catch (err) {
+    console.error('[payments] error inicializando MP client', err)
+    return null
+  }
+})()
+
+// Minimal helper to record a payment (no-op if service client is unavailable)
+async function recordPayment({ userId, listingId, amount, currency = 'ARS', status = 'succeeded', provider = 'mercadopago', providerRef = null }) {
+  try {
+    if (!supabaseService) return
+    const payload = {
+      user_id: userId || null,
+      listing_id: listingId || null,
+      amount: typeof amount === 'number' ? amount : null,
+      currency,
+      status,
+      provider,
+      provider_ref: providerRef,
+    }
+    await supabaseService.from('payments').insert(payload)
+  } catch (err) {
+    console.warn('[payments] recordPayment failed (non-fatal)', err?.message || err)
+  }
+}
+
 function normalizeOrigin(frontendUrlEnv) {
   const raw = (frontendUrlEnv || '').split(',')[0]?.trim()
   if (!raw) return 'https://www.ciclomarket.ar'
@@ -195,6 +229,83 @@ try { startSavedSearchDigestJob && startSavedSearchDigestJob() } catch {}
 try { startDeletedPurgerJob && startDeletedPurgerJob() } catch {}
 
 /* Google Reviews endpoints removed */
+
+/* ----------------------------- Checkout (Mercado Pago) -------------------- */
+app.post('/api/checkout', async (req, res) => {
+  try {
+    if (!mpClient) return res.status(503).json({ ok: false, error: 'payments_unavailable' })
+    const supabase = getServerSupabaseClient()
+    const authUser = await getAuthUser(req, supabase)
+
+    const body = req.body || {}
+    const rawPlan = body.planCode || body.planId
+    const planCode = normalisePlanCode(rawPlan)
+    const amount = Number(body.amount)
+    const currency = (body.planCurrency || 'ARS').toString()
+    const planName = (body.planName || (planCode === 'premium' ? 'Plan Premium' : planCode === 'basic' ? 'Plan Básico' : String(body.planId || 'Checkout'))).toString()
+    const redirect = body.redirectUrls || {}
+    const backUrls = {
+      success: typeof redirect.success === 'string' && redirect.success ? redirect.success : `${resolveFrontendBaseUrl()}/dashboard?payment=success`,
+      failure: typeof redirect.failure === 'string' && redirect.failure ? redirect.failure : `${resolveFrontendBaseUrl()}/dashboard?payment=failure`,
+      pending: typeof redirect.pending === 'string' && redirect.pending ? redirect.pending : `${resolveFrontendBaseUrl()}/dashboard?payment=pending`,
+    }
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({ ok: false, error: 'invalid_amount' })
+    }
+
+    const fallbackUserId = body.userId ? String(body.userId) : null
+    const userId = (authUser && authUser.id) ? authUser.id : fallbackUserId
+    if (!userId) return res.status(401).json({ ok: false, error: 'unauthorized' })
+
+    const metadata = {
+      userId,
+      planCode: planCode || null,
+      planId: String(body.planId || rawPlan || ''),
+      listingId: body.listingId ? String(body.listingId) : undefined,
+      listingSlug: body.listingSlug ? String(body.listingSlug) : undefined,
+      upgradePlanCode: planCode || undefined,
+      ...((typeof body.metadata === 'object' && body.metadata) || {}),
+    }
+
+    const pref = new Preference(mpClient)
+    const mp = await pref.create({
+      body: {
+        items: [
+          {
+            title: planName,
+            quantity: 1,
+            unit_price: amount,
+            currency_id: currency,
+          },
+        ],
+        payer: { email: authUser?.email || undefined },
+        metadata,
+        back_urls: backUrls,
+        auto_return: 'approved',
+        statement_descriptor: 'CICLO MARKET',
+      },
+    })
+
+    const initPoint = mp?.init_point || mp?.sandbox_init_point || null
+    if (!initPoint) return res.status(500).json({ ok: false, error: 'mp_init_point_missing' })
+
+    // Optionally create a pending credit row so UX can reflect it (best-effort)
+    if (supabaseService && (planCode === 'basic' || planCode === 'premium')) {
+      try {
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+        await supabaseService
+          .from('publish_credits')
+          .insert({ user_id: userId, plan_code: planCode, status: 'pending', provider: 'mercadopago', preference_id: mp.id || null, expires_at: expiresAt, ...(metadata.listingId ? { listing_id: metadata.listingId } : {}) })
+      } catch {}
+    }
+
+    return res.json({ ok: true, url: initPoint, preference_id: mp?.id || null })
+  } catch (err) {
+    console.error('[checkout] failed', err)
+    return res.status(500).json({ ok: false, error: 'unexpected_error' })
+  }
+})
 
 /* ----------------------------- Utils OG ----------------------------------- */
 function isBot(req) {
@@ -601,6 +712,46 @@ app.get('/api/credits/me', async (req, res) => {
     return res.json(Array.isArray(data) ? data : [])
   } catch {
     return res.status(500).json([])
+  }
+})
+
+// Grant a one-time welcome Basic credit per user (idempotent)
+app.post('/api/credits/grant-welcome', async (req, res) => {
+  try {
+    const supabase = getServerSupabaseClient()
+    const user = await getAuthUser(req, supabase)
+    if (!user?.id) return res.status(401).json({ ok: false, error: 'unauthorized' })
+
+    // If user already has a welcome credit (any status), do nothing
+    const { data: existing, error: exErr } = await supabase
+      .from('publish_credits')
+      .select('id,plan_code,status,provider,provider_ref')
+      .eq('user_id', user.id)
+      .eq('provider', 'welcome')
+      .limit(1)
+    if (!exErr && Array.isArray(existing) && existing[0]) {
+      return res.json({ ok: true, granted: false })
+    }
+
+    // Insert new Basic credit with 180 days validity
+    const expiresAt = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString()
+    const { data: inserted, error: insErr } = await supabase
+      .from('publish_credits')
+      .insert({
+        user_id: user.id,
+        plan_code: 'basic',
+        status: 'available',
+        provider: 'welcome',
+        provider_ref: 'welcome_basic_v1',
+        expires_at: expiresAt,
+      })
+      .select('id')
+      .maybeSingle()
+    if (insErr || !inserted) return res.status(500).json({ ok: false, error: 'insert_failed' })
+    return res.json({ ok: true, granted: true, creditId: inserted.id })
+  } catch (err) {
+    console.error('[credits/grant-welcome] failed', err)
+    return res.status(500).json({ ok: false, error: 'unexpected_error' })
   }
 })
 

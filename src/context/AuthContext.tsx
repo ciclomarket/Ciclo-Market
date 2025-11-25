@@ -2,6 +2,7 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { supabaseEnabled, getSupabaseClient } from '../services/supabase'
+import { grantWelcomeCredit } from '../services/credits'
 import { syncProfileFromAuthUser } from '../utils/authProfile'
 
 interface Ctx {
@@ -80,6 +81,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(sessionUser)
       if (sessionUser) {
         await syncProfileFromAuthUser(sessionUser)
+        // Best-effort: grant welcome credit on first load if logged in
+        try {
+          const ok = await grantWelcomeCredit()
+          if (ok && typeof window !== 'undefined') {
+            try { window.dispatchEvent(new CustomEvent('mb_credits_updated')) } catch { /* noop */ }
+          }
+        } catch { /* noop */ }
       }
       await loadRole(sessionUser?.id ?? null)
       setLoading(false)
@@ -92,6 +100,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false)
       void loadRole(newUser?.id ?? null)
       void syncProfileFromAuthUser(newUser)
+      // Best-effort: grant a welcome Basic credit once per user (idempotent)
+      try {
+        const ok = await grantWelcomeCredit()
+        if (ok && typeof window !== 'undefined') {
+          try { window.dispatchEvent(new CustomEvent('mb_credits_updated')) } catch { /* noop */ }
+        }
+      } catch { /* noop */ }
       // (Promo redirections removidas)
     })
     return () => {
