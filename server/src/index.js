@@ -76,10 +76,10 @@ const mpClient = (() => {
   }
 })()
 
-// Minimal helper to record a payment (no-op if service client is unavailable)
+// Minimal helper to record a payment (falls back to request-scoped client if needed)
 async function recordPayment({ userId, listingId, amount, currency = 'ARS', status = 'succeeded', provider = 'mercadopago', providerRef = null }) {
   try {
-    if (!supabaseService) return
+    const svc = supabaseService || getServerSupabaseClient()
     const payload = {
       user_id: userId || null,
       listing_id: listingId || null,
@@ -89,7 +89,7 @@ async function recordPayment({ userId, listingId, amount, currency = 'ARS', stat
       provider,
       provider_ref: providerRef,
     }
-    await supabaseService.from('payments').insert(payload)
+    await svc.from('payments').insert(payload)
   } catch (err) {
     console.warn('[payments] recordPayment failed (non-fatal)', err?.message || err)
   }
@@ -314,10 +314,11 @@ app.post('/api/checkout', async (req, res) => {
     } catch {}
 
     // Optionally create a pending credit row so UX can reflect it (best-effort)
-    if (supabaseService && (planCode === 'basic' || planCode === 'premium')) {
+    if (planCode === 'basic' || planCode === 'premium') {
       try {
         const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
-        await supabaseService
+        const svc = supabaseService || getServerSupabaseClient()
+        await svc
           .from('publish_credits')
           .insert({ user_id: userId, plan_code: planCode, status: 'pending', provider: 'mercadopago', preference_id: mp.id || null, expires_at: expiresAt, ...(metadata.listingId ? { listing_id: metadata.listingId } : {}) })
       } catch {}
@@ -1174,13 +1175,14 @@ app.post('/api/payments/confirm', async (req, res) => {
           }
         } catch {}
       }
-      if (supabaseService && (planCode === 'basic' || planCode === 'premium')) {
+      if (planCode === 'basic' || planCode === 'premium') {
         const creditStatus = status === 'succeeded' ? 'available' : (status === 'pending' ? 'pending' : 'cancelled')
         const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
         let updatedCount = 0
         if (prefId) {
           try {
-            const { data: updRows } = await supabaseService
+            const svc = supabaseService || getServerSupabaseClient()
+            const { data: updRows } = await svc
               .from('publish_credits')
               .update({ status: creditStatus, provider_ref: String(paymentId), preference_id: prefId, expires_at: expiresAt, ...(upgradeListingId ? { listing_id: upgradeListingId } : {}) })
               .eq('provider', 'mercadopago')
@@ -1191,14 +1193,15 @@ app.post('/api/payments/confirm', async (req, res) => {
         }
         if (updatedCount === 0) {
           const baseUpdate = { user_id: userId, plan_code: planCode, status: creditStatus, provider: 'mercadopago', provider_ref: String(paymentId), preference_id: prefId, expires_at: expiresAt, ...(upgradeListingId ? { listing_id: upgradeListingId } : {}) }
-          try { await supabaseService.from('publish_credits').upsert(baseUpdate, { onConflict: 'provider_ref,provider' }) } catch {}
-          if (prefId) { try { await supabaseService.from('publish_credits').upsert(baseUpdate, { onConflict: 'preference_id,provider' }) } catch {} }
+          try { const svc = supabaseService || getServerSupabaseClient(); await svc.from('publish_credits').upsert(baseUpdate, { onConflict: 'provider_ref,provider' }) } catch {}
+          if (prefId) { try { const svc = supabaseService || getServerSupabaseClient(); await svc.from('publish_credits').upsert(baseUpdate, { onConflict: 'preference_id,provider' }) } catch {} }
         }
 
         // Limpieza: si el pago quedó aprobado, cancelar otros créditos pendientes del mismo usuario/plan
         if (creditStatus === 'available' && userId && planCode) {
           try {
-            const { error: cancelErr } = await supabaseService
+            const svc = supabaseService || getServerSupabaseClient()
+            const { error: cancelErr } = await svc
               .from('publish_credits')
               .update({ status: 'cancelled' })
               .eq('user_id', userId)
