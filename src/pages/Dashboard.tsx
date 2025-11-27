@@ -3413,128 +3413,67 @@ function EditStoreView({ profile, userId, onStoreUpdated }: { profile: UserProfi
 
 function SubscriptionView({ listings }: { listings: Listing[] }) {
   const navigate = useNavigate()
-  const { plans, activeSubscription, loading, cancelSubscription, updateAutoRenew } = usePlans()
-  const { user } = useAuth()
-  const [isStore, setIsStore] = useState(false)
-
-  useEffect(() => {
-    let active = true
-    ;(async () => {
-      try {
-        if (!user?.id) { setIsStore(false); return }
-        const profile = await fetchUserProfile(user.id)
-        if (!active) return
-        setIsStore(Boolean(profile?.store_enabled))
-      } catch {
-        if (active) setIsStore(false)
-      }
-    })()
-    return () => { active = false }
-  }, [user?.id])
-  const [updatingAuto, setUpdatingAuto] = useState(false)
-  const [cancelling, setCancelling] = useState(false)
+  const { plans, loading } = usePlans()
+  const totalListings = listings.length
 
   if (loading) {
-    return <div className="py-10 text-center text-[#14212e]/60">Cargando información de tu plan…</div>
+    return <div className="py-10 text-center text-[#14212e]/60">Cargando información de planes…</div>
   }
 
-  if (isStore) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-4 py-10 text-center">
-        <h2 className="text-xl font-semibold text-[#14212e]">Tienda oficial habilitada</h2>
-        <p className="max-w-md text-sm text-[#14212e]/70">Tu cuenta de tienda tiene publicaciones ilimitadas y sin vencimiento. No necesitás planes pagos.</p>
-        <div className="flex gap-3">
-          <Button className="bg-[#14212e] text-white hover:bg-[#1b2f3f]" onClick={() => navigate('/publicar')}>
-            Crear nueva publicación
-          </Button>
-          <Button variant="ghost" onClick={() => navigate('/dashboard?tab=Editar%20tienda')}>Editar tienda</Button>
-        </div>
-      </div>
-    )
-  }
-
-  const plan = activeSubscription?.plan || plans.find((p) => p.id === activeSubscription?.planId)
-
-  if (!plan || !activeSubscription) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-4 py-10 text-center">
-        <h2 className="text-xl font-semibold text-[#14212e]">No tenés un plan activo</h2>
-        <p className="max-w-md text-sm text-[#14212e]/70">
-          Elegí uno de nuestros planes para habilitar publicaciones, destaque y contacto preferencial.
-        </p>
-        <Button className="bg-[#14212e] text-white hover:bg-[#1b2f3f]" onClick={() => navigate('/publicar')}>
-          Ver planes disponibles
-        </Button>
-      </div>
-    )
-  }
-
-  const formattedEndsAt = activeSubscription.endsAt
-    ? new Intl.DateTimeFormat('es-AR', { dateStyle: 'medium' }).format(new Date(activeSubscription.endsAt))
-    : null
-  const listingsCount = listings.length
-  const hasQuotaLimit = plan.maxListings !== undefined && plan.maxListings > 1
-  const remainingListings = hasQuotaLimit ? Math.max(plan.maxListings - listingsCount, 0) : null
-  const autoRenewEnabled = activeSubscription.autoRenew ?? true
+  const paidPlans = plans.filter((plan) => typeof plan.price === 'number' && plan.price > 0)
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-3xl border border-[#14212e]/10 bg-white p-6 shadow">
-        <div className="flex flex-col gap-2">
-          <span className="text-xs uppercase tracking-[0.3em] text-[#14212e]/50">Plan actual</span>
-          <h2 className="text-2xl font-semibold text-[#14212e]">{plan.name}</h2>
-          <p className="text-sm text-[#14212e]/70">Estado: {activeSubscription.status === 'active' ? 'Activo' : activeSubscription.status}</p>
-          {formattedEndsAt && (
-            <p className="text-sm text-[#14212e]/70">Renueva el {formattedEndsAt}</p>
-          )}
-        </div>
+    <div className="space-y-6 rounded-3xl border border-[#14212e]/10 bg-white p-6 shadow">
+      <div className="space-y-2 text-center sm:text-left">
+        <span className="inline-flex items-center justify-center rounded-full border border-[#14212e]/10 bg-[#14212e]/5 px-3 py-1 text-xs uppercase tracking-[0.3em] text-[#14212e]/60">
+          Planes y créditos
+        </span>
+        <h2 className="text-2xl font-semibold text-[#14212e]">Gestioná tus publicaciones con créditos</h2>
+        <p className="text-sm text-[#14212e]/70">
+          Actualmente las publicaciones pagas se activan comprando créditos (Básico o Premium). Cada crédito habilita un aviso durante 30 días e incluye los beneficios del plan.
+        </p>
+      </div>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <PlanStat
-            label="Publicaciones incluidas"
-            value={hasQuotaLimit ? `${plan.maxListings}` : 'Por publicación'}
-            helper={hasQuotaLimit ? `${remainingListings} disponibles actualmente` : 'Contratás un plan por cada aviso publicado.'}
-          />
-          <PlanStat label="Fotos por publicación" value={plan.maxPhotos?.toString() ?? 'Sin límite'} />
-          <PlanStat label="Destacados" value={plan.featuredDays ? `${plan.featuredDays} ${plan.featuredDays === 1 ? 'día' : 'días'}` : 'No incluye'} />
-          <PlanStat label="WhatsApp" value={plan.whatsappEnabled ? 'Habilitado' : 'No incluido'} />
-        </div>
+      <div className="rounded-2xl border border-[#14212e]/10 bg-[#14212e]/5 p-4 text-sm text-[#14212e]/70">
+        <p className="font-semibold text-[#14212e]">Tus publicaciones activas</p>
+        <p className="mt-1 text-3xl font-semibold text-[#14212e]">{totalListings}</p>
+        <p className="mt-2">
+          Cuando consumas tus créditos podés comprar uno nuevo desde “Publicar” &rarr; “Elegir plan”. Si tenés créditos disponibles, el sistema los detecta automáticamente al crear un aviso.
+        </p>
+      </div>
 
-        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2 text-sm text-[#14212e]/80">
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={autoRenewEnabled}
-                disabled={updatingAuto}
-                onChange={async () => {
-                  setUpdatingAuto(true)
-                  await updateAutoRenew(!autoRenewEnabled)
-                  setUpdatingAuto(false)
-                }}
-              />
-              Renovación automática
-            </label>
-            {updatingAuto && <span>Actualizando…</span>}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="ghost" onClick={() => navigate('/publicar')}>
-              Cambiar plan
-            </Button>
-            <Button
-              variant="ghost"
-              className="text-red-600"
-              disabled={cancelling}
-              onClick={async () => {
-                setCancelling(true)
-                await cancelSubscription()
-                setCancelling(false)
-              }}
-            >
-              {cancelling ? 'Cancelando…' : 'Cancelar plan'}
-            </Button>
-          </div>
+      {paidPlans.length > 0 && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          {paidPlans.map((plan) => (
+            <div key={plan.id || plan.code} className="rounded-2xl border border-[#14212e]/10 bg-white p-4 shadow-sm">
+              <h3 className="text-lg font-semibold text-[#14212e]">{plan.name}</h3>
+              <p className="text-sm text-[#14212e]/70">{plan.description || 'Plan pago disponible.'}</p>
+              <div className="mt-3 text-xl font-semibold text-[#14212e]">
+                {typeof plan.price === 'number'
+                  ? new Intl.NumberFormat('es-AR', {
+                      style: 'currency',
+                      currency: plan.currency || 'ARS',
+                      maximumFractionDigits: plan.currency === 'ARS' ? 0 : 2,
+                    }).format(plan.price)
+                  : 'Consultar'}
+              </div>
+              <ul className="mt-3 space-y-1 text-xs text-[#14212e]/60">
+                <li>• Fotos incluidas: {plan.maxPhotos ?? 'sin límite'}</li>
+                <li>• Destacado en portada: {plan.featuredDays ? `${plan.featuredDays} días` : 'no incluido'}</li>
+                <li>• WhatsApp: {plan.whatsappEnabled ? 'habilitado' : 'solo email'}</li>
+              </ul>
+            </div>
+          ))}
         </div>
+      )}
+
+      <div className="flex flex-wrap items-center justify-center gap-3 sm:justify-between">
+        <p className="text-sm text-[#14212e]/70">
+          ¿Necesitás más exposición? Comprá un crédito Premium y activá un nuevo aviso en segundos.
+        </p>
+        <Button className="bg-[#14212e] text-white hover:bg-[#1b2f3f]" onClick={() => navigate('/publicar')}>
+          Comprar créditos
+        </Button>
       </div>
     </div>
   )
@@ -3661,16 +3600,6 @@ function VerifyProfileView({ profile, userEmail }: { profile: UserProfileRecord 
           <span className="text-xs text-[#14212e]/60">Tu solicitud se enviará a admin@ciclomarket.ar</span>
         </div>
       </form>
-    </div>
-  )
-}
-
-function PlanStat({ label, value, helper }: { label: string; value: string; helper?: string }) {
-  return (
-    <div className="rounded-2xl border border-[#14212e]/10 bg-[#14212e]/5 p-4">
-      <p className="text-xs uppercase tracking-wide text-[#14212e]/50">{label}</p>
-      <p className="mt-1 text-lg font-semibold text-[#14212e]">{value}</p>
-      {helper && <p className="text-xs text-[#14212e]/60">{helper}</p>}
     </div>
   )
 }
