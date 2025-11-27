@@ -532,68 +532,114 @@ async function fetchQuestionContext(supabase, questionId) {
   return { question, listing, seller, asker }
 }
 
-function buildQuestionEmailHtml({ recipientName, listingTitle, questionBody, listingUrl, assetsBase }) {
-  const greeting = recipientName ? `Hola ${escapeHtml(recipientName)},` : 'Hola,'
+function buildQuestionEmailHtml({ recipientName, listingTitle, questionBody, listingUrl }) {
+  const greeting = recipientName ? `Hola <strong>${escapeHtml(recipientName)}</strong>,` : 'Hola,'
   const safeTitle = escapeHtml(listingTitle || '')
   const safeQuestion =
     questionBody && questionBody.trim()
       ? escapeHtml(questionBody).replace(/\r?\n/g, '<br />')
       : '<em style="color:#64748b;">(sin contenido)</em>'
-  const safeUrl = escapeHtml(listingUrl)
-  const logoUrl = `${assetsBase.replace(/\/$/, '')}/site-logo.png`
+  const ctaUrl = escapeHtml(`${listingUrl}?tab=preguntas`)
   return `<!DOCTYPE html>
 <html lang="es">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Nueva consulta</title>
+    <title>Nueva consulta en Ciclo Market</title>
   </head>
-  <body style="margin:0;background:#f6f8fb;font-family:'Helvetica Neue',Arial,sans-serif;">
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f6f8fb;padding:24px 12px;">
+  <body style="margin:0; padding:0; background-color:#F4F5F7;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#F4F5F7;">
       <tr>
-        <td align="center">
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 24px 60px -30px rgba(15,33,46,0.35);">
+        <td align="center" style="padding:24px 12px;">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:600px; background-color:#FFFFFF; border-radius:12px; overflow:hidden;">
             <tr>
-              <td style="background:#0f172a;padding:28px 32px;text-align:left;">
-                <img src="${logoUrl}" alt="Ciclo Market" width="140" height="24" style="display:block;margin-bottom:24px;" />
-                <p style="margin:0;font-size:14px;letter-spacing:0.25em;text-transform:uppercase;color:rgba(255,255,255,0.56);">Nueva consulta</p>
-                <h1 style="margin:12px 0 0;font-size:22px;line-height:30px;font-weight:700;color:#ffffff;">Recibiste una pregunta sobre tu publicación</h1>
+              <td align="center" style="padding:20px 20px 10px 20px; background-color:#FFFFFF;">
+                <img src="https://www.ciclomarket.ar/_static/email-logo-ciclomarket.png" alt="Ciclo Market" width="120" style="display:block; max-width:120px; height:auto; margin:0 auto;" />
               </td>
             </tr>
             <tr>
-              <td style="padding:32px 32px 12px;color:#0f172a;">
-                <p style="margin:0 0 12px;font-size:16px;line-height:24px;">${greeting}</p>
-                <p style="margin:0 0 16px;font-size:16px;line-height:26px;color:#475569;">
-                  Recibiste una nueva consulta en <strong>${safeTitle}</strong>:
-                </p>
-                <blockquote style="margin:0 0 20px;padding:16px 20px;border-left:4px solid #0f172a;background:#f0f4f8;border-radius:16px;font-size:15px;line-height:24px;color:#0f172a;">
-                  ${safeQuestion}
-                </blockquote>
-                <p style="margin:0 0 24px;font-size:15px;line-height:24px;color:#475569;">
-                  Respondela desde tu panel para que el comprador avance rápido con la decisión.
-                </p>
-                <div style="margin-bottom:28px;">
-                  <a href="${safeUrl}?tab=preguntas" style="display:inline-block;padding:14px 28px;border-radius:999px;background:#0f172a;color:#ffffff;text-decoration:none;font-weight:600;">
-                    Ver consulta y responder
-                  </a>
-                </div>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:0 32px 32px;">
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#0f172a;border-radius:18px;padding:20px 24px;">
+              <td align="center" style="background-color:#FFFFFF; padding:0 20px 16px 20px;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0">
                   <tr>
-                    <td style="color:#f8fafc;font-size:14px;line-height:22px;">
-                      <strong>Tip:</strong> las respuestas rápidas mejoran tu conversión. Si la consulta requiere fotos extras, podés adjuntarlas en la misma conversación.
+                    <td style="padding:0 8px;">
+                      <a href="https://www.ciclomarket.ar/marketplace?bikes=1" style="font-family:Arial, sans-serif; font-size:13px; color:#14212E; text-decoration:none;">Bicicletas</a>
+                    </td>
+                    <td style="padding:0 8px;">
+                      <a href="https://www.ciclomarket.ar/marketplace?cat=Accesorios" style="font-family:Arial, sans-serif; font-size:13px; color:#14212E; text-decoration:none;">Accesorios</a>
+                    </td>
+                    <td style="padding:0 8px;">
+                      <a href="https://www.ciclomarket.ar/marketplace?cat=Indumentaria" style="font-family:Arial, sans-serif; font-size:13px; color:#14212E; text-decoration:none;">Indumentaria</a>
+                    </td>
+                    <td style="padding:0 8px;">
+                      <a href="https://www.ciclomarket.ar/marketplace?cat=Nutrici%C3%B3n" style="font-family:Arial, sans-serif; font-size:13px; color:#14212E; text-decoration:none;">Nutrición</a>
                     </td>
                   </tr>
                 </table>
               </td>
             </tr>
             <tr>
-              <td style="padding:0 32px 32px;color:#94a3b8;font-size:13px;line-height:20px;">
-                <p style="margin:0;">Si necesitás ayuda, escribinos a <a href="mailto:hola@ciclomarket.ar" style="color:#0f172a;text-decoration:none;">hola@ciclomarket.ar</a>.</p>
-                <p style="margin:6px 0 0;">— Equipo Ciclo Market</p>
+              <td style="padding:24px 24px 8px 24px; background-color:#14212E;">
+                <h1 style="margin:0; font-family:Arial, sans-serif; font-size:22px; line-height:1.3; color:#FFFFFF; font-weight:bold;">
+                  Recibiste una pregunta sobre tu publicación
+                </h1>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:20px 24px 8px 24px; background-color:#FFFFFF;">
+                <p style="margin:0 0 12px 0; font-family:Arial, sans-serif; font-size:14px; color:#111111;">
+                  ${greeting}
+                </p>
+                <p style="margin:0 0 12px 0; font-family:Arial, sans-serif; font-size:14px; color:#111111;">
+                  Recibiste una nueva consulta en <strong>${safeTitle}</strong>:
+                </p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:0 24px 20px 24px; background-color:#FFFFFF;">
+                <div style="border-radius:8px; background-color:#F4F5F7; padding:14px 16px; font-family:Arial, sans-serif; font-size:14px; color:#111111;">
+                  ${safeQuestion}
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td align="center" style="padding:0 24px 20px 24px; background-color:#FFFFFF;">
+                <a href="${ctaUrl}" style="display:inline-block; padding:12px 24px; background-color:#14212E; color:#FFFFFF; font-family:Arial, sans-serif; font-size:14px; font-weight:bold; text-decoration:none; border-radius:999px;">
+                  Ver consulta y responder
+                </a>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:0 24px 24px 24px; background-color:#FFFFFF;">
+                <div style="border-radius:8px; background-color:#14212E; padding:14px 16px;">
+                  <p style="margin:0; font-family:Arial, sans-serif; font-size:13px; color:#FFFFFF;">
+                    <strong>Tip:</strong> las respuestas rápidas mejoran tu conversión. Si la consulta requiere fotos extra, podés adjuntarlas en la misma conversación.
+                  </p>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:20px 24px 8px 24px; background-color:#FFFFFF; border-top:1px solid #E2E4E8;">
+                <h2 style="margin:0 0 8px 0; font-family:Arial, sans-serif; font-size:16px; color:#14212E;">
+                  ¿Por qué vender en Ciclo Market?
+                </h2>
+                <ul style="margin:8px 0 0 18px; padding:0; font-family:Arial, sans-serif; font-size:13px; color:#444444; line-height:1.5;">
+                  <li>Público 100% ciclista, sin ruido de otros rubros.</li>
+                  <li>Tu bici se muestra en un entorno pensado para vender más rápido.</li>
+                  <li>Contacto directo con compradores reales por WhatsApp o mensajes internos.</li>
+                </ul>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:16px 24px 20px 24px; background-color:#FFFFFF;">
+                <p style="margin:0 0 8px 0; font-family:Arial, sans-serif; font-size:12px; color:#777777;">
+                  Si necesitás ayuda, escribinos a <a href="mailto:hola@ciclomarket.ar" style="color:#14212E; text-decoration:none;">hola@ciclomarket.ar</a>.
+                </p>
+                <p style="margin:0 0 6px 0; font-family:Arial, sans-serif; font-size:12px; color:#777777;">
+                  Instagram: <a href="https://www.instagram.com/ciclomarket.ar" style="color:#14212E; text-decoration:none;">@ciclomarket.ar</a>
+                </p>
+                <p style="margin:0; font-family:Arial, sans-serif; font-size:12px; color:#777777;">
+                  LinkedIn: <a href="https://www.linkedin.com/company/ciclo-market" style="color:#14212E; text-decoration:none;">Ciclo Market</a>
+                </p>
               </td>
             </tr>
           </table>
@@ -604,57 +650,114 @@ function buildQuestionEmailHtml({ recipientName, listingTitle, questionBody, lis
 </html>`
 }
 
-function buildAnswerEmailHtml({ recipientName, listingTitle, answerBody, listingUrl, assetsBase }) {
-  const greeting = recipientName ? `Hola ${escapeHtml(recipientName)},` : 'Hola,'
+function buildAnswerEmailHtml({ recipientName, listingTitle, answerBody, listingUrl }) {
+  const greeting = recipientName ? `Hola <strong>${escapeHtml(recipientName)}</strong>,` : 'Hola,'
   const safeTitle = escapeHtml(listingTitle || '')
   const safeAnswer =
     answerBody && answerBody.trim()
       ? escapeHtml(answerBody).replace(/\r?\n/g, '<br />')
       : '<em style="color:#64748b;">(sin respuesta)</em>'
-  const safeUrl = escapeHtml(listingUrl)
-  const logoUrl = `${assetsBase.replace(/\/$/, '')}/site-logo.png`
+  const ctaUrl = escapeHtml(`${listingUrl}?tab=preguntas`)
   return `<!DOCTYPE html>
 <html lang="es">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Respondieron tu consulta</title>
+    <title>Respuesta recibida en Ciclo Market</title>
   </head>
-  <body style="margin:0;background:#f6f8fb;font-family:'Helvetica Neue',Arial,sans-serif;">
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f6f8fb;padding:24px 12px;">
+  <body style="margin:0; padding:0; background-color:#F4F5F7;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#F4F5F7;">
       <tr>
-        <td align="center">
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 24px 60px -30px rgba(15,33,46,0.35);">
+        <td align="center" style="padding:24px 12px;">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:600px; background-color:#FFFFFF; border-radius:12px; overflow:hidden;">
             <tr>
-              <td style="background:#0f172a;padding:28px 32px;text-align:left;">
-                <img src="${logoUrl}" alt="Ciclo Market" width="140" height="24" style="display:block;margin-bottom:24px;" />
-                <p style="margin:0;font-size:14px;letter-spacing:0.25em;text-transform:uppercase;color:rgba(255,255,255,0.56);">Respuesta recibida</p>
-                <h1 style="margin:12px 0 0;font-size:22px;line-height:30px;font-weight:700;color:#ffffff;">El vendedor respondió tu consulta</h1>
+              <td align="center" style="padding:20px 20px 10px 20px; background-color:#FFFFFF;">
+                <img src="https://www.ciclomarket.ar/_static/email-logo-ciclomarket.png" alt="Ciclo Market" width="120" style="display:block; max-width:120px; height:auto; margin:0 auto;" />
               </td>
             </tr>
             <tr>
-              <td style="padding:32px 32px 12px;color:#0f172a;">
-                <p style="margin:0 0 12px;font-size:16px;line-height:24px;">${greeting}</p>
-                <p style="margin:0 0 16px;font-size:16px;line-height:26px;color:#475569;">
+              <td align="center" style="background-color:#FFFFFF; padding:0 20px 16px 20px;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                  <tr>
+                    <td style="padding:0 8px;">
+                      <a href="https://www.ciclomarket.ar/marketplace?bikes=1" style="font-family:Arial, sans-serif; font-size:13px; color:#14212E; text-decoration:none;">Bicicletas</a>
+                    </td>
+                    <td style="padding:0 8px;">
+                      <a href="https://www.ciclomarket.ar/marketplace?cat=Accesorios" style="font-family:Arial, sans-serif; font-size:13px; color:#14212E; text-decoration:none;">Accesorios</a>
+                    </td>
+                    <td style="padding:0 8px;">
+                      <a href="https://www.ciclomarket.ar/marketplace?cat=Indumentaria" style="font-family:Arial, sans-serif; font-size:13px; color:#14212E; text-decoration:none;">Indumentaria</a>
+                    </td>
+                    <td style="padding:0 8px;">
+                      <a href="https://www.ciclomarket.ar/marketplace?cat=Nutrici%C3%B3n" style="font-family:Arial, sans-serif; font-size:13px; color:#14212E; text-decoration:none;">Nutrición</a>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:24px 24px 8px 24px; background-color:#14212E;">
+                <h1 style="margin:0; font-family:Arial, sans-serif; font-size:22px; line-height:1.3; color:#FFFFFF; font-weight:bold;">
+                  El vendedor respondió tu consulta
+                </h1>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:20px 24px 8px 24px; background-color:#FFFFFF;">
+                <p style="margin:0 0 12px 0; font-family:Arial, sans-serif; font-size:14px; color:#111111;">
+                  ${greeting}
+                </p>
+                <p style="margin:0 0 12px 0; font-family:Arial, sans-serif; font-size:14px; color:#111111;">
                   Recibiste una respuesta sobre <strong>${safeTitle}</strong>:
                 </p>
-                <blockquote style="margin:0 0 20px;padding:16px 20px;border-left:4px solid #0f172a;background:#f0f4f8;border-radius:16px;font-size:15px;line-height:24px;color:#0f172a;">
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:0 24px 20px 24px; background-color:#FFFFFF;">
+                <div style="border-radius:8px; background-color:#F4F5F7; padding:14px 16px; font-family:Arial, sans-serif; font-size:14px; color:#111111;">
                   ${safeAnswer}
-                </blockquote>
-                <p style="margin:0 0 24px;font-size:15px;line-height:24px;color:#475569;">
-                  Segu&iacute; la conversación desde la publicación para coordinar pruebas, envíos o avanzar con la compra.
-                </p>
-                <div style="margin-bottom:28px;">
-                  <a href="${safeUrl}?tab=preguntas" style="display:inline-block;padding:14px 28px;border-radius:999px;background:#0f172a;color:#ffffff;text-decoration:none;font-weight:600;">
-                    Ver conversación completa
-                  </a>
                 </div>
               </td>
             </tr>
             <tr>
-              <td style="padding:0 32px 32px;color:#94a3b8;font-size:13px;line-height:20px;">
-                <p style="margin:0;">¿Tenés dudas adicionales? Podés responder desde la misma sección de preguntas en Ciclo Market.</p>
-                <p style="margin:6px 0 0;">— Equipo Ciclo Market</p>
+              <td align="center" style="padding:0 24px 20px 24px; background-color:#FFFFFF;">
+                <a href="${ctaUrl}" style="display:inline-block; padding:12px 24px; background-color:#14212E; color:#FFFFFF; font-family:Arial, sans-serif; font-size:14px; font-weight:bold; text-decoration:none; border-radius:999px;">
+                  Ver conversación completa
+                </a>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:0 24px 24px 24px; background-color:#FFFFFF;">
+                <div style="border-radius:8px; background-color:#14212E; padding:14px 16px;">
+                  <p style="margin:0; font-family:Arial, sans-serif; font-size:13px; color:#FFFFFF;">
+                    Coordiná la próxima etapa desde la publicación para organizar pruebas, envíos o cerrar la operación con tranquilidad.
+                  </p>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:20px 24px 8px 24px; background-color:#FFFFFF; border-top:1px solid #E2E4E8;">
+                <h2 style="margin:0 0 8px 0; font-family:Arial, sans-serif; font-size:16px; color:#14212E;">
+                  ¿Por qué comprar en Ciclo Market?
+                </h2>
+                <ul style="margin:8px 0 0 18px; padding:0; font-family:Arial, sans-serif; font-size:13px; color:#444444; line-height:1.5;">
+                  <li>Solo productos pensados para ciclistas, curados por la comunidad.</li>
+                  <li>Publicaciones con fotos, detalles reales y vendedores verificados.</li>
+                  <li>Contacto directo para coordinar pagos, envíos y pruebas sin intermediarios.</li>
+                </ul>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:16px 24px 20px 24px; background-color:#FFFFFF;">
+                <p style="margin:0 0 8px 0; font-family:Arial, sans-serif; font-size:12px; color:#777777;">
+                  ¿Necesitás ayuda? Escribinos a <a href="mailto:hola@ciclomarket.ar" style="color:#14212E; text-decoration:none;">hola@ciclomarket.ar</a>.
+                </p>
+                <p style="margin:0 0 6px 0; font-family:Arial, sans-serif; font-size:12px; color:#777777;">
+                  Instagram: <a href="https://www.instagram.com/ciclomarket.ar" style="color:#14212E; text-decoration:none;">@ciclomarket.ar</a>
+                </p>
+                <p style="margin:0; font-family:Arial, sans-serif; font-size:12px; color:#777777;">
+                  LinkedIn: <a href="https://www.linkedin.com/company/ciclo-market" style="color:#14212E; text-decoration:none;">Ciclo Market</a>
+                </p>
               </td>
             </tr>
           </table>
@@ -692,7 +795,6 @@ router.post('/api/questions/notify', async (req, res) => {
         listingTitle: listing.title || '',
         questionBody: question.question_body || '',
         listingUrl,
-        assetsBase: frontBase,
       })
       await sendMail({
         to: seller.email,
@@ -714,7 +816,6 @@ Respondela desde tu panel: ${listingUrl}?tab=preguntas
         listingTitle: listing.title || '',
         answerBody: question.answer_body || '',
         listingUrl,
-        assetsBase: frontBase,
       })
       await sendMail({
         to: asker.email,
