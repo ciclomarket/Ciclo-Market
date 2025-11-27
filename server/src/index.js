@@ -40,6 +40,7 @@ const { startDeletedPurgerJob } = (() => {
 const { buildStoreAnalyticsHTML } = (() => {
   try { return require('./emails/storeAnalyticsEmail') } catch { return {} }
 })()
+const appApiRouter = require('./routes/appApi')
 // Sweepstake feature removed
 const path = require('path')
 // const https = require('https') // removed: used only for Google rating proxy
@@ -175,9 +176,6 @@ app.use((req, res, next) => {
   return next()
 })
 
-// Custom application API (analytics, reviews, share boost, etc.)
-app.use(appApiRouter)
-
 /* ----------------------------- Static assets ------------------------------ */
 const distDir = path.join(__dirname, '..', '..', 'dist')
 // Static assets live at project-root/public (not server/public)
@@ -185,7 +183,6 @@ const publicDir = path.join(__dirname, '..', '..', 'public')
 // Admin panel (built separately)
 const adminDistDir = path.join(__dirname, '..', '..', 'dist-admin')
 const sitemapRouter = require('./routes/sitemaps')
-const appApiRouter = require('./routes/appApi')
 
 app.use(
   express.static(distDir, {
@@ -271,6 +268,9 @@ const corsOptions = {
 
 app.use(cors(corsOptions))
 app.options('*', cors(corsOptions))
+
+// Custom application API (analytics, reviews, share boost, etc.)
+app.use(appApiRouter)
 
 /* ----------------------------- Cron jobs ---------------------------------- */
 // Start scheduled jobs after basic middleware is ready
