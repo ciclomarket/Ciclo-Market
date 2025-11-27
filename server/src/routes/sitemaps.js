@@ -225,9 +225,9 @@ async function getListingsPageData(page) {
     const supabase = getServerSupabaseClient()
     const { data, error, count } = await supabase
       .from('listings')
-      .select('slug, updated_at, created_at, status', { count: 'exact' })
+      .select('slug, created_at, status', { count: 'exact' })
       .eq('status', 'active')
-      .order('updated_at', { ascending: false })
+      .order('created_at', { ascending: false })
       .range(from, to)
     if (error) throw error
     const items = []
@@ -235,7 +235,7 @@ async function getListingsPageData(page) {
     for (const row of data || []) {
       const slug = String(row.slug || '').trim()
       if (!slug) continue
-      const lastmod = formatDate(row.updated_at || row.created_at) || undefined
+      const lastmod = formatDate(row.created_at) || undefined
       if (lastmod) {
         const ts = Date.parse(lastmod)
         if (!Number.isNaN(ts) && ts > latest) latest = ts
