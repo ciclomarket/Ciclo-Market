@@ -27,6 +27,15 @@ function validateEmail(email) {
   return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(email).trim())
 }
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 function getSupabaseOrFail(res) {
   try {
     return getServerSupabaseClient()
@@ -119,31 +128,24 @@ router.post('/api/contacts/log', async (req, res) => {
     if (!sellerId || typeof type !== 'string') {
       return res.status(400).json({ ok: false, error: 'missing_fields' })
     }
+    const normalizedType = String(type).toLowerCase()
+    if (normalizedType !== 'whatsapp' && normalizedType !== 'email') {
+      return res.status(400).json({ ok: false, error: 'invalid_type' })
+    }
     const supabase = getSupabaseOrFail(res)
     if (!supabase) return
-    const basePayload = {
-      seller_id: sellerId,
-      buyer_id: buyerId || null,
-      listing_id: listingId || null,
+    const payload = {
+      seller_id: String(sellerId),
+      buyer_id: buyerId ? String(buyerId) : null,
+      listing_id: listingId ? String(listingId) : null,
+      type: normalizedType,
     }
-    const attempts = [
-      { ...basePayload, channel: type, meta: { source: 'web' } },
-      { ...basePayload, contact_type: type },
-      basePayload,
-    ]
-    let lastError = null
-    for (const payload of attempts) {
-      const { error } = await supabase.from('contact_events').insert(payload)
-      if (!error) {
-        return res.json({ ok: true })
-      }
-      lastError = error
-      if (error?.message && !/column .* does not exist/i.test(error.message)) {
-        break
-      }
+    const { error } = await supabase.from('contact_events').insert(payload)
+    if (error) {
+      console.error('[api] contact_events insert failed', error)
+      return res.status(500).json({ ok: false, error: 'insert_failed' })
     }
-    console.warn('[api] contact_events insert fallback failed', lastError)
-    return res.status(500).json({ ok: false, error: 'insert_failed' })
+    return res.json({ ok: true })
   } catch (err) {
     console.error('[api] contacts/log unexpected error', err)
     return res.status(500).json({ ok: false, error: 'unexpected_error' })
@@ -530,6 +532,139 @@ async function fetchQuestionContext(supabase, questionId) {
   return { question, listing, seller, asker }
 }
 
+function buildQuestionEmailHtml({ recipientName, listingTitle, questionBody, listingUrl, assetsBase }) {
+  const greeting = recipientName ? `Hola ${escapeHtml(recipientName)},` : 'Hola,'
+  const safeTitle = escapeHtml(listingTitle || '')
+  const safeQuestion =
+    questionBody && questionBody.trim()
+      ? escapeHtml(questionBody).replace(/\r?\n/g, '<br />')
+      : '<em style="color:#64748b;">(sin contenido)</em>'
+  const safeUrl = escapeHtml(listingUrl)
+  const logoUrl = `${assetsBase.replace(/\/$/, '')}/site-logo.png`
+  return `<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Nueva consulta</title>
+  </head>
+  <body style="margin:0;background:#f6f8fb;font-family:'Helvetica Neue',Arial,sans-serif;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f6f8fb;padding:24px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 24px 60px -30px rgba(15,33,46,0.35);">
+            <tr>
+              <td style="background:#0f172a;padding:28px 32px;text-align:left;">
+                <img src="${logoUrl}" alt="Ciclo Market" width="140" height="24" style="display:block;margin-bottom:24px;" />
+                <p style="margin:0;font-size:14px;letter-spacing:0.25em;text-transform:uppercase;color:rgba(255,255,255,0.56);">Nueva consulta</p>
+                <h1 style="margin:12px 0 0;font-size:22px;line-height:30px;font-weight:700;color:#ffffff;">Recibiste una pregunta sobre tu publicación</h1>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:32px 32px 12px;color:#0f172a;">
+                <p style="margin:0 0 12px;font-size:16px;line-height:24px;">${greeting}</p>
+                <p style="margin:0 0 16px;font-size:16px;line-height:26px;color:#475569;">
+                  Recibiste una nueva consulta en <strong>${safeTitle}</strong>:
+                </p>
+                <blockquote style="margin:0 0 20px;padding:16px 20px;border-left:4px solid #0f172a;background:#f0f4f8;border-radius:16px;font-size:15px;line-height:24px;color:#0f172a;">
+                  ${safeQuestion}
+                </blockquote>
+                <p style="margin:0 0 24px;font-size:15px;line-height:24px;color:#475569;">
+                  Respondela desde tu panel para que el comprador avance rápido con la decisión.
+                </p>
+                <div style="margin-bottom:28px;">
+                  <a href="${safeUrl}?tab=preguntas" style="display:inline-block;padding:14px 28px;border-radius:999px;background:#0f172a;color:#ffffff;text-decoration:none;font-weight:600;">
+                    Ver consulta y responder
+                  </a>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:0 32px 32px;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#0f172a;border-radius:18px;padding:20px 24px;">
+                  <tr>
+                    <td style="color:#f8fafc;font-size:14px;line-height:22px;">
+                      <strong>Tip:</strong> las respuestas rápidas mejoran tu conversión. Si la consulta requiere fotos extras, podés adjuntarlas en la misma conversación.
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:0 32px 32px;color:#94a3b8;font-size:13px;line-height:20px;">
+                <p style="margin:0;">Si necesitás ayuda, escribinos a <a href="mailto:hola@ciclomarket.ar" style="color:#0f172a;text-decoration:none;">hola@ciclomarket.ar</a>.</p>
+                <p style="margin:6px 0 0;">— Equipo Ciclo Market</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`
+}
+
+function buildAnswerEmailHtml({ recipientName, listingTitle, answerBody, listingUrl, assetsBase }) {
+  const greeting = recipientName ? `Hola ${escapeHtml(recipientName)},` : 'Hola,'
+  const safeTitle = escapeHtml(listingTitle || '')
+  const safeAnswer =
+    answerBody && answerBody.trim()
+      ? escapeHtml(answerBody).replace(/\r?\n/g, '<br />')
+      : '<em style="color:#64748b;">(sin respuesta)</em>'
+  const safeUrl = escapeHtml(listingUrl)
+  const logoUrl = `${assetsBase.replace(/\/$/, '')}/site-logo.png`
+  return `<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Respondieron tu consulta</title>
+  </head>
+  <body style="margin:0;background:#f6f8fb;font-family:'Helvetica Neue',Arial,sans-serif;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f6f8fb;padding:24px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 24px 60px -30px rgba(15,33,46,0.35);">
+            <tr>
+              <td style="background:#0f172a;padding:28px 32px;text-align:left;">
+                <img src="${logoUrl}" alt="Ciclo Market" width="140" height="24" style="display:block;margin-bottom:24px;" />
+                <p style="margin:0;font-size:14px;letter-spacing:0.25em;text-transform:uppercase;color:rgba(255,255,255,0.56);">Respuesta recibida</p>
+                <h1 style="margin:12px 0 0;font-size:22px;line-height:30px;font-weight:700;color:#ffffff;">El vendedor respondió tu consulta</h1>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:32px 32px 12px;color:#0f172a;">
+                <p style="margin:0 0 12px;font-size:16px;line-height:24px;">${greeting}</p>
+                <p style="margin:0 0 16px;font-size:16px;line-height:26px;color:#475569;">
+                  Recibiste una respuesta sobre <strong>${safeTitle}</strong>:
+                </p>
+                <blockquote style="margin:0 0 20px;padding:16px 20px;border-left:4px solid #0f172a;background:#f0f4f8;border-radius:16px;font-size:15px;line-height:24px;color:#0f172a;">
+                  ${safeAnswer}
+                </blockquote>
+                <p style="margin:0 0 24px;font-size:15px;line-height:24px;color:#475569;">
+                  Segu&iacute; la conversación desde la publicación para coordinar pruebas, envíos o avanzar con la compra.
+                </p>
+                <div style="margin-bottom:28px;">
+                  <a href="${safeUrl}?tab=preguntas" style="display:inline-block;padding:14px 28px;border-radius:999px;background:#0f172a;color:#ffffff;text-decoration:none;font-weight:600;">
+                    Ver conversación completa
+                  </a>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:0 32px 32px;color:#94a3b8;font-size:13px;line-height:20px;">
+                <p style="margin:0;">¿Tenés dudas adicionales? Podés responder desde la misma sección de preguntas en Ciclo Market.</p>
+                <p style="margin:6px 0 0;">— Equipo Ciclo Market</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`
+}
+
 router.post('/api/questions/notify', async (req, res) => {
   try {
     const { questionId, event } = req.body || {}
@@ -552,15 +687,18 @@ router.post('/api/questions/notify', async (req, res) => {
     const subjectPrefix = 'Consulta en tu publicación'
 
     if (event === 'asked' && seller?.email) {
+      const html = buildQuestionEmailHtml({
+        recipientName: seller.full_name || seller.email,
+        listingTitle: listing.title || '',
+        questionBody: question.question_body || '',
+        listingUrl,
+        assetsBase: frontBase,
+      })
       await sendMail({
         to: seller.email,
         subject: `${subjectPrefix}: ${listing.title}`,
-        html: `<p>Hola${seller.full_name ? ` ${seller.full_name}` : ''},</p>
-<p>Recibiste una nueva consulta en tu publicación <strong>${listing.title}</strong>:</p>
-<blockquote>${question.question_body || '(sin contenido)'}</blockquote>
-<p>Respondela desde <a href="${listingUrl}?tab=preguntas">tu panel</a> para que el comprador reciba la respuesta.</p>
-<p>— Equipo Ciclo Market</p>`,
-        text: `Hola${seller.full_name ? ` ${seller.full_name}` : ''},
+        html,
+        text: `${seller.full_name ? `Hola ${seller.full_name},` : 'Hola,'}
 
 Recibiste una nueva consulta en tu publicación "${listing.title}":
 
@@ -571,15 +709,18 @@ Respondela desde tu panel: ${listingUrl}?tab=preguntas
 — Equipo Ciclo Market`,
       })
     } else if (event === 'answered' && asker?.email) {
+      const html = buildAnswerEmailHtml({
+        recipientName: asker.full_name || asker.email,
+        listingTitle: listing.title || '',
+        answerBody: question.answer_body || '',
+        listingUrl,
+        assetsBase: frontBase,
+      })
       await sendMail({
         to: asker.email,
         subject: `Respondieron tu consulta: ${listing.title}`,
-        html: `<p>Hola${asker.full_name ? ` ${asker.full_name}` : ''},</p>
-<p>El vendedor respondió tu consulta sobre <strong>${listing.title}</strong>:</p>
-<blockquote>${question.answer_body || '(sin respuesta)'}</blockquote>
-<p>Seguí la conversación desde <a href="${listingUrl}?tab=preguntas">la publicación</a>.</p>
-<p>— Equipo Ciclo Market</p>`,
-        text: `Hola${asker.full_name ? ` ${asker.full_name}` : ''},
+        html,
+        text: `${asker.full_name ? `Hola ${asker.full_name},` : 'Hola,'}
 
 El vendedor respondió tu consulta sobre "${listing.title}":
 "${question.answer_body || '(sin respuesta)'}"
