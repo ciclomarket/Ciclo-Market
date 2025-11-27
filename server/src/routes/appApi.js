@@ -537,7 +537,7 @@ async function fetchQuestionContext(supabase, questionId) {
   return { question, listing, seller, asker }
 }
 
-function buildQuestionEmailHtml({ recipientName, listingTitle, questionBody, listingUrl }) {
+function buildQuestionEmailHtml({ recipientName, listingTitle, questionBody, listingUrl, assetsBase }) {
   const greeting = recipientName ? `Hola <strong>${escapeHtml(recipientName)}</strong>,` : 'Hola,'
   const safeTitle = escapeHtml(listingTitle || '')
   const safeQuestion =
@@ -545,6 +545,8 @@ function buildQuestionEmailHtml({ recipientName, listingTitle, questionBody, lis
       ? escapeHtml(questionBody).replace(/\r?\n/g, '<br />')
       : '<em style="color:#64748b;">(sin contenido)</em>'
   const ctaUrl = escapeHtml(`${listingUrl}?tab=preguntas`)
+  const base = (assetsBase || resolveFrontendBaseUrl() || '').replace(/\/$/, '')
+  const logoUrl = `${base}/site-logo.png`
   return `<!DOCTYPE html>
 <html lang="es">
   <head>
@@ -559,7 +561,7 @@ function buildQuestionEmailHtml({ recipientName, listingTitle, questionBody, lis
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:600px; background-color:#FFFFFF; border-radius:12px; overflow:hidden;">
             <tr>
               <td align="center" style="padding:20px 20px 10px 20px; background-color:#FFFFFF;">
-                <img src="https://www.ciclomarket.ar/_static/email-logo-ciclomarket.png" alt="Ciclo Market" width="120" style="display:block; max-width:120px; height:auto; margin:0 auto;" />
+                <img src="${logoUrl}" alt="Ciclo Market" width="120" style="display:block; max-width:120px; height:auto; margin:0 auto;" />
               </td>
             </tr>
             <tr>
@@ -655,7 +657,7 @@ function buildQuestionEmailHtml({ recipientName, listingTitle, questionBody, lis
 </html>`
 }
 
-function buildAnswerEmailHtml({ recipientName, listingTitle, answerBody, listingUrl }) {
+function buildAnswerEmailHtml({ recipientName, listingTitle, answerBody, listingUrl, assetsBase }) {
   const greeting = recipientName ? `Hola <strong>${escapeHtml(recipientName)}</strong>,` : 'Hola,'
   const safeTitle = escapeHtml(listingTitle || '')
   const safeAnswer =
@@ -663,6 +665,8 @@ function buildAnswerEmailHtml({ recipientName, listingTitle, answerBody, listing
       ? escapeHtml(answerBody).replace(/\r?\n/g, '<br />')
       : '<em style="color:#64748b;">(sin respuesta)</em>'
   const ctaUrl = escapeHtml(`${listingUrl}?tab=preguntas`)
+  const base = (assetsBase || resolveFrontendBaseUrl() || '').replace(/\/$/, '')
+  const logoUrl = `${base}/site-logo.png`
   return `<!DOCTYPE html>
 <html lang="es">
   <head>
@@ -677,7 +681,7 @@ function buildAnswerEmailHtml({ recipientName, listingTitle, answerBody, listing
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:600px; background-color:#FFFFFF; border-radius:12px; overflow:hidden;">
             <tr>
               <td align="center" style="padding:20px 20px 10px 20px; background-color:#FFFFFF;">
-                <img src="https://www.ciclomarket.ar/_static/email-logo-ciclomarket.png" alt="Ciclo Market" width="120" style="display:block; max-width:120px; height:auto; margin:0 auto;" />
+                <img src="${logoUrl}" alt="Ciclo Market" width="120" style="display:block; max-width:120px; height:auto; margin:0 auto;" />
               </td>
             </tr>
             <tr>
@@ -800,6 +804,7 @@ router.post('/api/questions/notify', async (req, res) => {
         listingTitle: listing.title || '',
         questionBody: question.question_body || '',
         listingUrl,
+        assetsBase: frontBase,
       })
       await sendMail({
         to: seller.email,
@@ -821,6 +826,7 @@ Respondela desde tu panel: ${listingUrl}?tab=preguntas
         listingTitle: listing.title || '',
         answerBody: question.answer_body || '',
         listingUrl,
+        assetsBase: frontBase,
       })
       await sendMail({
         to: asker.email,
