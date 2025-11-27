@@ -175,6 +175,9 @@ app.use((req, res, next) => {
   return next()
 })
 
+// Custom application API (analytics, reviews, share boost, etc.)
+app.use(appApiRouter)
+
 /* ----------------------------- Static assets ------------------------------ */
 const distDir = path.join(__dirname, '..', '..', 'dist')
 // Static assets live at project-root/public (not server/public)
@@ -228,7 +231,6 @@ app.use(
 
 // Sitemaps & custom API endpoints
 app.use(sitemapRouter)
-app.use(appApiRouter)
 
 /* ----------------------------- CORS --------------------------------------- */
 // Permitir CORS amplio (ajustable por FRONTEND_URL si se quiere restringir)
