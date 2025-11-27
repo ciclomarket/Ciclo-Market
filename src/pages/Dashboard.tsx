@@ -1664,6 +1664,14 @@ function ListingsView({
     if (currentPlan === 'basic' && targetPlan === 'premium') return 'Subir a Premium con crédito'
     return `Cambiar a plan ${targetLabel} con crédito`
   }, [])
+  const getCheckoutLabel = useCallback((currentPlan: string | null, targetPlan: 'basic' | 'premium') => {
+    const targetLabel = targetPlan === 'premium' ? 'Premium' : 'Básica'
+    if (!currentPlan || currentPlan === 'free') return `Mejorar a plan ${targetLabel} (Mercado Pago)`
+    if (currentPlan === targetPlan) return `Renovar plan ${targetLabel} (Mercado Pago)`
+    if (currentPlan === 'basic' && targetPlan === 'premium') return 'Subir a plan Premium (Mercado Pago)'
+    if (currentPlan === 'premium' && targetPlan === 'basic') return 'Cambiar a plan Básico (Mercado Pago)'
+    return `Actualizar a plan ${targetLabel} (Mercado Pago)`
+  }, [])
 
   const planCatalog = useMemo(() => {
     const defaults: Record<'basic' | 'premium', { id: string; name: string; price?: number; currency?: string }> = {
@@ -1747,6 +1755,11 @@ function ListingsView({
     const currency = planConfig?.currency || 'ARS'
     const planId = planConfig?.id || targetPlan
     const planName = planConfig?.name || (targetPlan === 'premium' ? 'Plan Premium' : 'Plan Básico')
+    if (typeof amountValue !== 'number' || amountValue <= 0) {
+      showToast('Configurá el precio del plan en el panel de planes antes de iniciar el pago.', { variant: 'error' })
+      setProcessingPaymentKey(null)
+      return
+    }
     setProcessingPaymentKey(payKey)
     try {
       trackMetaPixel('InitiateCheckout', {
@@ -2013,6 +2026,8 @@ function ListingsView({
           const showPremiumCheckoutOption = canInitiateCheckout
           const basicUpgradeLabel = getUpgradeLabel(listingPlanCode, 'basic')
           const premiumUpgradeLabel = getUpgradeLabel(listingPlanCode, 'premium')
+          const basicCheckoutLabel = getCheckoutLabel(listingPlanCode, 'basic')
+          const premiumCheckoutLabel = getCheckoutLabel(listingPlanCode, 'premium')
           const isExpired = listing.status === 'expired' || (typeof listing.expiresAt === 'number' && listing.expiresAt > 0 && listing.expiresAt < now)
           return (
             <div key={listing.id} id={`dashboard-listing-${listing.id}`} className="space-y-3">
@@ -2108,7 +2123,7 @@ function ListingsView({
                         disabled={processingPaymentKey === basicCheckoutKey}
                         onClick={() => { void handleUpgradeCheckout(listing, 'basic') }}
                       >
-                        {processingPaymentKey === basicCheckoutKey ? 'Redirigiendo…' : 'Upgrade plan Básico (Mercado Pago)'}
+                        {processingPaymentKey === basicCheckoutKey ? 'Redirigiendo…' : basicCheckoutLabel}
                       </button>
                     )}
                     {showPremiumCheckoutOption && (
@@ -2118,7 +2133,7 @@ function ListingsView({
                         disabled={processingPaymentKey === premiumCheckoutKey}
                         onClick={() => { void handleUpgradeCheckout(listing, 'premium') }}
                       >
-                        {processingPaymentKey === premiumCheckoutKey ? 'Redirigiendo…' : 'Upgrade plan Premium (Mercado Pago)'}
+                        {processingPaymentKey === premiumCheckoutKey ? 'Redirigiendo…' : premiumCheckoutLabel}
                       </button>
                     )}
                     {!canInitiateCheckout && !showBasicCreditOption && !showPremiumCreditOption && (

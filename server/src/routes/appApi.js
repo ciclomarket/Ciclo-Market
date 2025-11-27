@@ -27,6 +27,11 @@ function validateEmail(email) {
   return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(email).trim())
 }
 
+function isUuid(value) {
+  if (!value) return false
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value).trim())
+}
+
 function escapeHtml(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -137,7 +142,7 @@ router.post('/api/contacts/log', async (req, res) => {
     const payload = {
       seller_id: String(sellerId),
       buyer_id: buyerId ? String(buyerId) : null,
-      listing_id: listingId ? String(listingId) : null,
+      listing_id: listingId && isUuid(listingId) ? String(listingId).trim() : null,
       type: normalizedType,
     }
     const { error } = await supabase.from('contact_events').insert(payload)
