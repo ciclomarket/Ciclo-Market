@@ -84,6 +84,12 @@
       }
       ,
       {
+        "source": "/sitemap-blog.xml",
+        "destination": "https://ciclo-market.onrender.com/sitemap-blog.xml",
+        "type": 301
+      }
+      ,
+      {
         "source": "/merchant-feed.xml",
         "destination": "https://ciclo-market.onrender.com/merchant-feed.xml",
         "type": 301

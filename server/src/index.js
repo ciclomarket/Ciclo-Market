@@ -181,6 +181,7 @@ const distDir = path.join(__dirname, '..', '..', 'dist')
 const publicDir = path.join(__dirname, '..', '..', 'public')
 // Admin panel (built separately)
 const adminDistDir = path.join(__dirname, '..', '..', 'dist-admin')
+const sitemapRouter = require('./routes/sitemaps')
 
 app.use(
   express.static(distDir, {
@@ -223,6 +224,9 @@ app.use(
     },
   })
 )
+
+// Sitemaps
+app.use(sitemapRouter)
 
 /* ----------------------------- CORS --------------------------------------- */
 // Permitir CORS amplio (ajustable por FRONTEND_URL si se quiere restringir)

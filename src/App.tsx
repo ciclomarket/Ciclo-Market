@@ -38,6 +38,9 @@ const Indumentaria = lazyWithRetry(() => import('./pages/seo/Indumentaria'))
 const BicicletasTriatlon = lazyWithRetry(() => import('./pages/seo/BicicletasTriatlon'))
 const OfertasDestacadas = lazyWithRetry(() => import('./pages/seo/OfertasDestacadas'))
 const Nutricion = lazyWithRetry(() => import('./pages/seo/Nutricion'))
+const BlogListPage = lazyWithRetry(() => import('./pages/Blog'))
+const BlogPostDetail = lazyWithRetry(() => import('./pages/Blog/PostDetail'))
+const BlogAdminPage = lazyWithRetry(() => import('./pages/Admin/Blog'))
 import { AuthProvider } from './context/AuthContext'
 import { CurrencyProvider } from './context/CurrencyContext'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -104,6 +107,31 @@ function resolveSeoForPath(pathname: string, search: string): Partial<SeoHeadPro
         'Entrá directo al marketplace, ofertas, tiendas oficiales y contenido destacado desde el link en bio de Ciclo Market.',
       image: '/og-preview.png',
       noIndex: true
+    }
+  }
+
+  if (normalized === '/blog') {
+    return {
+      title: 'Blog de Ciclo Market',
+      description:
+        'Notas, entrevistas, rutas recomendadas y tecnología para ciclistas en Argentina. Todo el universo de Ciclo Market en un solo lugar.',
+      image: '/OG-Marketplace.png',
+      keywords: [
+        'blog ciclomarket',
+        'notas ciclismo argentina',
+        'gravel rutas argentina',
+        'consejos para ciclistas',
+      ],
+    }
+  }
+
+  if (normalized.startsWith('/blog/')) {
+    return {
+      title: 'Artículo · Ciclo Market',
+      description:
+        'Leé las últimas historias y guías del blog de Ciclo Market. Consejos de mantenimiento, rutas y experiencias en primera persona.',
+      image: '/OG-Marketplace.png',
+      type: 'article',
     }
   }
 
@@ -433,6 +461,10 @@ export default function App() {
                       {/* /ofertas va al shop con deal=1 */}
                       <Route path="/ofertas" element={<Navigate to="/marketplace?deal=1" replace />} />
 
+                      {/* Blog */}
+                      <Route path="/blog" element={<BlogListPage />} />
+                      <Route path="/blog/:slug" element={<BlogPostDetail />} />
+
                       {/* Publicar */}
                       <Route path="/publicar" element={<Plans />} />
                       {/* Campaña: Publicá gratis */}
@@ -459,6 +491,14 @@ export default function App() {
                         element={
                           <ProtectedRoute>
                             <Dashboard />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route
+                        path="/admin/blog"
+                        element={
+                          <ProtectedRoute>
+                            <BlogAdminPage />
                           </ProtectedRoute>
                         }
                       />

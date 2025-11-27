@@ -137,3 +137,91 @@ body {
 .seo-details:not([open]) .seo-copy {
   display: none;
 }
+
+.blog-content {
+  color: #101928;
+  font-size: 0.975rem;
+  line-height: 1.75;
+  display: grid;
+  gap: 1.25rem;
+}
+.blog-content h1,
+.blog-content h2,
+.blog-content h3,
+.blog-content h4,
+.blog-content h5,
+.blog-content h6 {
+  font-weight: 700;
+  line-height: 1.25;
+  color: #0f172a;
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+.blog-content h1 { font-size: 2rem; }
+.blog-content h2 { font-size: 1.75rem; }
+.blog-content h3 { font-size: 1.5rem; }
+.blog-content h4 { font-size: 1.25rem; }
+.blog-content h5,
+.blog-content h6 { font-size: 1.125rem; }
+.blog-content p { margin: 0; }
+.blog-content ul,
+.blog-content ol {
+  padding-left: 1.5rem;
+  display: grid;
+  gap: 0.5rem;
+}
+.blog-content li::marker {
+  color: rgba(20, 33, 46, 0.65);
+}
+.blog-content blockquote {
+  border-left: 4px solid rgba(20, 33, 46, 0.2);
+  padding: 0.5rem 1.5rem;
+  font-style: italic;
+  background: rgba(15, 23, 42, 0.04);
+  border-radius: 12px;
+}
+.blog-content img,
+.blog-content iframe {
+  width: 100%;
+  max-width: 100%;
+  border-radius: 16px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.12);
+}
+.blog-content table {
+  width: 100%;
+  border-collapse: collapse;
+  overflow: hidden;
+  border-radius: 12px;
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.08);
+}
+.blog-content .blog-image {
+  display: grid;
+  gap: 0.5rem;
+}
+.blog-content .blog-image figcaption {
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: rgba(15, 23, 42, 0.6);
+  text-align: center;
+}
+.blog-content th,
+.blog-content td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  text-align: left;
+  background: rgba(255, 255, 255, 0.9);
+}
+.blog-content tbody tr:nth-child(even) td {
+  background: rgba(241, 245, 249, 0.6);
+}
+.blog-content a {
+  color: #047857;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+.blog-content hr {
+  border: none;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.1);
+  margin: 1rem 0;
+}

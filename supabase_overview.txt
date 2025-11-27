@@ -1,0 +1,41 @@
+Supabase Integration Overview
+==============================
+
+Client Bootstrap
+----------------
+- The main client factory lives in src/services/supabase.ts. It guards all usage behind the supabaseEnabled flag, which only flips true when VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY look real. Every service and hook calls getSupabaseClient() and relies on this module for storage persistence tweaks.
+- Admin and web scopes share the same client with different storage keys (mb_admin_auth vs mb_web_auth). setAuthPersistence() must run before login to pick localStorage or sessionStorage.
+
+Authentication and Roles
+------------------------
+- AuthContext (src/context/AuthContext.tsx) creates the session for the public app; AdminAuthContext (admin/src/context/AdminAuthContext.tsx) mirrors it for panel moderators.
+- Both resolve privileges through public.user_roles. Any schema change on that table or its RLS directly affects who can query moderation-only views like notifications or events.
+
+Listings Lifecycle
+------------------
+- src/services/listings.ts provides the canonical serializer for public.listings. It filters drafts/archived/deleted rows and normalises plan codes through utils/planCodes.
+- Publish and dashboard flows (src/pages/Publish/NewListingForm.tsx, src/pages/Dashboard.tsx) assume direct PostgREST access for insert/update/delete, which means Supabase RLS must allow owners (and moderators) to mutate their rows.
+- Server endpoints under /api/listings/:id/* (server/src/index.js) escalate to the service role to perform gated updates like highlight cleanups or plan upgrades.
+
+Plans, Credits, Payments
+------------------------
+- Frontend plan selection (src/pages/Publish/Plans.tsx) and Dashboard upgrades call backend endpoints: /api/checkout, /api/listings/:id/upgrade, /api/listings/:id/apply-plan.
+- The Express server reads and writes public.publish_credits, public.plans, public.payments and updates listings.status/expires_at/highlight_expires. When SUPABASE_SERVICE_ROLE_KEY is missing, several fallbacks become read-only.
+
+Engagement and Events
+---------------------
+- Analytics relies on public.events plus the views defined in scripts/supabase_events.sql and scripts/supabase_store_analytics.sql. Admin pages consume admin_events_daily, admin_listing_engagement_summary, admin_store_engagement_summary, etc.
+- Frontend tracking uses src/services/track.ts, expecting a /api/track endpoint that writes rows into public.events. That route is currently absent on the Express server, so events stop flowing unless another ingestion path exists.
+
+Supporting Domains
+------------------
+- Likes, questions, support tickets, notifications: handled in src/services/likes.ts, src/services/listingQuestions.ts, src/services/support.ts and src/context/NotificationContext.tsx. All depend on Supabase tables and the RPC mark_notifications_read.
+- Jobs under server/src/jobs/* (marketingAutomations, storeAnalyticsDigest, deletedPurger, etc.) use the service role client (getServerSupabaseClient) to email users, expire listings, or clean storage.
+- Cloud Functions in functions/index.js act as proxy layers for Supabase storage images and listing share pages.
+
+Integrity Concerns to Monitor
+-----------------------------
+- public.listings.status has no enum/check; the code filters strings like "active", "published", "archived". Add constraints only after migrating values and updating clients.
+- Several relations use text for IDs (contact_events.listing_id, reviews.seller_id, gift_redemptions.seller_id). Tightening them to uuid needs coordinated migrations so existing fetches keep working.
+- notifications.actor_id defaults to auth.uid(); service-role inserts must set it explicitly or mark the column nullable.
+- Arrays such as listings.images and users.bike_preferences store unbounded text data; front-end limits exist, but any schema normalisation should be reflected in serializers.

@@ -42,19 +42,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       setRoleLoading(true)
       const client = getSupabaseClient()
-      const { data, error } = await client
+      const { data: profileRole, error: profileError } = await client
+        .from('profiles')
+        .select('role')
+        .eq('id', userId)
+        .maybeSingle()
+
+      if (profileError) {
+        console.warn('[auth] profile role fetch error', profileError)
+      }
+
+      if (profileRole?.role === 'moderator' || profileRole?.role === 'admin') {
+        setRole(profileRole.role)
+        setRoleLoading(false)
+        return
+      }
+
+      const { data: legacyRole, error: legacyError } = await client
         .from('user_roles')
         .select('role')
         .eq('user_id', userId)
         .maybeSingle()
-      if (error) {
-        console.warn('[auth] role fetch error', error)
-        setRole('user')
-        setRoleLoading(false)
-        return
+
+      if (legacyError) {
+        console.warn('[auth] legacy role fetch error', legacyError)
       }
-      if (data?.role === 'moderator' || data?.role === 'admin') {
-        setRole(data.role)
+
+      if (legacyRole?.role === 'moderator' || legacyRole?.role === 'admin') {
+        setRole(legacyRole.role)
       } else {
         setRole('user')
       }
