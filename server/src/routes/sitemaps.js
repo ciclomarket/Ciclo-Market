@@ -81,8 +81,20 @@ function buildUrlElement({ loc, lastmod, changefreq, priority }) {
   return parts.join('\n')
 }
 
-function buildUrlSet(urls) {
-  return `${XML_HEADER}\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls
+function buildUrlSet(urls, fallbackEntry) {
+  const entries = Array.isArray(urls) ? [...urls] : []
+  if (entries.length === 0) {
+    const fallback =
+      fallbackEntry && fallbackEntry.loc
+        ? fallbackEntry
+        : {
+            loc: resolveFrontendBaseUrl(),
+            changefreq: 'weekly',
+            priority: '0.3',
+          }
+    entries.push(fallback)
+  }
+  return `${XML_HEADER}\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${entries
     .map(buildUrlElement)
     .join('\n')}\n</urlset>`
 }

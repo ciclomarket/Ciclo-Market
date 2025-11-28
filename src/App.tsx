@@ -16,6 +16,7 @@ const Profile = lazyWithRetry(() => import('./pages/Profile'))
 const Login = lazyWithRetry(() => import('./pages/Auth/Login'))
 const Register = lazyWithRetry(() => import('./pages/Auth/Register'))
 const VerifyEmail = lazyWithRetry(() => import('./pages/Auth/VerifyEmail'))
+const ResetPassword = lazyWithRetry(() => import('./pages/Auth/ResetPassword'))
 const Help = lazyWithRetry(() => import('./pages/Help'))
 const HowToPublish = lazyWithRetry(() => import('./pages/HowToPublish'))
 const OfficialStore = lazyWithRetry(() => import('./pages/OfficialStore'))
@@ -509,6 +510,7 @@ export default function App() {
                       <Route path="/login" element={<Login />} />
                       <Route path="/register" element={<Register />} />
                       <Route path="/verificar-email" element={<VerifyEmail />} />
+                      <Route path="/recuperar-clave" element={<ResetPassword />} />
                       <Route path="/ayuda" element={<Help />} />
                       <Route path="/como-publicar" element={<HowToPublish />} />
                       <Route path="/tienda-oficial" element={<OfficialStore />} />

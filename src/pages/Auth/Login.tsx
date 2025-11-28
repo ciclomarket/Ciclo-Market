@@ -8,6 +8,7 @@ import { getSupabaseClient, supabaseEnabled, setAuthPersistence } from '../../se
 import { trackMetaPixel } from '../../lib/metaPixel'
 import { detectInAppBrowser, canUseOAuthInContext } from '../../utils/inAppBrowser'
 import InAppBrowserWarning from '../../components/InAppBrowserWarning'
+import { useToast } from '../../context/ToastContext'
 
 type OAuthProvider = 'google' | 'facebook'
 
@@ -20,6 +21,8 @@ export default function Login() {
   const location = useLocation() as any
   const { enabled } = useAuth()
   const [inApp, setInApp] = useState<{ isInApp: boolean; agent: string | null }>({ isInApp: false, agent: null })
+  const { show: showToast } = useToast()
+  const [sendingReset, setSendingReset] = useState(false)
   useEffect(() => { setInApp(detectInAppBrowser()) }, [])
   // (Promo next removido)
 
@@ -91,6 +94,31 @@ export default function Login() {
       alert(message)
     } finally {
       setProviderLoading(provider, false)
+    }
+  }
+
+  const handlePasswordReset = async () => {
+    if (!enabled || !supabaseEnabled) {
+      showToast('Recuperar contraseña está deshabilitado: configurá Supabase en .env', { variant: 'error' })
+      return
+    }
+    if (!email.trim()) {
+      showToast('Ingresá el email con el que te registraste para recuperar tu contraseña.', { variant: 'info' })
+      return
+    }
+    try {
+      setSendingReset(true)
+      const supabase = getSupabaseClient()
+      const redirectTo = `${window.location.origin}/recuperar-clave`
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo })
+      if (error) throw error
+      showToast(`Te enviamos un enlace de recuperación a ${email.trim()}. Revisá tu bandeja de entrada y spam.`, { variant: 'info' })
+    } catch (err: any) {
+      console.error('Error enviando email de recuperación:', err)
+      const message = err instanceof Error ? err.message : 'No pudimos enviar el correo de recuperación. Intentá nuevamente.'
+      showToast(message, { variant: 'error' })
+    } finally {
+      setSendingReset(false)
     }
   }
 
@@ -193,6 +221,14 @@ export default function Login() {
               >
                 Ingresar con email
               </Button>
+              <button
+                type="button"
+                onClick={handlePasswordReset}
+                className="w-full text-center text-xs font-semibold text-white/70 underline-offset-4 hover:text-white"
+                disabled={sendingReset}
+              >
+                {sendingReset ? 'Enviando correo de recuperación…' : '¿Olvidaste tu contraseña?'}
+              </button>
               <p className="text-center text-xs text-white/50">
                 Al continuar aceptás nuestros{' '}
                 <a href="/terminos" className="underline hover:text-white">
