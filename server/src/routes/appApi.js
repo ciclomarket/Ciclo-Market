@@ -32,6 +32,15 @@ function isUuid(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value).trim())
 }
 
+function normalizeUuidLike(value) {
+  if (!value) return null
+  const text = String(value).trim()
+  if (!text) return null
+  if (isUuid(text)) return text.toLowerCase()
+  const match = text.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)
+  return match ? match[0].toLowerCase() : null
+}
+
 function escapeHtml(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -133,20 +142,35 @@ router.post('/api/contacts/log', async (req, res) => {
     if (!sellerId || typeof type !== 'string') {
       return res.status(400).json({ ok: false, error: 'missing_fields' })
     }
+    const sellerUuid = normalizeUuidLike(sellerId)
+    if (!sellerUuid) {
+      return res.status(400).json({ ok: false, error: 'invalid_seller' })
+    }
     const normalizedType = String(type).toLowerCase()
     if (normalizedType !== 'whatsapp' && normalizedType !== 'email') {
       return res.status(400).json({ ok: false, error: 'invalid_type' })
     }
     const supabase = getSupabaseOrFail(res)
     if (!supabase) return
+    const listingUuid = normalizeUuidLike(listingId)
     const payload = {
-      seller_id: String(sellerId),
-      buyer_id: buyerId ? String(buyerId) : null,
-      listing_id: listingId && isUuid(listingId) ? String(listingId).trim() : null,
+      seller_id: sellerUuid,
+      buyer_id: normalizeUuidLike(buyerId),
+      listing_id: listingUuid,
       type: normalizedType,
     }
     const { error } = await supabase.from('contact_events').insert(payload)
     if (error) {
+      if (error.code === '42804' && payload.listing_id) {
+        console.warn('[api] contact_events insert retry without listing_id', {
+          listingId,
+          normalized: listingUuid,
+          message: error.message,
+        })
+        const retryPayload = { ...payload, listing_id: null }
+        const { error: retryError } = await supabase.from('contact_events').insert(retryPayload)
+        if (!retryError) return res.json({ ok: true })
+      }
       console.error('[api] contact_events insert failed', error)
       return res.status(500).json({ ok: false, error: 'insert_failed' })
     }
