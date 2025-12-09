@@ -346,7 +346,8 @@ async function fetchReviewsWithBuyerData(supabase, sellerId) {
   }))
 }
 
-router.get('/api/reviews/:sellerId', async (req, res) => {
+// Match only UUID-like sellerId to avoid catching '/api/reviews/can-review'
+router.get('/api/reviews/:sellerId([0-9a-fA-F-]{36})', async (req, res) => {
   try {
     const { sellerId } = req.params
     if (!sellerId) return res.status(400).json({ ok: false, error: 'missing_seller' })
@@ -406,11 +407,14 @@ router.get('/api/reviews/:sellerId', async (req, res) => {
 
 router.get('/api/reviews/can-review', async (req, res) => {
   try {
-    const sellerId = String(req.query.sellerId || '').trim()
-    const buyerId = String(req.query.buyerId || '').trim()
-    if (!sellerId || !buyerId) {
+    const rawSeller = String(req.query.sellerId || '').trim()
+    const rawBuyer = String(req.query.buyerId || '').trim()
+    if (!rawSeller || !rawBuyer) {
       return res.status(400).json({ allowed: false, reason: 'missing_fields' })
     }
+    // Intentar normalizar a UUID cuando sea posible (acepta ids con caracteres extra)
+    const sellerId = normalizeUuidLike(rawSeller) || rawSeller
+    const buyerId = normalizeUuidLike(rawBuyer) || rawBuyer
     if (sellerId === buyerId) {
       return res.json({ allowed: false, reason: 'self_review' })
     }
