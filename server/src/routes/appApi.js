@@ -136,7 +136,29 @@ router.post('/api/track', async (req, res) => {
 /* Contact events (para habilitar reseñas y analytics)                        */
 /* -------------------------------------------------------------------------- */
 
-router.post('/api/contacts/log', async (req, res) => {
+// Algunos navegadores envían navigator.sendBeacon con content-type text/plain
+// o application/octet-stream. Agregamos un body parser específico para este
+// endpoint y convertimos JSON string -> objeto cuando sea necesario.
+const beaconBodyParser = express.text({
+  type: (req) => {
+    const ct = String(req.headers['content-type'] || '').toLowerCase()
+    return ct.startsWith('text/plain') || ct.startsWith('application/octet-stream')
+  },
+  limit: '256kb',
+})
+
+function coerceJsonBody(req, _res, next) {
+  if (typeof req.body === 'string') {
+    try {
+      req.body = JSON.parse(req.body)
+    } catch {
+      // dejar como string; el handler devolverá missing_fields
+    }
+  }
+  next()
+}
+
+router.post('/api/contacts/log', beaconBodyParser, coerceJsonBody, async (req, res) => {
   try {
     const { sellerId, buyerId, listingId, type } = req.body || {}
     if (!sellerId || typeof type !== 'string') {
@@ -153,10 +175,11 @@ router.post('/api/contacts/log', async (req, res) => {
     const supabase = getSupabaseOrFail(res)
     if (!supabase) return
     const listingUuid = normalizeUuidLike(listingId)
+    const omitListingId = String(process.env.CONTACT_EVENTS_OMIT_LISTING_ID || '').toLowerCase() === 'true'
     const payload = {
       seller_id: sellerUuid,
       buyer_id: normalizeUuidLike(buyerId),
-      listing_id: listingUuid,
+      listing_id: omitListingId ? null : listingUuid,
       type: normalizedType,
     }
     const { error } = await supabase.from('contact_events').insert(payload)
@@ -170,6 +193,12 @@ router.post('/api/contacts/log', async (req, res) => {
         const retryPayload = { ...payload, listing_id: null }
         const { error: retryError } = await supabase.from('contact_events').insert(retryPayload)
         if (!retryError) return res.json({ ok: true })
+        console.error('[api] contact_events retry insert still failed', {
+          code: retryError?.code,
+          message: retryError?.message,
+          details: retryError?.details,
+          hint: retryError?.hint,
+        })
       }
       console.error('[api] contact_events insert failed', error)
       return res.status(500).json({ ok: false, error: 'insert_failed' })

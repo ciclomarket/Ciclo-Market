@@ -5,7 +5,8 @@
   "type": "commonjs",
   "scripts": {
     "start": "node src/index.js",
-    "build": "npm install --prefix .. --production=false && npm run build --prefix .."
+    "build": "npm install --prefix .. --production=false && npm run build --prefix ..",
+    "review-reminder:once": "node -e \"require('./src/jobs/reviewReminder').runReviewReminderOnce(Number(process.env.REVIEW_REMINDER_BATCH_LIMIT)||50).then(()=>process.exit(0)).catch((e)=>{console.error(e);process.exit(1)})\""
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.74.0",

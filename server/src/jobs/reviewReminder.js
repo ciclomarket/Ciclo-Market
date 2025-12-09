@@ -141,4 +141,29 @@ function startReviewReminderJob() {
   console.info('[reviewReminder] job iniciado con cron', cronSchedule)
 }
 
-module.exports = { startReviewReminderJob }
+async function runReviewReminderOnce(limit) {
+  const batchLimit = Number(limit || process.env.REVIEW_REMINDER_BATCH_LIMIT || DEFAULT_BATCH_LIMIT)
+  let supabase
+  try {
+    supabase = getServerSupabaseClient()
+  } catch (error) {
+    console.warn('[reviewReminder] no se pudo inicializar Supabase:', error.message)
+    return { inapp: 0, emailed: 0 }
+  }
+  const inapp = await emitInAppNotifications(supabase, batchLimit)
+  let emailed = 0
+  try {
+    if (isMailConfigured()) {
+      const reminders = await fetchReadyEmailReminders(supabase, batchLimit)
+      emailed = await sendEmailsForReminders(supabase, reminders)
+    } else {
+      console.warn('[reviewReminder] email no configurado; sólo se emitieron notificaciones in-app')
+    }
+  } catch (err) {
+    console.error('[reviewReminder] runOnce failed while emailing', err)
+  }
+  console.info('[reviewReminder] once done', { inapp, emailed })
+  return { inapp, emailed }
+}
+
+module.exports = { startReviewReminderJob, runReviewReminderOnce }
