@@ -238,9 +238,11 @@ async function runOnce() {
     try {
       const html = buildEmailHtml({ baseFront, profile, listing })
       const text = buildEmailText({ baseFront, listing })
-      const subject = `Hasta ${pctOff(BASIC_ORIG, BASIC_PROMO)}% OFF en planes — potenciá tu aviso`
+      const subject = `🔥 Hasta 44% OFF en planes: Básica ${BASIC_PROMO.toLocaleString('es-AR')} y Premium ${PREMIUM_PROMO.toLocaleString('es-AR')} — activá WhatsApp y destaque`
       await sendMail({ to: email, subject, html, text })
       await recordSend(supabase, CAMPAIGN_CODE, listing?.id ?? null, sellerId, email)
+      // rate limit: 1 mail cada 2 segundos
+      await new Promise((r) => setTimeout(r, 2000))
       sent += 1
     } catch (e) {
       console.warn('[campaign] send failed', sellerId, e?.message || e)

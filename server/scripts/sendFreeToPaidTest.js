@@ -41,11 +41,11 @@ async function main() {
   const baseFront = resolveFrontendBaseUrl()
   const html = buildEmailHtml({ baseFront, profile, listing })
   const text = buildEmailText({ baseFront, listing })
-  const subject = 'Test · Oferta de planes con descuento'
+  const defaultSubject = `Test Dark · Oferta de planes ${new Date().toLocaleString('es-AR')}`
+  const subject = process.env.TEST_EMAIL_SUBJECT || defaultSubject
 
   const res = await sendMail({ to, subject, html, text })
   console.log('OK', res)
 }
 
 main().catch((e) => { console.error(e); process.exit(1) })
-
