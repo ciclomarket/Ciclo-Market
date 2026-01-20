@@ -112,6 +112,7 @@ function buildEmailHtml({ baseFront, profile, listing }) {
       .dm-text { color: #e6edf5 !important; }
       .dm-subtle { color: #9fb2c7 !important; }
       .dm-muted { color: #7a8ea5 !important; }
+      .dm-text a { color: #8ab4ff !important; }
     }
     [data-ogsc] .dm-bg { background: #0b1a28 !important; }
     [data-ogsc] .dm-hero { background: linear-gradient(135deg,#0b1220,#122133) !important; }
@@ -119,12 +120,13 @@ function buildEmailHtml({ baseFront, profile, listing }) {
     [data-ogsc] .dm-text { color: #e6edf5 !important; }
     [data-ogsc] .dm-subtle { color: #9fb2c7 !important; }
     [data-ogsc] .dm-muted { color: #7a8ea5 !important; }
+    .dm-text a { color: inherit !important; }
   </style>`
 
   return `
   ${styleBlock}
   <div class="dm-bg" style="background:#f2f4f8;margin:0;padding:0;font-family:Arial, sans-serif;color:#0c1723">
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="width:100%;max-width:720px;margin:0 auto">
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="width:100%;max-width:720px;margin:0 auto" bgcolor="#f2f4f8">
       <tr>
         <td style="padding:24px;text-align:center;">
           <img src="${cleanBase}/site-logo.png" alt="Ciclo Market" style="height:56px;width:auto;display:inline-block" />
@@ -148,7 +150,7 @@ function buildEmailHtml({ baseFront, profile, listing }) {
         </td>
       </tr>
       <tr>
-        <td style="padding:0 24px 8px">
+        <td style="padding:0 24px 8px" bgcolor="#ffffff">
           <div class="dm-card dm-text" style="background:#fff;border-radius:20px;padding:22px">
             <div class="dm-text" style="font-size:13px;color:#0c1723;font-weight:700;margin-bottom:10px">Tu publicación</div>
             <div class="dm-card dm-text">${listingCard}</div>
@@ -156,7 +158,7 @@ function buildEmailHtml({ baseFront, profile, listing }) {
         </td>
       </tr>
       <tr>
-        <td style="padding:10px 24px 28px">
+        <td style="padding:10px 24px 28px" bgcolor="#ffffff">
           <div class="dm-card dm-text" style="background:#fff;border-radius:20px;padding:22px">
             <div class="dm-text" style="font-size:14px;color:#0c1723;font-weight:700;margin-bottom:8px">¿Qué ganás al mejorar?</div>
             <ul class="dm-text" style="margin:0;padding-left:18px;color:#334155;line-height:1.7;font-size:14px">
