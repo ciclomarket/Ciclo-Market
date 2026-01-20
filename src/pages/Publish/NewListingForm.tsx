@@ -496,6 +496,27 @@ export default function NewListingForm() {
       if (typeof draft.cityOther === 'string') setCityOther(draft.cityOther)
       if (typeof draft.description === 'string') setDescription(draft.description)
       if (Array.isArray(draft.images)) setImages(draft.images.filter((item: unknown) => typeof item === 'string'))
+      // Campos faltantes previamente no restaurados
+      if (typeof draft.seatInfo === 'string') setSeatInfo(draft.seatInfo)
+      if (typeof draft.handlebarInfo === 'string') setHandlebarInfo(draft.handlebarInfo)
+      if (typeof draft.pedalsInfo === 'string') setPedalsInfo(draft.pedalsInfo)
+      if (typeof draft.chainInfo === 'string') setChainInfo(draft.chainInfo)
+      if (typeof draft.forkInfo === 'string') setForkInfo(draft.forkInfo)
+      if (typeof draft.mtbForkModel === 'string') setMtbForkModel(draft.mtbForkModel)
+      if (typeof draft.fixieRatio === 'string') setFixieRatio(draft.fixieRatio)
+      if (typeof draft.ebikeMotor === 'string') setEbikeMotor(draft.ebikeMotor)
+      if (typeof draft.ebikeCharge === 'string') setEbikeCharge(draft.ebikeCharge)
+      if (typeof draft.brakeType === 'string') {
+        const allowed = ['Disco hidráulico', 'Disco mecánico', 'Herradura', ''] as const
+        if ((allowed as readonly string[]).includes(draft.brakeType)) setBrakeType(draft.brakeType as any)
+      }
+      if (typeof draft.bikeCondition === 'string' && (CONDITION_OPTIONS as readonly string[]).includes(draft.bikeCondition)) {
+        setBikeCondition(draft.bikeCondition as (typeof CONDITION_OPTIONS)[number])
+      }
+      if (typeof draft.whatsappDial === 'string') {
+        const dials = COUNTRY_CODES.map((c) => c.dial as string)
+        if (dials.includes(draft.whatsappDial)) setWhatsappDial(draft.whatsappDial as any)
+      }
       const draftWhatsappRaw =
         typeof draft.sellerWhatsappLocal === 'string'
           ? draft.sellerWhatsappLocal
@@ -533,6 +554,18 @@ export default function NewListingForm() {
         wheelset,
         wheelSize,
         extras,
+        // Campos adicionales
+        seatInfo,
+        handlebarInfo,
+        pedalsInfo,
+        chainInfo,
+        forkInfo,
+        mtbForkModel,
+        fixieRatio,
+        ebikeMotor,
+        ebikeCharge,
+        brakeType,
+        bikeCondition,
         priceCurrency,
         priceInput,
         year,
@@ -542,6 +575,7 @@ export default function NewListingForm() {
         description,
         images,
         sellerWhatsappLocal,
+        whatsappDial,
         planOverride,
         accessoryType,
         accessoryCondition,
@@ -584,6 +618,19 @@ export default function NewListingForm() {
     description,
     images,
     sellerWhatsappLocal,
+    // Nuevos campos persistidos
+    seatInfo,
+    handlebarInfo,
+    pedalsInfo,
+    chainInfo,
+    forkInfo,
+    mtbForkModel,
+    fixieRatio,
+    ebikeMotor,
+    ebikeCharge,
+    brakeType,
+    bikeCondition,
+    whatsappDial,
     planOverride,
     accessoryType,
     accessoryCondition,

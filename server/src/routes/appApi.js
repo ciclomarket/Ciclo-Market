@@ -27,20 +27,6 @@ function validateEmail(email) {
   return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(email).trim())
 }
 
-function isUuid(value) {
-  if (!value) return false
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value).trim())
-}
-
-function normalizeUuidLike(value) {
-  if (!value) return null
-  const text = String(value).trim()
-  if (!text) return null
-  if (isUuid(text)) return text.toLowerCase()
-  const match = text.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)
-  return match ? match[0].toLowerCase() : null
-}
-
 function escapeHtml(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -48,102 +34,6 @@ function escapeHtml(value) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
-}
-
-async function resolveUserEmail(supabase, userId) {
-  if (!userId) return null
-  try {
-    const { data } = await supabase.from('users').select('email').eq('id', userId).maybeSingle()
-    if (data?.email) return data.email
-  } catch {}
-  try {
-    const { data, error } = await supabase.auth.admin.getUserById(userId)
-    if (!error && data?.user?.email) return data.user.email
-  } catch {}
-  return null
-}
-
-async function resolveUserName(supabase, userId) {
-  try {
-    const { data } = await supabase.from('users').select('full_name').eq('id', userId).maybeSingle()
-    return (data?.full_name || '').trim() || null
-  } catch {
-    return null
-  }
-}
-
-function buildReviewReceivedEmailHtml({ sellerName, buyerName, rating, comment, tags, profileUrl, assetsBase }) {
-  const greeting = sellerName ? `Hola <strong>${escapeHtml(sellerName)}</strong>,` : 'Hola,'
-  const stars = '★★★★★'.slice(0, Math.max(1, Math.min(5, Number(rating) || 0)))
-  const safeComment = comment ? escapeHtml(comment).replace(/\r?\n/g, '<br />') : '<em style="color:#64748b;">(sin comentario)</em>'
-  const tagsHtml = Array.isArray(tags) && tags.length
-    ? `<p style=\"margin:8px 0 0 0;font-family:Arial,sans-serif;font-size:12px;color:#475569;\">Etiquetas: ${tags.map((t)=>`<span style=\"display:inline-block;margin-right:6px;padding:2px 8px;border-radius:999px;background:#f1f5f9;color:#0f1724;\">${escapeHtml(String(t).replace(/_/g,' '))}</span>`).join('')}</p>`
-    : ''
-  const base = (assetsBase || resolveFrontendBaseUrl() || '').replace(/\/$/, '')
-  const logoUrl = `${base}/site-logo.png`
-  const ctaUrl = profileUrl
-  return `<!DOCTYPE html>
-<html lang="es">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Recibiste una reseña</title>
-  </head>
-  <body style="margin:0; padding:0; background-color:#F4F5F7;">
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#F4F5F7;">
-      <tr>
-        <td align="center" style="padding:24px 12px;">
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:600px; background-color:#FFFFFF; border-radius:12px; overflow:hidden;">
-            <tr>
-              <td align="center" style="padding:20px 20px 10px 20px; background-color:#FFFFFF;">
-                <img src="${logoUrl}" alt="Ciclo Market" width="120" style="display:block; max-width:120px; height:auto; margin:0 auto;" />
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:24px 24px 8px 24px; background-color:#14212E;">
-                <h1 style="margin:0; font-family:Arial, sans-serif; font-size:22px; line-height:1.3; color:#FFFFFF; font-weight:bold;">
-                  ¡Recibiste una nueva reseña!
-                </h1>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:16px 24px 0 24px; background-color:#FFFFFF;">
-                <p style="margin:0 0 12px 0; font-family:Arial, sans-serif; font-size:14px; color:#0f1724;">
-                  ${greeting} ${buyerName ? `${escapeHtml(buyerName)} ` : ''}dejó una reseña sobre tu atención.
-                </p>
-                <p style="margin:0 0 8px 0; font-family:Arial, sans-serif; font-size:16px; color:#0f1724; font-weight:bold;">
-                  ${stars} (${Number(rating) || 0}/5)
-                </p>
-                <div style="border-radius:8px; background-color:#F4F5F7; padding:14px 16px; font-family:Arial, sans-serif; font-size:14px; color:#111111;">
-                  ${safeComment}
-                </div>
-                ${tagsHtml}
-              </td>
-            </tr>
-            <tr>
-              <td align="center" style="padding:16px 24px 24px 24px; background-color:#FFFFFF;">
-                <a href="${ctaUrl}" style="display:inline-block; padding:12px 24px; background-color:#14212E; color:#FFFFFF; font-family:Arial, sans-serif; font-size:14px; font-weight:bold; text-decoration:none; border-radius:999px;">
-                  Ver reseña en mi perfil
-                </a>
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-  </body>
-</html>`
-}
-
-function buildReviewReceivedEmailText({ buyerName, rating, comment, profileUrl }) {
-  const lines = []
-  lines.push('¡Recibiste una nueva reseña en Ciclo Market!')
-  if (buyerName) lines.push(`De: ${buyerName}`)
-  lines.push(`Puntaje: ${Number(rating) || 0}/5`)
-  if (comment) lines.push('Comentario:')
-  if (comment) lines.push(String(comment))
-  if (profileUrl) lines.push(`Ver reseña: ${profileUrl}`)
-  return lines.join('\n')
 }
 
 function getSupabaseOrFail(res) {
@@ -232,37 +122,11 @@ router.post('/api/track', async (req, res) => {
 /* Contact events (para habilitar reseñas y analytics)                        */
 /* -------------------------------------------------------------------------- */
 
-// Algunos navegadores envían navigator.sendBeacon con content-type text/plain
-// o application/octet-stream. Agregamos un body parser específico para este
-// endpoint y convertimos JSON string -> objeto cuando sea necesario.
-const beaconBodyParser = express.text({
-  type: (req) => {
-    const ct = String(req.headers['content-type'] || '').toLowerCase()
-    return ct.startsWith('text/plain') || ct.startsWith('application/octet-stream')
-  },
-  limit: '256kb',
-})
-
-function coerceJsonBody(req, _res, next) {
-  if (typeof req.body === 'string') {
-    try {
-      req.body = JSON.parse(req.body)
-    } catch {
-      // dejar como string; el handler devolverá missing_fields
-    }
-  }
-  next()
-}
-
-router.post('/api/contacts/log', beaconBodyParser, coerceJsonBody, async (req, res) => {
+router.post('/api/contacts/log', async (req, res) => {
   try {
     const { sellerId, buyerId, listingId, type } = req.body || {}
     if (!sellerId || typeof type !== 'string') {
       return res.status(400).json({ ok: false, error: 'missing_fields' })
-    }
-    const sellerUuid = normalizeUuidLike(sellerId)
-    if (!sellerUuid) {
-      return res.status(400).json({ ok: false, error: 'invalid_seller' })
     }
     const normalizedType = String(type).toLowerCase()
     if (normalizedType !== 'whatsapp' && normalizedType !== 'email') {
@@ -270,32 +134,14 @@ router.post('/api/contacts/log', beaconBodyParser, coerceJsonBody, async (req, r
     }
     const supabase = getSupabaseOrFail(res)
     if (!supabase) return
-    const listingUuid = normalizeUuidLike(listingId)
-    const omitListingId = String(process.env.CONTACT_EVENTS_OMIT_LISTING_ID || '').toLowerCase() === 'true'
     const payload = {
-      seller_id: sellerUuid,
-      buyer_id: normalizeUuidLike(buyerId),
-      listing_id: omitListingId ? null : listingUuid,
+      seller_id: String(sellerId),
+      buyer_id: buyerId ? String(buyerId) : null,
+      listing_id: listingId ? String(listingId) : null,
       type: normalizedType,
     }
     const { error } = await supabase.from('contact_events').insert(payload)
     if (error) {
-      if (error.code === '42804' && payload.listing_id) {
-        console.warn('[api] contact_events insert retry without listing_id', {
-          listingId,
-          normalized: listingUuid,
-          message: error.message,
-        })
-        const retryPayload = { ...payload, listing_id: null }
-        const { error: retryError } = await supabase.from('contact_events').insert(retryPayload)
-        if (!retryError) return res.json({ ok: true })
-        console.error('[api] contact_events retry insert still failed', {
-          code: retryError?.code,
-          message: retryError?.message,
-          details: retryError?.details,
-          hint: retryError?.hint,
-        })
-      }
       console.error('[api] contact_events insert failed', error)
       return res.status(500).json({ ok: false, error: 'insert_failed' })
     }
@@ -346,8 +192,7 @@ async function fetchReviewsWithBuyerData(supabase, sellerId) {
   }))
 }
 
-// Match only UUID-like sellerId to avoid catching '/api/reviews/can-review'
-router.get('/api/reviews/:sellerId([0-9a-fA-F-]{36})', async (req, res) => {
+router.get('/api/reviews/:sellerId', async (req, res) => {
   try {
     const { sellerId } = req.params
     if (!sellerId) return res.status(400).json({ ok: false, error: 'missing_seller' })
@@ -407,14 +252,11 @@ router.get('/api/reviews/:sellerId([0-9a-fA-F-]{36})', async (req, res) => {
 
 router.get('/api/reviews/can-review', async (req, res) => {
   try {
-    const rawSeller = String(req.query.sellerId || '').trim()
-    const rawBuyer = String(req.query.buyerId || '').trim()
-    if (!rawSeller || !rawBuyer) {
+    const sellerId = String(req.query.sellerId || '').trim()
+    const buyerId = String(req.query.buyerId || '').trim()
+    if (!sellerId || !buyerId) {
       return res.status(400).json({ allowed: false, reason: 'missing_fields' })
     }
-    // Intentar normalizar a UUID cuando sea posible (acepta ids con caracteres extra)
-    const sellerId = normalizeUuidLike(rawSeller) || rawSeller
-    const buyerId = normalizeUuidLike(rawBuyer) || rawBuyer
     if (sellerId === buyerId) {
       return res.json({ allowed: false, reason: 'self_review' })
     }
@@ -429,19 +271,6 @@ router.get('/api/reviews/can-review', async (req, res) => {
       .maybeSingle()
     if (existing) {
       return res.json({ allowed: false, reason: 'already_reviewed' })
-    }
-
-    // Si existe un recordatorio de reseña para este par, permitir directamente.
-    // Cubre casos donde el contacto existe pero no quedó registrado por listing_id u otros detalles.
-    const { data: reminder } = await supabase
-      .from('review_reminders')
-      .select('id')
-      .eq('seller_id', sellerId)
-      .eq('buyer_id', buyerId)
-      .limit(1)
-      .maybeSingle()
-    if (reminder) {
-      return res.json({ allowed: true })
     }
 
     const { data: contact } = await supabase
@@ -513,38 +342,6 @@ router.post('/api/reviews/submit', async (req, res) => {
     if (error) {
       console.error('[api] review insert failed', error)
       return res.status(500).json({ ok: false, error: 'insert_failed' })
-    }
-    // Notificar al vendedor por email (si está configurado)
-    try {
-      if (isMailConfigured()) {
-        const sellerEmail = await resolveUserEmail(supabase, sellerId)
-        if (sellerEmail) {
-          const sellerName = await resolveUserName(supabase, sellerId)
-          const buyerName = await resolveUserName(supabase, buyerId)
-          const baseFront = resolveFrontendBaseUrl()
-          const profileUrl = `${baseFront.replace(/\/$/, '')}/vendedor/${encodeURIComponent(sellerId)}?tab=Reseñas`
-          const subject = 'Recibiste una nueva reseña en Ciclo Market'
-          const html = buildReviewReceivedEmailHtml({
-            sellerName,
-            buyerName,
-            rating: normalizedRating,
-            comment: insertPayload.comment,
-            tags: insertPayload.tags,
-            profileUrl,
-            assetsBase: baseFront,
-          })
-          const text = buildReviewReceivedEmailText({ buyerName, rating: normalizedRating, comment: insertPayload.comment, profileUrl })
-          await sendMail({
-            from: process.env.SMTP_FROM || `Ciclo Market <${process.env.SMTP_USER || 'no-reply@ciclomarket.ar'}>`,
-            to: sellerEmail,
-            subject,
-            html,
-            text,
-          })
-        }
-      }
-    } catch (mailErr) {
-      console.warn('[api] review notify seller failed (non-fatal)', mailErr?.message || mailErr)
     }
     return res.json({ ok: true, review: data })
   } catch (err) {
@@ -735,7 +532,7 @@ async function fetchQuestionContext(supabase, questionId) {
   return { question, listing, seller, asker }
 }
 
-function buildQuestionEmailHtml({ recipientName, listingTitle, questionBody, listingUrl, assetsBase }) {
+function buildQuestionEmailHtml({ recipientName, listingTitle, questionBody, listingUrl }) {
   const greeting = recipientName ? `Hola <strong>${escapeHtml(recipientName)}</strong>,` : 'Hola,'
   const safeTitle = escapeHtml(listingTitle || '')
   const safeQuestion =
@@ -743,8 +540,6 @@ function buildQuestionEmailHtml({ recipientName, listingTitle, questionBody, lis
       ? escapeHtml(questionBody).replace(/\r?\n/g, '<br />')
       : '<em style="color:#64748b;">(sin contenido)</em>'
   const ctaUrl = escapeHtml(`${listingUrl}?tab=preguntas`)
-  const base = (assetsBase || resolveFrontendBaseUrl() || '').replace(/\/$/, '')
-  const logoUrl = `${base}/site-logo.png`
   return `<!DOCTYPE html>
 <html lang="es">
   <head>
@@ -759,7 +554,7 @@ function buildQuestionEmailHtml({ recipientName, listingTitle, questionBody, lis
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:600px; background-color:#FFFFFF; border-radius:12px; overflow:hidden;">
             <tr>
               <td align="center" style="padding:20px 20px 10px 20px; background-color:#FFFFFF;">
-                <img src="${logoUrl}" alt="Ciclo Market" width="120" style="display:block; max-width:120px; height:auto; margin:0 auto;" />
+                <img src="https://www.ciclomarket.ar/_static/email-logo-ciclomarket.png" alt="Ciclo Market" width="120" style="display:block; max-width:120px; height:auto; margin:0 auto;" />
               </td>
             </tr>
             <tr>
@@ -837,7 +632,7 @@ function buildQuestionEmailHtml({ recipientName, listingTitle, questionBody, lis
             <tr>
               <td style="padding:16px 24px 20px 24px; background-color:#FFFFFF;">
                 <p style="margin:0 0 8px 0; font-family:Arial, sans-serif; font-size:12px; color:#777777;">
-                  Si necesitás ayuda, escribinos a <a href="mailto:hola@ciclomarket.ar" style="color:#14212E; text-decoration:none;">hola@ciclomarket.ar</a>.
+                  Si necesitás ayuda, escribinos a <a href="mailto:admin@ciclomarket.ar" style="color:#14212E; text-decoration:none;">hola@ciclomarket.ar</a>.
                 </p>
                 <p style="margin:0 0 6px 0; font-family:Arial, sans-serif; font-size:12px; color:#777777;">
                   Instagram: <a href="https://www.instagram.com/ciclomarket.ar" style="color:#14212E; text-decoration:none;">@ciclomarket.ar</a>
@@ -855,7 +650,7 @@ function buildQuestionEmailHtml({ recipientName, listingTitle, questionBody, lis
 </html>`
 }
 
-function buildAnswerEmailHtml({ recipientName, listingTitle, answerBody, listingUrl, assetsBase }) {
+function buildAnswerEmailHtml({ recipientName, listingTitle, answerBody, listingUrl }) {
   const greeting = recipientName ? `Hola <strong>${escapeHtml(recipientName)}</strong>,` : 'Hola,'
   const safeTitle = escapeHtml(listingTitle || '')
   const safeAnswer =
@@ -863,8 +658,6 @@ function buildAnswerEmailHtml({ recipientName, listingTitle, answerBody, listing
       ? escapeHtml(answerBody).replace(/\r?\n/g, '<br />')
       : '<em style="color:#64748b;">(sin respuesta)</em>'
   const ctaUrl = escapeHtml(`${listingUrl}?tab=preguntas`)
-  const base = (assetsBase || resolveFrontendBaseUrl() || '').replace(/\/$/, '')
-  const logoUrl = `${base}/site-logo.png`
   return `<!DOCTYPE html>
 <html lang="es">
   <head>
@@ -879,7 +672,7 @@ function buildAnswerEmailHtml({ recipientName, listingTitle, answerBody, listing
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:600px; background-color:#FFFFFF; border-radius:12px; overflow:hidden;">
             <tr>
               <td align="center" style="padding:20px 20px 10px 20px; background-color:#FFFFFF;">
-                <img src="${logoUrl}" alt="Ciclo Market" width="120" style="display:block; max-width:120px; height:auto; margin:0 auto;" />
+                <img src="https://www.ciclomarket.ar/_static/email-logo-ciclomarket.png" alt="Ciclo Market" width="120" style="display:block; max-width:120px; height:auto; margin:0 auto;" />
               </td>
             </tr>
             <tr>
@@ -1002,7 +795,6 @@ router.post('/api/questions/notify', async (req, res) => {
         listingTitle: listing.title || '',
         questionBody: question.question_body || '',
         listingUrl,
-        assetsBase: frontBase,
       })
       await sendMail({
         to: seller.email,
@@ -1024,7 +816,6 @@ Respondela desde tu panel: ${listingUrl}?tab=preguntas
         listingTitle: listing.title || '',
         answerBody: question.answer_body || '',
         listingUrl,
-        assetsBase: frontBase,
       })
       await sendMail({
         to: asker.email,

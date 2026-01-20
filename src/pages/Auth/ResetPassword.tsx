@@ -98,13 +98,13 @@ export default function ResetPassword() {
               Recuperar acceso
             </span>
             <h1 className="text-3xl font-bold text-white sm:text-4xl">
-              Creá una nueva contraseña para seguir usando MundoBike.
+              Creá una nueva contraseña para seguir usando Ciclo Market.
             </h1>
             <p className="max-w-xl text-base">
               Este enlace es válido por tiempo limitado. Una vez que guardes tu nueva contraseña, tendrás que iniciar sesión nuevamente.
             </p>
             <p className="text-xs text-white/50">
-              ¿No solicitaste este cambio? Ignorá el correo o <a href="mailto:hola@mundobike.com" className="font-semibold text-white hover:text-white/80">contactanos</a>.
+              ¿No solicitaste este cambio? Ignorá el correo o <a href="mailto:admin@ciclomarket.com" className="font-semibold text-white hover:text-white/80">contactanos</a>.
             </p>
             <p className="text-xs text-white/40">
               Si el enlace caducó, <Link to="/login" className="font-semibold text-white hover:text-white/80">pedí uno nuevo</Link> desde la pantalla de ingreso.

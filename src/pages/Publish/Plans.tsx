@@ -309,6 +309,11 @@ export default function Plans() {
       .sort((a, b) => PLAN_ORDER.indexOf(a._code) - PLAN_ORDER.indexOf(b._code))
   }, [plans])
 
+  // Promoción: precios con descuento al llegar con ?promo=free2paid
+  const promoCode = (searchParams.get('promo') || '').trim().toLowerCase()
+  const promoActive = promoCode === 'free2paid'
+  const promoPrices: Partial<Record<PlanCode, number>> = { basic: 5000, premium: 9000 }
+
   const clearPaymentParams = useCallback(() => {
     const next = new URLSearchParams(searchParams)
     next.delete('payment')
@@ -401,11 +406,14 @@ export default function Plans() {
       setProcessingPlan(planCode)
       // Pixel: iniciar checkout (solo planes pagos)
       try {
+        const effectivePrice = (promoActive && (planCode === 'basic' || planCode === 'premium'))
+          ? (promoPrices[planCode] as number)
+          : (typeof plan.price === 'number' ? plan.price : 0)
         trackMetaPixel('InitiateCheckout', {
           content_ids: [plan.id || planCode],
           content_name: plan.name,
           content_type: 'product',
-          value: typeof plan.price === 'number' ? plan.price : 0,
+          value: effectivePrice,
           currency: plan.currency || 'ARS'
         })
       } catch { /* noop */ }
@@ -431,7 +439,9 @@ export default function Plans() {
           planCurrency: plan.currency,
           userId: user.id,
           autoRenew: false,
-          amount: typeof plan.price === 'number' ? plan.price : undefined,
+          amount: (promoActive && (planCode === 'basic' || planCode === 'premium'))
+            ? (promoPrices[planCode] as number)
+            : (typeof plan.price === 'number' ? plan.price : undefined),
           redirectUrls: {
             // En success volvemos al formulario con el crédito aplicado
             success: `${window.location.origin}/publicar?type=${listingType}&payment=success&plan=${planCode}&credit=1`,
@@ -715,7 +725,13 @@ export default function Plans() {
           {visiblePlans.map((plan) => {
             const planCode = plan._code
             const listingDuration = plan.listingDurationDays ?? plan.periodDays
-            const priceLabel = giftPlan === planCode && giftCode ? 'Bonificado' : formatPrice(plan.price, plan.currency)
+            const promoForPlan = (promoActive && (planCode === 'basic' || planCode === 'premium')) ? (promoPrices[planCode] as number) : null
+            const isGift = giftPlan === planCode && giftCode
+            const priceLabel = isGift
+              ? 'Bonificado'
+              : promoForPlan !== null
+              ? `${formatPrice(promoForPlan, plan.currency)}`
+              : formatPrice(plan.price, plan.currency)
             const displayName = PLAN_LABEL[planCode] ?? plan.name ?? planCode
             const orderClass =
               planCode === 'premium'
@@ -782,7 +798,15 @@ export default function Plans() {
                   </div>
 
                   <div>
-                    <span className="text-3xl font-bold">{priceLabel}</span>
+                    {promoForPlan !== null && !isGift ? (
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-lg line-through opacity-70">{formatPrice(plan.price, plan.currency)}</span>
+                        <span className="text-3xl font-bold">{formatPrice(promoForPlan, plan.currency)}</span>
+                        <span className="text-xs font-semibold text-emerald-200">Promo</span>
+                      </div>
+                    ) : (
+                      <span className="text-3xl font-bold">{priceLabel}</span>
+                    )}
                   </div>
 
                   {plan.description && (

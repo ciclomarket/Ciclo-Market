@@ -6,7 +6,10 @@
   "scripts": {
     "start": "node src/index.js",
     "build": "npm install --prefix .. --production=false && npm run build --prefix ..",
-    "review-reminder:once": "node -e \"require('./src/jobs/reviewReminder').runReviewReminderOnce(Number(process.env.REVIEW_REMINDER_BATCH_LIMIT)||50).then(()=>process.exit(0)).catch((e)=>{console.error(e);process.exit(1)})\""
+    "review-reminder:once": "node -e \"require('./src/jobs/reviewReminder').runReviewReminderOnce(Number(process.env.REVIEW_REMINDER_BATCH_LIMIT)||50).then(()=>process.exit(0)).catch((e)=>{console.error(e);process.exit(1)})\"",
+    "extend-expired:once": "node ./src/jobs/extendExpired90d.js",
+    "extend-expired:dry": "DRY_RUN=true node ./src/jobs/extendExpired90d.js",
+    "campaign:free2paid:test": "node ./scripts/sendFreeToPaidTest.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.74.0",

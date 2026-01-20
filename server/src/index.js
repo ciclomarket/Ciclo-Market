@@ -40,6 +40,9 @@ const { startDeletedPurgerJob } = (() => {
 const { buildStoreAnalyticsHTML } = (() => {
   try { return require('./emails/storeAnalyticsEmail') } catch { return {} }
 })()
+const { buildEmailHtml: buildFree2PaidEmailHtml } = (() => {
+  try { return require('./jobs/campaignFreeToPaid') } catch { return {} }
+})()
 const appApiRouter = require('./routes/appApi')
 // Sweepstake feature removed
 const path = require('path')
@@ -229,6 +232,56 @@ app.use(
 // Sitemaps & custom API endpoints
 app.use(sitemapRouter)
 
+// Preview endpoint for Free→Paid campaign email (HTML)
+app.get('/api/preview/campaign/free2paid', async (req, res) => {
+  try {
+    if (typeof buildFree2PaidEmailHtml !== 'function') {
+      return res.status(501).type('text/plain').send('Preview not available')
+    }
+    const supabase = getServerSupabaseClient()
+    const listingId = req.query.listingId ? String(req.query.listingId) : null
+    const sellerId = req.query.sellerId ? String(req.query.sellerId) : null
+    let listing = null
+    if (listingId) {
+      const { data } = await supabase
+        .from('listings')
+        .select('id,seller_id,title,price,price_currency,images,plan,plan_code,seller_plan,status,slug,location,seller_location')
+        .eq('id', listingId)
+        .maybeSingle()
+      listing = data
+    } else {
+      let query = supabase
+        .from('listings')
+        .select('id,seller_id,title,price,price_currency,images,plan,plan_code,seller_plan,status,slug,location,seller_location,updated_at')
+        .or('status.in.(active,published),status.is.null')
+        .or('plan.eq.free,plan_code.eq.free,seller_plan.eq.free')
+        .order('updated_at', { ascending: false, nullsLast: true })
+        .limit(1)
+      if (sellerId) query = query.eq('seller_id', sellerId)
+      const { data } = await query
+      listing = Array.isArray(data) && data[0] ? data[0] : null
+    }
+    let profile = null
+    if (listing?.seller_id) {
+      const { data } = await supabase
+        .from('users')
+        .select('id,full_name,email')
+        .eq('id', listing.seller_id)
+        .maybeSingle()
+      profile = data
+    }
+    const html = buildFree2PaidEmailHtml({
+      baseFront: resolveFrontendBaseUrl(),
+      profile,
+      listing,
+    })
+    return res.type('text/html; charset=utf-8').send(html)
+  } catch (err) {
+    console.error('[preview/free2paid] failed', err)
+    return res.status(500).type('text/plain').send('Preview error')
+  }
+})
+
 /* ----------------------------- CORS --------------------------------------- */
 // Permitir CORS amplio (ajustable por FRONTEND_URL si se quiere restringir)
 const allowed = (() => {
@@ -295,6 +348,7 @@ app.post('/api/checkout', async (req, res) => {
     const amount = Number(body.amount)
     const currency = (body.planCurrency || 'ARS').toString()
     const planName = (body.planName || (planCode === 'premium' ? 'Plan Premium' : planCode === 'basic' ? 'Plan Básico' : String(body.planId || 'Checkout'))).toString()
+    const promoCode = (body.promo || body.promoCode || '').toString().trim().toLowerCase()
     const redirect = body.redirectUrls || {}
     const backUrls = {
       success: typeof redirect.success === 'string' && redirect.success ? redirect.success : `${resolveFrontendBaseUrl()}/dashboard?payment=success`,
@@ -304,6 +358,44 @@ app.post('/api/checkout', async (req, res) => {
 
     if (!Number.isFinite(amount) || amount <= 0) {
       return res.status(400).json({ ok: false, error: 'invalid_amount' })
+    }
+
+    // Validate amount server-side to avoid client tampering
+    async function fetchPlanBasePrice(code) {
+      try {
+        const svc = getServerSupabaseClient()
+        const { data } = await svc
+          .from('plans')
+          .select('id,code,name,price')
+          .or('code.eq.' + code + ',id.eq.' + code + ',name.ilike.%' + code + '%')
+          .limit(1)
+          .maybeSingle()
+        if (data && typeof data.price === 'number' && data.price > 0) return Number(data.price)
+      } catch {}
+      // Fallbacks aligned with frontend FALLBACK_PLANS
+      if (code === 'basic') return 9000
+      if (code === 'premium') return 13000
+      return 0
+    }
+
+    let expectedAmount = 0
+    if (planCode === 'basic' || planCode === 'premium') {
+      const base = await fetchPlanBasePrice(planCode)
+      const promoAllowed = promoCode === 'free2paid'
+      if (promoAllowed) {
+        expectedAmount = planCode === 'basic' ? 5000 : 9000
+      } else {
+        expectedAmount = base
+      }
+    } else {
+      expectedAmount = amount // other flows (e.g., pro) not discounted here
+    }
+
+    if (!Number.isFinite(expectedAmount) || expectedAmount <= 0) {
+      return res.status(400).json({ ok: false, error: 'amount_not_configured' })
+    }
+    if (Math.round(amount) !== Math.round(expectedAmount)) {
+      return res.status(400).json({ ok: false, error: 'amount_mismatch', expected: expectedAmount })
     }
 
     const fallbackUserId = body.userId ? String(body.userId) : null
@@ -337,7 +429,7 @@ app.post('/api/checkout', async (req, res) => {
           {
             title: planName,
             quantity: 1,
-            unit_price: amount,
+            unit_price: expectedAmount,
             currency_id: currency,
           },
         ],
@@ -1686,6 +1778,30 @@ app.listen(PORT, '0.0.0.0', () => {
     }
   } else {
     console.info('[reviewReminder] disabled (REVIEW_REMINDER_ENABLED != "true")')
+  }
+  // One-off reactivation of expired listings (+90 days) and optional scheduling
+  if (process.env.EXTEND_EXPIRED_ENABLED === 'true') {
+    try {
+      const { runOnce } = require('./jobs/extendExpired90d')
+      runOnce().catch((e) => console.warn('[extendExpired90d] runOnce error', e?.message || e))
+    } catch (err) {
+      console.warn('[extendExpired90d] not started:', err?.message || err)
+    }
+  } else {
+    console.info('[extendExpired90d] disabled (EXTEND_EXPIRED_ENABLED != "true")')
+  }
+  if (process.env.EXTEND_EXPIRED_CRON) {
+    try {
+      const cron = require('node-cron')
+      const { runOnce } = require('./jobs/extendExpired90d')
+      const schedule = String(process.env.EXTEND_EXPIRED_CRON)
+      console.info('[extendExpired90d] scheduling via cron', schedule)
+      cron.schedule(schedule, () => {
+        runOnce().catch((e) => console.warn('[extendExpired90d] cron error', e?.message || e))
+      })
+    } catch (err) {
+      console.warn('[extendExpired90d] cron not started:', err?.message || err)
+    }
   }
 })
 /* ----------------------------- Auth helper -------------------------------- */
