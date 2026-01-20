@@ -31,11 +31,11 @@ async function fetchFreeActiveListings(supabase, limit = 1000) {
   const { data, error } = await supabase
     .from('listings')
     .select(
-      'id,seller_id,title,price,price_currency,images,plan,plan_code,seller_plan,status,slug,updated_at,created_at,location,seller_location'
+      'id,seller_id,title,price,price_currency,images,plan,plan_code,seller_plan,status,slug,created_at,location,seller_location'
     )
     .or('status.in.(active,published),status.is.null')
     .or('plan.eq.free,plan_code.eq.free,seller_plan.eq.free')
-    .order('updated_at', { ascending: false, nullsLast: true })
+    .order('created_at', { ascending: false, nullsLast: true })
     .limit(limit)
   if (error) {
     console.warn('[campaign] error fetching free listings', error)
