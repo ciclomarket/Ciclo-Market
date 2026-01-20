@@ -50,7 +50,15 @@ export default function Login() {
       // Marca de intención para asegurar el evento luego de redirigir
       try { sessionStorage.setItem('mb_oauth_login_intent', 'email') } catch { /* noop */ }
       try { trackMetaPixel('Login', { method: 'email' }) } catch { /* noop */ }
-      if (typeof window !== 'undefined') window.location.assign('/dashboard')
+      if (typeof window !== 'undefined') {
+        const from = location?.state?.from as { pathname?: string; search?: string } | undefined
+        if (from?.pathname) {
+          const target = `${from.pathname}${from.search || ''}`
+          window.location.assign(target)
+        } else {
+          window.location.assign('/dashboard')
+        }
+      }
     } catch (err: any) {
       const message = err instanceof Error ? err.message : 'No pudimos iniciar sesión. Intentá nuevamente.'
       alert(message)
@@ -74,7 +82,10 @@ export default function Login() {
       const scopes = provider === 'facebook'
         ? 'public_profile,email'
         : undefined
-      const redirect = `${window.location.origin}/dashboard`
+      const from = (location?.state?.from as { pathname?: string; search?: string } | undefined)
+      const nextPath = from?.pathname ? `${from.pathname}${from.search || ''}` : null
+      const redirectBase = `${window.location.origin}/dashboard`
+      const redirect = nextPath ? `${redirectBase}?next=${encodeURIComponent(nextPath)}` : redirectBase
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {

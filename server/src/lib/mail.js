@@ -80,7 +80,8 @@ async function sendViaSMTP(options) {
 async function sendViaResend(options) {
   const apiKey = process.env.RESEND_API_KEY
   if (!apiKey) throw new Error('RESEND_API_KEY no configurado')
-  const from = options.from || process.env.SMTP_FROM || process.env.SMTP_USER
+  const fromEnv = process.env.RESEND_FROM || process.env.SMTP_FROM || process.env.SMTP_USER
+  const from = options.from || fromEnv || 'Ciclo Market <onboarding@resend.dev>'
   const to = Array.isArray(options.to) ? options.to : [options.to]
   const payload = {
     from,
@@ -90,7 +91,7 @@ async function sendViaResend(options) {
     text: options.text,
   }
   if (process.env.SMTP_LOGGER === 'true') {
-    console.info('[mail] sending via Resend', { to, subject: options.subject })
+    console.info('[mail] sending via Resend', { from, to, subject: options.subject })
   }
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',

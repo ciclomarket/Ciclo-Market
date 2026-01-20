@@ -340,7 +340,7 @@ export default function Plans() {
         state: {
           from: {
             pathname: '/publicar',
-            search: `?type=${listingType}&plan=${encodeURIComponent(planCode)}`
+            search: `?type=${listingType}&plan=${encodeURIComponent(planCode)}${promoActive ? `&promo=free2paid` : ''}`
           }
         }
       })

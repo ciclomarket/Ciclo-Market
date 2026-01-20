@@ -101,8 +101,29 @@ function buildEmailHtml({ baseFront, profile, listing }) {
 
   const listingCard = buildListingCardHtml(listing, cleanBase)
 
+  // Dark-mode helpers (Apple Mail, iOS Mail, Gmail mobile)
+  const styleBlock = `
+  <style>
+    :root { color-scheme: light dark; supported-color-schemes: light dark; }
+    @media (prefers-color-scheme: dark) {
+      .dm-bg { background: #0b1a28 !important; }
+      .dm-hero { background: linear-gradient(135deg,#0b1220,#122133) !important; }
+      .dm-card { background: #0f1729 !important; border-color: #233041 !important; }
+      .dm-text { color: #e6edf5 !important; }
+      .dm-subtle { color: #9fb2c7 !important; }
+      .dm-muted { color: #7a8ea5 !important; }
+    }
+    [data-ogsc] .dm-bg { background: #0b1a28 !important; }
+    [data-ogsc] .dm-hero { background: linear-gradient(135deg,#0b1220,#122133) !important; }
+    [data-ogsc] .dm-card { background: #0f1729 !important; border-color: #233041 !important; }
+    [data-ogsc] .dm-text { color: #e6edf5 !important; }
+    [data-ogsc] .dm-subtle { color: #9fb2c7 !important; }
+    [data-ogsc] .dm-muted { color: #7a8ea5 !important; }
+  </style>`
+
   return `
-  <div style="background:#f2f4f8;margin:0;padding:0;font-family:Arial, sans-serif;color:#0c1723">
+  ${styleBlock}
+  <div class="dm-bg" style="background:#f2f4f8;margin:0;padding:0;font-family:Arial, sans-serif;color:#0c1723">
     <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="width:100%;max-width:720px;margin:0 auto">
       <tr>
         <td style="padding:24px;text-align:center;">
@@ -111,12 +132,12 @@ function buildEmailHtml({ baseFront, profile, listing }) {
       </tr>
       <tr>
         <td style="padding:0 24px 24px">
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:linear-gradient(135deg,#0f1729,#14212e);border-radius:22px;overflow:hidden;color:#fff">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" class="dm-hero" style="background:linear-gradient(135deg,#0f1729,#14212e);border-radius:22px;overflow:hidden;color:#fff">
             <tr>
               <td style="padding:26px 28px">
-                <div style="font-size:12px;letter-spacing:0.3em;text-transform:uppercase;opacity:.85;margin-bottom:6px">Oferta exclusiva</div>
-                <h1 style="margin:0 0 8px;font-size:22px;font-weight:800;line-height:1.2">${escapeHtml(profile?.fullName || 'Ciclista')}, potenciá tu publicación con descuento</h1>
-                <p style="margin:0;color:#e5e7eb;line-height:1.6">Mejorá a un plan pago por única vez y activá WhatsApp, destaque y prioridad en listados.</p>
+                <div class="dm-text" style="font-size:12px;letter-spacing:0.3em;text-transform:uppercase;opacity:.85;margin-bottom:6px">Oferta exclusiva</div>
+                <h1 class="dm-text" style="margin:0 0 8px;font-size:22px;font-weight:800;line-height:1.2">${escapeHtml(profile?.fullName || 'Ciclista')}, potenciá tu publicación con descuento</h1>
+                <p class="dm-subtle" style="margin:0;color:#e5e7eb;line-height:1.6">Mejorá a un plan pago por única vez y activá WhatsApp, destaque y prioridad en listados.</p>
                 <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
                   <a href="${ctaBasic}" style="display:inline-block;background:#22c55e;color:#0b1a28;text-decoration:none;font-weight:800;padding:12px 16px;border-radius:999px;font-size:13px">Básica ${basicOff}% OFF</a>
                   <a href="${ctaPremium}" style="display:inline-block;background:#38bdf8;color:#0b1a28;text-decoration:none;font-weight:800;padding:12px 16px;border-radius:999px;font-size:13px">Premium ${premiumOff}% OFF</a>
@@ -128,17 +149,17 @@ function buildEmailHtml({ baseFront, profile, listing }) {
       </tr>
       <tr>
         <td style="padding:0 24px 8px">
-          <div style="background:#fff;border-radius:20px;padding:22px">
-            <div style="font-size:13px;color:#0c1723;font-weight:700;margin-bottom:10px">Tu publicación</div>
-            ${listingCard}
+          <div class="dm-card dm-text" style="background:#fff;border-radius:20px;padding:22px">
+            <div class="dm-text" style="font-size:13px;color:#0c1723;font-weight:700;margin-bottom:10px">Tu publicación</div>
+            <div class="dm-card dm-text">${listingCard}</div>
           </div>
         </td>
       </tr>
       <tr>
         <td style="padding:10px 24px 28px">
-          <div style="background:#fff;border-radius:20px;padding:22px">
-            <div style="font-size:14px;color:#0c1723;font-weight:700;margin-bottom:8px">¿Qué ganás al mejorar?</div>
-            <ul style="margin:0;padding-left:18px;color:#334155;line-height:1.7;font-size:14px">
+          <div class="dm-card dm-text" style="background:#fff;border-radius:20px;padding:22px">
+            <div class="dm-text" style="font-size:14px;color:#0c1723;font-weight:700;margin-bottom:8px">¿Qué ganás al mejorar?</div>
+            <ul class="dm-text" style="margin:0;padding-left:18px;color:#334155;line-height:1.7;font-size:14px">
               <li>Contacto directo por WhatsApp para cerrar más rápido.</li>
               <li>Prioridad en el marketplace y hasta 14 días de destaque.</li>
               <li>Hasta 8 fotos y difusión en redes (Premium).</li>
@@ -147,11 +168,11 @@ function buildEmailHtml({ baseFront, profile, listing }) {
               <a href="${ctaBasic}" style="display:inline-block;background:#14212e;color:#fff;text-decoration:none;font-weight:700;padding:10px 14px;border-radius:12px;font-size:13px">Aprovechar descuento</a>
             </div>
           </div>
-          <div style="margin-top:12px;text-align:center;color:#64748b;font-size:12px">Si ya actualizaste tu plan, ignorá este mensaje.</div>
+          <div class="dm-muted" style="margin-top:12px;text-align:center;color:#64748b;font-size:12px">Si ya actualizaste tu plan, ignorá este mensaje.</div>
         </td>
       </tr>
       <tr>
-        <td style="padding:0 24px 28px;color:#64748b;font-size:12px;text-align:center">© ${new Date().getFullYear()} Ciclo Market</td>
+        <td class="dm-muted" style="padding:0 24px 28px;color:#64748b;font-size:12px;text-align:center">© ${new Date().getFullYear()} Ciclo Market</td>
       </tr>
     </table>
   </div>`

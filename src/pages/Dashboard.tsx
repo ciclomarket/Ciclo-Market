@@ -207,6 +207,7 @@ function summarizeSavedSearchCriteria(criteria: Record<string, any> | null | und
 
 export default function Dashboard() {
   const { user, logout, isModerator } = useAuth()
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const [activeTab, setActiveTab] = useState<SellerTab>('Perfil')
   const [sellerListings, setSellerListings] = useState<Listing[]>([])
@@ -240,6 +241,29 @@ export default function Dashboard() {
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([])
   const [savedSearchesLoading, setSavedSearchesLoading] = useState(false)
   const [savedSearchMutating, setSavedSearchMutating] = useState<number | null>(null)
+
+  // Handle post-OAuth redirect with ?next=/publicar?type=...&plan=...&promo=...
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const next = searchParams.get('next')
+    if (next) {
+      // Clean param then navigate to intended page (preserve absolute-or-relative safety)
+      setSearchParams((prev) => {
+        const n = new URLSearchParams(prev)
+        n.delete('next')
+        return n
+      }, { replace: true })
+      // Small delay to avoid interfering with state updates
+      setTimeout(() => {
+        try {
+          const url = new URL(next, window.location.origin)
+          navigate(url.pathname + url.search, { replace: true })
+        } catch {
+          navigate(next, { replace: true })
+        }
+      }, 10)
+    }
+  }, [])
 
   const loadData = useCallback(async () => {
     if (!user?.id) {
