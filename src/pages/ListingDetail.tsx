@@ -173,40 +173,26 @@ export default function ListingDetail() {
     }
     return ''
   }
+  const apiBase = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 
   async function startUpgrade(planCode: 'PREMIUM'|'PRO') {
     try {
-      const amount = planCode === 'PRO' ? 13000 : 9000
-      const supabase = getSupabaseClient()
-      const { data: session } = await supabase.auth.getSession()
-      const userId = session.session?.user?.id
-      if (!userId || !listing) return
-      const redirectBase = window.location.origin
-      const back = {
-        success: `${redirectBase}/listing/${listing.slug || listing.id}`,
-        failure: `${redirectBase}/listing/${listing.slug || listing.id}`,
-        pending: `${redirectBase}/listing/${listing.slug || listing.id}`,
+      // Usa el servicio de upgrade centralizado (maneja API_BASE y token)
+      const normalized = planCode === 'PRO' ? 'pro' : 'premium'
+      const result = await upgradeListingPlan({ id: listing?.id || '', planCode: normalized as any })
+      if (result.ok && result.listing) {
+        setListing(result.listing)
+        return
       }
-      const res = await fetch('/api/checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          planCode: planCode.toLowerCase(),
-          amount,
-          planCurrency: 'ARS',
-          planName: planCode === 'PRO' ? 'Plan Pro' : 'Plan Premium',
-          listingId: listing.id,
-          listingSlug: listing.slug || listing.id,
-          redirectUrls: back,
-          userId,
-        }),
-      })
-      const json = await res.json()
-      if (json?.ok && json?.url) {
-        window.location.assign(json.url)
+      // Si el endpoint devuelve una URL de checkout (cuando API responde con redirect)
+      if ((result as any)?.url) {
+        window.location.assign((result as any).url)
+        return
       }
+      alert('No pudimos iniciar el checkout. Intentá nuevamente en unos minutos.')
     } catch (e) {
       console.warn('[upgrade] failed', e)
+      alert('No pudimos iniciar el checkout. Intentá nuevamente.')
     }
   }
 

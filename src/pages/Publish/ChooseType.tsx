@@ -68,6 +68,7 @@ export default function ChooseType() {
   const { user } = useAuth()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
+  const currentUrl = typeof window !== 'undefined' ? window.location.pathname + window.location.search : '/publicar'
   const items = [
     {
       type: 'bike',
@@ -99,11 +100,23 @@ export default function ChooseType() {
     },
   ]
 
+  const handleSelect = (href: string) => {
+    if (!user) {
+      navigate(`/login?redirect=${encodeURIComponent(href)}`)
+      return
+    }
+    navigate(href)
+  }
+
   // Auto redirect if /publicar?type=... is provided
   const t = (searchParams.get('type') || '').toLowerCase()
   if (t === 'bike' || t === 'accessory' || t === 'apparel' || t === 'nutrition') {
     const next = new URLSearchParams(Array.from(searchParams.entries()))
-    return <AutoNav to={`/publicar/nueva?${next.toString()}`} />
+    const target = `/publicar/nueva?${next.toString()}`
+    if (!user) {
+      return <AutoNav to={`/login?redirect=${encodeURIComponent(target)}`} />
+    }
+    return <AutoNav to={target} />
   }
 
   return (
@@ -119,8 +132,8 @@ export default function ChooseType() {
                 key={it.type}
                 role="link"
                 tabIndex={0}
-                onClick={() => navigate(it.href)}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(it.href) } }}
+                onClick={() => handleSelect(it.href)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleSelect(it.href) } }}
                 className="group relative overflow-hidden rounded-xl border border-gray-700 h-64 cursor-pointer transition-all hover:border-blue-500 hover:shadow-[0_0_15px_rgba(59,130,246,0.2)] hover:-translate-y-1 active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
                 aria-label={`Seleccionar ${it.title}`}
               >

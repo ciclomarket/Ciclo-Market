@@ -443,7 +443,7 @@ export async function setListingWhatsapp(id: string, value: string | null): Prom
 
 type UpgradeParams = {
   id: string
-  planCode: 'basic' | 'premium'
+  planCode: 'basic' | 'premium' | 'pro'
   useCredit?: boolean
   allowClientFallback?: boolean
 }
@@ -505,7 +505,7 @@ async function tryClientModeratorUpgrade({
 }: {
   supabase: SupabaseClient
   id: string
-  planCode: 'basic' | 'premium'
+  planCode: 'basic' | 'premium' | 'pro'
 }): Promise<{ ok: boolean; listing?: Listing; error?: string }> {
   try {
     const { data: listing, error } = await supabase

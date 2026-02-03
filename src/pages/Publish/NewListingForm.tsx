@@ -122,6 +122,12 @@ export default function NewListingForm() {
   const [waCountry, setWaCountry] = useState('+54')
   const [waLocal, setWaLocal] = useState('')
   const [authModalOpen, setAuthModalOpen] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [authEmail, setAuthEmail] = useState('')
+  const [authEmailSending, setAuthEmailSending] = useState(false)
+  const [authEmailMessage, setAuthEmailMessage] = useState<string | null>(null)
+  const [authEmailError, setAuthEmailError] = useState<string | null>(null)
+  const sessionDraftKey = 'cm_publish_last'
   const [loadedDraft, setLoadedDraft] = useState(false)
   // Accessorios / Indumentaria / Nutrición extended fields
   const [accType, setAccType] = useState('')
@@ -170,13 +176,18 @@ export default function NewListingForm() {
       try {
         const payload = JSON.stringify({ ...data, ts: Date.now() })
         window.localStorage.setItem(draftKey, payload)
+        window.sessionStorage.setItem(sessionDraftKey, payload)
       } catch {}
     }
-  ), [draftKey])
+  ), [draftKey, sessionDraftKey])
 
   const loadDraft = useMemo(() => (
     () => {
       try {
+        const sessionRaw = window.sessionStorage.getItem(sessionDraftKey)
+        if (sessionRaw) {
+          return JSON.parse(sessionRaw)
+        }
         const raw = window.localStorage.getItem(draftKey)
         if (!raw) return null
         const parsed = JSON.parse(raw)
@@ -185,7 +196,7 @@ export default function NewListingForm() {
         return null
       }
     }
-  ), [draftKey])
+  ), [draftKey, sessionDraftKey])
   const removeImageAt = (idx: number) => setImages(prev => prev.filter((_, i) => i !== idx))
   const makePrimaryAt = (idx: number) => setImages(prev => {
     if (idx <= 0 || idx >= prev.length) return prev
@@ -248,6 +259,7 @@ export default function NewListingForm() {
             setNutriExpire(draft.nutriExpire || '')
           }
           setLoadedDraft(true)
+          try { window.sessionStorage.removeItem(sessionDraftKey) } catch {}
         }
 
         if (!user?.id) return
@@ -300,6 +312,23 @@ export default function NewListingForm() {
     if (tokens.length >= 2) return `${tokens[0]} ${tokens[1][0]?.toUpperCase() || ''}.`
     return emailName
   }, [profileFullName, profileEmail])
+
+  // Si volvemos del login con intención de publicar, relanzar submit automáticamente
+  useEffect(() => {
+    if (!user || submitting || !loadedDraft) return
+    try {
+      const pending = window.sessionStorage.getItem('cm_publish_pending')
+      // Solo auto-enviar si tenemos datos esenciales cargados
+      const hasData = brand.trim().length > 0 && model.trim().length > 0 && priceInput.trim().length > 0
+      if (pending === '1' && hasData) {
+        window.sessionStorage.removeItem('cm_publish_pending')
+        void submit()
+      }
+    } catch {
+      // ignore
+    }
+  }, [user?.id, submitting, loadedDraft, brand, model, priceInput])
+
 const buildExtras = (): string => {
     const parts: string[] = []
     if (mainCategory === 'Bicicletas') {
@@ -343,15 +372,64 @@ const buildExtras = (): string => {
   }
 
   const submit = async () => {
+    if (submitting) return
     if (!supabaseEnabled) { alert('Supabase no configurado en .env'); return }
-    if (!user) { setAuthModalOpen(true); return }
+    if (!user) {
+      try {
+        window.sessionStorage.setItem('cm_publish_pending', '1')
+        const snapshot = {
+          category,
+          accessorySubcat,
+          apparelSubcat,
+          nutritionSubcat,
+          brand,
+          model,
+          year,
+          priceInput,
+          priceCurrency,
+          city,
+          province,
+          description,
+          material,
+          frameSize,
+          wheelSize,
+          drivetrain,
+          drivetrainOther,
+          brakeType,
+          accCompatibility,
+          accWeight,
+          groupComplete,
+          groupMode,
+          accUseType,
+          apparelGender,
+          apparelSize,
+          apparelColor,
+          nutriCHO,
+          nutriSodium,
+          nutriServings,
+          nutriNetWeight,
+          nutriExpire,
+          extras,
+          images,
+          bikeCondition,
+          accCondition,
+          apparelCondition,
+          waCountry,
+          waLocal,
+        }
+        persistDraft(snapshot)
+      } catch {}
+      setAuthModalOpen(true)
+      return
+    }
+    setSubmitting(true)
     const supabase = getSupabaseClient()
     const price = Number(priceInput)
-    if (!brand.trim() || !model.trim()) { alert('Completá marca y modelo'); setOpenStep(2); return }
-    if (!price || price <= 0) { alert('Indicá un precio válido'); setOpenStep(5); return }
+    if (!brand.trim() || !model.trim()) { alert('Completá marca y modelo'); setOpenStep(2); setSubmitting(false); return }
+    if (!price || price <= 0) { alert('Indicá un precio válido'); setOpenStep(5); setSubmitting(false); return }
     // Bicicletas: exigir transmisión y freno
     if (mainCategory === 'Bicicletas' && (!drivetrain && !drivetrainOther || !brakeType)) {
-      alert('Completá grupo de transmisión y tipo de freno'); setOpenStep(2); return
+      alert('Completá grupo de transmisión y tipo de freno'); setOpenStep(2); setSubmitting(false); return
     }
 
     const title = `${brand.trim()} ${model.trim()}`.trim()
@@ -382,12 +460,19 @@ const buildExtras = (): string => {
       images: images.length ? images.slice(0, 12) : [],
       status: 'draft',
       seller_id: user.id,
+      plan_code: 'free',
+      plan: 'free',
+      granted_visible_photos: 4,
+      visible_images_count: Math.min(4, images.length || 4),
+      plan_price: 0,
+      plan_photo_limit: 4,
     }
 
     const { data, error } = await supabase.from('listings').insert(payload).select('id, slug').maybeSingle()
     if (error) {
       console.warn('[publish] insert error', error)
       alert(`Error al publicar: ${error.message}`)
+      setSubmitting(false)
       return
     }
     // Update user profile (province/city/whatsapp) if provided
@@ -401,6 +486,7 @@ const buildExtras = (): string => {
     } else {
       navigate(`/dashboard?tab=${encodeURIComponent('Publicaciones')}`)
     }
+    setSubmitting(false)
   }
 
   return (
@@ -1079,7 +1165,53 @@ const buildExtras = (): string => {
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" className="h-5 w-5" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C34.5 31.9 30.7 35 26 35c-6.1 0-11-4.9-11-11s4.9-11 11-11c2.8 0 5.4 1.1 7.4 2.9l5.7-5.7C35.6 7 30.9 5 26 5 14.4 5 5 14.4 5 26s9.4 21 21 21 21-9.4 21-21c0-1.2-.1-2.3-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.5 15.3 19.8 12 26 12c2.8 0 5.4 1.1 7.4 2.9l5.7-5.7C35.6 7 30.9 5 26 5 17 5 9.1 9.7 6.3 14.7z"/><path fill="#4CAF50" d="M26 47c4.7 0 9-1.8 12.3-4.7l-5.7-5.7C30.7 37.9 28.4 39 26 39c-4.6 0-8.4-3.1-9.8-7.3l-6.6 5.1C12.3 42.5 18.7 47 26 47z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-1.1 3.1-3.6 5.5-6.6 6.7l5.7 5.7C34.1 41.2 39 38 42 33c1.8-2.8 2.8-6.1 2.8-9.5 0-1.2-.1-2.3-.4-3.5z"/></svg>
                 Continuar con Google
               </button>
-              <p className="text-xs text-slate-500 text-center">Se abrirá una ventana segura de Google y volverás a este formulario para finalizar la publicación.</p>
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-slate-600">O ingresá tu email para recibir un link</label>
+                <input
+                  type="email"
+                  value={authEmail}
+                  onChange={(e) => { setAuthEmail(e.target.value); setAuthEmailError(null); setAuthEmailMessage(null) }}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                  placeholder="tu@email.com"
+                />
+                {authEmailError && <p className="text-xs text-red-600">{authEmailError}</p>}
+                {authEmailMessage && <p className="text-xs text-green-700">{authEmailMessage}</p>}
+                <button
+                  type="button"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-[#14212e] hover:bg-slate-100"
+                  disabled={authEmailSending}
+                  onClick={async () => {
+                    setAuthEmailError(null)
+                    setAuthEmailMessage(null)
+                    const email = authEmail.trim()
+                    if (!email || !email.includes('@')) {
+                      setAuthEmailError('Ingresá un email válido')
+                      return
+                    }
+                    try {
+                      setAuthEmailSending(true)
+                      const supabase = getSupabaseClient()
+                      const redirectTo = window.location.href
+                      const { error } = await supabase.auth.signInWithOtp({
+                        email,
+                        options: { emailRedirectTo: redirectTo },
+                      })
+                      if (error) {
+                        setAuthEmailError(error.message || 'No pudimos enviar el correo. Intentá nuevamente.')
+                      } else {
+                        setAuthEmailMessage('Revisá tu casilla. Te enviamos un link para continuar.')
+                      }
+                    } catch (e: any) {
+                      setAuthEmailError(e?.message || 'No pudimos enviar el correo.')
+                    } finally {
+                      setAuthEmailSending(false)
+                    }
+                  }}
+                >
+                  {authEmailSending ? 'Enviando…' : 'Ingresar con email'}
+                </button>
+              </div>
+              <p className="text-xs text-slate-500 text-center">Te enviaremos un link y volverás a este formulario para finalizar la publicación.</p>
             </div>
           </div>
         </div>

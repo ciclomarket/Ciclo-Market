@@ -60,6 +60,11 @@ export default function MyListingsPage() {
               const photosVis = l.photosVisible ?? Math.min(l.images?.length || 0, 12)
               const cap = l.grantedVisiblePhotos ? Math.min(l.grantedVisiblePhotos, 12) : 4
               const photosTotal = l.images?.length || 0
+              const createdLabel = l.createdAt ? new Date(l.createdAt).toLocaleDateString('es-AR') : '-'
+              const planLabel = l.planStatus ?? 'FREE'
+              const waLabel = (l.whatsappCapGranted && l.whatsappEnabled)
+                ? 'habilitado'
+                : (l.whatsappCapGranted ? 'apagado' : 'no habilitado')
               return (
                 <div key={l.id} className="rounded-2xl border border-[#14212e]/10 bg-white p-4 shadow-sm">
                   <div className="flex items-center justify-between gap-3">
@@ -67,11 +72,10 @@ export default function MyListingsPage() {
                     <span className={`rounded-full px-2 py-0.5 text-xs ${l.planStatus === 'PRO' ? 'bg-emerald-100 text-emerald-800' : l.planStatus === 'PREMIUM' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-700'}`}>{l.planStatus ?? 'FREE'}</span>
                   </div>
                   <div className="mt-2 text-lg font-bold text-[#14212e]">{priceLabel}</div>
-                  <div className="mt-2 flex items-center justify-between text-xs text-[#14212e]/70">
-                    <div>Prioridad: {l.priorityActive ? 'activa' : 'inactiva'}</div>
-                    <div>Fotos visibles: {photosVis}/{cap}</div>
-                  </div>
-                  <div className="mt-1 text-xs text-[#14212e]/70">WhatsApp: {(l.whatsappCapGranted && l.whatsappEnabled) ? 'activo' : (l.whatsappCapGranted ? 'apagado' : 'no disponible')}</div>
+                  <div className="mt-2 text-xs text-[#14212e]/70">Creada el: {createdLabel}</div>
+                  <div className="mt-1 text-xs text-[#14212e]/70">Plan: {planLabel}</div>
+                  <div className="mt-1 text-xs text-[#14212e]/70">WhatsApp: {waLabel}</div>
+                  <div className="mt-1 text-xs text-[#14212e]/70">Fotos visibles: {photosVis}/{cap}</div>
 
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Button size="sm" onClick={() => setEditing({ id: l.id, price: String(l.price) })}>Editar precio</Button>
