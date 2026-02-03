@@ -784,7 +784,7 @@ app.get('/api/market/search', async (req, res) => {
 
     let query = supabase
       .from('listings')
-      .select('id,slug,title,brand,model,year,category,subcategory,price,price_currency,original_price,location,description,material,frame_size,wheel_size,drivetrain,drivetrain_detail,wheelset,extras,seller_id,seller_name,seller_plan,seller_plan_expires,seller_location,seller_whatsapp,seller_email,seller_avatar,plan,highlight_expires,contact_methods,expires_at,renewal_notified_at,status,created_at,images')
+      .select('id,slug,title,brand,model,year,category,subcategory,price,price_currency,original_price,location,description,material,frame_size,wheel_size,drivetrain,drivetrain_detail,wheelset,extras,seller_id,seller_name,seller_plan,seller_plan_expires,seller_location,seller_whatsapp,seller_email,seller_avatar,plan,highlight_expires,rank_boost_until,granted_visible_photos,whatsapp_cap_granted,whatsapp_enabled,whatsapp_user_disabled,contact_methods,expires_at,renewal_notified_at,status,created_at,images')
       .order('created_at', { ascending: false })
       .limit(500)
 
@@ -837,7 +837,16 @@ app.get('/api/market/search', async (req, res) => {
       if (typeof criteria.priceMax === 'number' && Number.isFinite(criteria.priceMax)) {
         if (priceSel > Number(criteria.priceMax)) continue
       }
-      filtered.push({ ...listing, __store_enabled: storeEnabled })
+      // Public derivations for UI (4/8/12 + WA badge)
+      const rbu = listing?.rank_boost_until ? new Date(listing.rank_boost_until).getTime() : 0
+      const premiumActive = rbu > now
+      const granted = Number(listing?.granted_visible_photos || 4)
+      const planTier = premiumActive ? (granted >= 12 ? 'PRO' : (granted >= 8 ? 'PREMIUM' : 'FREE')) : 'FREE'
+      const publicPhotosLimit = planTier === 'PRO' ? 12 : (planTier === 'PREMIUM' ? 8 : 4)
+      const images = Array.isArray(listing?.images) ? listing.images : []
+      const publicPhotosVisible = Math.min(images.length, publicPhotosLimit)
+      const waPublic = premiumActive && granted >= 8 && !!listing?.whatsapp_enabled && !listing?.whatsapp_user_disabled
+      filtered.push({ ...listing, __store_enabled: storeEnabled, premium_active: premiumActive, plan_tier: planTier, public_photos_limit: publicPhotosLimit, public_photos_visible: publicPhotosVisible, wa_public: waPublic })
     }
 
     const fx = Number(req.query.fx) || 0
@@ -860,23 +869,27 @@ app.get('/api/market/search', async (req, res) => {
         return sort === 'asc' ? pa - pb : pb - pa
       })
     } else {
-      // relevance: 1) destacadas (highlight_expires futuro, más recientes primero)
-      //            2) tiendas oficiales
-      //            3) no destacadas
+      // relevance: freshness + engagement + premium boost + highlight + store
       ordered = [...filtered].sort((a, b) => {
         const nowTs = Date.now()
-        const aHl = a.highlight_expires ? new Date(a.highlight_expires).getTime() > nowTs : false
-        const bHl = b.highlight_expires ? new Date(b.highlight_expires).getTime() > nowTs : false
-        const aStore = Boolean(a.__store_enabled)
-        const bStore = Boolean(b.__store_enabled)
-        const rank = (hl, st) => (hl ? 2 : (st ? 1 : 0))
-        const rA = rank(aHl, aStore)
-        const rB = rank(bHl, bStore)
-        if (rB !== rA) return rB - rA
-        // dentro del grupo, más recientes primero
-        const da = new Date(a.created_at || 0).getTime()
-        const db = new Date(b.created_at || 0).getTime()
-        return db - da
+        const fresh = (row) => {
+          const ageDays = Math.max(0, (nowTs - new Date(row.created_at || 0).getTime()) / (24*60*60*1000))
+          return 1 / (1 + ageDays / 14)
+        }
+        const engage = (row) => (Number(row.original_price) > Number(row.price)) ? 0.1 : 0
+        const premium = (row) => {
+          const rbu = row.rank_boost_until || row.featured_until || null
+          const active = rbu ? new Date(rbu).getTime() > nowTs : false
+          if (!active) return 0
+          const cap = Number(row.granted_visible_photos) || 4
+          return cap >= 12 ? 1.1 : 0.8 // PRO > PREMIUM
+        }
+        const highlight = (row) => (row.highlight_expires && new Date(row.highlight_expires).getTime() > nowTs) ? 0.15 : 0
+        const store = (row) => Boolean(row.__store_enabled) ? 0.05 : 0
+        const score = (row) => fresh(row) + engage(row) + premium(row) + highlight(row) + store(row)
+        const delta = score(b) - score(a)
+        if (delta !== 0) return delta
+        return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
       })
     }
 
@@ -1955,7 +1968,7 @@ app.post('/api/listings/:id/upgrade', async (req, res) => {
 
     const { data: listing, error: listingError } = await supabase
       .from('listings')
-      .select('id,seller_id,plan,plan_code,seller_plan,expires_at,highlight_expires,seller_whatsapp,contact_methods')
+      .select('id,seller_id,plan,plan_code,seller_plan,expires_at,highlight_expires,rank_boost_until,granted_visible_photos,whatsapp_cap_granted,whatsapp_enabled,seller_whatsapp,contact_methods')
       .eq('id', id)
       .maybeSingle()
     if (listingError || !listing) return res.status(404).json({ error: 'not_found' })
@@ -1968,6 +1981,7 @@ app.post('/api/listings/:id/upgrade', async (req, res) => {
     if (!isOwner && !isModeratorUser) return res.status(403).json({ error: 'forbidden' })
 
     const planCode = normalisePlanCode(req.body?.planCode || req.body?.plan)
+    const planTier = String(req.body?.plan_tier || '').trim().toUpperCase() // 'PREMIUM' | 'PRO'
     if (!planCode || (planCode !== 'basic' && planCode !== 'premium')) {
       return res.status(400).json({ error: 'invalid_plan' })
     }
@@ -2023,6 +2037,11 @@ app.post('/api/listings/:id/upgrade', async (req, res) => {
       nextHighlightIso = new Date(baseHighlight + includedHighlightDays * 24 * 60 * 60 * 1000).toISOString()
     }
 
+    // Premium rank boost: 90 days from now (or extend from current future boost)
+    const PREMIUM_BOOST_DAYS = 90
+    const baseBoost = listing.rank_boost_until ? Math.max(new Date(listing.rank_boost_until).getTime(), now) : now
+    const nextRankBoostIso = new Date(baseBoost + PREMIUM_BOOST_DAYS * 24 * 60 * 60 * 1000).toISOString()
+
     let sellerWhatsapp = normalizeWhatsappForStorage(listing.seller_whatsapp || '')
     let profileWhatsapp = null
     if (supabaseService) {
@@ -2060,6 +2079,13 @@ app.post('/api/listings/:id/upgrade', async (req, res) => {
       ? ensureWhatsappInContactMethods(listing.contact_methods)
       : ensureWhatsappInContactMethods(['email', 'chat'])
 
+    // Determine benefits to grant
+    const targetCap = planTier === 'PRO' ? 12 : 8
+    const nextGrantedPhotos = Math.max(Number(listing.granted_visible_photos || 4), targetCap)
+    const nextWhatsappCap = true
+    // Respect explicit off: if user disabled, do not force-enable on upgrade
+    const nextWhatsappEnabled = listing.whatsapp_user_disabled ? listing.whatsapp_enabled : true
+
     const { data: updatedListing, error: updateErr } = await supabase
       .from('listings')
       .update({
@@ -2070,6 +2096,11 @@ app.post('/api/listings/:id/upgrade', async (req, res) => {
         contact_methods: contactMethods,
         expires_at: nextExpires,
         highlight_expires: nextHighlightIso,
+        rank_boost_until: nextRankBoostIso,
+        granted_visible_photos: nextGrantedPhotos,
+        visible_images_count: targetCap,
+        whatsapp_cap_granted: nextWhatsappCap,
+        whatsapp_enabled: nextWhatsappEnabled,
         status: 'active',
       })
       .eq('id', id)
@@ -2084,6 +2115,18 @@ app.post('/api/listings/:id/upgrade', async (req, res) => {
           .eq('id', creditId)
       }
       return res.status(500).json({ error: 'update_failed' })
+    }
+
+    if (supabaseService) {
+      // Record plan period history (best-effort)
+      try {
+        const expiresAt = new Date(now + PREMIUM_BOOST_DAYS * 24 * 60 * 60 * 1000).toISOString()
+        await supabaseService
+          .from('listing_plan_periods')
+          .insert({ listing_id: id, plan_code: (planTier || (nextGrantedPhotos >= 12 ? 'PRO' : 'PREMIUM')), started_at: new Date().toISOString(), expires_at: expiresAt, payment_id: null })
+      } catch (err) {
+        console.warn('[upgrade] listing_plan_periods insert failed (non-fatal)', err?.message || err)
+      }
     }
 
     if (creditId && supabaseService) {
@@ -2152,6 +2195,7 @@ app.post('/api/listings/:id/apply-plan', async (req, res) => {
         plan_code: planCode,
         expires_at: nextExpires,
         highlight_expires: nextHighlightIso,
+        rank_boost_until: (planCode === 'premium') ? new Date(Math.max(now, now)).toISOString() : undefined
       })
       .eq('id', id)
       .select('*')
@@ -2210,4 +2254,122 @@ app.get('/admin/*', (req, res, next) => {
   return res.sendFile(path.join(adminDistDir, 'index.html'), (err) => {
     if (err) next(err)
   })
+})
+/* ----------------------------- My Listings quick actions ------------------ */
+// Owner: update price
+app.patch('/api/my-listings/:id/price', async (req, res) => {
+  try {
+    const supabase = getServerSupabaseClient()
+    const user = await getAuthUser(req, supabase)
+    if (!user) return res.status(401).json({ ok: false, error: 'unauthorized' })
+    const id = String(req.params.id)
+    const nextPrice = Number(req.body?.price)
+    if (!Number.isFinite(nextPrice) || nextPrice <= 0) return res.status(400).json({ ok: false, error: 'invalid_price' })
+    const { data: listing, error: fetchErr } = await supabase
+      .from('listings')
+      .select('id,seller_id')
+      .eq('id', id)
+      .maybeSingle()
+    if (fetchErr || !listing) return res.status(404).json({ ok: false, error: 'not_found' })
+    if (listing.seller_id !== user.id) return res.status(403).json({ ok: false, error: 'forbidden' })
+    const { error: updErr } = await supabase
+      .from('listings')
+      .update({ price: nextPrice })
+      .eq('id', id)
+    if (updErr) return res.status(500).json({ ok: false, error: 'update_failed' })
+    return res.json({ ok: true })
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: 'unexpected_error' })
+  }
+})
+
+// Owner: reorder/replace images (max 12)
+app.patch('/api/my-listings/:id/images', async (req, res) => {
+  try {
+    const supabase = getServerSupabaseClient()
+    const user = await getAuthUser(req, supabase)
+    if (!user) return res.status(401).json({ ok: false, error: 'unauthorized' })
+    const id = String(req.params.id)
+    const images = Array.isArray(req.body?.images) ? req.body.images.map(String) : null
+    if (!images) return res.status(400).json({ ok: false, error: 'invalid_payload' })
+    const next = images.slice(0, 12)
+    const { data: listing } = await supabase
+      .from('listings')
+      .select('id,seller_id')
+      .eq('id', id)
+      .maybeSingle()
+    if (!listing) return res.status(404).json({ ok: false, error: 'not_found' })
+    if (listing.seller_id !== user.id) return res.status(403).json({ ok: false, error: 'forbidden' })
+    const { error: updErr } = await supabase
+      .from('listings')
+      .update({ images: next })
+      .eq('id', id)
+    if (updErr) return res.status(500).json({ ok: false, error: 'update_failed' })
+    return res.json({ ok: true })
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: 'unexpected_error' })
+  }
+})
+
+// Owner: toggle whatsapp (requires cap granted)
+app.patch('/api/my-listings/:id/whatsapp', async (req, res) => {
+  try {
+    const supabase = getServerSupabaseClient()
+    const user = await getAuthUser(req, supabase)
+    if (!user) return res.status(401).json({ ok: false, error: 'unauthorized' })
+    const id = String(req.params.id)
+    const enable = Boolean(req.body?.enabled)
+    const { data: listing } = await supabase
+      .from('listings')
+      .select('id,seller_id,whatsapp_cap_granted')
+      .eq('id', id)
+      .maybeSingle()
+    if (!listing) return res.status(404).json({ ok: false, error: 'not_found' })
+    if (listing.seller_id !== user.id) return res.status(403).json({ ok: false, error: 'forbidden' })
+    if (!listing.whatsapp_cap_granted) return res.status(409).json({ ok: false, error: 'cap_not_granted' })
+    const { error: updErr } = await supabase
+      .from('listings')
+      .update({ whatsapp_enabled: enable, whatsapp_user_disabled: !enable })
+      .eq('id', id)
+    if (updErr) return res.status(500).json({ ok: false, error: 'update_failed' })
+    return res.json({ ok: true })
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: 'unexpected_error' })
+  }
+})
+
+// Owner: start upgrade checkout (Premium ARS 11000)
+app.post('/api/my-listings/:id/upgrade', async (req, res) => {
+  try {
+    if (!mpClient) return res.status(503).json({ ok: false, error: 'payments_unavailable' })
+    const supabase = getServerSupabaseClient()
+    const user = await getAuthUser(req, supabase)
+    if (!user) return res.status(401).json({ ok: false, error: 'unauthorized' })
+    const id = String(req.params.id)
+    // Validate ownership
+    const { data: listing } = await supabase
+      .from('listings')
+      .select('id,seller_id')
+      .eq('id', id)
+      .maybeSingle()
+    if (!listing) return res.status(404).json({ ok: false, error: 'not_found' })
+    if (listing.seller_id !== user.id) return res.status(403).json({ ok: false, error: 'forbidden' })
+
+    // Create MP preference using existing /api/checkout path to keep logic consolidated
+    req.body = {
+      planCode: 'premium',
+      amount: 11000,
+      planCurrency: 'ARS',
+      planName: 'Plan Premium',
+      listingId: id,
+      redirectUrls: {
+        success: `${resolveFrontendBaseUrl()}/checkout/success`,
+        failure: `${resolveFrontendBaseUrl()}/checkout/failure`,
+        pending: `${resolveFrontendBaseUrl()}/checkout/pending`,
+      },
+    }
+    return app._router.handle(req, res, () => {}) // delegate to existing route
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: 'unexpected_error' })
+  }
 })

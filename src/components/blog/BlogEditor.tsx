@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import type { BlogPost } from '../../types/blog'
 import { createBlogPost, updateBlogPost } from '../../services/blog'
+import { buildEmbeddedMetaComment } from '../../utils/blogContent'
 import useUpload from '../../hooks/useUpload'
 import { sanitizeHtml } from '../../utils/sanitizeHtml'
 import { slugify } from '../../utils/slug'
@@ -21,6 +22,17 @@ type FormState = {
   htmlContent: string
   status: 'draft' | 'published'
   tags: string[]
+  // SEO
+  seoTitle: string
+  seoDescription: string
+  canonicalUrl: string
+  ogImageUrl: string
+  // JSON-LD (texto JSON)
+  jsonLdText: string
+  // Theme tokens
+  themeHeroBg: string
+  themeHeroText: string
+  themeAccent: string
 }
 
 const DEFAULT_FORM: FormState = {
@@ -31,6 +43,14 @@ const DEFAULT_FORM: FormState = {
   htmlContent: '',
   status: 'draft',
   tags: [],
+  seoTitle: '',
+  seoDescription: '',
+  canonicalUrl: '',
+  ogImageUrl: '',
+  jsonLdText: '',
+  themeHeroBg: '#14212E',
+  themeHeroText: '#ffffff',
+  themeAccent: '#0c72ff',
 }
 
 export default function BlogEditor({ authorId, initialPost, onCancel, onSaved }: BlogEditorProps) {
@@ -46,6 +66,14 @@ export default function BlogEditor({ authorId, initialPost, onCancel, onSaved }:
       htmlContent: initialPost.htmlContent,
       status: initialPost.status,
       tags: initialPost.tags ?? [],
+      seoTitle: '',
+      seoDescription: '',
+      canonicalUrl: '',
+      ogImageUrl: '',
+      jsonLdText: '',
+      themeHeroBg: '#14212E',
+      themeHeroText: '#ffffff',
+      themeAccent: '#0c72ff',
     }
   })
   const [tagInput, setTagInput] = useState('')
@@ -119,6 +147,47 @@ export default function BlogEditor({ authorId, initialPost, onCancel, onSaved }:
     }
   }
 
+  // Inserta un snippet HTML en el cursor del textarea de contenido
+  const insertHtmlAtCursor = (snippet: string) => {
+    setForm((prev) => {
+      const textarea = htmlTextareaRef.current
+      if (!textarea) {
+        return { ...prev, htmlContent: prev.htmlContent + snippet }
+      }
+      const start = textarea.selectionStart ?? prev.htmlContent.length
+      const end = textarea.selectionEnd ?? prev.htmlContent.length
+      const next = prev.htmlContent.slice(0, start) + snippet + prev.htmlContent.slice(end)
+      requestAnimationFrame(() => {
+        const caret = start + snippet.length
+        textarea.focus()
+        textarea.setSelectionRange(caret, caret)
+      })
+      return { ...prev, htmlContent: next }
+    })
+  }
+
+  // Upload de imagen y auto-inserción como <figure> en el contenido
+  const handleInlineImageUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return
+    try {
+      const urls = await uploadFiles(Array.from(files))
+      if (urls.length > 0) {
+        const file = files[0]
+        const alt = file.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ').trim()
+        const snippet = `\n<figure class=\"blog-image\"><img src=\"${urls[0]}\" alt=\"${alt}\" loading=\"lazy\" /></figure>\n`
+        insertHtmlAtCursor(snippet)
+        showToast('Imagen insertada en el contenido')
+      }
+    } catch (err) {
+      console.error('[blog] inline image upload error', err)
+      showToast('No se pudo subir la imagen. Intentá de nuevo.', { variant: 'error' })
+    } finally {
+      if (inlineImageInputRef.current) {
+        inlineImageInputRef.current.value = ''
+      }
+    }
+  }
+
   const validate = (): string | null => {
     if (!form.title.trim()) return 'El título es obligatorio.'
     if (!form.slug.trim()) return 'El slug es obligatorio.'
@@ -126,6 +195,17 @@ export default function BlogEditor({ authorId, initialPost, onCancel, onSaved }:
       return 'El slug solo puede contener letras minúsculas, números y guiones.'
     }
     if (!form.htmlContent.trim()) return 'El contenido HTML no puede estar vacío.'
+    // Validar JSON-LD si fue provisto
+    if (form.jsonLdText.trim()) {
+      try {
+        const parsed = JSON.parse(form.jsonLdText)
+        if (!parsed || (typeof parsed !== 'object' && !Array.isArray(parsed))) {
+          return 'El JSON-LD debe ser un objeto o un array.'
+        }
+      } catch {
+        return 'El JSON-LD no es JSON válido.'
+      }
+    }
     return null
   }
 
@@ -141,12 +221,36 @@ export default function BlogEditor({ authorId, initialPost, onCancel, onSaved }:
     setSaving(true)
     try {
       const sanitizedHtml = sanitizeHtml(form.htmlContent)
+      // Componer comentario de metadatos incrustados para compatibilidad sin migración DB
+      let prefix = ''
+      const metaPayload = {
+        seoTitle: form.seoTitle.trim() || null,
+        seoDescription: form.seoDescription.trim() || null,
+        canonicalUrl: form.canonicalUrl.trim() || null,
+        ogImageUrl: (form.ogImageUrl.trim() || form.coverImageUrl || '') || null,
+        jsonLd: (() => {
+          if (!form.jsonLdText.trim()) return null
+          try {
+            const parsed = JSON.parse(form.jsonLdText)
+            if (Array.isArray(parsed)) return parsed
+            if (parsed && typeof parsed === 'object') return [parsed]
+            return null
+          } catch { return null }
+        })(),
+        theme: {
+          heroBg: form.themeHeroBg,
+          heroText: form.themeHeroText,
+          accent: form.themeAccent,
+        },
+      }
+      const metaComment = buildEmbeddedMetaComment(metaPayload)
+      prefix = metaComment + '\n\n'
       const payload = {
         title: form.title.trim(),
         slug: form.slug.trim(),
         excerpt: form.excerpt.trim() || null,
         coverImageUrl: form.coverImageUrl,
-        htmlContent: sanitizedHtml,
+        htmlContent: prefix + sanitizedHtml,
         status: form.status,
         tags: form.tags.map((tag) => tag.toLowerCase()),
       }
@@ -330,6 +434,13 @@ export default function BlogEditor({ authorId, initialPost, onCancel, onSaved }:
               >
                 Insertar imagen
               </button>
+              <button
+                type="button"
+                onClick={() => insertHtmlAtCursor('\n<hr/>\n')}
+                className="rounded-full border border-[#1f2d3a] px-3 py-1.5 text-xs font-semibold text-[#14212e] transition hover:border-[#14212e] hover:text-[#0f1729]"
+              >
+                Insertar separador
+              </button>
             </div>
           </div>
           <textarea
@@ -342,26 +453,240 @@ export default function BlogEditor({ authorId, initialPost, onCancel, onSaved }:
           />
         </label>
 
-        <div>
-          <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
-            Preview
-          </h3>
-          <div className="rounded-2xl border border-gray-200 bg-gray-50/60 p-6">
-            {previewHtml ? (
-              <article
-                className="blog-content"
-                dangerouslySetInnerHTML={{ __html: previewHtml }}
-              />
-            ) : (
-              <p className="text-sm text-gray-500">El contenido aparecerá aquí.</p>
-            )}
-          </div>
-        </div>
+        {/* Pestañas simples: Contenido, SEO, JSON-LD, Preview */}
+        <EditorTabs
+          html={form.htmlContent}
+          onHtmlChange={(v) => handleChange('htmlContent', v)}
+          seo={{
+            title: form.seoTitle,
+            description: form.seoDescription,
+            canonicalUrl: form.canonicalUrl,
+            ogImageUrl: form.ogImageUrl,
+          }}
+          onSeoChange={(next) => {
+            handleChange('seoTitle', next.title)
+            handleChange('seoDescription', next.description)
+            handleChange('canonicalUrl', next.canonicalUrl)
+            handleChange('ogImageUrl', next.ogImageUrl)
+          }}
+          jsonLdText={form.jsonLdText}
+          onJsonLdChange={(v) => handleChange('jsonLdText', v)}
+          previewHtml={previewHtml}
+          design={{ heroBg: form.themeHeroBg, heroText: form.themeHeroText, accent: form.themeAccent }}
+          onDesignChange={(d) => { handleChange('themeHeroBg', d.heroBg); handleChange('themeHeroText', d.heroText); handleChange('themeAccent', d.accent) }}
+          onInsertBlock={(snippet) => insertHtmlAtCursor(snippet)}
+        />
 
         {error && <p className="text-sm font-medium text-red-600">{error}</p>}
       </form>
     </div>
   )
+}
+
+function EditorTabs(props: {
+  html: string
+  onHtmlChange: (v: string) => void
+  seo: { title: string; description: string; canonicalUrl: string; ogImageUrl: string }
+  onSeoChange: (v: { title: string; description: string; canonicalUrl: string; ogImageUrl: string }) => void
+  jsonLdText: string
+  onJsonLdChange: (v: string) => void
+  previewHtml: string
+  design: { heroBg: string; heroText: string; accent: string }
+  onDesignChange: (d: { heroBg: string; heroText: string; accent: string }) => void
+  onInsertBlock: (snippet: string) => void
+}) {
+  const [tab, setTab] = useState<'content' | 'seo' | 'design' | 'jsonld' | 'preview'>('content')
+  const { html, onHtmlChange, seo, onSeoChange, jsonLdText, onJsonLdChange, previewHtml, design, onDesignChange, onInsertBlock } = props
+  return (
+    <div>
+      <div className="mb-3 flex gap-2">
+        {[
+          { k: 'content', label: 'Contenido' },
+          { k: 'seo', label: 'SEO' },
+          { k: 'design', label: 'Diseño' },
+          { k: 'jsonld', label: 'JSON-LD' },
+          { k: 'preview', label: 'Preview' },
+        ].map((t) => (
+          <button
+            key={t.k}
+            type="button"
+            onClick={() => setTab(t.k as any)}
+            className={
+              'rounded-full px-4 py-1.5 text-sm font-semibold ' +
+              (tab === t.k
+                ? 'bg-[#14212e] text-white'
+                : 'border border-[#1f2d3a] text-[#14212e] hover:border-[#14212e]')
+            }
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'content' && (
+        <label className="flex flex-col gap-2">
+          <span className="text-sm font-medium text-gray-700">Contenido HTML</span>
+          <textarea
+            value={html}
+            onChange={(e) => onHtmlChange(e.target.value)}
+            rows={14}
+            className="rounded-xl border border-gray-300 px-4 py-3 font-mono text-sm text-gray-900 shadow-sm transition focus:border-[#14212e] focus:outline-none focus:ring-2 focus:ring-[#14212e]/25"
+            placeholder="<p>Hola ciclistas…</p>"
+          />
+        </label>
+      )}
+
+      {tab === 'design' && (
+        <div className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-3">
+            <label className="flex flex-col gap-2">
+              <span className="text-sm font-medium text-gray-700">Hero BG</span>
+              <input type="color" value={design.heroBg} onChange={(e) => onDesignChange({ ...design, heroBg: e.target.value })} />
+            </label>
+            <label className="flex flex-col gap-2">
+              <span className="text-sm font-medium text-gray-700">Hero Text</span>
+              <input type="color" value={design.heroText} onChange={(e) => onDesignChange({ ...design, heroText: e.target.value })} />
+            </label>
+            <label className="flex flex-col gap-2">
+              <span className="text-sm font-medium text-gray-700">Accent</span>
+              <input type="color" value={design.accent} onChange={(e) => onDesignChange({ ...design, accent: e.target.value })} />
+            </label>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-sm font-semibold text-gray-900">Insertar bloques</p>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className="rounded-full border border-[#1f2d3a] px-3 py-1.5 text-xs font-semibold text-[#14212e]" onClick={() => onInsertBlock(heroSnippet())}>Hero</button>
+              <button type="button" className="rounded-full border border-[#1f2d3a] px-3 py-1.5 text-xs font-semibold text-[#14212e]" onClick={() => onInsertBlock(ctaSnippet())}>CTA</button>
+              <button type="button" className="rounded-full border border-[#1f2d3a] px-3 py-1.5 text-xs font-semibold text-[#14212e]" onClick={() => onInsertBlock(faqSnippet())}>FAQ</button>
+              <button type="button" className="rounded-full border border-[#1f2d3a] px-3 py-1.5 text-xs font-semibold text-[#14212e]" onClick={() => onInsertBlock(gallerySnippet())}>Galería</button>
+              <button type="button" className="rounded-full border border-[#1f2d3a] px-3 py-1.5 text-xs font-semibold text-[#14212e]" onClick={() => onInsertBlock(tableSnippet())}>Tabla</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === 'seo' && (
+        <div className="grid gap-4 md:grid-cols-2">
+          <label className="flex flex-col gap-2">
+            <span className="text-sm font-medium text-gray-700">Título SEO</span>
+            <input
+              type="text"
+              value={seo.title}
+              onChange={(e) => onSeoChange({ ...seo, title: e.target.value })}
+              placeholder="Hasta 60 caracteres"
+              className="rounded-xl border border-gray-300 px-4 py-3 text-sm text-gray-900 shadow-sm transition focus:border-[#14212e] focus:outline-none focus:ring-2 focus:ring-[#14212e]/25"
+            />
+            <span className="text-xs text-gray-500">Recomendado ≤ 60 caracteres.</span>
+          </label>
+          <label className="flex flex-col gap-2">
+            <span className="text-sm font-medium text-gray-700">Descripción SEO</span>
+            <textarea
+              value={seo.description}
+              onChange={(e) => onSeoChange({ ...seo, description: e.target.value })}
+              rows={3}
+              placeholder="140–160 caracteres"
+              className="rounded-xl border border-gray-300 px-4 py-3 text-sm text-gray-900 shadow-sm transition focus:border-[#14212e] focus:outline-none focus:ring-2 focus:ring-[#14212e]/25"
+            />
+            <span className="text-xs text-gray-500">Recomendado 140–160 caracteres.</span>
+          </label>
+          <label className="flex flex-col gap-2">
+            <span className="text-sm font-medium text-gray-700">Canonical URL</span>
+            <input
+              type="url"
+              value={seo.canonicalUrl}
+              onChange={(e) => onSeoChange({ ...seo, canonicalUrl: e.target.value })}
+              placeholder="https://www.ejemplo.com/post"
+              className="rounded-xl border border-gray-300 px-4 py-3 text-sm text-gray-900 shadow-sm transition focus:border-[#14212e] focus:outline-none focus:ring-2 focus:ring-[#14212e]/25"
+            />
+          </label>
+          <label className="flex flex-col gap-2">
+            <span className="text-sm font-medium text-gray-700">OG Image URL</span>
+            <input
+              type="url"
+              value={seo.ogImageUrl}
+              onChange={(e) => onSeoChange({ ...seo, ogImageUrl: e.target.value })}
+              placeholder="https://.../imagen.jpg"
+              className="rounded-xl border border-gray-300 px-4 py-3 text-sm text-gray-900 shadow-sm transition focus:border-[#14212e] focus:outline-none focus:ring-2 focus:ring-[#14212e]/25"
+            />
+          </label>
+        </div>
+      )}
+
+      {tab === 'jsonld' && (
+        <label className="flex flex-col gap-2">
+          <span className="text-sm font-medium text-gray-700">JSON-LD (pegá un objeto o array)</span>
+          <textarea
+            value={jsonLdText}
+            onChange={(e) => onJsonLdChange(e.target.value)}
+            rows={10}
+            className="rounded-xl border border-gray-300 px-4 py-3 font-mono text-xs text-gray-900 shadow-sm transition focus:border-[#14212e] focus:outline-none focus:ring-2 focus:ring-[#14212e]/25"
+            placeholder='{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[...]}'
+          />
+        </label>
+      )}
+
+      {tab === 'preview' && (
+        <div className="rounded-2xl border border-gray-200 bg-gray-50/60 p-6">
+          {previewHtml ? (
+            <article className="blog-content" dangerouslySetInnerHTML={{ __html: previewHtml }} />
+          ) : (
+            <p className="text-sm text-gray-500">El contenido aparecerá aquí.</p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Bloques seguros (sin estilos inline)
+function heroSnippet() {
+  return `\n<section class="hero">
+  <h1>Título llamativo del artículo</h1>
+  <p>Subtítulo inspirador que resume la idea central.</p>
+</section>\n`
+}
+function ctaSnippet() {
+  return `\n<section class="cta">
+  <h3>¿Listo para pedalear mejor?</h3>
+  <p>Explorá nuestras guías y equipamiento recomendado por el equipo.</p>
+  <div class="cta-actions">
+    <a class="btn btn-primary" href="/marketplace">Ver marketplace</a>
+    <a class="btn btn-secondary" href="/ayuda">Ayuda</a>
+  </div>
+</section>\n`
+}
+function faqSnippet() {
+  return `\n<section class="faq">
+  <details>
+    <summary>¿Cómo elijo la talla de mi bici?</summary>
+    <div>Considerá tu altura y el tipo de cuadro. Probá varias opciones si podés.</div>
+  </details>
+  <details>
+    <summary>¿Qué presión de neumáticos uso?</summary>
+    <div>Depende del terreno y tu peso. Empezá por recomendaciones del fabricante.</div>
+  </details>
+</section>\n`
+}
+function gallerySnippet() {
+  return `\n<section class="gallery grid-3">
+  <figure class="blog-image"><img src="https://placehold.co/600x400" alt="Foto 1" loading="lazy" /></figure>
+  <figure class="blog-image"><img src="https://placehold.co/600x400" alt="Foto 2" loading="lazy" /></figure>
+  <figure class="blog-image"><img src="https://placehold.co/600x400" alt="Foto 3" loading="lazy" /></figure>
+</section>\n`
+}
+function tableSnippet() {
+  return `\n<div class="table-wrapper">
+  <table class="price-table">
+    <thead>
+      <tr><th>Plan</th><th>Precio</th><th>Características</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Básico</td><td>Gratis</td><td>Publicaciones limitadas</td></tr>
+      <tr><td>Pro</td><td>$</td><td>Más visibilidad</td></tr>
+    </tbody>
+  </table>
+</div>\n`
 }
   const insertHtmlAtCursor = (snippet: string) => {
     setForm((prev) => {

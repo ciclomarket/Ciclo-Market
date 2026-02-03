@@ -21,6 +21,12 @@ export interface BlogPost {
   publishedAt: string | null
   views: number
   tags: string[]
+  seoTitle?: string | null
+  seoDescription?: string | null
+  canonicalUrl?: string | null
+  ogImageUrl?: string | null
+  jsonLd?: any | null
+  theme?: { heroBg?: string; heroText?: string; accent?: string; surfaceBg?: string } | null
 }
 
 export interface BlogPostInput {
@@ -31,6 +37,13 @@ export interface BlogPostInput {
   htmlContent: string
   status: BlogPostStatus
   tags?: string[]
+  // Opcionales si la migración existe (guardamos en columnas)
+  seoTitle?: string | null
+  seoDescription?: string | null
+  canonicalUrl?: string | null
+  ogImageUrl?: string | null
+  jsonLd?: any | null
+  theme?: { heroBg?: string; heroText?: string; accent?: string; surfaceBg?: string } | null
 }
 
 export interface PaginatedBlogPosts {

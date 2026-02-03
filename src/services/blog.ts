@@ -1,5 +1,6 @@
 import { getSupabaseClient, supabaseEnabled } from './supabase'
 import type { BlogPost, BlogPostInput, PaginatedBlogPosts } from '../types/blog'
+import { getOptionalColumns } from '../utils/supabaseCompat'
 
 export const BLOG_PAGE_SIZE = 6
 
@@ -17,6 +18,12 @@ type BlogPostRow = {
   published_at: string | null
   views: number | null
   tags: string[] | null
+  seo_title?: string | null
+  seo_description?: string | null
+  canonical_url?: string | null
+  og_image_url?: string | null
+  json_ld?: any | null
+  theme?: any | null
   author?: {
     id: string
     full_name: string | null
@@ -46,6 +53,12 @@ function mapRow(row: BlogPostRow): BlogPost {
     publishedAt: row.published_at,
     views: row.views ?? 0,
     tags: Array.isArray(row.tags) ? row.tags : [],
+    seoTitle: row.seo_title ?? null,
+    seoDescription: row.seo_description ?? null,
+    canonicalUrl: row.canonical_url ?? null,
+    ogImageUrl: row.og_image_url ?? null,
+    jsonLd: row.json_ld ?? null,
+    theme: row.theme ?? null,
   }
 }
 
@@ -64,6 +77,10 @@ export async function fetchPublishedBlogPosts(
   const supabase = getSupabaseClient()
   const start = (page - 1) * pageSize
   const end = start + pageSize - 1
+  const optional = await getOptionalColumns(supabase)
+  const extraCols = optional.supportsSeo
+    ? ', seo_title, seo_description, canonical_url, og_image_url, json_ld, theme'
+    : ''
   const { data, error, count } = await supabase
     .from('blog_posts')
     .select(
@@ -80,7 +97,7 @@ export async function fetchPublishedBlogPosts(
         updated_at,
         published_at,
         views,
-        tags,
+        tags${extraCols},
         author:users!blog_posts_author_id_fkey(id, full_name, avatar_url)
       `,
       { count: 'exact' },
@@ -105,6 +122,10 @@ export async function fetchPublishedBlogPosts(
 export async function fetchBlogPostBySlug(slug: string): Promise<BlogPost | null> {
   if (!supabaseEnabled) return null
   const supabase = getSupabaseClient()
+  const optional = await getOptionalColumns(supabase)
+  const extraCols = optional.supportsSeo
+    ? ', seo_title, seo_description, canonical_url, og_image_url, json_ld, theme'
+    : ''
   const { data, error } = await supabase
     .from('blog_posts')
     .select(
@@ -121,7 +142,7 @@ export async function fetchBlogPostBySlug(slug: string): Promise<BlogPost | null
         updated_at,
         published_at,
         views,
-        tags,
+        tags${extraCols},
         author:users!blog_posts_author_id_fkey(id, full_name, avatar_url)
       `,
     )
@@ -155,6 +176,10 @@ export async function fetchRelatedBlogPosts(
 ): Promise<BlogPost[]> {
   if (!supabaseEnabled || tags.length === 0) return []
   const supabase = getSupabaseClient()
+  const optional = await getOptionalColumns(supabase)
+  const extraCols = optional.supportsSeo
+    ? ', seo_title, seo_description, canonical_url, og_image_url, json_ld, theme'
+    : ''
   const { data, error } = await supabase
     .from('blog_posts')
     .select(
@@ -171,7 +196,7 @@ export async function fetchRelatedBlogPosts(
         updated_at,
         published_at,
         views,
-        tags,
+        tags${extraCols},
         author:users!blog_posts_author_id_fkey(id, full_name, avatar_url)
       `,
     )
@@ -225,7 +250,8 @@ export async function createBlogPost(
 ): Promise<BlogPost> {
   if (!supabaseEnabled) throw new Error('Supabase no configurado')
   const supabase = getSupabaseClient()
-  const payload = {
+  const optional = await getOptionalColumns(supabase)
+  const payload: Record<string, any> = {
     title: input.title,
     slug: input.slug,
     excerpt: input.excerpt ?? null,
@@ -235,6 +261,17 @@ export async function createBlogPost(
     author_id: input.authorId,
     tags: Array.isArray(input.tags) ? input.tags : [],
   }
+  if (optional.supportsSeo) {
+    payload.seo_title = (input as any).seoTitle ?? null
+    payload.seo_description = (input as any).seoDescription ?? null
+    payload.canonical_url = (input as any).canonicalUrl ?? null
+    payload.og_image_url = (input as any).ogImageUrl ?? null
+    payload.json_ld = (input as any).jsonLd ?? null
+    payload.theme = (input as any).theme ?? null
+  }
+  const extraCols = optional.supportsSeo
+    ? ', seo_title, seo_description, canonical_url, og_image_url, json_ld, theme'
+    : ''
   const { data, error } = await supabase
     .from('blog_posts')
     .insert(payload)
@@ -252,7 +289,7 @@ export async function createBlogPost(
         updated_at,
         published_at,
         views,
-        tags,
+        tags${extraCols},
         author:users!blog_posts_author_id_fkey(id, full_name, avatar_url)
       `,
     )
@@ -270,6 +307,7 @@ export async function updateBlogPost(
 ): Promise<BlogPost> {
   if (!supabaseEnabled) throw new Error('Supabase no configurado')
   const supabase = getSupabaseClient()
+  const optional = await getOptionalColumns(supabase)
   const payload: Record<string, any> = {}
   if (typeof input.title === 'string') payload.title = input.title
   if (typeof input.slug === 'string') payload.slug = input.slug
@@ -278,6 +316,17 @@ export async function updateBlogPost(
   if (typeof input.htmlContent === 'string') payload.html_content = input.htmlContent
   if (typeof input.status === 'string') payload.status = input.status
   if (Array.isArray(input.tags)) payload.tags = input.tags
+  if (optional.supportsSeo) {
+    if ('seoTitle' in (input as any)) payload.seo_title = (input as any).seoTitle ?? null
+    if ('seoDescription' in (input as any)) payload.seo_description = (input as any).seoDescription ?? null
+    if ('canonicalUrl' in (input as any)) payload.canonical_url = (input as any).canonicalUrl ?? null
+    if ('ogImageUrl' in (input as any)) payload.og_image_url = (input as any).ogImageUrl ?? null
+    if ('jsonLd' in (input as any)) payload.json_ld = (input as any).jsonLd ?? null
+    if ('theme' in (input as any)) payload.theme = (input as any).theme ?? null
+  }
+  const extraCols = optional.supportsSeo
+    ? ', seo_title, seo_description, canonical_url, og_image_url, json_ld, theme'
+    : ''
   const { data, error } = await supabase
     .from('blog_posts')
     .update(payload)
@@ -296,7 +345,7 @@ export async function updateBlogPost(
         updated_at,
         published_at,
         views,
-        tags,
+        tags${extraCols},
         author:users!blog_posts_author_id_fkey(id, full_name, avatar_url)
       `,
     )

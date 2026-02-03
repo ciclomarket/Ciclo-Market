@@ -8,6 +8,7 @@ import ErrorBoundary from './components/ErrorBoundary'
 import Home from './pages/Home'
 import { lazyWithRetry } from './utils/lazyWithRetry'
 const Plans = lazyWithRetry(() => import('./pages/Publish/Plans'))
+const ChooseType = lazyWithRetry(() => import('./pages/Publish/ChooseType'))
 const PublishNew = lazyWithRetry(() => import('./pages/Publish/PublishNew'))
 const ListingDetail = lazyWithRetry(() => import('./pages/ListingDetail'))
 const HighlightListing = lazyWithRetry(() => import('./pages/HighlightListing'))
@@ -60,6 +61,7 @@ import SeoHead, { type SeoHeadProps } from './components/SeoHead'
 import GlobalJsonLd from './components/GlobalJsonLd'
 import { useRef } from 'react'
 import { trackMetaPixel } from './lib/metaPixel'
+const MyListingsPage = lazyWithRetry(() => import('./pages/MyListings'))
 
 // Helper opcional por si quisieras redirigir preservando query-string
 function RedirectWithSearch({ to }: { to: string }) {
@@ -466,17 +468,13 @@ export default function App() {
                       <Route path="/blog" element={<BlogListPage />} />
                       <Route path="/blog/:slug" element={<BlogPostDetail />} />
 
-                      {/* Publicar */}
-                      <Route path="/publicar" element={<Plans />} />
+                      {/* Publicar: elegir tipo, luego formulario */}
+                      <Route path="/publicar" element={<ChooseType />} />
                       {/* Campaña: Publicá gratis */}
                       
                       <Route
                         path="/publicar/nueva"
-                        element={
-                          <ProtectedRoute>
-                            <PublishNew />
-                          </ProtectedRoute>
-                        }
+                        element={<PublishNew />}
                       />
                       {/* Alias legado */}
                       <Route path="/publish" element={<Navigate to="/publicar" replace />} />
@@ -494,6 +492,10 @@ export default function App() {
                             <Dashboard />
                           </ProtectedRoute>
                         }
+                      />
+                      <Route
+                        path="/my-listings"
+                        element={<Navigate to={`/dashboard?tab=${encodeURIComponent('Publicaciones')}`} replace />}
                       />
                       <Route
                         path="/admin/blog"

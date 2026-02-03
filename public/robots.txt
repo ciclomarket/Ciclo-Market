@@ -1,9 +1,40 @@
+# robots.txt para Ciclo Market
+# Permitir scrapers sociales y Googlebot. Regla general permisiva.
+
+User-agent: facebookexternalhit
+Allow: /
+
+User-agent: Facebot
+Allow: /
+
+User-agent: WhatsApp
+Allow: /
+
+User-agent: Twitterbot
+Allow: /
+
+User-agent: LinkedInBot
+Allow: /
+
+User-agent: Slackbot
+Allow: /
+
+User-agent: Discordbot
+Allow: /
+
+User-agent: TelegramBot
+Allow: /
+
+User-agent: Pinterest
+Allow: /
+
+User-agent: Googlebot
+Allow: /
+
+# Regla general
 User-agent: *
 Allow: /
 
-# Sitemaps actualizados
+# Sitemap principal (si está publicado)
 Sitemap: https://www.ciclomarket.ar/sitemap.xml
-Sitemap: https://www.ciclomarket.ar/sitemap-static.xml
-Sitemap: https://www.ciclomarket.ar/sitemap-stores.xml
-Sitemap: https://www.ciclomarket.ar/sitemap-categories.xml
-Sitemap: https://www.ciclomarket.ar/sitemap-listings-1.xml
+

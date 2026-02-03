@@ -260,7 +260,7 @@ export default function Header() {
   const [creditCount, setCreditCount] = useState<number>(0)
   const [nutritionBrands, setNutritionBrands] = useState<string[]>([])
   const { show: showToast } = useToast()
-  const publishLink = user ? '/publicar' : '/register'
+  const publishLink = '/publicar'
 
   useEffect(() => {
     if (user) {
@@ -744,6 +744,9 @@ export default function Header() {
           <Link to="/como-publicar" className="py-3 text-[#14212e]/80 hover:text-[#14212e] border-b-2 border-transparent hover:border-[#14212e] transition-all" onMouseEnter={() => { setOpenIdx(null); setStoresOpen(false) }}>
             Cómo publicar
           </Link>
+          <Link to="/blog" className="py-3 text-[#14212e]/80 hover:text-[#14212e] border-b-2 border-transparent hover:border-[#14212e] transition-all" onMouseEnter={() => { setOpenIdx(null); setStoresOpen(false) }}>
+            Blog
+          </Link>
           <Link
             to="/tiendas"
             className={`py-3 border-b-2 transition-all ${storesOpen ? 'border-b-[3px] border-[#14212e] text-[#14212e]' : 'border-transparent text-[#14212e]/80 hover:text-[#14212e] hover:border-[#14212e]'}`}
@@ -972,6 +975,10 @@ export default function Header() {
                 <div>
                   <Link to="/como-publicar" className="flex items-center justify-between py-3 text-base font-semibold text-[#14212e]" onClick={closeMobileMenu}>
                     <span>Cómo publicar</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                  </Link>
+                  <Link to="/blog" className="flex items-center justify-between py-3 text-base font-semibold text-[#14212e]" onClick={closeMobileMenu}>
+                    <span>Blog</span>
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
                   </Link>
                 </div>

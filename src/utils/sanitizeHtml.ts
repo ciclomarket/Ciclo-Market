@@ -48,6 +48,9 @@ const ALLOWED_TAGS = new Set([
   'tr',
   'th',
   'td',
+  // Permitir acordeones simples para FAQ
+  'details',
+  'summary',
 ])
 
 const YOUTUBE_HOSTS = ['www.youtube.com', 'youtube.com', 'youtu.be']
@@ -164,8 +167,13 @@ function sanitizeNode(node: Node) {
   if (node.nodeType === Node.ELEMENT_NODE) {
     const el = node as Element
     const tagName = el.tagName.toLowerCase()
+    // Remover por completo <script> y <style> para evitar que su contenido textual quede impreso
+    if (tagName === 'script' || tagName === 'style') {
+      el.remove()
+      return
+    }
     if (!ALLOWED_TAGS.has(tagName)) {
-      // Replace forbidden element with its children
+      // Reemplazar elemento prohibido por sus hijos (mantiene el contenido visible)
       const parent = el.parentNode
       if (parent) {
         while (el.firstChild) {
@@ -202,4 +210,3 @@ export function sanitizeHtml(html: string): string {
   sanitizeNode(template.content)
   return template.innerHTML
 }
-

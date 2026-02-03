@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { supabaseEnabled, getSupabaseClient } from '../services/supabase'
 import { useAuth } from './AuthContext'
 import type { PostgrestSingleResponse } from '@supabase/supabase-js'
@@ -84,6 +84,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     void refresh()
 
     const supabase = getSupabaseClient()
+    const pollRef = { id: null as number | null }
     const channel = supabase
       .channel('notifications-feed')
       .on(
@@ -108,10 +109,24 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
           })
         }
       )
-      .subscribe()
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          if (pollRef.id) {
+            window.clearInterval(pollRef.id)
+            pollRef.id = null
+          }
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          // Fallback a polling si Realtime no conecta
+          console.warn('[notifications] realtime subscribe failed:', status)
+          if (!pollRef.id) {
+            pollRef.id = window.setInterval(() => { void refresh() }, 15000)
+          }
+        }
+      })
 
     return () => {
       void supabase.removeChannel(channel)
+      if (pollRef.id) window.clearInterval(pollRef.id)
     }
   }, [user])
 

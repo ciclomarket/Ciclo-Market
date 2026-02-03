@@ -627,6 +627,17 @@ export default function Plans() {
           </p>
         </div>
 
+        {promoActive && (
+          <div className="mt-6 rounded-3xl border border-amber-300/50 bg-amber-50/95 p-6 text-amber-900">
+            <h2 className="text-base font-semibold">¿Cómo aplico el descuento a mi publicación?</h2>
+            <p className="mt-1 text-sm">
+              Este pago genera un crédito en tu cuenta. Una vez aprobado, podés mejorar tu aviso desde
+              <strong> Dashboard → Publicaciones → Mejorar plan</strong>. Si preferís, también podés crear una
+              nueva publicación usando el crédito sin volver a pagar.
+            </p>
+          </div>
+        )}
+
         {planFromQuery && paymentStatus === 'success' && (
           <div className="mt-8 rounded-3xl border border-white/20 bg-white/90 p-6 text-[#14212e] shadow">
             <h2 className="text-lg font-semibold">Pago confirmado</h2>

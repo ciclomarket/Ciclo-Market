@@ -144,6 +144,9 @@ body {
   line-height: 1.75;
   display: grid;
   gap: 1.25rem;
+  max-width: 48rem; /* ~768px */
+  margin-left: auto;
+  margin-right: auto;
 }
 .blog-content h1,
 .blog-content h2,
@@ -187,6 +190,12 @@ body {
   border-radius: 16px;
   box-shadow: 0 12px 32px rgba(15, 23, 42, 0.12);
 }
+.blog-content video {
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  border-radius: 16px;
+}
 .blog-content table {
   width: 100%;
   border-collapse: collapse;
@@ -194,9 +203,23 @@ body {
   border-radius: 12px;
   box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.08);
 }
+.blog-content .table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+.blog-content pre {
+  overflow-x: auto;
+  padding: 1rem;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.06);
+}
+.blog-content code {
+  word-break: break-word;
+}
 .blog-content .blog-image {
   display: grid;
   gap: 0.5rem;
+  justify-items: center;
 }
 .blog-content .blog-image figcaption {
   font-size: 0.85rem;
@@ -224,4 +247,62 @@ body {
   border: none;
   border-bottom: 1px solid rgba(15, 23, 42, 0.1);
   margin: 1rem 0;
+}
+
+/* Blog hero (seguro, basado en variables) */
+.blog-hero {
+  background: linear-gradient(135deg, var(--hero-bg, #14212E), #0f1729 60%, #050c18);
+  border-bottom: 1px solid rgba(29, 42, 54, 1);
+}
+.blog-hero-title,
+.blog-hero h1,
+.blog-hero h2,
+.blog-hero h3 {
+  color: var(--hero-text, #ffffff);
+}
+
+/* FAQ accesible */
+.blog-content .faq details {
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.9);
+}
+.blog-content .faq details + details { margin-top: 0.75rem; }
+.blog-content .faq summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 0.875rem 1rem;
+  font-weight: 600;
+}
+.blog-content .faq summary::-webkit-details-marker { display: none; }
+.blog-content .faq details[open] summary { border-bottom: 1px solid rgba(15,23,42,0.08); }
+.blog-content .faq details > div { padding: 0.875rem 1rem; color: #334155; }
+
+/* CTA bloques */
+.blog-content .cta {
+  border: 1px solid rgba(15,23,42,0.12);
+  border-radius: 16px;
+  background: linear-gradient(0deg, rgba(12, 114, 255, 0.03), rgba(12, 114, 255, 0.03)), #fff;
+  padding: 1.25rem;
+}
+.blog-content .cta .cta-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.75rem; }
+.blog-content .cta .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 1rem;
+  border-radius: 9999px;
+  font-weight: 700;
+}
+.blog-content .cta .btn-primary { background: var(--accent, #0c72ff); color: #fff; }
+.blog-content .cta .btn-secondary { background: #e6edf5; color: #14212e; }
+
+/* Galería simple */
+.blog-content .gallery {
+  display: grid;
+  gap: 0.5rem;
+}
+@media (min-width: 768px) {
+  .blog-content .gallery.grid-2 { grid-template-columns: repeat(2, 1fr); }
+  .blog-content .gallery.grid-3 { grid-template-columns: repeat(3, 1fr); }
 }

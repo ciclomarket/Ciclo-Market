@@ -142,6 +142,12 @@ export default function ListingCard({ l, storeLogoUrl, priority = false, likeCou
     ? 'mt-1 text-xs text-[#14212e]/50 line-clamp-1 sm:line-clamp-2'
     : 'mt-1 text-xs text-[#14212e]/70 line-clamp-1 sm:line-clamp-2'
   // Descripción debajo del título: mostramos siempre los metadatos pedidos
+  // Limit images for card prefetch if needed elsewhere (gallery handled in ListingDetail)
+  // Public WA badge must derive from server-provided wa_public; fallback only if missing
+  const premiumActive = (l as any).premium_active === true
+  const waPublic = typeof (l as any).wa_public === 'boolean'
+    ? (l as any).wa_public
+    : (premiumActive && !!l.whatsappEnabled)
   return (
     <div className="relative h-full">
       <div className="absolute top-2 left-2 right-2 z-10 flex items-center justify-between gap-2">
@@ -185,6 +191,11 @@ export default function ListingCard({ l, storeLogoUrl, priority = false, likeCou
               }`}
             >
               {statusLabel}
+            </span>
+          )}
+          {waPublic && (
+            <span className="rounded-full px-2 py-1 text-xs bg-[#25D366] text-white shadow">
+              WhatsApp disponible
             </span>
           )}
           {discountPct !== null && discountPct > 0 && (

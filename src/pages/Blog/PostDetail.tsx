@@ -7,6 +7,7 @@ import {
 } from '../../services/blog'
 import type { BlogPost } from '../../types/blog'
 import { sanitizeHtml } from '../../utils/sanitizeHtml'
+import { parseBlogHtmlMeta } from '../../utils/blogContent'
 import { supabaseEnabled } from '../../services/supabase'
 import SeoHead from '../../components/SeoHead'
 import { resolveSiteOrigin } from '../../utils/seo'
@@ -87,10 +88,12 @@ export default function BlogPostDetail() {
     }
   }, [slug])
 
-  const sanitizedContent = useMemo(() => {
-    if (!post?.htmlContent) return ''
-    return sanitizeHtml(post.htmlContent)
+  const { contentHtml, meta: embeddedMeta, jsonLdFromScripts } = useMemo(() => {
+    const parsed = parseBlogHtmlMeta(post?.htmlContent ?? '')
+    return parsed
   }, [post?.htmlContent])
+
+  const sanitizedContent = useMemo(() => sanitizeHtml(contentHtml), [contentHtml])
 
   const siteOrigin = resolveSiteOrigin()
   const plainContent = useMemo(
@@ -149,6 +152,15 @@ export default function BlogPostDetail() {
     }
   }, [post, metaDescription, seoImage, keywords, siteOrigin])
 
+  // Combinar JSON‑LD embebido/extraído con el generado por defecto
+  const jsonLdPayloads = useMemo(() => {
+    const list: Array<Record<string, unknown>> = []
+    if (Array.isArray(embeddedMeta.jsonLd)) list.push(...embeddedMeta.jsonLd)
+    if (jsonLdFromScripts.length) list.push(...jsonLdFromScripts)
+    if (articleJsonLd) list.push(articleJsonLd as any)
+    return list
+  }, [embeddedMeta.jsonLd, jsonLdFromScripts, articleJsonLd])
+
   if (!slug) {
     return <Navigate to="/blog" replace />
   }
@@ -183,19 +195,26 @@ export default function BlogPostDetail() {
     )
   }
 
+  const themeVars = {
+    ['--hero-bg' as any]: embeddedMeta.theme?.heroBg || '#14212E',
+    ['--hero-text' as any]: embeddedMeta.theme?.heroText || '#ffffff',
+    ['--accent' as any]: embeddedMeta.theme?.accent || '#0c72ff',
+    ['--surface-bg' as any]: embeddedMeta.theme?.surfaceBg || '#ffffff',
+  } as React.CSSProperties
+
   return (
     <>
       <SeoHead
-        title={post ? post.title : 'Artículo · Blog de Ciclo Market'}
-        description={metaDescription}
-        canonicalPath={canonicalPath}
+        title={embeddedMeta.seoTitle || (post ? post.title : 'Artículo · Blog de Ciclo Market')}
+        description={embeddedMeta.seoDescription || metaDescription}
+        canonicalPath={embeddedMeta.canonicalUrl || canonicalPath}
         type={post ? 'article' : 'website'}
-        image={seoImage}
+        image={embeddedMeta.ogImageUrl || seoImage}
         keywords={keywords}
-        jsonLd={articleJsonLd ?? undefined}
+        jsonLd={jsonLdPayloads}
       />
-      <div className="min-h-screen bg-gradient-to-b from-white via-white to-[#f6f8fb] pb-16">
-      <header className="border-b border-[#1d2a36] bg-gradient-to-br from-[#0f1729] via-[#14212e] to-[#050c18] py-20 text-white">
+      <div className="min-h-screen bg-gradient-to-b from-white via-white to-[#f6f8fb] pb-16" style={themeVars}>
+      <header className="blog-hero py-20 text-white">
         <div className="container space-y-3">
           <Link
             to="/blog"
@@ -214,7 +233,7 @@ export default function BlogPostDetail() {
             </div>
           ) : post ? (
             <div className="space-y-4">
-              <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">{post.title}</h1>
+              <h1 className="blog-hero-title text-4xl font-bold tracking-tight sm:text-5xl">{post.title}</h1>
               <p className="text-sm text-white/80">
                 {post.author?.fullName ? `${post.author.fullName} · ` : ''}
                 {formatDate(post.publishedAt)}

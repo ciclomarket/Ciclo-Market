@@ -42,7 +42,6 @@
       }
     ],
     "redirects": [
-      { "source": "/:path*/", "destination": "/:path*", "type": 301 },
       {
         "source": "/share/listing/:id",
         "destination": "https://ciclo-market.onrender.com/share/listing/:id",
@@ -103,6 +102,9 @@
     ],
     "rewrites": [
       { "source": "/storage/v1/render/image/**", "function": "imageProxy" },
+      { "source": "/blog/**", "function": "shareBlog" },
+      { "source": "/listing/**", "function": "shareListing" },
+      { "source": "/tienda/**", "function": "shareStore" },
       { "source": "/admin/**", "destination": "/admin/index.html" },
       { "source": "**", "destination": "/index.html" }
     ]

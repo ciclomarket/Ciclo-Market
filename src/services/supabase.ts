@@ -96,7 +96,7 @@ function resolveStorage(): Storage {
 let supabase: SupabaseClient | null = null
 
 function createSupabase(): SupabaseClient {
-  return createClient(supabaseUrl, supabaseAnonKey, {
+  const client = createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
@@ -105,6 +105,20 @@ function createSupabase(): SupabaseClient {
       storage: resolveStorage(),
     },
   })
+  // Dev-only realtime diagnostics to debug WebSocket issues
+  if (import.meta.env.DEV) {
+    const rt: any = (client as any).realtime
+    if (rt && typeof rt.onOpen === 'function') {
+      rt.onOpen(() => console.log('[realtime] open'))
+    }
+    if (rt && typeof rt.onError === 'function') {
+      rt.onError((err: any) => console.error('[realtime] error', err))
+    }
+    if (rt && typeof rt.onClose === 'function') {
+      rt.onClose(() => console.log('[realtime] close'))
+    }
+  }
+  return client
 }
 
 // Initialize immediately if enabled

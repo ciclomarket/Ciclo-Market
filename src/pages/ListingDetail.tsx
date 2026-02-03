@@ -67,6 +67,10 @@ export default function ListingDetail() {
   const [editFieldValue, setEditFieldValue] = useState('')
   // Related items by seller (used in desktop slider) — must be before any early return
   const [sellerRelated, setSellerRelated] = useState<Listing[]>([])
+  // Upgrade modal after publish
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
+  // Lightweight sticky banner for upgrade CTA
+  const [bannerClosed, setBannerClosed] = useState(false)
 
   const openEditField = (name: string, value: string | number | null | undefined, type: 'text'|'number'|'textarea' = 'text') => {
     setEditFieldName(name)
@@ -170,6 +174,42 @@ export default function ListingDetail() {
     return ''
   }
 
+  async function startUpgrade(planCode: 'PREMIUM'|'PRO') {
+    try {
+      const amount = planCode === 'PRO' ? 13000 : 9000
+      const supabase = getSupabaseClient()
+      const { data: session } = await supabase.auth.getSession()
+      const userId = session.session?.user?.id
+      if (!userId || !listing) return
+      const redirectBase = window.location.origin
+      const back = {
+        success: `${redirectBase}/listing/${listing.slug || listing.id}`,
+        failure: `${redirectBase}/listing/${listing.slug || listing.id}`,
+        pending: `${redirectBase}/listing/${listing.slug || listing.id}`,
+      }
+      const res = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          planCode: planCode.toLowerCase(),
+          amount,
+          planCurrency: 'ARS',
+          planName: planCode === 'PRO' ? 'Plan Pro' : 'Plan Premium',
+          listingId: listing.id,
+          listingSlug: listing.slug || listing.id,
+          redirectUrls: back,
+          userId,
+        }),
+      })
+      const json = await res.json()
+      if (json?.ok && json?.url) {
+        window.location.assign(json.url)
+      }
+    } catch (e) {
+      console.warn('[upgrade] failed', e)
+    }
+  }
+
   useEffect(() => {
     let active = true
     const load = async () => {
@@ -185,6 +225,10 @@ export default function ListingDetail() {
         if (result) {
           setListing(result)
           setLoading(false)
+          try {
+            const flag = searchParams.get('post_publish')
+            if (flag === '1') setShowUpgradeModal(true)
+          } catch {}
           try {
             // Track ViewContent when a listing is loaded
             trackMetaPixel('ViewContent', {
@@ -234,6 +278,26 @@ export default function ListingDetail() {
     }
   }, [listingKey, user?.id])
 
+  // Mostrar upgrade modal para planes FREE cuando el owner ve su publicación,
+  // con persistencia local para no mostrarlo en cada visita (salvo post_publish=1)
+  useEffect(() => {
+    if (!listing || !user?.id || user.id !== listing.sellerId) return
+    const premiumActive = typeof listing.rankBoostUntil === 'number' && listing.rankBoostUntil > Date.now()
+    const forceShow = searchParams.get('post_publish') === '1'
+    if (premiumActive) return
+    const key = `cm_upg_seen_${listing.id}`
+    const seen = typeof window !== 'undefined' ? window.localStorage.getItem(key) === '1' : false
+    if (forceShow || !seen) setShowUpgradeModal(true)
+  }, [listing?.id, listing?.rankBoostUntil, user?.id, searchParams])
+
+  const markUpgradeSeen = () => {
+    try {
+      if (!listing) return
+      const key = `cm_upg_seen_${listing.id}`
+      window.localStorage.setItem(key, '1')
+    } catch {}
+  }
+
   // Load seller-related items once listing is known; runs before any return
   useEffect(() => {
     let active = true
@@ -242,6 +306,7 @@ export default function ListingDetail() {
       const all = await fetchListingsBySeller(listing.sellerId)
       if (!active || !Array.isArray(all)) return
       const currentId = listing.id
+      const targetSub = (listing.subcategory || '').toLowerCase()
       const groupFor = (cat: Listing['category']) => {
         if (cat === 'Nutrición') return 'Nutrición'
         if (cat === 'Indumentaria') return 'Indumentaria'
@@ -254,7 +319,15 @@ export default function ListingDetail() {
         if (targetGroup === 'bikes') return g === 'bikes'
         return g === targetGroup
       })
-      setSellerRelated(allowed)
+      const now = Date.now()
+      const score = (item: Listing) => {
+        const boost = typeof item.rankBoostUntil === 'number' && item.rankBoostUntil > now ? 2 : 0
+        const sameSub = targetSub && item.subcategory?.toLowerCase() === targetSub ? 1 : 0
+        const created = typeof item.createdAt === 'number' ? item.createdAt : 0
+        return boost * 1e12 + sameSub * 1e9 + created
+      }
+      const sorted = [...allowed].sort((a, b) => score(b) - score(a))
+      setSellerRelated(sorted)
     }
     void load()
     return () => { active = false }
@@ -380,6 +453,7 @@ export default function ListingDetail() {
             </div>
           </Container>
         </div>
+          
       )
     }
   }
@@ -724,17 +798,6 @@ export default function ListingDetail() {
   }
 
   const ContactIcons = () => {
-    if (!user) {
-      return (
-        <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wide text-[#14212e]/60">
-            Contactate con el vendedor
-          </p>
-          <p className="text-sm text-[#14212e]/70">Registrate para ver información de contacto</p>
-        </div>
-      )
-    }
-
     const items: Array<{ id: string; label: string; onClick?: () => void; href?: string; icon: ReactNode; disabled?: boolean; className?: string }> = []
     const emailRecipient = sellerAuthEmail || sellerProfile?.email || listing.sellerEmail || null
     const isStoreLocal = Boolean(sellerProfile?.store_enabled)
@@ -835,6 +898,27 @@ export default function ListingDetail() {
   // Detailed SEO (JSON-LD, etc.) moved out to avoid hook order issues; using early minimal config instead.
   const isLifestyle = listing.category === 'Nutrición' || listing.category === 'Indumentaria'
 
+  // Limit images for public detail using server-provided public_photos_limit (4/8/12),
+  // fallback to premium_active heuristic only if missing.
+  const displayImages = (() => {
+    const imgs = Array.isArray(listing.images) ? listing.images : []
+    // Prefer server-provided cap; else derive from rankBoostUntil + grantedVisiblePhotos
+    let cap: number | null = null
+    if (typeof (listing as any).public_photos_limit === 'number') cap = (listing as any).public_photos_limit
+    if (cap == null) {
+      const now = Date.now()
+      const rbu = typeof listing.rankBoostUntil === 'number' ? listing.rankBoostUntil : (listing.rankBoostUntil ? Date.parse(listing.rankBoostUntil as any) : null)
+      const boostActive = typeof rbu === 'number' && rbu > now
+      if (boostActive) {
+        const granted = typeof (listing as any).grantedVisiblePhotos === 'number' ? (listing as any).grantedVisiblePhotos : 4
+        cap = granted >= 12 ? 12 : (granted >= 8 ? 8 : 4)
+      } else {
+        cap = 4
+      }
+    }
+    return imgs.slice(0, Math.min(imgs.length, cap))
+  })()
+
   return (
     <>
       <SeoHead {...seoHeadConfig} />
@@ -846,9 +930,9 @@ export default function ListingDetail() {
           {/* Fotos (siempre primero en mobile; desktop: col 1) */}
           <div className="w-full min-w-0 lg:col-start-1 lg:row-start-1">
             {isLifestyle ? (
-              <ImageCarousel images={listing.images} aspect="auto" fit="contain" bg="light" maxHeightClass="lg:max-h-[500px]" thumbWhiteBg />
+              <ImageCarousel images={displayImages} aspect="auto" fit="contain" bg="light" maxHeightClass="lg:max-h-[500px]" thumbWhiteBg />
             ) : (
-              <ImageCarousel images={listing.images} />
+              <ImageCarousel images={displayImages} />
             )}
             {isModerator && listing && (
               <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -1049,16 +1133,19 @@ export default function ListingDetail() {
                       {originalPriceLabel && <span className="text-sm text-[#14212e]/60 line-through">{originalPriceLabel}</span>}
                     </div>
                     {isLifestyle && <hr className="my-3 border-t border-[#14212e]/20" />}
+                    {/* Bloque de estado de publicación removido a pedido */}
                     {isOwner && (
-                      <div className="rounded-2xl border border-[#14212e]/10 bg-white/80 px-4 py-3 text-xs text-[#14212e]/80">
-                        <p className="font-semibold uppercase tracking-[0.3em] text-[#14212e]/60">Tu publicación</p>
-                        <div className="mt-2 space-y-1">
-                          <div>Publicación: {publicationRemainingLabel ?? 'sin vencimiento'}</div>
-                          {listingPlanName ? (
-                            <div>Plan: {listingPlanDuration ? `${listingPlanName} · ${listingPlanDuration} días` : listingPlanName}</div>
-                          ) : null}
-                          <div>Destaque: {highlightRemainingLabel ?? 'sin destaque'}</div>
-                        </div>
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        <Link
+                          to={`/publicar/nueva?id=${encodeURIComponent(listing.id)}`}
+                          className="inline-flex items-center gap-2 rounded-full border border-[#14212e]/20 px-3 py-1.5 text-xs font-semibold text-[#14212e] hover:bg-[#14212e]/5"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25Z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M14.06 6.19l3.75 3.75" />
+                          </svg>
+                          Editar publicación
+                        </Link>
                       </div>
                     )}
                     {/* Seller info + CTAs */}
@@ -1190,18 +1277,7 @@ export default function ListingDetail() {
               {isLifestyle && <div className="hidden lg:block"><hr className="my-3 border-t border-[#14212e]/20" /></div>}
               {/* Remove second spacer under price on mobile */}
               <div className={isLifestyle ? 'hidden' : 'hidden'} />
-              {isOwner && (
-                <div className="mt-4 rounded-2xl border border-[#14212e]/10 bg-white/80 px-4 py-3 text-xs text-[#14212e]/80">
-                  <p className="font-semibold uppercase tracking-[0.3em] text-[#14212e]/60">Tu publicación</p>
-                  <div className="mt-2 space-y-1">
-                    <div>Publicación: {publicationRemainingLabel ?? 'sin vencimiento'}</div>
-                    {listingPlanName ? (
-                      <div>Plan: {listingPlanDuration ? `${listingPlanName} · ${listingPlanDuration} días` : listingPlanName}</div>
-                    ) : null}
-                    <div>Destaque: {highlightRemainingLabel ?? 'sin destaque'}</div>
-                  </div>
-                </div>
-              )}
+                  {/* Bloque de estado de publicación removido a pedido */}
               
               {/* Sección de información de la tienda (teléfono/dirección) removida a pedido */}
               <p className="mt-4 text-xs text-[#14212e]/60 lg:hidden">
@@ -1274,70 +1350,37 @@ export default function ListingDetail() {
                       Ver perfil del vendedor
                     </Link>
                   )}
-                  {/* Mensaje de destacado removido a pedido */}
                 </div>
                 <div className="space-y-3">
-                  {/* Botón de oferta removido */}
                   {/* Quitar línea antes de Contactate (mobile lifestyle).*/}
                   <div className={isLifestyle ? 'hidden lg:block my-3 h-px w-full bg-[#14212e]/30' : 'hidden'} />
                   <ContactIcons />
                   {isOwner && (
                     <div className="pt-2 border-t border-[#14212e]/10">
-                      <Link
-                        to={`/listing/${listingSlugOrId}/destacar?id=${listing.id}`}
-                        className="inline-flex items-center gap-2 rounded-full bg-[#14212e] px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-[#1b2f3f]"
-                      >
-                        Destacar publicación
-                      </Link>
+                      <div className="rounded-2xl border border-[#14212e]/15 bg-[#f5f9ff] p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-[#14212e]/60">Mejorá tu aviso</p>
+                            <p className="text-sm text-[#14212e]/80">Plan actual: Free · {listing.canUpgrade ? 'Podés subir a Premium/Pro' : 'Plan activo'}</p>
+                          </div>
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-2 rounded-full bg-[#14212e] px-3 py-2 text-xs font-semibold text-white hover:bg-[#1b2f3f]"
+                            onClick={() => setShowUpgradeModal(true)}
+                          >
+                            Ver planes
+                          </button>
+                        </div>
+                        <ul className="mt-2 text-xs text-[#14212e]/70 space-y-1">
+                          <li>• Más fotos visibles (8/12)</li>
+                          <li>• Prioridad 90 días en el listado</li>
+                          <li>• WhatsApp directo con compradores</li>
+                        </ul>
+                      </div>
                     </div>
                   )}
                   {!canSubmitOffer && listingSold && (
                     <p className="text-xs font-semibold text-[#0f766e]">Esta publicación está marcada como vendida.</p>
-                  )}
-                  {/* Mensaje de ofertas removido */}
-                </div>
-                <div className={`mt-3 pt-3 border-t ${isLifestyle ? 'border-[#14212e]/20' : 'border-[#14212e]/10'}`}>
-                  <p className="text-xs text-[#14212e]/60 uppercase tracking-wide">Compartir publicación</p>
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <IconCircleButton
-                      size="sm"
-                      label="Copiar link"
-                      onClick={handleCopyLink}
-                      className="bg-white text-[#14212e] border border-[#14212e]"
-                      icon={<LinkIcon />}
-                    />
-                    <IconCircleButton
-                      size="sm"
-                      label="Compartir por WhatsApp"
-                      onClick={() => handleShare('whatsapp')}
-                      className="bg-white text-[#25D366] border border-[#25D366]"
-                      icon={<WhatsappIcon />}
-                    />
-                    <IconCircleButton
-                      size="sm"
-                      label="Compartir en Facebook"
-                      onClick={() => handleShare('facebook')}
-                      className="bg-white text-[#1877F2] border border-[#1877F2]"
-                      icon={<FacebookIcon />}
-                    />
-                    <IconCircleButton
-                      size="sm"
-                      label="Enviar por Instagram"
-                      onClick={handleInstagramShare}
-                      className="bg-white text-[#c13584] border border-[#c13584]"
-                      icon={<InstagramIcon />}
-                    />
-                  </div>
-                  {isOwner && (
-                    <div className="mt-3">
-                      <button
-                        type="button"
-                        className="inline-flex items-center gap-2 rounded-full border border-[#14212e]/20 px-3 py-1.5 text-xs font-semibold text-[#14212e] hover:bg-[#14212e]/5"
-                        onClick={() => setShareModalOpen(true)}
-                      >
-                        Compartí y ganá 7 días de destaque
-                      </button>
-                    </div>
                   )}
                 </div>
                 {/* Texto relacionado a ofertas removido en mobile */}
@@ -1606,17 +1649,51 @@ export default function ListingDetail() {
 
           </div>
         </div>
-        {/* Slider: Productos del vendedor (desktop) */}
+        {/* Upgrade modal post-publicación */}
+        {showUpgradeModal && listing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" role="dialog" aria-modal="true" onClick={() => { markUpgradeSeen(); setShowUpgradeModal(false) }}>
+          <div className="mx-4 w-full max-w-xl rounded-2xl border border-white/10 bg-white p-6 text-[#14212e] shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-xl font-bold">Destacá tu publicación y vendé más rápido</h3>
+                  <p className="mt-1 text-sm text-slate-600">Sumá prioridad en listado, WhatsApp directo y más fotos visibles. Sin volver a subir nada.</p>
+                </div>
+                <button aria-label="Cerrar" className="rounded-full border border-slate-200 p-2 hover:bg-slate-50" onClick={() => { markUpgradeSeen(); setShowUpgradeModal(false) }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 6l12 12M6 18 18 6"/></svg>
+                </button>
+              </div>
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <div className="rounded-xl border border-slate-200 p-4">
+                  <div className="text-xs font-bold uppercase tracking-wider text-amber-600">Premium</div>
+                  <div className="mt-1 text-2xl font-extrabold text-[#14212e]">$9.000</div>
+                  <ul className="mt-3 space-y-1 text-sm text-slate-700">
+                    <li>• 8 fotos visibles</li>
+                    <li>• Prioridad 90 días</li>
+                    <li>• WhatsApp directo</li>
+                  </ul>
+                <button className="mt-4 w-full rounded-lg bg-[#14212e] py-2 text-white hover:opacity-90" onClick={() => { markUpgradeSeen(); startUpgrade('PREMIUM') }}>Elegir Premium</button>
+              </div>
+              <div className="rounded-xl border border-slate-200 p-4 ring-2 ring-blue-500/50">
+                  <div className="text-xs font-bold uppercase tracking-wider text-blue-700">Pro</div>
+                  <div className="mt-1 text-2xl font-extrabold text-[#14212e]">$13.000</div>
+                  <ul className="mt-3 space-y-1 text-sm text-slate-700">
+                    <li>• 12 fotos visibles</li>
+                    <li>• Máxima prioridad 90 días</li>
+                    <li>• WhatsApp directo</li>
+                  </ul>
+                <button className="mt-4 w-full rounded-lg bg-blue-600 py-2 text-white hover:bg-blue-700" onClick={() => { markUpgradeSeen(); startUpgrade('PRO') }}>Elegir Pro</button>
+              </div>
+            </div>
+              <p className="mt-3 text-center text-xs text-slate-500">Al vencer el período, tu publicación sigue activa y vuelve a Free automáticamente.</p>
+            </div>
+          </div>
+        )}
+        {/* Slider: relacionados (boost primero, misma subcategoría cuando haya) */}
         {sellerRelated.length > 0 && (
-          <div className="hidden lg:block mt-8">
+          <div className="mt-8">
             <HorizontalSlider
-              title="Productos del vendedor"
-              subtitle={(() => {
-                const c = listing.category
-                if (c === 'Nutrición') return 'Más productos de Nutrición'
-                if (c === 'Indumentaria') return 'Más productos de Indumentaria'
-                return 'Más bicicletas del mismo vendedor'
-              })()}
+              title="Bicicletas similares o relacionadas"
+              subtitle="Mostramos avisos parecidos según categoría y prioridad activa"
               items={sellerRelated.slice(0, 20)}
               maxItems={20}
               initialLoad={8}

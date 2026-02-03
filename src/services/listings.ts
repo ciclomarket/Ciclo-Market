@@ -46,6 +46,10 @@ type ListingRow = {
   created_at?: string | null
   slug?: string | null
   contact_methods?: string[] | null
+  granted_visible_photos?: number | null
+  whatsapp_cap_granted?: boolean | null
+  whatsapp_enabled?: boolean | null
+  rank_boost_until?: string | null
 }
 
 const normalizeListing = (row: ListingRow): Listing => {
@@ -89,6 +93,11 @@ const normalizeListing = (row: ListingRow): Listing => {
     expiresAt: row.expires_at ? Date.parse(row.expires_at) : null,
     renewalNotifiedAt: row.renewal_notified_at ? Date.parse(row.renewal_notified_at) : null,
     createdAt: row.created_at ? Date.parse(row.created_at) : Date.now()
+    ,
+    grantedVisiblePhotos: typeof row.granted_visible_photos === 'number' ? row.granted_visible_photos : undefined,
+    whatsappCapGranted: Boolean(row.whatsapp_cap_granted),
+    whatsappEnabled: row.whatsapp_enabled ?? undefined,
+    rankBoostUntil: row.rank_boost_until ? Date.parse(row.rank_boost_until) : null
   }
 }
 

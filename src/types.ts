@@ -41,6 +41,11 @@ export interface Listing {
   expiresAt?: number | null
   renewalNotifiedAt?: number | null
   createdAt: number
+  // New monetization-by-listing fields (optional for backward compatibility)
+  grantedVisiblePhotos?: number
+  whatsappCapGranted?: boolean
+  whatsappEnabled?: boolean
+  rankBoostUntil?: number | null
 }
 
 export interface ListingQuestion {

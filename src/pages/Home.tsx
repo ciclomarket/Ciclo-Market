@@ -540,7 +540,7 @@ export default function Home() {
             </p>
             <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
               <Button
-                to={user ? '/publicar' : '/register'}
+                to="/publicar"
                 className="bg-gradient-to-r from-[#0ea5e9] via-[#2563eb] to-[#1d4ed8] text-white shadow-[0_14px_40px_rgba(37,99,235,0.45)] hover:brightness-110"
               >
                 <span>Publicar bicicleta</span>

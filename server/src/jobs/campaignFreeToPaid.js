@@ -122,6 +122,8 @@ function buildEmailHtml({ baseFront, profile, listing }) {
           <a href=\"${cleanBase}/marketplace?cat=Accesorios\" style=\"color:#0f1729;text-decoration:none;font-weight:700;font-size:13px;margin:0 10px;\">Accesorios</a>
           <span style=\"color:#94a3b8\">|</span>
           <a href=\"${cleanBase}/marketplace?cat=Indumentaria\" style=\"color:#0f1729;text-decoration:none;font-weight:700;font-size:13px;margin:0 10px;\">Indumentaria</a>
+          <span style=\"color:#94a3b8\">|</span>
+          <a href=\"${cleanBase}/blog\" style=\"color:#0f1729;text-decoration:none;font-weight:700;font-size:13px;margin:0 10px;\">Blog</a>
         </td>
       </tr>
       <tr>
