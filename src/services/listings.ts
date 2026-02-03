@@ -50,6 +50,14 @@ type ListingRow = {
   whatsapp_cap_granted?: boolean | null
   whatsapp_enabled?: boolean | null
   rank_boost_until?: string | null
+  public_photos_limit?: number | null
+  public_photos_visible?: number | null
+  wa_public?: boolean | null
+  plan_status?: 'FREE' | 'PREMIUM' | 'PRO' | null
+  plan_tier?: 'FREE' | 'PREMIUM' | 'PRO' | null
+  priority_active?: boolean | null
+  can_upgrade?: boolean | null
+  is_tienda?: boolean | null
 }
 
 const normalizeListing = (row: ListingRow): Listing => {
@@ -97,7 +105,15 @@ const normalizeListing = (row: ListingRow): Listing => {
     grantedVisiblePhotos: typeof row.granted_visible_photos === 'number' ? row.granted_visible_photos : undefined,
     whatsappCapGranted: Boolean(row.whatsapp_cap_granted),
     whatsappEnabled: row.whatsapp_enabled ?? undefined,
-    rankBoostUntil: row.rank_boost_until ? Date.parse(row.rank_boost_until) : null
+    rankBoostUntil: row.rank_boost_until ? Date.parse(row.rank_boost_until) : null,
+    publicPhotosLimit: typeof row.public_photos_limit === 'number' ? row.public_photos_limit : undefined,
+    publicPhotosVisible: typeof row.public_photos_visible === 'number' ? row.public_photos_visible : undefined,
+    waPublic: row.wa_public ?? undefined,
+    planStatus: (row.plan_status ?? undefined) as Listing['planStatus'],
+    planTier: (row.plan_tier ?? undefined) as Listing['planTier'],
+    priorityActive: row.priority_active ?? undefined,
+    canUpgrade: row.can_upgrade ?? undefined,
+    isTienda: row.is_tienda ?? undefined
   }
 }
 
@@ -137,6 +153,9 @@ export async function fetchListings(): Promise<Listing[]> {
     const filtered = data.filter((row: any) => {
       const status = typeof row?.status === 'string' ? row.status.trim().toLowerCase() : 'active'
       if (status === 'draft' || status === 'deleted' || status === 'archived' || status === 'expired') return false
+      if (row?.archived_at) return false
+      const mod = typeof row?.moderation_state === 'string' ? row.moderation_state.trim().toLowerCase() : 'approved'
+      if (mod !== 'approved') return false
       const expiresAt = row?.expires_at ? Date.parse(row.expires_at) : null
       if (typeof expiresAt === 'number' && !Number.isNaN(expiresAt) && expiresAt > 0 && expiresAt < now) return false
       return true
@@ -159,7 +178,8 @@ export async function fetchListing(identifier: string): Promise<Listing | null> 
 
     if (bySlug) {
       const status = typeof (bySlug as any)?.status === 'string' ? (bySlug as any).status.trim().toLowerCase() : undefined
-      if (status === 'deleted') return null
+      const mod = typeof (bySlug as any)?.moderation_state === 'string' ? (bySlug as any).moderation_state.trim().toLowerCase() : 'approved'
+      if (status === 'deleted' || (bySlug as any)?.archived_at || mod !== 'approved') return null
       return normalizeListing(bySlug as ListingRow)
     }
     if (slugError && slugError.code && slugError.code !== 'PGRST116') return null
@@ -172,7 +192,8 @@ export async function fetchListing(identifier: string): Promise<Listing | null> 
       .maybeSingle()
     if (idError || !byId) return null
     const status = typeof (byId as any)?.status === 'string' ? (byId as any).status.trim().toLowerCase() : undefined
-    if (status === 'deleted') return null
+    const mod = typeof (byId as any)?.moderation_state === 'string' ? (byId as any).moderation_state.trim().toLowerCase() : 'approved'
+    if (status === 'deleted' || (byId as any)?.archived_at || mod !== 'approved') return null
     // Backfill slug si falta: usar título + modelo + año y asegurar unicidad
     if (!(byId as any).slug) {
       try {

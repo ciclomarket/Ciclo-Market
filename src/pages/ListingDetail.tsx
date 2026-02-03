@@ -813,7 +813,8 @@ export default function ListingDetail() {
     const items: Array<{ id: string; label: string; onClick?: () => void; href?: string; icon: ReactNode; disabled?: boolean; className?: string }> = []
     const emailRecipient = sellerAuthEmail || sellerProfile?.email || listing.sellerEmail || null
     const isStoreLocal = Boolean(sellerProfile?.store_enabled)
-    const canShowWhatsapp = Boolean(waLink && !isOwner && !listingUnavailable && (hadBasicOrPremium || isStoreLocal))
+    const waAllowed = Boolean((listing as any).waPublic ?? (listing as any).wa_public ?? (hadBasicOrPremium || isStoreLocal))
+    const canShowWhatsapp = Boolean(waLink && !isOwner && !listingUnavailable && waAllowed)
 
     // WhatsApp habilitado para publicaciones Básica o Premium (aunque el destaque haya vencido)
     if (canShowWhatsapp) {
@@ -889,10 +890,6 @@ export default function ListingDetail() {
             )
           )}
         </div>
-        {/* Mensaje de gating solo para personas (no tiendas) cuando sí hay número y el bloqueo es por plan */}
-        {waLink && !isOwner && !listingUnavailable && !isStoreLocal && !hadBasicOrPremium ? (
-          <p className="mt-2 text-xs text-[#14212e]/60">El contacto por WhatsApp está disponible con planes Básica o Premium.</p>
-        ) : null}
       </div>
     )
   }
@@ -914,21 +911,20 @@ export default function ListingDetail() {
   // fallback to premium_active heuristic only if missing.
   const displayImages = (() => {
     const imgs = Array.isArray(listing.images) ? listing.images : []
-    // Prefer server-provided cap; else derive from rankBoostUntil + grantedVisiblePhotos
-    let cap: number | null = null
-    if (typeof (listing as any).public_photos_limit === 'number') cap = (listing as any).public_photos_limit
-    if (cap == null) {
-      const now = Date.now()
-      const rbu = typeof listing.rankBoostUntil === 'number' ? listing.rankBoostUntil : (listing.rankBoostUntil ? Date.parse(listing.rankBoostUntil as any) : null)
-      const boostActive = typeof rbu === 'number' && rbu > now
-      if (boostActive) {
-        const granted = typeof (listing as any).grantedVisiblePhotos === 'number' ? (listing as any).grantedVisiblePhotos : 4
-        cap = granted >= 12 ? 12 : (granted >= 8 ? 8 : 4)
-      } else {
-        cap = 4
-      }
+    const cap = typeof listing.publicPhotosLimit === 'number'
+      ? listing.publicPhotosLimit
+      : (typeof (listing as any).public_photos_limit === 'number' ? (listing as any).public_photos_limit : null)
+    if (cap != null) return imgs.slice(0, Math.min(imgs.length, cap))
+    // Fallback legacy: derive from boost
+    const now = Date.now()
+    const rbu = typeof listing.rankBoostUntil === 'number' ? listing.rankBoostUntil : (listing.rankBoostUntil ? Date.parse(listing.rankBoostUntil as any) : null)
+    const boostActive = typeof rbu === 'number' && rbu > now
+    if (boostActive) {
+      const granted = typeof listing.grantedVisiblePhotos === 'number' ? listing.grantedVisiblePhotos : 4
+      const derivedCap = granted >= 12 ? 12 : (granted >= 8 ? 8 : 4)
+      return imgs.slice(0, Math.min(imgs.length, derivedCap))
     }
-    return imgs.slice(0, Math.min(imgs.length, cap))
+    return imgs.slice(0, Math.min(imgs.length, 4))
   })()
 
   return (

@@ -46,6 +46,15 @@ export interface Listing {
   whatsappCapGranted?: boolean
   whatsappEnabled?: boolean
   rankBoostUntil?: number | null
+  // Derived/public fields from listings_enriched
+  publicPhotosLimit?: number
+  publicPhotosVisible?: number
+  waPublic?: boolean
+  planStatus?: 'FREE' | 'PREMIUM' | 'PRO'
+  planTier?: 'FREE' | 'PREMIUM' | 'PRO'
+  priorityActive?: boolean
+  canUpgrade?: boolean
+  isTienda?: boolean
 }
 
 export interface ListingQuestion {

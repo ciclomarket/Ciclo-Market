@@ -958,7 +958,8 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
   const filters = useMemo(() => paramsToFilters(searchParams), [paramsKey])
   const effectiveCat: Cat = forcedCat ?? filters.cat
   const effectiveDeal = forcedDeal ? '1' : filters.deal
-  const MARKET_USE_API = (import.meta.env.VITE_MARKET_USE_API || 'false').toString().toLowerCase() === 'true'
+  // Forzamos uso directo de Supabase (listings_enriched) para respetar límites 4/8/12 y WA público
+  const MARKET_USE_API = false
 
   const [count, setCount] = useState(40)
   const sentinelRef = useRef<HTMLDivElement | null>(null)
@@ -1405,9 +1406,10 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
         const rB = boostScore(b)
         if (rB !== rA) return rB - rA
 
+        // En igualdad de boost, priorizar usuarios comunes sobre tiendas
         const sA = storeScore(a)
         const sB = storeScore(b)
-        if (sB !== sA) return sB - sA
+        if (sA !== sB) return sA - sB
 
         // Dentro del mismo grupo, más likes primero (si no hay datos, 0)
         const aLikes = likeCounts[a.id] || 0

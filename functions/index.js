@@ -1,5 +1,6 @@
 const { onRequest } = require('firebase-functions/v2/https')
 const { Readable } = require('stream')
+const { Resend } = require('resend')
 
 // Canonical site origin (force www)
 const SITE_ORIGIN = 'https://www.ciclomarket.ar'
@@ -38,6 +39,94 @@ function toAbsoluteUrl(value, origin = SITE_ORIGIN) {
 
 function buildCache(res) {
   res.set('Cache-Control', 'public, max-age=300, s-maxage=3600')
+}
+
+// Email template: aviso con prioridad, 90 días y contacto abierto
+function buildUpgradeEmailHtml({
+  title,
+  image,
+  price,
+  currency = 'ARS',
+  listingUrl,
+  dashboardUrl = 'https://www.ciclomarket.ar/dashboard',
+  location,
+}) {
+  const safeTitle = escapeHtml(title || 'Tu publicación')
+  const safeImage = escapeHtml(image || `${SITE_ORIGIN}/logo-azul.png`)
+  const safePrice = escapeHtml(price != null ? String(price) : '')
+  const safeCurrency = escapeHtml(currency)
+  const safeListingUrl = escapeHtml(listingUrl || SITE_ORIGIN)
+  const safeDashboardUrl = escapeHtml(dashboardUrl)
+  const safeLocation = escapeHtml(location || '')
+
+  return `<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Ciclo Market – Tu aviso ahora con prioridad</title>
+  <style>
+    body { margin:0; padding:0; background:#f5f7fb; font-family: 'Inter', Arial, sans-serif; color:#0f172a; }
+    .container { max-width:640px; margin:0 auto; padding:32px 20px; }
+    .card { background:#fff; border:1px solid #e5e7eb; border-radius:16px; padding:24px; box-shadow:0 10px 30px rgba(15,23,42,0.08); }
+    h1 { margin:0 0 12px; font-size:24px; line-height:1.3; color:#0f172a; }
+    p { margin:0 0 12px; font-size:15px; line-height:1.6; color:#1f2937; }
+    .highlight { color:#0b7bff; font-weight:700; }
+    .listing { display:flex; gap:16px; align-items:flex-start; margin:16px 0; }
+    .listing img { width:160px; height:120px; object-fit:cover; border-radius:12px; border:1px solid #e5e7eb; }
+    .badge { display:inline-block; padding:6px 10px; background:#0b7bff; color:#fff; border-radius:999px; font-weight:700; font-size:12px; letter-spacing:0.2px; }
+    .cta-row { display:flex; gap:12px; flex-wrap:wrap; margin-top:16px; }
+    .btn { display:inline-block; padding:12px 18px; border-radius:10px; font-weight:700; text-decoration:none; text-align:center; }
+    .btn-primary { background:#0b7bff; color:#fff; }
+    .btn-secondary { background:#0f172a; color:#fff; }
+    .small { font-size:13px; color:#475569; }
+    .footer { margin-top:24px; font-size:12px; color:#94a3b8; text-align:center; }
+    .social a { color:#0b7bff; text-decoration:none; margin:0 8px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div style="text-align:center; margin-bottom:16px;">
+      <img src="${SITE_ORIGIN}/logo-azul.png" alt="Ciclo Market" style="height:38px;" />
+    </div>
+    <div class="card">
+      <div style="margin-bottom:12px;">
+        <span class="badge">Actualización de tu aviso</span>
+      </div>
+      <h1>Tu publicación ahora tiene prioridad</h1>
+      <p>En <strong>Ciclo Market</strong> nos reinventamos todos los días para ofrecer el mejor servicio a nuestra comunidad.</p>
+      <p><span class="highlight">¿Qué cambió?</span></p>
+      <ul style="margin:0 0 16px 18px; padding:0; color:#1f2937; line-height:1.5; font-size:15px;">
+        <li>Las publicaciones Básica o Premium ahora suben de prioridad en las búsquedas.</li>
+        <li>Renovamos los vencimientos: tu aviso se mantiene visible por <strong>90 días</strong>.</li>
+        <li>Los compradores ya no necesitan crear cuenta para ver tus datos de contacto, generando más leads.</li>
+      </ul>
+
+      <div class="listing">
+        <img src="${safeImage}" alt="Foto de ${safeTitle}" />
+        <div>
+          <p style="margin:0 0 6px; font-size:16px; font-weight:700; color:#0f172a;">${safeTitle}</p>
+          <p style="margin:0 0 8px; font-size:15px; color:#0b7bff; font-weight:700;">${safePrice ? `${safePrice} ${safeCurrency}` : ''}</p>
+          ${safeLocation ? `<p class="small" style="margin:0;">${safeLocation}</p>` : ''}
+        </div>
+      </div>
+
+      <div class="cta-row">
+        <a class="btn btn-primary" href="${safeListingUrl}" target="_blank" rel="noreferrer">Ver publicación</a>
+        <a class="btn btn-secondary" href="${safeDashboardUrl}" target="_blank" rel="noreferrer">¿Ya la vendiste? Marcala como vendida</a>
+      </div>
+
+      <p class="small" style="margin-top:18px;">Gracias por confiar en Ciclo Market. Seguimos optimizando para que vendas más rápido y con mejor experiencia.</p>
+    </div>
+    <div class="footer">
+      <div class="social" style="margin-bottom:8px;">
+        <a href="https://www.instagram.com/ciclomarket.ar" target="_blank" rel="noreferrer">Instagram</a> ·
+        <a href="https://www.facebook.com/ciclomarket.ar" target="_blank" rel="noreferrer">Facebook</a>
+      </div>
+      Ciclo Market · Marketplace de bicicletas · <a href="${SITE_ORIGIN}" style="color:#0b7bff; text-decoration:none;">www.ciclomarket.ar</a>
+    </div>
+  </div>
+</body>
+</html>`
 }
 
 // Para usuarios (no bots): servir el index.html de la SPA y evitar bucles de redirect
@@ -545,3 +634,82 @@ exports.shareStore = onRequest({ region: 'us-central1', memory: '256MiB', secret
     return sendFallback(200)
   }
 })
+
+// Exponer template para uso desde backend (cron / envíos masivos)
+exports.buildUpgradeEmailHtml = buildUpgradeEmailHtml
+
+// Endpoint manual para disparar emails de upgrade por vendedor (usar desde Render/cron)
+exports.sendUpgradeEmail = onRequest(
+  {
+    region: 'us-central1',
+    timeoutSeconds: 120,
+    memory: '256MiB',
+    secrets: ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'RESEND_API_KEY'],
+  },
+  async (req, res) => {
+    if (req.method !== 'POST') {
+      res.set('Allow', 'POST')
+      return res.status(405).send('Method Not Allowed')
+    }
+
+    const email =
+      (req.body && (req.body.email || req.body.target)) ||
+      req.query.email ||
+      ''
+    const targetEmail = String(email).trim().toLowerCase()
+    if (!targetEmail) {
+      return res.status(400).json({ ok: false, error: 'email_required' })
+    }
+
+    try {
+      const supabase = await getSupabase()
+      const { data: rows, error } = await supabase
+        .from('listings')
+        .select('id,title,slug,price,price_currency,images,location,seller_email,status')
+        .eq('seller_email', targetEmail)
+        .in('status', ['active', 'published'])
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      if (!rows || rows.length === 0) {
+        return res.status(404).json({ ok: false, error: 'no_listings' })
+      }
+
+      const cards = rows
+        .map((row) => {
+          const firstImg = Array.isArray(row.images) && row.images.length
+            ? (typeof row.images[0] === 'string'
+              ? row.images[0]
+              : (row.images[0] && row.images[0].url) || `${SITE_ORIGIN}/logo-azul.png`)
+            : `${SITE_ORIGIN}/logo-azul.png`
+          return buildUpgradeEmailHtml({
+            title: row.title,
+            image: firstImg,
+            price: row.price,
+            currency: row.price_currency || 'ARS',
+            listingUrl: `${SITE_ORIGIN}/listing/${row.slug || row.id}`,
+            location: row.location,
+          })
+        })
+        .join('\n<hr style="border:none; border-top:1px solid #e5e7eb; margin:32px 0;" />\n')
+
+      const resendApiKey = process.env.RESEND_API_KEY
+      if (!resendApiKey) {
+        return res.status(500).json({ ok: false, error: 'missing_resend_key' })
+      }
+
+      const resend = new Resend(resendApiKey)
+      await resend.emails.send({
+        from: 'Ciclo Market <admin@ciclomarket.ar>',
+        to: targetEmail,
+        subject: 'Tu publicación ahora tiene prioridad en Ciclo Market',
+        html: cards,
+      })
+
+      return res.status(200).json({ ok: true, sent: rows.length })
+    } catch (err) {
+      console.error('[sendUpgradeEmail] error', err)
+      return res.status(500).json({ ok: false, error: 'internal_error' })
+    }
+  }
+)
