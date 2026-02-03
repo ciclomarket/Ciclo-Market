@@ -1613,6 +1613,8 @@ async function applyPaymentUpdateByPaymentId(paymentId) {
         const creditStatus = status === 'succeeded' ? 'available' : (status === 'pending' ? 'pending' : 'cancelled')
         const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
         let updatedCount = 0
+        const boostUntilIso = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString()
+        const photoCap = planCode === 'premium' ? 8 : 8
         if (prefId) {
           try {
             const { data: updRows } = await svc
@@ -1666,6 +1668,37 @@ async function applyPaymentUpdateByPaymentId(paymentId) {
               .neq('provider_ref', String(paymentId))
             if (cancelErr) console.warn('[webhook] cleanup pending credits failed', cancelErr)
           } catch {}
+          // Aplicar upgrade directo al listing si vino en metadata
+          if (upgradeListingId) {
+            try {
+              const { data: currentRow } = await svc
+                .from('listings')
+                .select('granted_visible_photos, visible_images_count, whatsapp_enabled')
+                .eq('id', upgradeListingId)
+                .maybeSingle()
+              const currentGrant = Number(currentRow?.granted_visible_photos || 4)
+              const currentVisible = Number(currentRow?.visible_images_count || 4)
+              const nextGrant = Math.max(currentGrant, photoCap)
+              const nextVisible = Math.max(currentVisible, photoCap)
+              const nextWaEnabled = currentRow?.whatsapp_enabled === true ? true : true
+
+              const { error: updListErr } = await svc
+                .from('listings')
+                .update({
+                  plan_code: planCode,
+                  granted_visible_photos: nextGrant,
+                  visible_images_count: nextVisible,
+                  whatsapp_cap_granted: true,
+                  whatsapp_enabled: nextWaEnabled,
+                  rank_boost_until: boostUntilIso,
+                })
+                .eq('id', upgradeListingId)
+              if (updListErr) console.warn('[webhook] listing upgrade update failed', updListErr)
+              else console.info('[webhook] listing upgraded by payment', { listingId: upgradeListingId, planCode, boostUntilIso })
+            } catch (err) {
+              console.warn('[webhook] listing upgrade exception', err?.message || err)
+            }
+          }
         }
       }
       else {
