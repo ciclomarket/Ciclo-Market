@@ -177,19 +177,45 @@ export default function ListingDetail() {
 
   async function startUpgrade(planCode: 'PREMIUM'|'PRO') {
     try {
-      // Usa el servicio de upgrade centralizado (maneja API_BASE y token)
-      const normalized = planCode === 'PRO' ? 'pro' : 'premium'
-      const result = await upgradeListingPlan({ id: listing?.id || '', planCode: normalized as any })
-      if (result.ok && result.listing) {
-        setListing(result.listing)
+      const amount = planCode === 'PRO' ? 13000 : 9000
+      const supabase = getSupabaseClient()
+      const { data: session } = await supabase.auth.getSession()
+      const token = session.session?.access_token
+      const userId = session.session?.user?.id
+      if (!userId || !listing) return
+      const redirectBase = window.location.origin
+      const back = {
+        success: `${redirectBase}/listing/${listing.slug || listing.id}`,
+        failure: `${redirectBase}/listing/${listing.slug || listing.id}`,
+        pending: `${redirectBase}/listing/${listing.slug || listing.id}`,
+      }
+      const endpoint = apiBase ? `${apiBase}/api/checkout` : '/api/checkout'
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          planCode: planCode.toLowerCase(),
+          amount,
+          planCurrency: 'ARS',
+          planName: planCode === 'PRO' ? 'Plan Pro' : 'Plan Premium',
+          listingId: listing.id,
+          listingSlug: listing.slug || listing.id,
+          redirectUrls: back,
+          userId,
+        }),
+      })
+      const text = await res.text()
+      let json: any = null
+      try { json = JSON.parse(text) } catch { /* respuesta no es json */ }
+      if (res.ok && json?.url) {
+        window.location.assign(json.url)
         return
       }
-      // Si el endpoint devuelve una URL de checkout (cuando API responde con redirect)
-      if ((result as any)?.url) {
-        window.location.assign((result as any).url)
-        return
-      }
-      alert('No pudimos iniciar el checkout. Intentá nuevamente en unos minutos.')
+      console.warn('[upgrade] unexpected response', { status: res.status, text })
+      alert('No pudimos iniciar el checkout. Intentá nuevamente.')
     } catch (e) {
       console.warn('[upgrade] failed', e)
       alert('No pudimos iniciar el checkout. Intentá nuevamente.')
@@ -875,7 +901,7 @@ export default function ListingDetail() {
   const storeLink = isStore ? (sellerProfile?.store_slug ? `/tienda/${sellerProfile.store_slug}` : `/tienda/${listing.sellerId}`) : null
   const sellerDisplayName = isStore
     ? (sellerProfile?.store_name || 'Tienda')
-    : formatNameWithInitial(listing.sellerName, undefined)
+    : formatNameWithInitial(sellerProfile?.full_name || listing.sellerName || sellerProfile?.email || 'Vendedor', 'Vendedor')
   const sellerTrustLevel = computeTrustLevel(
     sellerProfile,
     sellerRating ? { count: sellerRating.count, avgRating: sellerRating.avg } : undefined
@@ -1148,7 +1174,7 @@ export default function ListingDetail() {
                           />
                         )}
                         <div className="min-w-0">
-                          <p className="text-sm text-[#14212e]/70">Publicado por</p>
+                          <p className="text-sm text-[#14212e]/70">Publicado por:</p>
                           <h3 className="text-lg font-semibold text-[#14212e]">
                             {isStore ? (
                               <Link to={storeLink!} className="inline-flex items-center gap-2 transition hover:text-mb-primary">
@@ -1284,7 +1310,7 @@ export default function ListingDetail() {
                       />
                     )}
                     <div className="min-w-0">
-                      <p className="text-sm text-[#14212e]/70">Publicado por</p>
+                      <p className="text-sm text-[#14212e]/70">Publicado por:</p>
                       <h3 className="text-lg font-semibold text-[#14212e]">
                         {isStore ? (
                           <Link to={storeLink!} className="inline-flex items-center gap-2 transition hover:text-mb-primary">

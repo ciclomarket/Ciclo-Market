@@ -1388,15 +1388,26 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
     if (sortMode === 'relevance') {
       return sorted.sort((a, b) => {
         const now = Date.now()
-        const aHl = (a.highlightExpires ?? 0) > now
-        const bHl = (b.highlightExpires ?? 0) > now
-        const aStore = a.sellerId ? Boolean(storeLogos[a.sellerId]) : false
-        const bStore = b.sellerId ? Boolean(storeLogos[b.sellerId]) : false
+        const boostScore = (l: Listing) => {
+          const rawBoost = typeof l.rankBoostUntil === 'number'
+            ? l.rankBoostUntil
+            : (l.rankBoostUntil ? Date.parse(l.rankBoostUntil as any) : 0)
+          const active = rawBoost > now
+          if (!active) return 0
+          const granted = (l as any).grantedVisiblePhotos ?? (l as any).granted_visible_photos ?? 4
+          if (granted >= 12) return 3 // Prioridad ALTA (Pro)
+          if (granted >= 8) return 2 // Prioridad (Premium)
+          return 1
+        }
+        const storeScore = (l: Listing) => (l.sellerId ? (storeLogos[l.sellerId] ? 1 : 0) : 0)
 
-        const rank = (hl: boolean, st: boolean) => (hl ? 2 : (st ? 1 : 0))
-        const rA = rank(aHl, aStore)
-        const rB = rank(bHl, bStore)
+        const rA = boostScore(a)
+        const rB = boostScore(b)
         if (rB !== rA) return rB - rA
+
+        const sA = storeScore(a)
+        const sB = storeScore(b)
+        if (sB !== sA) return sB - sA
 
         // Dentro del mismo grupo, más likes primero (si no hay datos, 0)
         const aLikes = likeCounts[a.id] || 0

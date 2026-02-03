@@ -2207,31 +2207,20 @@ function ListingsView({
 }
 
 function ListingExpiryMeta({ listing }: { listing: Listing }) {
-  const now = Date.now()
-  const expiresAt = typeof listing.expiresAt === 'number' ? listing.expiresAt : null
-  const highlightSource = typeof listing.highlightExpires === 'number'
-    ? listing.highlightExpires
-    : typeof listing.sellerPlanExpires === 'number'
-      ? listing.sellerPlanExpires
-      : null
-  const formatRemaining = (ms: number) => {
-    const days = Math.ceil((ms - now) / (24 * 60 * 60 * 1000))
-    return days <= 0 ? 'vencido' : `${days} día${days === 1 ? '' : 's'}`
-  }
-  const publicationLabel = expiresAt ? formatRemaining(expiresAt) : 'sin vencimiento'
-  const highlightLabel = highlightSource ? formatRemaining(highlightSource) : 'sin destaque'
-
-  const resolvedPlan = canonicalPlanCode(listing.plan ?? listing.sellerPlan ?? undefined)
-  const planDef = FALLBACK_PLANS.find((plan) => canonicalPlanCode(plan.code ?? plan.id ?? plan.name) === resolvedPlan)
-  const planDuration = planDef?.listingDurationDays ?? planDef?.periodDays ?? undefined
-  const planName = planDef?.name ?? resolvedPlan ?? 'Plan'
-  const planLabel = planDuration ? `${planName} · ${planDuration} días` : planName
+  const createdLabel = listing.createdAt ? new Date(listing.createdAt).toLocaleDateString('es-AR') : '—'
+  const planLabel = canonicalPlanCode(listing.plan ?? listing.sellerPlan ?? undefined)?.toUpperCase() ?? 'FREE'
+  const waLabel = (listing.whatsappCapGranted && listing.whatsappEnabled)
+    ? 'habilitado'
+    : (listing.whatsappCapGranted ? 'apagado' : 'no habilitado')
+  const photosVisible = listing.photosVisible ?? Math.min(listing.images?.length || 0, 12)
+  const photosCap = listing.grantedVisiblePhotos ? Math.min(listing.grantedVisiblePhotos, 12) : 4
 
   return (
     <>
-      <div>Publicación: {publicationLabel}</div>
+      <div>Creada el: {createdLabel}</div>
       <div>Plan: {planLabel}</div>
-      <div>Destaque: {highlightLabel}</div>
+      <div>WhatsApp: {waLabel}</div>
+      <div>Fotos visibles: {photosVisible}/{photosCap}</div>
     </>
   )
 }

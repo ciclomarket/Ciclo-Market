@@ -129,7 +129,7 @@ export async function fetchListings(): Promise<Listing[]> {
   try {
     const supabase = getSupabaseClient()
     const { data, error } = await supabase
-      .from('listings')
+      .from('listings_enriched')
       .select('*')
       .order('created_at', { ascending: false })
     if (error || !data) return []
@@ -152,7 +152,7 @@ export async function fetchListing(identifier: string): Promise<Listing | null> 
   try {
     const supabase = getSupabaseClient()
     const { data: bySlug, error: slugError } = await supabase
-      .from('listings')
+      .from('listings_enriched')
       .select('*')
       .eq('slug', identifier)
       .maybeSingle()
@@ -166,7 +166,7 @@ export async function fetchListing(identifier: string): Promise<Listing | null> 
 
     const lookupId = extractListingId(identifier)
     const { data: byId, error: idError } = await supabase
-      .from('listings')
+      .from('listings_enriched')
       .select('*')
       .eq('id', lookupId)
       .maybeSingle()
@@ -200,10 +200,10 @@ export async function fetchListingsByIds(ids: string[]): Promise<Listing[]> {
   if (!supabaseEnabled || ids.length === 0) return []
   try {
     const supabase = getSupabaseClient()
-    const { data, error } = await supabase
-      .from('listings')
-      .select('*')
-      .in('id', ids)
+  const { data, error } = await supabase
+    .from('listings_enriched')
+    .select('*')
+    .in('id', ids)
     if (error || !data) return []
     const filtered = data.filter((row: any) => {
       const status = typeof row?.status === 'string' ? row.status.trim().toLowerCase() : ''
@@ -222,10 +222,10 @@ export async function fetchListingsBySeller(
   if (!supabaseEnabled) return []
   try {
     const supabase = getSupabaseClient()
-    const { data, error } = await supabase
-      .from('listings')
-      .select('*')
-      .eq('seller_id', sellerId)
+  const { data, error } = await supabase
+    .from('listings_enriched')
+    .select('*')
+    .eq('seller_id', sellerId)
       .order('created_at', { ascending: false })
     if (error || !data) return []
     const includeArchived = options?.includeArchived ?? false
