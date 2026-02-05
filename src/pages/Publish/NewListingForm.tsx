@@ -79,6 +79,11 @@ export default function NewListingForm() {
   const [sp] = useSearchParams()
   const navigate = useNavigate()
   const { user } = useAuth()
+  const editId = useMemo(() => {
+    const id = (sp.get('id') || '').trim()
+    return id || null
+  }, [sp])
+  const isEdit = Boolean(editId)
   const [openStep, setOpenStep] = useState<number>(1)
   // Derive main category from query param: type=bike|accessory|apparel|nutrition
   const mainCategory = useMemo<typeof MAIN_CATEGORIES[number]>(() => {
@@ -177,7 +182,7 @@ export default function NewListingForm() {
         const payload = JSON.stringify({ ...data, ts: Date.now() })
         window.localStorage.setItem(draftKey, payload)
         window.sessionStorage.setItem(sessionDraftKey, payload)
-      } catch {}
+      } catch { /* noop */ }
     }
   ), [draftKey, sessionDraftKey])
 
@@ -259,7 +264,7 @@ export default function NewListingForm() {
             setNutriExpire(draft.nutriExpire || '')
           }
           setLoadedDraft(true)
-          try { window.sessionStorage.removeItem(sessionDraftKey) } catch {}
+          try { window.sessionStorage.removeItem(sessionDraftKey) } catch { /* noop */ }
         }
 
         if (!user?.id) return
@@ -279,22 +284,47 @@ export default function NewListingForm() {
         }
         // read initial subcat from URL
         const preset = (sp.get('subcat') || '').trim()
-        if (preset) {
+        if (preset && !isEdit) {
           if (mainCategory === 'Bicicletas') setCategory(preset)
           else if (mainCategory === 'Accesorios') setAccessorySubcat(preset as any)
           else if (mainCategory === 'Indumentaria') setApparelSubcat(preset as any)
           else if (mainCategory === 'Nutrición') setNutritionSubcat(preset as any)
         }
-      } catch {}
+      } catch { /* noop */ }
     })()
     return () => { active = false }
-  }, [user?.id, loadedDraft, loadDraft, mainCategory, province, city, whatsApp])
+  }, [user?.id, loadedDraft, loadDraft, mainCategory, province, city, whatsApp, isEdit])
 
   // Infer mechanical vs electronic from group text
   function inferTxType(txt?: string): 'Mecánico' | 'Electrónico' {
     const v = (txt || '').toLowerCase()
     if (v.includes('di2') || v.includes('etap') || v.includes('axs') || v.includes('eps') || v.includes('electr')) return 'Electrónico'
     return 'Mecánico'
+  }
+
+  const parseExtrasMap = (extrasRaw?: string | null) => {
+    const map: Record<string, string> = {}
+    const parts = String(extrasRaw || '')
+      .split('•')
+      .map((p) => p.trim())
+      .filter(Boolean)
+    for (const p of parts) {
+      const idx = p.indexOf(':')
+      if (idx === -1) continue
+      const k = p.slice(0, idx).trim()
+      const v = p.slice(idx + 1).trim()
+      if (k) map[k] = v
+    }
+    return map
+  }
+
+  const getExtra = (map: Record<string, string>, key: string) => {
+    const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    const keyNorm = norm(key)
+    for (const k of Object.keys(map)) {
+      if (norm(k) === keyNorm) return map[k]
+    }
+    return ''
   }
 
   const displayAuthor = useMemo(() => {
@@ -331,17 +361,21 @@ export default function NewListingForm() {
 
 const buildExtras = (): string => {
     const parts: string[] = []
-    if (mainCategory === 'Bicicletas') {
-      if (frameSize) parts.push(`Talle: ${frameSize}`)
-      if (year) parts.push(`Año: ${year}`)
-      if (drivetrain || drivetrainOther) parts.push(`Grupo: ${drivetrain || drivetrainOther}`)
-      if (brakeType) parts.push(`Freno: ${brakeType}`)
-      if (wheelSize) parts.push(`Rodado: ${wheelSize}`)
-      if (seatInfo) parts.push(`Asiento: ${seatInfo}`)
-      if (handlebarInfo) parts.push(`Manillar: ${handlebarInfo}`)
-      if (pedalsInfo) parts.push(`Pedales: ${pedalsInfo}`)
-      if (chainInfo) parts.push(`Cadena: ${chainInfo}`)
-      if (forkInfo) parts.push(`Horquilla: ${forkInfo}`)
+	    if (mainCategory === 'Bicicletas') {
+	      if (frameSize) parts.push(`Talle: ${frameSize}`)
+	      if (year) parts.push(`Año: ${year}`)
+	      if (drivetrain || drivetrainOther) parts.push(`Grupo: ${drivetrain || drivetrainOther}`)
+	      if (brakeType) parts.push(`Freno: ${brakeType}`)
+	      if (wheelSize) parts.push(`Rodado: ${wheelSize}`)
+	      if (bikeCondition) parts.push(`Condición: ${bikeCondition}`)
+	      if (fixieRatio) parts.push(`Relación: ${fixieRatio}`)
+	      if (ebikeMotor) parts.push(`Motor: ${ebikeMotor}`)
+	      if (ebikeBattery) parts.push(`Carga: ${ebikeBattery}`)
+	      if (seatInfo) parts.push(`Asiento: ${seatInfo}`)
+	      if (handlebarInfo) parts.push(`Manillar: ${handlebarInfo}`)
+	      if (pedalsInfo) parts.push(`Pedales: ${pedalsInfo}`)
+	      if (chainInfo) parts.push(`Cadena: ${chainInfo}`)
+	      if (forkInfo) parts.push(`Horquilla: ${forkInfo}`)
     } else if (mainCategory === 'Accesorios') {
       if (accessorySubcat) parts.push(`Tipo: ${accessorySubcat}`)
       if (accUseType) parts.push(`Uso: ${accUseType}`)
@@ -368,13 +402,106 @@ const buildExtras = (): string => {
       if (nutriNetWeight) parts.push(`Peso: ${nutriNetWeight}`)
       if (nutriExpire) parts.push(`Vence: ${nutriExpire}`)
     }
-    return parts.filter(Boolean).join(' • ')
-  }
+	    return parts.filter(Boolean).join(' • ')
+	  }
 
-  const submit = async () => {
-    if (submitting) return
-    if (!supabaseEnabled) { alert('Supabase no configurado en .env'); return }
-    if (!user) {
+	  useEffect(() => {
+	    let active = true
+	    const loadExisting = async () => {
+	      if (!isEdit || !editId) return
+	      if (!supabaseEnabled) return
+	      if (!user?.id) return
+	      try {
+	        const supabase = getSupabaseClient()
+	        const { data: row, error } = await supabase
+	          .from('listings')
+	          .select('*')
+	          .eq('id', editId)
+	          .maybeSingle()
+	        if (!active) return
+	        if (error || !row) {
+	          alert('No se pudo cargar la publicación para editar.')
+	          return
+	        }
+	        if (row.seller_id && row.seller_id !== user.id) {
+	          alert('No tenés permisos para editar esta publicación.')
+	          navigate(`/listing/${encodeURIComponent(editId)}`)
+	          return
+	        }
+
+	        const extrasMap = parseExtrasMap(row.extras)
+	        const inferredBrake = getExtra(extrasMap, 'Freno') || getExtra(extrasMap, 'Tipo de freno')
+	        const inferredCondition = getExtra(extrasMap, 'Condición') || getExtra(extrasMap, 'Condicion')
+	        const inferredFork = getExtra(extrasMap, 'Horquilla')
+	        const inferredRatio = getExtra(extrasMap, 'Relación') || getExtra(extrasMap, 'Relacion')
+	        const inferredMotor = getExtra(extrasMap, 'Motor')
+	        const inferredCharge = getExtra(extrasMap, 'Carga') || getExtra(extrasMap, 'Batería') || getExtra(extrasMap, 'Bateria')
+
+	        setBrand(String(row.brand || ''))
+	        setModel(String(row.model || ''))
+	        setYear(row.year != null ? String(row.year) : '')
+	        setDescription(String(row.description || ''))
+	        setMaterial(String(row.material || ''))
+	        setFrameSize(String(row.frame_size || ''))
+	        setWheelSize(String(row.wheel_size || ''))
+	        setBrakeType(String(inferredBrake || ''))
+	        setBikeCondition(String(inferredCondition || ''))
+	        setFixieRatio(String(inferredRatio || ''))
+	        setEbikeMotor(String(inferredMotor || ''))
+	        setEbikeBattery(String(inferredCharge || ''))
+	        setForkInfo(String(inferredFork || ''))
+
+	        const drivetrainVal = String(row.drivetrain || '')
+	        const drivetrainDetailVal = String(row.drivetrain_detail || '')
+	        if (drivetrainDetailVal) {
+	          setDrivetrain('Otro')
+	          setDrivetrainOther(drivetrainDetailVal)
+	        } else if (drivetrainVal && !DRIVETRAIN_OPTIONS.includes(drivetrainVal)) {
+	          setDrivetrain('Otro')
+	          setDrivetrainOther(drivetrainVal)
+	        } else {
+	          setDrivetrain(drivetrainVal)
+	          setDrivetrainOther('')
+	        }
+
+	        const imagesArr = Array.isArray(row.images) ? row.images.filter(Boolean).map((x: any) => String(x)) : []
+	        setImages(imagesArr)
+	        setPriceCurrency((row.price_currency || 'USD') as any)
+	        setPriceInput(row.price != null ? String(row.price) : '')
+
+	        const loc = String(row.location || '')
+	        if (loc && (!city || !province)) {
+	          const parts = loc.split(',').map((p: string) => p.trim()).filter(Boolean)
+	          if (parts.length >= 1 && !city) setCity(parts[0])
+	          if (parts.length >= 2 && !province) setProvince(parts.slice(1).join(', '))
+	        }
+
+	        const cat = String(row.category || '')
+	        const sub = String(row.subcategory || '')
+	        if (mainCategory === 'Bicicletas') {
+	          const bikeCat = BIKE_CATEGORIES.includes(cat as any) ? cat : (BIKE_CATEGORIES.includes(sub as any) ? sub : '')
+	          if (bikeCat) setCategory(bikeCat)
+	        } else if (mainCategory === 'Accesorios') {
+	          if (sub) setAccessorySubcat(sub as any)
+	        } else if (mainCategory === 'Indumentaria') {
+	          if (sub) setApparelSubcat(sub as any)
+	        } else if (mainCategory === 'Nutrición') {
+	          if (sub) setNutritionSubcat(sub as any)
+	        }
+
+	        setOpenStep(2)
+	      } catch {
+	        alert('No se pudo cargar la publicación para editar.')
+	      }
+	    }
+	    void loadExisting()
+	    return () => { active = false }
+	  }, [isEdit, editId, user?.id, mainCategory])
+
+	  const submit = async () => {
+	    if (submitting) return
+	    if (!supabaseEnabled) { alert('Supabase no configurado en .env'); return }
+	    if (!user) {
       try {
         window.sessionStorage.setItem('cm_publish_pending', '1')
         const snapshot = {
@@ -418,7 +545,7 @@ const buildExtras = (): string => {
           waLocal,
         }
         persistDraft(snapshot)
-      } catch {}
+      } catch { /* noop */ }
       setAuthModalOpen(true)
       return
     }
@@ -432,73 +559,79 @@ const buildExtras = (): string => {
       alert('Completá grupo de transmisión y tipo de freno'); setOpenStep(2); setSubmitting(false); return
     }
 
-    const title = `${brand.trim()} ${model.trim()}`.trim()
-    const location = [city, province].filter(Boolean).join(', ')
-    const categoryField = mainCategory === 'Bicicletas' ? 'Bicicletas' : mainCategory
-    const subcategoryField = mainCategory === 'Bicicletas' ? (category || null) : (
-      mainCategory === 'Accesorios' ? accessorySubcat : (mainCategory === 'Indumentaria' ? apparelSubcat : nutritionSubcat)
-    )
-    const extrasText = buildExtras()
+	    const title = `${brand.trim()} ${model.trim()}`.trim()
+	    const location = [city, province].filter(Boolean).join(', ')
+	    const categoryField = mainCategory === 'Bicicletas' ? (category || null) : mainCategory
+	    const subcategoryField = mainCategory === 'Bicicletas' ? null : (
+	      mainCategory === 'Accesorios' ? accessorySubcat : (mainCategory === 'Indumentaria' ? apparelSubcat : nutritionSubcat)
+	    )
+	    const extrasText = buildExtras()
+      const imagesLimit = 4
+      const imagesToSave = images.length ? images.slice(0, imagesLimit) : []
 
-    const payload: any = {
-      title,
-      brand: brand.trim(),
-      model: model.trim(),
-      year: year ? Number(year) : null,
-      category: categoryField,
-      subcategory: subcategoryField,
-      price,
-      price_currency: priceCurrency,
-      location: location || null,
-      description: description || null,
-      material: material || null,
-      frame_size: mainCategory === 'Bicicletas' ? (frameSize || null) : null,
-      wheel_size: wheelSize || null,
-      drivetrain: (drivetrain || drivetrainOther) || null,
-      drivetrain_detail: drivetrainOther || null,
-      extras: extrasText || null,
-      images: images.length ? images.slice(0, 12) : [],
-      status: 'draft',
-      seller_id: user.id,
-      plan_code: 'free',
-      plan: 'free',
-      granted_visible_photos: 4,
-      visible_images_count: Math.min(4, images.length || 4),
-      plan_price: 0,
-      plan_photo_limit: 4,
-    }
+		    const basePayload: any = {
+		      title,
+		      brand: brand.trim(),
+		      model: model.trim(),
+		      year: year ? Number(year) : null,
+		      category: categoryField,
+		      subcategory: subcategoryField,
+		      price,
+		      price_currency: priceCurrency,
+		      location: location || null,
+		      description: description || null,
+		      material: material || null,
+		      frame_size: mainCategory === 'Bicicletas' ? (frameSize || null) : null,
+		      wheel_size: wheelSize || null,
+		      drivetrain: (drivetrain || drivetrainOther) || null,
+		      drivetrain_detail: drivetrainOther || null,
+		      extras: extrasText || null,
+		      images: imagesToSave,
+		    }
 
-    const { data, error } = await supabase.from('listings').insert(payload).select('id, slug').maybeSingle()
-    if (error) {
-      console.warn('[publish] insert error', error)
-      alert(`Error al publicar: ${error.message}`)
-      setSubmitting(false)
-      return
-    }
+		    const { data, error } = isEdit && editId
+		      ? await supabase.from('listings').update(basePayload).eq('id', editId).select('id, slug').maybeSingle()
+		      : await supabase.from('listings').insert([{
+		          ...basePayload,
+		          status: 'draft',
+		          seller_id: user.id,
+		          plan_code: 'free',
+		          plan: 'free',
+		          granted_visible_photos: 4,
+		          visible_images_count: Math.min(4, imagesToSave.length || 4),
+		          plan_price: 0,
+		          plan_photo_limit: 4,
+		        }]).select('id, slug').maybeSingle()
+		    if (error) {
+		      console.warn('[publish] insert error', error)
+	      alert(`Error al ${isEdit ? 'guardar' : 'publicar'}: ${error.message}`)
+	      setSubmitting(false)
+	      return
+	    }
     // Update user profile (province/city/whatsapp) if provided
     try {
       await upsertUserProfile({ id: user.id, province, city, whatsapp: whatsApp })
-    } catch {}
-    // Redirigir al detalle de la publicación y mostrar modal de upgrade
-    const slug = data?.slug || data?.id
-    if (slug) {
-      navigate(`/listing/${slug}?post_publish=1`)
-    } else {
-      navigate(`/dashboard?tab=${encodeURIComponent('Publicaciones')}`)
-    }
-    setSubmitting(false)
-  }
+    } catch { /* noop */ }
+	    // Redirigir al detalle de la publicación y mostrar modal de upgrade
+	    const slug = data?.slug || data?.id
+	    if (slug) {
+	      navigate(isEdit ? `/listing/${slug}` : `/listing/${slug}?post_publish=1`)
+	    } else {
+	      navigate(`/dashboard?tab=${encodeURIComponent('Publicaciones')}`)
+	    }
+	    setSubmitting(false)
+	  }
 
   return (
     <div className="min-h-screen bg-[#14212E] py-12 px-4 font-sans text-gray-900">
       <Container>
         <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           {/* LEFT: White Form Card */}
-          <div className="lg:col-span-7 bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200">
-            <div className="p-6 border-b border-gray-100">
-              <h1 className="text-2xl font-bold text-gray-900">Nueva publicación</h1>
-              <p className="text-gray-500 text-sm mt-1">Completá los pasos para vender.</p>
-            </div>
+	          <div className="lg:col-span-7 bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200">
+	            <div className="p-6 border-b border-gray-100">
+	              <h1 className="text-2xl font-bold text-gray-900">{isEdit ? 'Editar publicación' : 'Nueva publicación'}</h1>
+	              <p className="text-gray-500 text-sm mt-1">{isEdit ? 'Actualizá los datos de tu publicación.' : 'Completá los pasos para vender.'}</p>
+	            </div>
 
             {/* Step 1: Categoría / Subcategoría (según tipo) */}
             <StepHeader step={1} title="Categoría" isOpen={openStep === 1} isCompleted={(mainCategory === 'Bicicletas' ? !!category : (mainCategory === 'Accesorios' ? !!accessorySubcat : (mainCategory === 'Indumentaria' ? !!apparelSubcat : !!nutritionSubcat)))} onClick={() => setOpenStep(1)} />
@@ -1032,11 +1165,11 @@ const buildExtras = (): string => {
                     />
                   </div>
                 </div>
-                <div className="pt-2">
-                  <Button onClick={submit} className="w-full h-14 text-lg shadow-xl shadow-blue-900/10">Publicar</Button>
-                </div>
-              </div>
-            )}
+	                <div className="pt-2">
+	                  <Button onClick={submit} className="w-full h-14 text-lg shadow-xl shadow-blue-900/10">{isEdit ? 'Guardar cambios' : 'Publicar'}</Button>
+	                </div>
+	              </div>
+	            )}
           </div>
 
           {/* RIGHT: Sticky Preview */}

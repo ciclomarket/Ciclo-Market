@@ -1,8 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useLocation } from 'react-router-dom'
-import Container from '../../components/Container'
-import Button from '../../components/Button'
-import { SocialAuthButtons } from '../../components/SocialAuthButtons'
+import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { getSupabaseClient, supabaseEnabled, setAuthPersistence } from '../../services/supabase'
 import { trackMetaPixel } from '../../lib/metaPixel'
@@ -10,14 +7,13 @@ import { detectInAppBrowser, canUseOAuthInContext } from '../../utils/inAppBrows
 import InAppBrowserWarning from '../../components/InAppBrowserWarning'
 import { useToast } from '../../context/ToastContext'
 
-type OAuthProvider = 'google' | 'facebook'
+type OAuthProvider = 'google'
 
 export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [rememberMe, setRememberMe] = useState(true)
   const [loadingProvider, setLoadingProvider] = useState<Partial<Record<OAuthProvider, boolean>>>({})
-  const navigate = useNavigate()
   const location = useLocation() as any
   const { enabled } = useAuth()
   const [inApp, setInApp] = useState<{ isInApp: boolean; agent: string | null }>({ isInApp: false, agent: null })
@@ -26,9 +22,26 @@ export default function Login() {
   useEffect(() => { setInApp(detectInAppBrowser()) }, [])
   // (Promo next removido)
 
+  const redirectParam = (() => {
+    try {
+      const sp = new URLSearchParams(location?.search || '')
+      const raw = (sp.get('redirect') || '').trim()
+      if (!raw) return null
+      if (!raw.startsWith('/')) return null
+      if (raw.startsWith('//')) return null
+      if (raw.includes('://')) return null
+      return raw
+    } catch {
+      return null
+    }
+  })()
+
   const setProviderLoading = (provider: OAuthProvider, value: boolean) => {
     setLoadingProvider((prev) => ({ ...prev, [provider]: value }))
   }
+
+  const inputClass =
+    'mt-1 block w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 shadow-sm focus:border-mb-primary focus:ring-1 focus:ring-mb-primary'
 
   // Cargar preferencia previa
   useEffect(() => {
@@ -52,9 +65,11 @@ export default function Login() {
       try { trackMetaPixel('Login', { method: 'email' }) } catch { /* noop */ }
       if (typeof window !== 'undefined') {
         const from = location?.state?.from as { pathname?: string; search?: string } | undefined
-        if (from?.pathname) {
-          const target = `${from.pathname}${from.search || ''}`
-          window.location.assign(target)
+        const nextPath = from?.pathname
+          ? `${from.pathname}${from.search || ''}`
+          : redirectParam
+        if (nextPath) {
+          window.location.assign(nextPath)
         } else {
           window.location.assign('/dashboard')
         }
@@ -65,46 +80,41 @@ export default function Login() {
     }
   }
 
-  const buildOAuthHandler = (provider: OAuthProvider) => async () => {
+  const loginWithGoogle = async () => {
     if (!canUseOAuthInContext()) {
-      alert('Para continuar con Google/Facebook, abrí este link en Chrome o Safari (no dentro de Instagram/Messenger).')
+      alert('Para continuar con Google, abrí este link en Chrome o Safari (no dentro de Instagram/Messenger).')
       return
     }
-    const providerName = provider === 'google' ? 'Google' : 'Facebook'
     if (!enabled || !supabaseEnabled) {
-      alert(`Login con ${providerName} deshabilitado: configurá Supabase en .env`)
+      alert('Login con Google deshabilitado: configurá Supabase en .env')
       return
     }
     try {
-      setProviderLoading(provider, true)
+      setProviderLoading('google', true)
       setAuthPersistence(Boolean(rememberMe))
       const supabase = getSupabaseClient()
-      const scopes = provider === 'facebook'
-        ? 'public_profile,email'
-        : undefined
       const from = (location?.state?.from as { pathname?: string; search?: string } | undefined)
-      const nextPath = from?.pathname ? `${from.pathname}${from.search || ''}` : null
+      const nextPath = from?.pathname ? `${from.pathname}${from.search || ''}` : redirectParam
       const redirectBase = `${window.location.origin}/dashboard`
       const redirect = nextPath ? `${redirectBase}?next=${encodeURIComponent(nextPath)}` : redirectBase
       const { data, error } = await supabase.auth.signInWithOAuth({
-        provider,
+        provider: 'google',
         options: {
           redirectTo: redirect,
-          scopes
         }
       })
       if (error) throw error
       if (data?.url) {
         // Guardamos intención para enviar evento al volver del OAuth
-        try { sessionStorage.setItem('mb_oauth_login_intent', provider) } catch { /* noop */ }
+        try { sessionStorage.setItem('mb_oauth_login_intent', 'google') } catch { /* noop */ }
         window.location.href = data.url
       }
     } catch (err: any) {
       const message =
-        err instanceof Error ? err.message : `No pudimos iniciar sesión con ${providerName}.`
+        err instanceof Error ? err.message : 'No pudimos iniciar sesión con Google.'
       alert(message)
     } finally {
-      setProviderLoading(provider, false)
+      setProviderLoading('google', false)
     }
   }
 
@@ -134,123 +144,128 @@ export default function Login() {
   }
 
   return (
-    <div className="relative isolate min-h-[calc(100vh-140px)] overflow-hidden bg-[#0c1723] py-14 text-white">
-      {inApp.isInApp && (
-        <InAppBrowserWarning />
-      )}
-      <div className="absolute inset-0 -z-10 bg-[radial-gradient(1200px_520px_at_-10%_0%,rgba(255,255,255,0.12),transparent_70%)] opacity-70" />
-      <div className="absolute inset-0 -z-20 bg-[radial-gradient(900px_520px_at_110%_20%,rgba(14,26,38,0.26),transparent_75%)]" />
-      <Container>
-        <div className="mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-[1.1fr_minmax(0,1fr)]">
-          <div className="space-y-6 text-sm text-white/80">
-            <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs uppercase tracking-[0.35em] text-white/60">
-              Bienvenido de vuelta
-            </span>
-            <h1 className="text-3xl font-bold text-white sm:text-4xl">
-              Entrá al marketplace más seguro para ciclistas en Argentina.
-            </h1>
-            <p className="max-w-xl text-base">
-              Guardamos tus conversaciones, avisos y favoritos para que sigas donde lo dejaste. Iniciá
-              sesión con Google o con tu email.
-            </p>
-            <div className="flex flex-wrap gap-4 text-xs uppercase tracking-[0.3em] text-white/50">
-              <span>Pagos protegidos</span>
-              <span>Verificación de usuarios</span>
-              <span>Soporte humano</span>
+    <div className="relative flex min-h-screen lg:flex-row">
+      <div className="absolute inset-0 z-0 lg:relative lg:inset-auto lg:z-auto lg:order-2 lg:w-1/2">
+        <picture className="h-full w-full">
+          <source srcSet="/bicicletas-home.webp" type="image/webp" />
+          <img src="/bicicletas-home.jpg" alt="Ciclismo" className="h-full w-full object-cover" />
+        </picture>
+        <div className="absolute inset-0 bg-black/40 lg:hidden" />
+      </div>
+
+      <div className="relative z-10 flex w-full items-center justify-center p-4 lg:order-1 lg:w-1/2 lg:bg-white lg:p-0">
+        <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-2xl lg:rounded-none lg:bg-transparent lg:p-12 lg:shadow-none">
+          <h1 className="text-3xl font-bold tracking-tight text-mb-ink">Bienvenido</h1>
+          <p className="mt-2 text-sm text-gray-500">
+            Iniciá sesión con Google o con tu email para acceder a tu dashboard.
+          </p>
+
+          {inApp.isInApp && (
+            <div className="mt-6">
+              <InAppBrowserWarning />
             </div>
-            <p className="text-xs text-white/40">
-              ¿Aún no tenés cuenta?{' '}
-              <Link to="/register" className="font-semibold text-white hover:text-white/80">
-                Crear cuenta
-              </Link>
-            </p>
-          </div>
-          <div className="relative overflow-hidden rounded-[32px] border border-white/10 bg-white/10 p-8 backdrop-blur">
-            <div className="absolute inset-0 -z-10 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),transparent)]" />
-            <div className="space-y-6">
-              <div className="text-center">
-                <h2 className="text-2xl font-semibold text-white">Ingresar</h2>
-                <p className="mt-1 text-sm text-white/70">
-                  Elegí tu método preferido. Nunca compartimos tu información personal.
-                </p>
-              </div>
-              <SocialAuthButtons
-                buttons={[
-                  {
-                    id: 'google',
-                    label: 'Continuar con Google',
-                    loading: Boolean(loadingProvider.google),
-                    onClick: buildOAuthHandler('google')
-                  },
-                  {
-                    id: 'facebook',
-                    label: 'Continuar con Facebook',
-                    loading: Boolean(loadingProvider.facebook),
-                    onClick: buildOAuthHandler('facebook')
-                  },
-                ]}
-              />
-              <div className="relative flex items-center gap-4 text-[11px] font-semibold uppercase tracking-[0.35em] text-white/40">
-                <span className="h-px flex-1 bg-white/10" />
-                <span>o con email</span>
-                <span className="h-px flex-1 bg-white/10" />
-              </div>
-              <div className="space-y-3">
-                <label className="text-xs font-semibold uppercase tracking-[0.28em] text-white/60">
-                  Email
-                  <input
-                    className="input mt-2 w-full border border-white/20 bg-white text-[#14212e] placeholder:text-black/60 focus:border-white/60"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    type="email"
-                    placeholder="tu@email.com"
-                  />
-                </label>
-                <label className="text-xs font-semibold uppercase tracking-[0.28em] text-white/60">
-                  Contraseña
-                  <input
-                    className="input mt-2 w-full border border-white/20 bg-white text-[#14212e] placeholder:text-black/60 focus:border-white/60"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                  />
-                </label>
-                <label className="flex items-center gap-2 text-[11px] text-white/80">
-                  <input
-                    type="checkbox"
-                    className="accent-mb-primary"
-                    checked={rememberMe}
-                    onChange={(e) => setRememberMe(e.target.checked)}
-                  />
-                  Mantenerme conectado
-                </label>
-              </div>
-              <Button
-                onClick={loginEmail}
-                className="w-full rounded-2xl bg-white text-[#14212e] hover:bg-white/90"
+          )}
+
+          <div className="mt-8 space-y-4">
+            <button
+              type="button"
+              onClick={() => void loginWithGoogle()}
+              disabled={Boolean(loadingProvider.google)}
+              className="flex h-12 w-full items-center justify-center gap-3 rounded-xl border border-gray-300 bg-white font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <svg viewBox="0 0 48 48" className="h-5 w-5" aria-hidden="true">
+                <path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303C33.648 32.657 29.164 36 24 36c-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.962 3.038l5.657-5.657C34.047 6.053 29.239 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z" />
+                <path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.655 16.108 18.961 12 24 12c3.059 0 5.842 1.154 7.962 3.038l5.657-5.657C34.047 6.053 29.239 4 24 4 16.318 4 9.656 8.337 6.306 14.691z" />
+                <path fill="#4CAF50" d="M24 44c5.134 0 9.86-1.979 13.409-5.197l-6.192-5.238C29.173 35.091 26.715 36 24 36c-5.143 0-9.61-3.317-11.268-7.946l-6.52 5.025C9.52 39.556 16.227 44 24 44z" />
+                <path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303a12.07 12.07 0 0 1-4.087 5.565h.003l6.192 5.238C36.973 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z" />
+              </svg>
+              {loadingProvider.google ? 'Conectando…' : 'Continuar con Google'}
+            </button>
+
+            <div className="relative flex items-center">
+              <div className="flex-grow border-t border-gray-200" />
+              <span className="mx-4 flex-shrink text-xs font-medium text-gray-400">O continuá con email</span>
+              <div className="flex-grow border-t border-gray-200" />
+            </div>
+
+            <form
+              className="space-y-4"
+              onSubmit={(e) => {
+                e.preventDefault()
+                void loginEmail()
+              }}
+            >
+              <label className="block text-sm font-medium text-gray-700">
+                Email
+                <input
+                  className={inputClass}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  type="email"
+                  placeholder="tu@email.com"
+                  autoComplete="email"
+                />
+              </label>
+
+              <label className="block text-sm font-medium text-gray-700">
+                Contraseña
+                <input
+                  className={inputClass}
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  autoComplete="current-password"
+                />
+              </label>
+
+              <label className="flex items-center gap-2 text-sm text-gray-600">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-gray-300 text-mb-primary focus:ring-mb-primary"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                />
+                Mantenerme conectado
+              </label>
+
+              <button
+                type="submit"
+                className="flex w-full justify-center rounded-xl border border-transparent bg-mb-primary px-4 py-3 text-sm font-bold text-white shadow-sm transition-colors hover:bg-mb-primary/90"
               >
-                Ingresar con email
-              </Button>
+                Ingresar
+              </button>
+
               <button
                 type="button"
-                onClick={handlePasswordReset}
-                className="w-full text-center text-xs font-semibold text-white/70 underline-offset-4 hover:text-white"
+                onClick={() => void handlePasswordReset()}
+                className="w-full text-center text-sm font-medium text-gray-600 underline-offset-4 hover:text-gray-900 hover:underline disabled:cursor-not-allowed disabled:opacity-60"
                 disabled={sendingReset}
               >
                 {sendingReset ? 'Enviando correo de recuperación…' : '¿Olvidaste tu contraseña?'}
               </button>
-              <p className="text-center text-xs text-white/50">
-                Al continuar aceptás nuestros{' '}
-                <a href="/terminos" className="underline hover:text-white">
-                  Términos y condiciones
-                </a>
-                .
-              </p>
-            </div>
+            </form>
+
+            <p className="text-xs text-gray-500">
+              Al continuar aceptás nuestros{' '}
+              <a href="/terminos" className="font-medium text-gray-700 underline-offset-4 hover:underline">
+                Términos y condiciones
+              </a>
+              .
+            </p>
+
+            <p className="text-sm text-gray-600">
+              ¿Aún no tenés cuenta?{' '}
+              <Link
+                to={redirectParam ? `/register?redirect=${encodeURIComponent(redirectParam)}` : '/register'}
+                className="font-semibold text-mb-primary hover:text-mb-primary/90"
+              >
+                Crear cuenta
+              </Link>
+            </p>
           </div>
         </div>
-      </Container>
+      </div>
     </div>
   )
 }

@@ -55,6 +55,8 @@ export interface Listing {
   priorityActive?: boolean
   canUpgrade?: boolean
   isTienda?: boolean
+  /** Conteo de vistas si está disponible desde API/listings_enriched */
+  viewCount?: number
 }
 
 export interface ListingQuestion {

@@ -20,6 +20,7 @@ import { buildListingSlug } from '../utils/slug'
 import { hasPaidPlan } from '../utils/plans'
 import { track, trackOncePerSession } from '../services/track'
 import { useAuth } from '../context/AuthContext'
+import HeroHome from '../components/HeroHome'
 
 import specializedLogo from '/brands/specialized.webp'
 import canyonLogo from '/brands/canyon.webp'
@@ -91,40 +92,6 @@ function buildStoreRoundRobin(listings: Listing[], storeLogos: Record<string, st
   return result
 }
 
-function HeroBackground() {
-  // Imagen LCP con soporte WebP y múltiple densidad (360/720/1520)
-  return (
-    <picture>
-      {/* Mobile: usar versión optimizada específica */}
-      <source
-        media="(max-width: 767px)"
-        type="image/webp"
-        srcSet={'/bicicletas-home_mobile.webp 946w'}
-        sizes="100vw"
-      />
-      {/* Desktop: mantener actual */}
-      <source
-        media="(min-width: 768px)"
-        type="image/webp"
-        srcSet={'/bicicletas-home.webp 1520w'}
-        sizes="100vw"
-      />
-      <img
-        src="/bicicletas-home-card-small.jpg"
-        srcSet={'/bicicletas-home-card-small.jpg 360w, /bicicletas-home-card.jpg 720w, /bicicletas-home.jpg 1520w'}
-        sizes="100vw"
-        width={1520}
-        height={1305}
-        alt=""
-        loading="eager"
-        fetchPriority="high"
-        decoding="async"
-        className="absolute inset-0 -z-20 size-full object-cover md:[object-position:50%_28%]"
-      />
-    </picture>
-  )
-}
-
 function OfferCard({ l }: { l: any }) {
   const { format, fx } = useCurrency()
   const hasOriginal = typeof l.originalPrice === 'number' && l.originalPrice > l.price
@@ -174,9 +141,9 @@ function OfferCard({ l }: { l: any }) {
   const imageSrcSet = media?.srcSet
   const imageSizes = media?.sizes || '(max-width: 1023px) 100vw, 33vw'
   return (
-    <Link to={`/listing/${slug}`} className="card-flat group flex h-full flex-col overflow-hidden">
-        <div className="relative">
-          <div className="relative aspect-[4/3] overflow-hidden rounded-2xl bg-[#0B1220]">
+	    <Link to={`/listing/${slug}`} className="card-flat group flex h-full flex-col overflow-hidden">
+	        <div className="relative">
+	          <div className="relative aspect-[4/3] overflow-hidden rounded-2xl bg-gray-100">
             {imageSrc ? (
               <>
                 <img
@@ -204,11 +171,11 @@ function OfferCard({ l }: { l: any }) {
                   }}
                 />
               </>
-            ) : (
-              <div className="absolute inset-0 flex items-center justify-center text-xs font-medium uppercase tracking-wide text-white/50">
-                Sin imagen
-              </div>
-            )}
+	            ) : (
+	              <div className="absolute inset-0 flex items-center justify-center text-xs font-medium uppercase tracking-wide text-gray-500">
+	                Sin imagen
+	              </div>
+	            )}
         </div>
         {hasOriginal && (
           <span className="absolute top-2 left-2 bg-mb-secondary text-white text-xs rounded-full px-2 py-0.5">
@@ -246,15 +213,15 @@ function BrandLogo({
   const [err, setErr] = useState(false)
   return (
     <button
-      onClick={onClick}
-      className={`rounded-2xl border transition transform hover:scale-[1.03] bg-white p-4 h-20 grid place-content-center
-                  ${
-                    active
-                      ? 'border-[#14212e] ring-2 ring-[#14212e]/40 bg-white'
-                      : 'border-white/60 bg-white/80 hover:border-[#14212e]/30 hover:bg-white'
-                  } backdrop-blur`}
-      title={brand.name} aria-pressed={active}
-    >
+	      onClick={onClick}
+	      className={`rounded-2xl border transition transform hover:scale-[1.03] bg-white p-4 h-20 grid place-content-center
+	                  ${
+	                    active
+	                      ? 'border-[#14212e] ring-2 ring-[#14212e]/20 bg-white'
+	                      : 'border-gray-200 bg-white hover:border-[#14212e]/25 hover:bg-white'
+	                  } backdrop-blur`}
+	      title={brand.name} aria-pressed={active}
+	    >
       {!err ? (
         <img
           src={BRAND_LOGOS[brand.slug]}
@@ -263,17 +230,17 @@ function BrandLogo({
           height={32}
           loading="lazy"
           decoding="async"
-          onError={(e) => {
-            try {
-              const el = e.currentTarget as HTMLImageElement
-              if (el.src.endsWith('.webp')) {
-                el.src = el.src.replace(/\.webp$/, '.png')
-                return
-              }
-            } catch {}
-            setErr(true)
-          }}
-        />
+	          onError={(e) => {
+	            try {
+	              const el = e.currentTarget as HTMLImageElement
+	              if (el.src.endsWith('.webp')) {
+	                el.src = el.src.replace(/\.webp$/, '.png')
+	                return
+	              }
+	            } catch { /* noop */ }
+	            setErr(true)
+	          }}
+	        />
       ) : (
         <span className="px-3 py-1 text-sm font-semibold">{brand.name}</span>
       )}
@@ -283,22 +250,22 @@ function BrandLogo({
 
 function Stat({ n, t }: { n: string; t: string }) {
   return (
-    <div className="rounded-xl2 border border-white/20 bg-white/10 p-4 backdrop-blur">
-      <div className="text-2xl font-extrabold text-white">{n}</div>
-      <div className="text-sm text-white/70">{t}</div>
+    <div className="rounded-xl2 border border-gray-200 bg-white p-4 shadow-sm">
+      <div className="text-2xl font-extrabold text-gray-900">{n}</div>
+      <div className="text-sm text-gray-600">{t}</div>
     </div>
   )
 }
 
 function Step({ icon, t, d }: { icon: ReactNode; t: string; d: string }) {
   return (
-    <div className="group relative rounded-2xl border border-white/10 bg-white/5 p-6 text-center backdrop-blur transition hover:border-white/20 hover:bg-white/10">
+    <div className="group relative rounded-2xl border border-gray-200 bg-white p-6 text-center shadow-sm transition hover:border-gray-300 hover:shadow-md">
       <div className="mx-auto grid size-12 place-content-center rounded-xl bg-gradient-to-br from-[#0ea5e9] via-[#2563eb] to-[#1d4ed8] text-white shadow-[0_8px_20px_rgba(37,99,235,0.35)]">
         {icon}
       </div>
-      <h4 className="mt-3 font-semibold text-white">{t}</h4>
-      <p className="mt-2 text-sm text-white/75">{d}</p>
-      <div className="pointer-events-none absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 ring-1 ring-inset ring-white/10 transition" />
+      <h4 className="mt-3 font-semibold text-gray-900">{t}</h4>
+      <p className="mt-2 text-sm text-gray-600">{d}</p>
+      <div className="pointer-events-none absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 ring-1 ring-inset ring-[#14212e]/10 transition" />
     </div>
   )
 }
@@ -515,73 +482,30 @@ export default function Home() {
     return () => { active = false }
   }, [listings.map((l) => l.sellerId || '').join(',')])
 
+  const heroOfferListing = useMemo(() => {
+    const candidates = listings.filter((l) => typeof l.originalPrice === 'number' && l.originalPrice > l.price && l.originalPrice > 0)
+    if (!candidates.length) return null
+    return candidates.sort((a, b) => (b.originalPrice! - b.price) - (a.originalPrice! - a.price))[0] || null
+  }, [listings])
+
+  const heroStoreListing = useMemo(() => {
+    const candidates = listings.filter((l) => Boolean(l.sellerId && storeLogos[l.sellerId]))
+    return candidates[0] || null
+  }, [listings, storeLogos])
+
+  const heroStoreLogoUrl = heroStoreListing?.sellerId ? (storeLogos[heroStoreListing.sellerId] || null) : null
+
   return (
     <div
-      className="relative isolate overflow-hidden text-white"
-      style={{ background: '#14212e' }}
+      className="relative isolate overflow-hidden text-gray-900"
     >
       {/* HERO */}
-      <section className="relative overflow-hidden border-b border-white/10 text-white">
-        {/* Hero como background CSS para no contar como LCP */}
-        <HeroBackground />
-        <div className="absolute inset-0 -z-10 bg-[#14212e]/60" />
-        <div className="absolute inset-0 -z-10 bg-[radial-gradient(1200px_600px_at_-20%_-10%,rgba(255,255,255,0.18),transparent_70%)]" />
-        <div className="absolute inset-0 -z-10 bg-[radial-gradient(900px_520px_at_110%_10%,rgba(20,33,46,0.28),transparent_78%)]" />
-        <Container>
-          <div className="relative mx-auto max-w-4xl py-10 text-center md:py-14">
-            <span className="inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.4em] text-white/70">
-              Comunidad ciclista
-            </span>
-            <h1 className="mt-5 text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl md:text-5xl">
-              El nuevo lugar para comprar y vender bicicletas en Argentina.
-            </h1>
-            <p className="mx-auto mt-3 max-w-2xl text-base text-white/80 md:text-lg">
-              Publicá en minutos, destacá tu aviso y conectá directo con compradores. Sin comisiones por venta.
-            </p>
-            <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-              <Button
-                to="/publicar"
-                className="bg-gradient-to-r from-[#0ea5e9] via-[#2563eb] to-[#1d4ed8] text-white shadow-[0_14px_40px_rgba(37,99,235,0.45)] hover:brightness-110"
-              >
-                <span>Publicar bicicleta</span>
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  className="h-4 w-4"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={1.8}
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14m-6-6 6 6-6 6" />
-                </svg>
-              </Button>
-              <Link to="/marketplace" className="btn bg-[#14212e] text-white shadow-[0_14px_40px_rgba(20,33,46,0.35)] hover:bg-[#1b2f3f]">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  className="h-4 w-4 text-white"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={1.8}
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="m17.5 17.5-4-4m1-3.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0Z" />
-                </svg>
-                <span>Explorar bicicletas</span>
-              </Link>
-            </div>
-            <div className="pointer-events-none absolute inset-x-0 -bottom-6 mx-auto h-px max-w-3xl bg-gradient-to-r from-transparent via-white/40 to-transparent" />
-          </div>
-        </Container>
-      </section>
+      <HeroHome offerListing={heroOfferListing} storeListing={heroStoreListing} storeLogoUrl={heroStoreLogoUrl} />
 
       {/* BICICLETAS DESTACADAS */}
       {featuredListings.length > 0 && (
-        <section className="relative isolate overflow-hidden bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] pt-10 pb-6">
-          <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
-            <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
-            <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
-          </div>
-          <Container className="text-white">
+        <section className="relative py-1 border-b border-gray-200/80">
+          <Container>
             <HorizontalSlider
               title="Bicicletas destacadas"
               subtitle="Avisos con planes Premium o Básico activos"
@@ -589,19 +513,15 @@ export default function Home() {
               maxItems={24}
               initialLoad={8}
               renderCard={(l: any, idx?: number) => <ListingCard l={l} storeLogoUrl={storeLogos[l.sellerId] || null} priority={(idx ?? 0) < 4} likeCount={likesFeatured[l.id]} />}
-              tone="dark"
+              tone="light"
             />
           </Container>
         </section>
       )}
 
       {routeListings.length > 0 && (
-        <section className="relative isolate overflow-hidden bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] pt-8 pb-8">
-          <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
-            <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
-            <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
-          </div>
-          <Container className="text-white">
+        <section className="relative py-1 border-b border-gray-200/80">
+          <Container>
             <HorizontalSlider
               title="Bicicletas de ruta"
               subtitle="Modelos listos para el asfalto y las largas distancias"
@@ -611,19 +531,15 @@ export default function Home() {
               renderCard={(l: any, idx?: number) => (
                 <ListingCard l={l} storeLogoUrl={storeLogos[l.sellerId] || null} priority={(idx ?? 0) < 4} likeCount={likesRoute[l.id]} />
               )}
-              tone="dark"
+              tone="light"
             />
           </Container>
         </section>
       )}
 
       {mtbListings.length > 0 && (
-        <section className="relative isolate overflow-hidden bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] pt-6 pb-8">
-          <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
-            <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
-            <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
-          </div>
-          <Container className="text-white">
+        <section className="relative py-1 border-b border-gray-200/80">
+          <Container>
             <HorizontalSlider
               title="Bicicletas de MTB"
               subtitle="Rigidas y doble suspensión para dominar los senderos"
@@ -633,19 +549,15 @@ export default function Home() {
               renderCard={(l: any, idx?: number) => (
                 <ListingCard l={l} storeLogoUrl={storeLogos[l.sellerId] || null} priority={(idx ?? 0) < 4} likeCount={likesMtb[l.id]} />
               )}
-              tone="dark"
+              tone="light"
             />
           </Container>
         </section>
       )}
 
       {triListings.length > 0 && (
-        <section className="relative isolate overflow-hidden bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] pt-6 pb-8">
-          <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
-            <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
-            <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
-          </div>
-          <Container className="text-white">
+        <section className="relative py-1 border-b border-gray-200/80">
+          <Container>
             <HorizontalSlider
               title="Bicicletas de triatlón"
               subtitle="Geometría y aerodinámica pensadas para ganar tiempo"
@@ -655,19 +567,15 @@ export default function Home() {
               renderCard={(l: any, idx?: number) => (
                 <ListingCard l={l} storeLogoUrl={storeLogos[l.sellerId] || null} priority={(idx ?? 0) < 4} likeCount={likesTri[l.id]} />
               )}
-              tone="dark"
+              tone="light"
             />
           </Container>
         </section>
       )}
 
       {officialStoreListings.length > 0 && (
-        <section className="relative isolate overflow-hidden bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] pt-6 pb-10">
-          <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
-            <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
-            <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
-          </div>
-          <Container className="text-white">
+        <section className="relative py-1 border-b border-gray-200/80">
+          <Container>
             <HorizontalSlider
               title="Tiendas oficiales"
               subtitle="Productos seleccionados de tiendas verificadas"
@@ -677,20 +585,16 @@ export default function Home() {
               renderCard={(l: any, idx?: number) => (
                 <ListingCard l={l} storeLogoUrl={storeLogos[l.sellerId] || null} priority={(idx ?? 0) < 4} likeCount={likesStores[l.id]} />
               )}
-              tone="dark"
+              tone="light"
             />
           </Container>
         </section>
       )}
 
       {/* ÚLTIMAS PUBLICADAS */}
-      <section id="explorar" className="relative isolate overflow-hidden bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] pt-8 pb-10">
-        <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
-          <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
-          <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
-        </div>
-        <Container className="text-white">
-          <div className="flex items-center justify-between mb-4 text-white">
+      <section id="explorar" className="relative py-1 border-b border-gray-200/80">
+        <Container>
+          <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold">Últimas publicadas</h2>
           </div>
 
@@ -705,7 +609,7 @@ export default function Home() {
               maxItems={20}
               initialLoad={8}
               renderCard={(l:any, idx?: number) => <ListingCard l={l} storeLogoUrl={storeLogos[l.sellerId] || null} priority={(idx ?? 0) < 4} likeCount={likesRecent[l.id]} />}
-              tone="dark"
+              tone="light"
             />
           ) : (
             <EmptyState />
@@ -714,12 +618,8 @@ export default function Home() {
       </section>
 
       {/* CATEGORÍAS RÁPIDAS (Bicis / Accesorios / Indumentaria / Nutrición) */}
-      <section className="relative isolate overflow-hidden bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] pt-2 pb-8">
-        <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
-          <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
-          <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
-        </div>
-        <Container className="text-white">
+      <section className="relative py-1 border-b border-gray-200/80">
+        <Container>
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-lg font-semibold">Buscá por categoría</h3>
           </div>
@@ -761,7 +661,7 @@ export default function Home() {
               <Link
                 key={card.key}
                 to={card.to}
-                className="relative w-full overflow-hidden rounded-3xl border-2 border-white/15 bg-white/5 transition hover:border-white/30 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#14212e]"
+                className="relative w-full overflow-hidden rounded-3xl border border-gray-200 bg-white transition hover:border-gray-300 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-mb-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-50"
               >
                 <div className="relative aspect-square sm:aspect-[17/5]">
                   <picture className="block h-full w-full">
@@ -783,13 +683,13 @@ export default function Home() {
       </section>
 
       {/* MARCAS con logos clickeables */}
-      <section className="bg-[#1d2f41] py-12" style={{ contentVisibility: 'auto' as any }}>
-        <Container className="text-white">
-          <div className="flex items-center justify-between mb-4 text-white">
+      <section className="py-10" style={{ contentVisibility: 'auto' as any }}>
+        <Container>
+          <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold">Marcas destacadas</h3>
             {brand && (
               <button
-                className="inline-flex items-center gap-2 rounded-xl2 border border-white/40 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-white/10"
+                className="inline-flex items-center gap-2 rounded-xl2 border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:border-gray-300 hover:bg-gray-50"
                 onClick={clearBrand}
               >
                 Limpiar marca
@@ -810,14 +710,14 @@ export default function Home() {
       </section>
 
       {/* ¿CÓMO FUNCIONA? */}
-      <section className="section-ribbon py-14 text-white" style={{ contentVisibility: 'auto' as any }}>
-        <Container className="text-white">
+      <section className="section-soft py-10" style={{ contentVisibility: 'auto' as any }}>
+        <Container>
           <div className="text-center mb-8">
             <h2 className="text-2xl font-semibold">Cómo funciona</h2>
-            <p className="text-sm text-white/70">Publicá en 4 pasos, sin vueltas.</p>
+            <p className="text-sm text-gray-600">Publicá en 4 pasos, sin vueltas.</p>
           </div>
           <div className="relative">
-            <div className="pointer-events-none absolute left-0 right-0 top-1/2 hidden h-px -translate-y-1/2 bg-gradient-to-r from-transparent via-white/20 to-transparent md:block" />
+            <div className="pointer-events-none absolute left-0 right-0 top-1/2 hidden h-px -translate-y-1/2 bg-gradient-to-r from-transparent via-[#14212e]/10 to-transparent md:block" />
             <div className="grid gap-4 md:grid-cols-4 items-stretch">
               <Step
                 icon={(

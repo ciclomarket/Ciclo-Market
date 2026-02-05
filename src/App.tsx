@@ -20,6 +20,7 @@ const VerifyEmail = lazyWithRetry(() => import('./pages/Auth/VerifyEmail'))
 const ResetPassword = lazyWithRetry(() => import('./pages/Auth/ResetPassword'))
 const Help = lazyWithRetry(() => import('./pages/Help'))
 const HowToPublish = lazyWithRetry(() => import('./pages/HowToPublish'))
+const CreateListing = lazyWithRetry(() => import('./pages/CreateListing'))
 const OfficialStore = lazyWithRetry(() => import('./pages/OfficialStore'))
 const Store = lazyWithRetry(() => import('./pages/Store'))
 const Tiendas = lazyWithRetry(() => import('./pages/Tiendas'))
@@ -438,7 +439,7 @@ export default function App() {
           <CurrencyProvider>
             <ToastProvider>
               <CompareProvider>
-                  <div className="min-h-screen flex flex-col">
+                  <div className="min-h-screen flex flex-col bg-gray-50 text-gray-900">
                   <SeoHead {...seoConfig} />
                   <GlobalJsonLd />
                   {!isInstagramLanding && <Header />}
@@ -476,6 +477,7 @@ export default function App() {
                         path="/publicar/nueva"
                         element={<PublishNew />}
                       />
+                      <Route path="/publicar/crear" element={<CreateListing />} />
                       {/* Alias legado */}
                       <Route path="/publish" element={<Navigate to="/publicar" replace />} />
                       <Route path="/publish/new" element={<Navigate to="/publicar" replace />} />

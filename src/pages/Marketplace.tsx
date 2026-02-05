@@ -66,29 +66,6 @@ const MULTI_FILTER_LABELS: Record<MultiFilterKey, string> = {
   , location: 'Ubicación',
   transmissionType: 'Tipo de transmisión'
 }
-const CATEGORY_CARDS: Array<{ cat: Cat; label: string; description: string; image: string; imageMobile: string }> = [
-  {
-    cat: 'Todos',
-    label: 'Bicicletas',
-    description: 'Solo bicicletas',
-    image: '/design/Banners/1.webp',
-    imageMobile: '/design/Banners-Mobile/1.webp'
-  },
-  {
-    cat: 'Accesorios',
-    label: 'Accesorios',
-    description: 'Componentes y upgrades',
-    image: '/design/Banners/2.webp',
-    imageMobile: '/design/Banners-Mobile/2.webp'
-  },
-  {
-    cat: 'Indumentaria',
-    label: 'Indumentaria',
-    description: 'Ropa técnica y casual',
-    image: '/design/Banners/3.webp',
-    imageMobile: '/design/Banners-Mobile/3.webp'
-  }
-]
 
 type CategorySeoKey = Cat | 'Deals'
 
@@ -628,7 +605,7 @@ function MultiSelectContent({ options, selected, onChange, close, placeholder = 
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder={placeholder}
-          className="input h-10 w-full rounded-full border border-white/10 bg-white px-4 text-sm text-[#14212e] placeholder:text-[#14212e]/60 focus:outline-none focus:ring-2 focus:ring-[#14212e]/20"
+          className="input h-10 w-full rounded-full border border-gray-200 bg-white px-4 text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-mb-primary/25"
         />
       ) : null}
       <div className="max-h-56 overflow-y-auto pr-1">
@@ -639,12 +616,12 @@ function MultiSelectContent({ options, selected, onChange, close, placeholder = 
               const checked = selectedSet.has(normalized)
               return (
                 <li key={option}>
-                  <label className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 hover:bg-white/10">
+                  <label className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 hover:bg-gray-50">
                     <input
                       type="checkbox"
                       checked={checked}
                       onChange={() => toggleOption(option)}
-                      className="h-4 w-4 accent-white"
+                      className="h-4 w-4 accent-mb-primary"
                     />
                     <span>{option}</span>
                   </label>
@@ -653,7 +630,7 @@ function MultiSelectContent({ options, selected, onChange, close, placeholder = 
             })}
           </ul>
         ) : (
-          <div className="py-4 text-sm text-white/60">Sin coincidencias.</div>
+          <div className="py-4 text-sm text-gray-500">Sin coincidencias.</div>
         )}
       </div>
       <div className="flex items-center justify-between pt-1 text-sm">
@@ -663,11 +640,11 @@ function MultiSelectContent({ options, selected, onChange, close, placeholder = 
             onChange([])
             close()
           }}
-          className="text-white/70 hover:text-white"
+          className="text-gray-600 hover:text-gray-900"
         >
           Limpiar
         </button>
-        <button type="button" onClick={close} className="rounded-full bg-white px-3 py-1 text-[#14212e] hover:bg-white/90">
+        <button type="button" onClick={close} className="rounded-full bg-mb-primary px-3 py-1 text-white hover:opacity-90">
           Listo
         </button>
       </div>
@@ -704,8 +681,8 @@ function SizeSelectContent({ options, selected, onChange, close }: { options: st
         {letterOptions.map((opt) => {
           const active = normalizedSelected.has(normalizeText(opt))
           return (
-            <label key={opt} className={`flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 hover:bg-white/10 ${active ? 'bg-white/10' : ''}`}>
-              <input type="checkbox" className="h-4 w-4 accent-white" checked={active} onChange={() => toggle(opt)} />
+            <label key={opt} className={`flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 hover:bg-gray-50 ${active ? 'bg-gray-50' : ''}`}>
+              <input type="checkbox" className="h-4 w-4 accent-mb-primary" checked={active} onChange={() => toggle(opt)} />
               <span>{labelFor(opt)}</span>
             </label>
           )
@@ -713,15 +690,15 @@ function SizeSelectContent({ options, selected, onChange, close }: { options: st
       </div>
       {otherOptions.length ? (
         <>
-          <div className="mt-1 text-xs text-white/60">Otros talles</div>
+          <div className="mt-1 text-xs text-gray-500">Otros talles</div>
           <div className="max-h-40 overflow-y-auto pr-1">
             <ul className="flex flex-col gap-2">
               {otherOptions.map((opt) => {
                 const active = normalizedSelected.has(normalizeText(opt))
                 return (
                   <li key={opt}>
-                    <label className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 hover:bg-white/10">
-                      <input type="checkbox" className="h-4 w-4 accent-white" checked={active} onChange={() => toggle(opt)} />
+                    <label className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 hover:bg-gray-50">
+                      <input type="checkbox" className="h-4 w-4 accent-mb-primary" checked={active} onChange={() => toggle(opt)} />
                       <span>{opt}</span>
                     </label>
                   </li>
@@ -732,8 +709,8 @@ function SizeSelectContent({ options, selected, onChange, close }: { options: st
         </>
       ) : null}
       <div className="flex items-center justify-between pt-1 text-sm">
-        <button type="button" onClick={() => { onChange([]); close() }} className="text-white/70 hover:text-white">Limpiar</button>
-        <button type="button" onClick={close} className="rounded-full bg-white px-3 py-1 text-[#14212e] hover:bg-white/90">Listo</button>
+        <button type="button" onClick={() => { onChange([]); close() }} className="text-gray-600 hover:text-gray-900">Limpiar</button>
+        <button type="button" onClick={close} className="rounded-full bg-mb-primary px-3 py-1 text-white hover:opacity-90">Listo</button>
       </div>
     </div>
   )
@@ -793,13 +770,15 @@ function PriceFilterContent({ min, max, bounds, currency, boundsByCur, onCurrenc
     <div className="flex flex-col gap-3 text-sm">
       <div className="flex items-center justify-end gap-2">
         {onCurrencyChange ? (
-          <div className="inline-flex items-center rounded-full border border-white/15 bg-white/5 p-0.5">
+          <div className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 p-0.5">
             {(['ARS','USD'] as const).map((cur) => (
               <button
                 key={cur}
                 type="button"
                 onClick={() => { const next = localCur === cur ? undefined : cur; setLocalCur(next); onCurrencyChange(next) }}
-                className={`px-2 py-1 text-xs rounded-full ${localCur === cur ? 'bg-white text-[#14212e]' : 'text-white/70 hover:text-white'}`}
+                className={`px-2 py-1 text-xs rounded-full transition ${
+                  localCur === cur ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900 hover:bg-white/60'
+                }`}
               >
                 {cur}
               </button>
@@ -807,31 +786,31 @@ function PriceFilterContent({ min, max, bounds, currency, boundsByCur, onCurrenc
           </div>
         ) : null}
       </div>
-      <div className="text-xs text-white/60">
+      <div className="text-xs text-gray-500">
         Rango disponible: {effBounds.min ? `${symbol}${localCur === 'USD' ? effBounds.min.toLocaleString('en-US') : effBounds.min.toLocaleString('es-AR')}` : '—'} – {effBounds.max ? `${symbol}${localCur === 'USD' ? effBounds.max.toLocaleString('en-US') : effBounds.max.toLocaleString('es-AR')}` : '—'}
       </div>
-      <div className="text-[11px] text-white/50">
+      <div className="text-[11px] text-gray-400">
         Conversión: 1 USD = {fx.toLocaleString('es-AR')} ARS
       </div>
       <div className="grid grid-cols-2 gap-3">
         <label className="flex flex-col gap-1">
-          <span className="text-xs text-white/60">Desde</span>
+          <span className="text-xs text-gray-500">Desde</span>
           <input
             type="number"
             min={0}
             value={minValue}
             onChange={(event) => setMinValue(event.target.value)}
-            className="input h-10 rounded-full border border-white/10 bg-white px-3 text-[#14212e] focus:outline-none focus:ring-2 focus:ring-[#14212e]/20"
+            className="input h-10 rounded-full border border-gray-200 bg-white px-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-mb-primary/25"
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-xs text-white/60">Hasta</span>
+          <span className="text-xs text-gray-500">Hasta</span>
           <input
             type="number"
             min={0}
             value={maxValue}
             onChange={(event) => setMaxValue(event.target.value)}
-            className="input h-10 rounded-full border border-white/10 bg-white px-3 text-[#14212e] focus:outline-none focus:ring-2 focus:ring-[#14212e]/20"
+            className="input h-10 rounded-full border border-gray-200 bg-white px-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-mb-primary/25"
           />
         </label>
       </div>
@@ -842,7 +821,7 @@ function PriceFilterContent({ min, max, bounds, currency, boundsByCur, onCurrenc
             onClear()
             close()
           }}
-          className="text-white/70 hover:text-white"
+          className="text-gray-600 hover:text-gray-900"
         >
           Limpiar
         </button>
@@ -850,14 +829,14 @@ function PriceFilterContent({ min, max, bounds, currency, boundsByCur, onCurrenc
           <button
             type="button"
             onClick={close}
-            className="rounded-full border border-white/20 px-3 py-1 text-white hover:border-white/40"
+            className="rounded-full border border-gray-300 px-3 py-1 text-gray-700 hover:bg-gray-50"
           >
             Cancelar
           </button>
           <button
             type="button"
             onClick={apply}
-            className="rounded-full bg-white px-3 py-1 font-semibold text-[#14212e] hover:bg-white/90"
+            className="rounded-full bg-mb-primary px-3 py-1 font-semibold text-white hover:opacity-90"
           >
             Aplicar
           </button>
@@ -876,16 +855,16 @@ type DealFilterContentProps = {
 function DealFilterContent({ active, onToggle, close }: DealFilterContentProps) {
   return (
     <div className="flex flex-col gap-3 text-sm">
-      <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2 hover:border-white/30">
+      <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 hover:border-gray-300">
         <input
           type="checkbox"
           checked={active}
           onChange={(event) => onToggle(event.target.checked)}
-          className="h-4 w-4 accent-white"
+          className="h-4 w-4 accent-mb-primary"
         />
         <div>
-          <div className="font-medium text-white">Solo con descuento</div>
-          <div className="text-xs text-white/60 whitespace-normal break-words leading-snug">Publicaciones con precio rebajado sobre el original.</div>
+          <div className="font-medium text-gray-900">Solo con descuento</div>
+          <div className="text-xs text-gray-600 whitespace-normal break-words leading-snug">Publicaciones con precio rebajado sobre el original.</div>
         </div>
       </label>
       <button
@@ -894,7 +873,7 @@ function DealFilterContent({ active, onToggle, close }: DealFilterContentProps) 
           onToggle(false)
           close()
         }}
-        className="self-end rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#14212e] hover:bg-white/90"
+        className="self-end rounded-full bg-mb-primary px-3 py-1 text-xs font-semibold text-white hover:opacity-90"
       >
         Listo
       </button>
@@ -911,16 +890,16 @@ type StoreFilterContentProps = {
 function StoreFilterContent({ active, onToggle, close }: StoreFilterContentProps) {
   return (
     <div className="flex flex-col gap-3 text-sm">
-      <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2 hover:border-white/30">
+      <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 hover:border-gray-300">
         <input
           type="checkbox"
           checked={active}
           onChange={(event) => onToggle(event.target.checked)}
-          className="h-4 w-4 accent-white"
+          className="h-4 w-4 accent-mb-primary"
         />
         <div>
-          <div className="font-medium text-white">Solo tiendas oficiales</div>
-          <div className="text-xs text-white/60 whitespace-normal break-words leading-snug">Ver solo publicaciones de tiendas verificadas.</div>
+          <div className="font-medium text-gray-900">Solo tiendas oficiales</div>
+          <div className="text-xs text-gray-600 whitespace-normal break-words leading-snug">Ver solo publicaciones de tiendas verificadas.</div>
         </div>
       </label>
       <button
@@ -929,7 +908,7 @@ function StoreFilterContent({ active, onToggle, close }: StoreFilterContentProps
           onToggle(false)
           close()
         }}
-        className="self-end rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#14212e] hover:bg-white/90"
+        className="self-end rounded-full bg-mb-primary px-3 py-1 text-xs font-semibold text-white hover:opacity-90"
       >
         Listo
       </button>
@@ -953,6 +932,10 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
   const navType = useNavigationType()
   const { fx } = useCurrency()
   const siteOrigin = useMemo(() => resolveSiteOrigin(), [])
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return window.matchMedia('(max-width: 639px)').matches
+  })
   const [searchParams, setSearchParams] = useSearchParams()
   const paramsKey = searchParams.toString()
   const filters = useMemo(() => paramsToFilters(searchParams), [paramsKey])
@@ -975,6 +958,15 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [mobileSortOpen, setMobileSortOpen] = useState(false)
   const [likeCounts, setLikeCounts] = useState<Record<string, number>>({})
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const mq = window.matchMedia('(max-width: 639px)')
+    const onChange = () => setIsMobile(mq.matches)
+    onChange()
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
 
   // Control manual de restauración de scroll
   useEffect(() => {
@@ -2049,120 +2041,31 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
   const seoDetailsSummary = categoryContent.summary
   const seoDetailsCopy = categoryContent.copy
 
+  const headerH1 = useMemo(() => {
+    if (headingTitle) return headingTitle
+    if (effectiveDealActive && effectiveCat === 'Todos') return 'Ofertas destacadas en Argentina'
+    const base = CATEGORY_TITLE_MAP[effectiveCat] ?? 'Bicicletas usadas y nuevas'
+    return `${base} en Argentina`
+  }, [headingTitle, effectiveDealActive, effectiveCat])
+
   return (
     <>
       <SeoHead {...seoConfig} />
-      <section className="relative overflow-hidden text-white">
-        <img
-          src="/hero-market.jpg"
-          alt="Ciclista de montaña"
-          className="absolute inset-0 h-full w-full object-cover"
-        />
-        <div className="absolute inset-0 bg-[#0b131c]/85" />
-        <div className="absolute inset-0 bg-[radial-gradient(900px_520px_at_15%_10%,rgba(255,255,255,0.18),transparent_70%)] opacity-80" />
-        <div className="absolute inset-0 bg-[radial-gradient(980px_540px_at_120%_0%,rgba(20,33,46,0.26),transparent_78%)] opacity-80" />
-        <div className="relative">
-          <Container>
-            <div className="relative mx-auto max-w-4xl py-10 text-center md:py-14">
-              <span className="inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.4em] text-white/70">
-                Marketplace vivo
-              </span>
-              <h1 className="mt-5 text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl md:text-5xl">
-                Las bicicletas se reinventan, vos también.
+      <section className="bg-gray-50 text-gray-900">
+        <Container className="!py-0 pt-10 md:pt-12 pb-0 w-full bg-transparent">
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <h1 className="text-3xl font-extrabold text-mb-ink tracking-tight">
+                {headerH1}
               </h1>
-              <p className="mt-3 mx-auto max-w-2xl text-base text-white/80 md:text-lg">
-                Filtrá por disciplina, marca o presupuesto. Vendé en minutos y conectá directo con compradores verificados.
-              </p>
-              <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-                <Link
-                  to="/publicar"
-                  className="btn bg-gradient-to-r from-[#0ea5e9] via-[#2563eb] to-[#1d4ed8] text-white shadow-[0_14px_40px_rgba(37,99,235,0.45)] hover:brightness-110"
-                >
-                  <span>Publicar bicicleta</span>
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14m-6-6 6 6-6 6" />
-                  </svg>
-                </Link>
-                <a href="#listings" className="btn bg-[#14212e] text-white shadow-[0_14px_40px_rgba(20,33,46,0.35)] hover:bg-[#1b2f3f]">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="m17.5 17.5-4-4m1-3.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0Z" />
-                  </svg>
-                  <span>Explorar bicicletas</span>
-                </a>
-              </div>
-              <div className="pointer-events-none absolute inset-x-0 -bottom-6 mx-auto h-px max-w-3xl bg-gradient-to-r from-transparent via-white/40 to-transparent" />
             </div>
-          </Container>
-        </div>
+          </div>
+        </Container>
       </section>
 
-      <section id="listings" className="relative isolate overflow-hidden bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] text-white">
-        <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
-          <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
-          <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
-        </div>
-        <Container className="text-white">
-          <div className="py-10 space-y-8">
-
-            {forcedCat || (allowedCats && allowedCats.length) ? null : (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
-              {CATEGORY_CARDS.map((card) => {
-                const isActive = card.cat === 'Todos'
-                  ? (filters.cat === 'Todos' && filters.bikes === '1')
-                  : (filters.cat === card.cat)
-                return (
-                  <button
-                    key={card.cat}
-                    type="button"
-                    onClick={() => {
-                      if (card.cat === 'Todos') {
-                        setFilters({ cat: 'Todos', bikes: '1' })
-                      } else {
-                        setFilters({ cat: card.cat, bikes: undefined })
-                      }
-                    }}
-                    className={`relative w-full overflow-hidden rounded-3xl border-2 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#14212e] ${
-                      isActive ? 'border-white shadow-lg' : 'border-white/15 bg-white/5 hover:border-white/30 hover:shadow-md'
-                    }`}
-                    aria-pressed={isActive}
-                  >
-                    <div className="relative aspect-square sm:aspect-[17/5]">
-                      <picture className="block h-full w-full">
-                        <source media="(max-width: 640px)" srcSet={card.imageMobile} />
-                        <img src={card.image} alt={card.label} className="h-full w-full object-cover" loading="lazy" decoding="async" />
-                      </picture>
-                      <div className="absolute inset-0 bg-gradient-to-t from-[#050c18]/85 via-transparent to-transparent" aria-hidden />
-                      <div className="absolute inset-0 flex items-end p-2 sm:p-4">
-                        <div className="space-y-1 text-left">
-                          <span className="text-sm font-semibold text-white sm:text-lg drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">{card.label}</span>
-                          <span className="hidden text-xs text-white/80 sm:block">{card.description}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </button>
-                )
-              })}
-              {/* Nutrición tile */}
-              <Link
-                to="/marketplace?cat=Nutrici%C3%B3n"
-                className="relative w-full overflow-hidden rounded-3xl border-2 border-white/15 bg-white/5 transition hover:border-white/30 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#14212e]"
-              >
-                <div className="relative aspect-square sm:aspect-[17/5]">
-                  <picture className="block h-full w-full">
-                    <source media="(max-width: 640px)" srcSet="/design/Banners-Mobile/4.webp" />
-                    <img src="/design/Banners/4.webp" alt="Nutrición" className="h-full w-full object-cover" loading="lazy" decoding="async" />
-                  </picture>
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#050c18]/85 via-transparent to-transparent" aria-hidden />
-                    <div className="absolute inset-0 flex items-end p-2 sm:p-4">
-                      <div className="space-y-1 text-left">
-                      <span className="text-sm font-semibold text-white sm:text-lg drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">Nutrición</span>
-                      <span className="hidden text-xs text-white/80 sm:block">Energía e hidratación</span>
-                    </div>
-                  </div>
-                </div>
-              </Link>
-            </div>
-            )}
+      <section id="listings" className="relative isolate overflow-hidden bg-gray-50 text-gray-900">
+        <Container className="!py-0">
+          <div className="pt-4 pb-6 space-y-4">
 
             <div className="sm:hidden">
               <div className="flex w-full overflow-hidden rounded-2xl bg-white text-[#14212e] shadow">
@@ -2184,7 +2087,7 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
               </div>
             </div>
 
-            <div className="sm:hidden text-xs text-white/70">{(serverMode && serverTotal != null) ? serverTotal : filtered.length} resultados</div>
+            <div className="sm:hidden text-xs text-gray-600">{(serverMode && serverTotal != null) ? serverTotal : filtered.length} resultados</div>
             {user ? (
               <div className="sm:hidden mt-2">
                 <button
@@ -2199,16 +2102,16 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
 
             <div className="space-y-4">
               {breadcrumbs && breadcrumbs.length ? (
-                <nav aria-label="Miga de pan" className="text-xs text-white/60">
+                <nav aria-label="Miga de pan" className="text-xs text-gray-500">
                   <ol className="flex items-center gap-2">
                     {breadcrumbs.map((c, idx) => (
                       <li key={`${c.label}-${idx}`} className="flex items-center gap-2">
                         {c.to ? (
-                          <Link to={c.to} className="hover:text-white/80">{c.label}</Link>
+                          <Link to={c.to} className="hover:text-gray-700">{c.label}</Link>
                         ) : (
-                          <span className="text-white/70">{c.label}</span>
+                          <span className="text-gray-700">{c.label}</span>
                         )}
-                        {idx < breadcrumbs.length - 1 ? (<span className="text-white/30">›</span>) : null}
+                        {idx < breadcrumbs.length - 1 ? (<span className="text-gray-300">›</span>) : null}
                       </li>
                     ))}
                   </ol>
@@ -2217,196 +2120,190 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
               {headingTitle ? (
                 <h2 className="text-xl font-semibold">{headingTitle}</h2>
               ) : null}
-              <div className="hidden flex-col gap-3 sm:flex lg:flex-row lg:items-center lg:justify-between">
-                <div className="text-sm text-white/70">{(serverMode && serverTotal != null) ? serverTotal : filtered.length} resultados</div>
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="text-white/60">Ordenar</span>
-                  <select
-                    value={sortMode}
-                    onChange={(event) => setSortMode(event.target.value as 'relevance' | 'newest' | 'asc' | 'desc')}
-                    className="input w-48 rounded-full border border-white/10 bg-white/90 text-sm text-[#14212e]"
-                  >
-                    <option value="relevance">Relevancia</option>
-                    <option value="newest">Más recientes</option>
-                    <option value="desc">Precio: mayor a menor</option>
-                    <option value="asc">Precio: menor a mayor</option>
-                  </select>
-                  {user ? (
-                    <button
-                      type="button"
-                      onClick={handleSaveSearch}
-                      className="btn ml-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#14212e] hover:bg-white/90"
-                      title="Guardá esta búsqueda para volver rápido"
-                    >
-                      Guardar búsqueda
-                    </button>
-                  ) : null}
-                </div>
-              </div>
+              <div className="hidden sm:block sticky top-[var(--header-h)] z-30">
+                <div className="bg-white border-b border-gray-200 shadow-sm">
+                  <div className="flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="text-sm text-gray-600">{(serverMode && serverTotal != null) ? serverTotal : filtered.length} resultados</div>
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="text-gray-500">Ordenar</span>
+                      <select
+                        value={sortMode}
+                        onChange={(event) => setSortMode(event.target.value as 'relevance' | 'newest' | 'asc' | 'desc')}
+                        className="input w-48 rounded-full border border-gray-200 bg-white text-sm text-gray-900"
+                      >
+                        <option value="relevance">Relevancia</option>
+                        <option value="newest">Más recientes</option>
+                        <option value="desc">Precio: mayor a menor</option>
+                        <option value="asc">Precio: menor a mayor</option>
+                      </select>
+                      {user ? (
+                        <button
+                          type="button"
+                          onClick={handleSaveSearch}
+                          className="btn ml-2 rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50"
+                          title="Guardá esta búsqueda para volver rápido"
+                        >
+                          Guardar búsqueda
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="border-t border-gray-200 px-4 py-3">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+                      {forcedCat || (allowedCats && allowedCats.length) ? null : (
+                        <FilterDropdown label="Categoría" summary={filters.cat} tone="light" variant="pill">
+                          {({ close }) => (
+                            <div className="flex flex-col gap-1 text-sm">
+                              {CAT_VALUES.map((cat) => {
+                                const isActive = filters.cat === cat
+                                return (
+                                  <button
+                                    key={cat}
+                                    type="button"
+                                    onClick={() => {
+                                      setFilters({ cat, bikes: undefined })
+                                      close()
+                                    }}
+                                    className={`flex items-center justify-between rounded-xl px-3 py-2 transition hover:bg-gray-50 ${
+                                      isActive ? 'bg-gray-50 text-gray-900' : 'text-gray-700'
+                                    }`}
+                                  >
+                                    <span>{cat}</span>
+                                    {isActive ? (
+                                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="m5 13 4 4L19 7" />
+                                      </svg>
+                                    ) : null}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          )}
+                        </FilterDropdown>
+                      )}
 
-              <div className="hidden sm:flex flex-wrap items-center text-sm gap-y-2">
-                {forcedCat || (allowedCats && allowedCats.length) ? null : (
-                <div className="px-3 first:pl-0 border-l border-white/20 first:border-l-0 whitespace-nowrap">
-                <FilterDropdown label="Categoría" summary={filters.cat} variant="inline">
-                  {({ close }) => (
-                    <div className="flex flex-col gap-1 text-sm">
-                      {CAT_VALUES.map((cat) => {
-                        const isActive = filters.cat === cat
+                      {UI_FILTERS_BEFORE_PRICE.map((key) => {
+                        const rawOptions = facetsData.options[key]
+                        const options = Array.from(new Set([...rawOptions, ...filters[key]]))
                         return (
-                          <button
-                            key={cat}
-                            type="button"
-                            onClick={() => {
-                              setFilters({ cat, bikes: undefined })
-                              close()
-                            }}
-                            className={`flex items-center justify-between rounded-xl px-3 py-2 transition hover:bg-white/10 ${
-                              isActive ? 'bg-white/15 text-white' : 'text-white/80'
-                            }`}
+                          <FilterDropdown
+                            key={key}
+                            label={MULTI_FILTER_LABELS[key]}
+                            summary={summaryFor(key)}
+                            disabled={key === 'size' ? false : !options.length}
+                            tone="light"
+                            variant="pill"
                           >
-                            <span>{cat}</span>
-                            {isActive ? (
-                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="m5 13 4 4L19 7" />
-                              </svg>
-                            ) : null}
-                          </button>
+                            {({ close }) => (
+                              key === 'size' ? (
+                                <SizeSelectContent
+                                  options={options}
+                                  selected={filters.size}
+                                  onChange={(next) => setFilters({ size: next })}
+                                  close={close}
+                                />
+                              ) : (
+                                <MultiSelectContent
+                                  options={options}
+                                  selected={filters[key]}
+                                  onChange={(next) => setFilters({ [key]: next } as Partial<FiltersState>)}
+                                  close={close}
+                                  placeholder={`Buscar ${MULTI_FILTER_LABELS[key].toLowerCase()}`}
+                                />
+                              )
+                            )}
+                          </FilterDropdown>
                         )
                       })}
-                    </div>
-                  )}
-                </FilterDropdown>
-                </div>
-                )}
 
-                {/* Tamaños de cuadro (frameSize) primero */}
-                {UI_FILTERS_BEFORE_PRICE.map((key) => {
-                  const rawOptions = facetsData.options[key]
-                  const options = Array.from(new Set([...rawOptions, ...filters[key]]))
-                  return (
-                    <div key={key} className="px-3 border-l border-white/20 first:border-l-0 whitespace-nowrap">
-                      <FilterDropdown
-                        label={MULTI_FILTER_LABELS[key]}
-                        summary={summaryFor(key)}
-                        disabled={key === 'size' ? false : !options.length}
-                        variant="inline"
-                      >
+                      <FilterDropdown label="Precio" summary={priceSummary} tone="light" variant="pill">
                         {({ close }) => (
-                          key === 'size' ? (
-                            <SizeSelectContent
-                              options={options}
-                              selected={filters.size}
-                              onChange={(next) => setFilters({ size: next })}
-                              close={close}
-                            />
-                          ) : (
-                            <MultiSelectContent
-                              options={options}
-                              selected={filters[key]}
-                              onChange={(next) => setFilters({ [key]: next } as Partial<FiltersState>)}
-                              close={close}
-                              placeholder={`Buscar ${MULTI_FILTER_LABELS[key].toLowerCase()}`}
-                            />
-                          )
+                          <PriceFilterContent
+                            min={filters.priceMin}
+                            max={filters.priceMax}
+                            bounds={facetsData.priceRange}
+                            currency={filters.priceCur}
+                            boundsByCur={facetsData.priceRangeByCur}
+                            onCurrencyChange={(cur) => setFilters({ priceCur: cur })}
+                            onApply={({ min, max }) => setFilters({ priceMin: min, priceMax: max })}
+                            onClear={() => setFilters({ priceMin: undefined, priceMax: undefined })}
+                            close={close}
+                          />
                         )}
                       </FilterDropdown>
-                    </div>
-                  )
-                })}
 
-                {/* Precio segundo */}
-                <div className="px-3 border-l border-white/20 first:border-l-0 whitespace-nowrap">
-                  <FilterDropdown label="Precio" summary={priceSummary} variant="inline">
-                    {({ close }) => (
-                      <PriceFilterContent
-                        min={filters.priceMin}
-                        max={filters.priceMax}
-                        bounds={facetsData.priceRange}
-                        currency={filters.priceCur}
-                        boundsByCur={facetsData.priceRangeByCur}
-                        onCurrencyChange={(cur) => setFilters({ priceCur: cur })}
-                        onApply={({ min, max }) => setFilters({ priceMin: min, priceMax: max })}
-                        onClear={() => setFilters({ priceMin: undefined, priceMax: undefined })}
-                        close={close}
-                      />
-                    )}
-                  </FilterDropdown>
-                </div>
+                      {UI_FILTERS_AFTER_PRICE.map((key) => {
+                        const rawOptions = facetsData.options[key]
+                        const options = Array.from(new Set([...rawOptions, ...filters[key]]))
+                        return (
+                          <FilterDropdown
+                            key={key}
+                            label={MULTI_FILTER_LABELS[key]}
+                            summary={summaryFor(key)}
+                            disabled={!options.length}
+                            tone="light"
+                            variant="pill"
+                          >
+                            {({ close }) => (
+                              <MultiSelectContent
+                                options={options}
+                                selected={filters[key]}
+                                onChange={(next) => setFilters({ [key]: next } as Partial<FiltersState>)}
+                                close={close}
+                                placeholder={`Buscar ${MULTI_FILTER_LABELS[key].toLowerCase()}`}
+                              />
+                            )}
+                          </FilterDropdown>
+                        )
+                      })}
 
-                {/* Resto de filtros en el orden solicitado */}
-                {UI_FILTERS_AFTER_PRICE.map((key) => {
-                  const rawOptions = facetsData.options[key]
-                  const options = Array.from(new Set([...rawOptions, ...filters[key]]))
-                  return (
-                    <div key={key} className="px-3 border-l border-white/20 first:border-l-0 whitespace-nowrap">
-                      <FilterDropdown
-                        label={MULTI_FILTER_LABELS[key]}
-                        summary={summaryFor(key)}
-                        disabled={!options.length}
-                        variant="inline"
-                      >
+                      <FilterDropdown label="Promos" summary={effectiveDeal === '1' ? 'Activas' : 'Todas'} tone="light" variant="pill">
                         {({ close }) => (
-                          <MultiSelectContent
-                            options={options}
-                            selected={filters[key]}
-                            onChange={(next) => setFilters({ [key]: next } as Partial<FiltersState>)}
+                          <DealFilterContent
+                            active={effectiveDeal === '1'}
+                            onToggle={(active) => { if (!forcedDeal) setFilters({ deal: active ? '1' : undefined }) }}
                             close={close}
-                            placeholder={`Buscar ${MULTI_FILTER_LABELS[key].toLowerCase()}`}
+                          />
+                        )}
+                      </FilterDropdown>
+
+                      <FilterDropdown label="Tiendas oficiales" summary={filters.store === '1' ? 'Solo tiendas' : 'Todas'} tone="light" variant="pill">
+                        {({ close }) => (
+                          <StoreFilterContent
+                            active={filters.store === '1'}
+                            onToggle={(active) => setFilters({ store: active ? '1' : undefined })}
+                            close={close}
                           />
                         )}
                       </FilterDropdown>
                     </div>
-                  )
-                })}
 
-                <div className="px-3 border-l border-white/20 first:border-l-0 whitespace-nowrap">
-                <FilterDropdown label="Promos" summary={effectiveDeal === '1' ? 'Activas' : 'Todas'} variant="inline">
-                  {({ close }) => (
-                    <DealFilterContent
-                      active={effectiveDeal === '1'}
-                      onToggle={(active) => { if (!forcedDeal) setFilters({ deal: active ? '1' : undefined }) }}
-                      close={close}
-                    />
-                  )}
-                </FilterDropdown>
-                </div>
-
-                <div className="px-3 border-l border-white/20 first:border-l-0 whitespace-nowrap">
-                <FilterDropdown label="Tiendas oficiales" summary={filters.store === '1' ? 'Solo tiendas' : 'Todas'} variant="inline">
-                  {({ close }) => (
-                    <StoreFilterContent
-                      active={filters.store === '1'}
-                      onToggle={(active) => setFilters({ store: active ? '1' : undefined })}
-                      close={close}
-                    />
-                  )}
-                </FilterDropdown>
+                    {hasActiveFilters ? (
+                      <div className="mt-2 text-xs text-gray-600">
+                        Filtros activos: {activeFilterChips.map((c) => c.label).join(', ')}{' '}
+                        <button type="button" onClick={handleClearFilters} className="underline hover:text-gray-900">Limpiar</button>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
               </div>
-
-              {hasActiveFilters ? (
-                <div className="text-xs text-white/70">
-                  Filtros activos: {activeFilterChips.map((c) => c.label).join(', ')}{' '}
-                  <button type="button" onClick={handleClearFilters} className="underline hover:text-white">Limpiar</button>
-                </div>
-              ) : null}
             </div>
 
             {loading ? (
-              <div className="grid -mx-2 grid-cols-1 gap-0 sm:mx-0 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">
+              <div className="flex flex-col gap-4 sm:grid sm:grid-cols-2 sm:gap-6 lg:grid-cols-3 lg:gap-8">
                 {Array.from({ length: 6 }).map((_, idx) => (
-                  <div key={`skeleton-${idx}`} className="p-2 sm:p-0">
+                  <div key={`skeleton-${idx}`} className="sm:p-0">
                     <SkeletonCard />
                   </div>
                 ))}
               </div>
             ) : visible.length ? (
               <>
-                <div className="grid -mx-2 grid-cols-1 gap-0 sm:mx-0 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3" style={{ overflowAnchor: 'none' } as any}>
+                <div className="flex flex-col sm:grid sm:grid-cols-2 sm:gap-6 lg:grid-cols-3 lg:gap-8" style={{ overflowAnchor: 'none' } as any}>
                   {visible.map((listing, idx) => (
                     <div
                       key={listing.id}
-                      className="p-2 sm:p-0"
+                      className="sm:p-0"
                       data-listing-id={listing.id}
                     >
                       <ListingCard
@@ -2414,6 +2311,7 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
                         storeLogoUrl={storeLogos[listing.sellerId] || null}
                         priority={idx < 4}
                         likeCount={likeCounts[listing.id]}
+                        variant={isMobile ? 'list' : 'grid'}
                       />
                     </div>
                   ))}
@@ -2462,33 +2360,34 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
 
       {mobileFiltersOpen ? (
         <div
-          className="fixed inset-0 z-50 bg-[#050c18]/80 backdrop-blur-sm sm:hidden"
+          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm sm:hidden"
           onClick={() => setMobileFiltersOpen(false)}
         >
           <div
-            className="absolute right-0 top-0 h-full w-full bg-[#0f1724] shadow-2xl sm:hidden"
+            className="absolute right-0 top-0 h-full w-full bg-white shadow-2xl sm:hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex h-full flex-col">
-              <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
-                <h3 className="text-base font-semibold text-white">Filtros</h3>
+              <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+                <h3 className="text-base font-semibold text-gray-900">Filtros</h3>
                 <button
                   type="button"
                   onClick={() => setMobileFiltersOpen(false)}
-                  className="rounded-full border border-white/20 px-3 py-1 text-xs text-white"
+                  className="rounded-full border border-gray-300 px-3 py-1 text-xs text-gray-700 hover:bg-gray-50"
                 >
                   Cerrar
                 </button>
               </div>
-              <div className="flex-1 overflow-y-auto px-5 py-4 pb-28 space-y-3 text-white">
+              <div className="flex-1 overflow-y-auto px-5 py-4 pb-28 space-y-3 text-gray-900">
                 {forcedCat || (allowedCats && allowedCats.length) ? null : (
                 <FilterDropdown
                   label="Categoría"
                   summary={filters.cat}
+                  tone="light"
                   className="w-full"
                   buttonClassName="w-full justify-between"
                   inlineOnMobile
-                  variant="inline"
+                  variant="pill"
                 >
                   {({ close }) => (
                     <div className="flex flex-col gap-1 text-sm">
@@ -2502,10 +2401,10 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
                               setFilters({ cat, bikes: undefined })
                               close()
                             }}
-                            className={`flex items-center justify-between rounded-xl px-3 py-2 transition hover:bg-white/10 ${
-                              isActive ? 'bg-white/15 text-white' : 'text-white/80'
-                            }`}
-                          >
+	                            className={`flex items-center justify-between rounded-xl px-3 py-2 transition hover:bg-gray-50 ${
+	                              isActive ? 'bg-gray-50 text-gray-900' : 'text-gray-700'
+	                            }`}
+	                          >
                             <span>{cat}</span>
                             {isActive ? (
                               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2}>
@@ -2524,16 +2423,17 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
                 const rawOptions = facetsData.options[key]
                 const options = Array.from(new Set([...rawOptions, ...filters[key]]))
                 return (
-                  <FilterDropdown
-                    key={`mobile-${key}`}
-                    label={MULTI_FILTER_LABELS[key]}
-                    summary={summaryFor(key)}
-                    disabled={key === 'size' ? false : !options.length}
-                    className="w-full"
-                    buttonClassName="w-full justify-between"
-                    inlineOnMobile
-                    variant="inline"
-                  >
+	                  <FilterDropdown
+	                    key={`mobile-${key}`}
+	                    label={MULTI_FILTER_LABELS[key]}
+	                    summary={summaryFor(key)}
+	                    disabled={key === 'size' ? false : !options.length}
+	                    tone="light"
+	                    className="w-full"
+	                    buttonClassName="w-full justify-between"
+	                    inlineOnMobile
+	                    variant="pill"
+	                  >
                     {({ close }) => (
                       key === 'size' ? (
                         <SizeSelectContent
@@ -2559,10 +2459,11 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
               <FilterDropdown
                 label="Precio"
                 summary={priceSummary}
+                tone="light"
                 className="w-full"
                 buttonClassName="w-full justify-between"
                 inlineOnMobile
-                variant="inline"
+                variant="pill"
               >
                 {({ close }) => (
                   <PriceFilterContent
@@ -2588,10 +2489,11 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
                     label={MULTI_FILTER_LABELS[key]}
                     summary={summaryFor(key)}
                     disabled={!options.length}
+                    tone="light"
                     className="w-full"
                     buttonClassName="w-full justify-between"
                     inlineOnMobile
-                    variant="inline"
+                    variant="pill"
                   >
                     {({ close }) => (
                       <MultiSelectContent
@@ -2605,14 +2507,15 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
                   </FilterDropdown>
                 )
               })}
-              <FilterDropdown
-                label="Promos"
-                summary={effectiveDeal === '1' ? 'Activas' : 'Todas'}
-                className="w-full"
-                buttonClassName="w-full justify-between"
-                inlineOnMobile
-                variant="inline"
-              >
+	              <FilterDropdown
+	                label="Promos"
+	                summary={effectiveDeal === '1' ? 'Activas' : 'Todas'}
+	                tone="light"
+	                className="w-full"
+	                buttonClassName="w-full justify-between"
+	                inlineOnMobile
+	                variant="pill"
+	              >
                 {({ close }) => (
                   <DealFilterContent
                     active={effectiveDeal === '1'}
@@ -2621,14 +2524,15 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
                   />
                 )}
               </FilterDropdown>
-              <FilterDropdown
-                label="Tiendas oficiales"
-                summary={filters.store === '1' ? 'Solo tiendas' : 'Todas'}
-                className="w-full"
-                buttonClassName="w-full justify-between"
-                inlineOnMobile
-                variant="inline"
-              >
+	              <FilterDropdown
+	                label="Tiendas oficiales"
+	                summary={filters.store === '1' ? 'Solo tiendas' : 'Todas'}
+	                tone="light"
+	                className="w-full"
+	                buttonClassName="w-full justify-between"
+	                inlineOnMobile
+	                variant="pill"
+	              >
                 {({ close }) => (
                   <StoreFilterContent
                     active={filters.store === '1'}
@@ -2636,26 +2540,26 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
                     close={close}
                   />
                 )}
-              </FilterDropdown>
-              </div>
-              <div className="border-t border-white/10 bg-[#0f1724] px-5 py-4">
-                <div className="flex gap-3">
-                  <button
-                    type="button"
-                    onClick={() => handleClearFilters()}
-                    className="flex-1 rounded-full border border-white/20 px-4 py-2 text-sm text-white hover:border-white/40 hover:bg-white/10"
-                  >
-                    Limpiar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setMobileFiltersOpen(false)}
-                    className="flex-1 rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#14212e] hover:bg-white/90"
-                  >
-                    Aplicar
-                  </button>
-                </div>
-              </div>
+	              </FilterDropdown>
+	              </div>
+	              <div className="border-t border-gray-200 bg-white px-5 py-4">
+	                <div className="flex gap-3">
+	                  <button
+	                    type="button"
+	                    onClick={() => handleClearFilters()}
+	                    className="flex-1 rounded-full border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+	                  >
+	                    Limpiar
+	                  </button>
+	                  <button
+	                    type="button"
+	                    onClick={() => setMobileFiltersOpen(false)}
+	                    className="flex-1 rounded-full bg-mb-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+	                  >
+	                    Aplicar
+	                  </button>
+	                </div>
+	              </div>
             </div>
           </div>
         </div>
@@ -2663,24 +2567,24 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
 
       {mobileSortOpen ? (
         <div
-          className="fixed inset-0 z-50 bg-[#050c18]/80 backdrop-blur-sm sm:hidden"
+          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm sm:hidden"
           onClick={() => setMobileSortOpen(false)}
         >
           <div
-            className="absolute inset-x-0 bottom-0 rounded-t-3xl bg-[#0f1724] p-5 shadow-2xl"
+            className="absolute inset-x-0 bottom-0 rounded-t-3xl bg-white p-5 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
-              <h3 className="text-base font-semibold text-white">Ordenar por</h3>
+              <h3 className="text-base font-semibold text-gray-900">Ordenar por</h3>
               <button
                 type="button"
                 onClick={() => setMobileSortOpen(false)}
-                className="rounded-full border border-white/20 px-3 py-1 text-xs text-white"
+                className="rounded-full border border-gray-300 px-3 py-1 text-xs text-gray-700 hover:bg-gray-50"
               >
                 Cerrar
               </button>
             </div>
-            <div className="mt-4 space-y-2 text-sm text-white">
+            <div className="mt-4 space-y-2 text-sm text-gray-900">
               {[
                 { value: 'relevance', label: 'Relevancia' },
                 { value: 'newest', label: 'Más recientes' },
@@ -2697,7 +2601,7 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
                       setMobileSortOpen(false)
                     }}
                     className={`w-full rounded-2xl border px-4 py-3 text-left transition ${
-                      active ? 'border-white bg-white/15' : 'border-white/15 hover:border-white/30 hover:bg-white/10'
+                      active ? 'border-mb-primary bg-mb-primary/5' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                     }`}
                   >
                     {option.label}

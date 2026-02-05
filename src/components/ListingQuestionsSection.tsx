@@ -326,18 +326,18 @@ export default function ListingQuestionsSection({ listing, listingUnavailable }:
   }, [userNames])
 
   return (
-    <section className="card p-6">
+    <section className="rounded-2xl border border-gray-200 bg-white p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold text-[#14212e]">Consultas sobre esta bici</h2>
+        <h2 className="text-lg font-semibold text-gray-900">Consultas sobre esta bici</h2>
         {supabaseEnabled && (
-          <span className="text-xs font-medium uppercase tracking-wide text-[#14212e]/50">
+          <span className="text-xs font-medium uppercase tracking-wide text-gray-500">
             Responde el vendedor
           </span>
         )}
       </div>
 
       {!supabaseEnabled && (
-        <p className="mt-4 text-sm text-[#14212e]/70">
+        <p className="mt-4 text-sm text-gray-600">
           Pronto vas a poder dejar consultas públicas para el vendedor. Mientras tanto, usá el
           botón de WhatsApp o correo para contactarlo.
         </p>
@@ -348,7 +348,7 @@ export default function ListingQuestionsSection({ listing, listingUnavailable }:
           <div className="mt-4 space-y-3">
             {canAsk && (
               <form onSubmit={handleAsk} className="space-y-3">
-                <label className="text-sm font-medium text-[#14212e]">¿Tenés una duda?</label>
+                <label className="text-sm font-medium text-gray-900">¿Tenés una duda?</label>
                 <textarea
                   className="input h-28 resize-none"
                   placeholder="Preguntale al vendedor (no compartas teléfonos; usá los botones de contacto)"
@@ -362,7 +362,7 @@ export default function ListingQuestionsSection({ listing, listingUnavailable }:
                 />
                 {questionError && <p className="text-sm text-red-600">{questionError}</p>}
                 <div className="flex items-center justify-end gap-3">
-                  <span className="text-xs text-[#14212e]/50">
+                  <span className="text-xs text-gray-500">
                     {questionDraft.trim().length}/{400}
                   </span>
                   <Button
@@ -377,8 +377,8 @@ export default function ListingQuestionsSection({ listing, listingUnavailable }:
             )}
 
             {!canAsk && requiresLoginToAsk && (
-              <div className="rounded-xl border border-[#14212e]/10 bg-[#f4f7fb] p-4 text-sm text-[#14212e]/80">
-                <p className="font-semibold text-[#14212e]">Iniciá sesión para preguntar</p>
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
+                <p className="font-semibold text-gray-900">Iniciá sesión para preguntar</p>
                 <p className="mt-1">Crear una cuenta es gratis y podés preguntar sin compartir tu teléfono.</p>
                 <div className="mt-3 flex gap-2">
                   <Button to="/login" variant="secondary" className="px-3 py-1 text-sm">Ingresar</Button>
@@ -390,54 +390,54 @@ export default function ListingQuestionsSection({ listing, listingUnavailable }:
             {/* Aviso de login unificado más abajo (para ver y hacer consultas) */}
 
             {askingDisabledReason && (
-              <div className="rounded-xl border border-[#14212e]/10 bg-white/80 p-3 text-sm text-[#14212e]/60">
+              <div className="rounded-xl border border-gray-200 bg-white p-3 text-sm text-gray-600">
                 {askingDisabledReason}
               </div>
             )}
           </div>
 
           {supabaseEnabled && (
-          <div className="mt-6 space-y-6">
-            {loading && <p className="text-sm text-[#14212e]/60">Cargando consultas…</p>}
+	          <div className="mt-6 space-y-6">
+	            {loading && <p className="text-sm text-gray-500">Cargando consultas…</p>}
 
-            {!loading && sortedQuestions.length === 0 && (
-              <p className="text-sm text-[#14212e]/60">
-                Todavía no hay consultas públicas. ¡Sé el primero en preguntar!
-              </p>
-            )}
+	            {!loading && sortedQuestions.length === 0 && (
+	              <p className="text-sm text-gray-500">
+	                Todavía no hay consultas públicas. ¡Sé el primero en preguntar!
+	              </p>
+	            )}
 
             {pendingQuestions.length > 0 && (
               <div className="space-y-4">
                 {pendingQuestions.map((question) => {
                   const questionerFullName = resolveFullName(question.questionerId, question.questionerName ?? null)
-                  return (
-                    <div key={question.id} className="rounded-2xl border border-[#14212e]/10 bg-white/90 p-4">
-                      <p className="text-sm font-semibold text-[#14212e]">
-                        {displayQuestionerName(questionerFullName)}
-                        <span className="ml-2 text-xs font-normal text-[#14212e]/50">
-                          {relativeTimeFromNow(question.createdAt)}
-                        </span>
-                      </p>
-                      <p className="mt-2 whitespace-pre-wrap text-sm text-[#14212e]/80">
-                        {question.questionBody}
-                      </p>
-                      {isSeller ? (
-                        <div className="mt-3 space-y-2">
-                          <textarea
-                            className="input h-24 resize-none"
-                            placeholder="Escribí tu respuesta pública (no compartas teléfonos; usá los botones de contacto)"
+	                  return (
+	                    <div key={question.id} className="rounded-2xl bg-gray-100 p-4">
+	                      <p className="text-xs font-semibold text-gray-900">
+	                        {displayQuestionerName(questionerFullName)}
+	                        <span className="ml-2 text-xs font-normal text-gray-500">
+	                          {relativeTimeFromNow(question.createdAt)}
+	                        </span>
+	                      </p>
+	                      <p className="mt-2 whitespace-pre-wrap text-sm text-gray-700">
+	                        {question.questionBody}
+	                      </p>
+	                      {isSeller ? (
+	                        <div className="mt-3 space-y-2 rounded-2xl border border-gray-200 bg-white p-3">
+	                          <textarea
+	                            className="input h-24 resize-none"
+	                            placeholder="Escribí tu respuesta pública (no compartas teléfonos; usá los botones de contacto)"
                             value={answerDrafts[question.id] ?? ''}
                             onChange={(event) => handleAnswerChange(question.id, event.target.value)}
                             maxLength={600}
                             disabled={answerSubmitting[question.id]}
                           />
-                          {answerErrors[question.id] && (
-                            <p className="text-sm text-red-600">{answerErrors[question.id]}</p>
-                          )}
-                          <div className="flex items-center justify-end gap-3">
-                            <span className="text-xs text-[#14212e]/50">
-                              {(answerDrafts[question.id] ?? '').trim().length}/{600}
-                            </span>
+	                          {answerErrors[question.id] && (
+	                            <p className="text-sm text-red-600">{answerErrors[question.id]}</p>
+	                          )}
+	                          <div className="flex items-center justify-end gap-3">
+	                            <span className="text-xs text-gray-500">
+	                              {(answerDrafts[question.id] ?? '').trim().length}/{600}
+	                            </span>
                             <Button
                               type="button"
                               onClick={() => void handleAnswerSubmit(question.id)}
@@ -451,11 +451,11 @@ export default function ListingQuestionsSection({ listing, listingUnavailable }:
                             </Button>
                           </div>
                         </div>
-                      ) : (
-                        <p className="mt-3 text-xs text-[#14212e]/50">
-                          El vendedor responderá en esta sección.
-                        </p>
-                      )}
+	                      ) : (
+	                        <p className="mt-3 text-xs text-gray-500">
+	                          El vendedor responderá en esta sección.
+	                        </p>
+	                      )}
                       {isModerator && (
                         <div className="mt-3 flex items-center justify-end gap-2">
                           <Button
@@ -483,55 +483,62 @@ export default function ListingQuestionsSection({ listing, listingUnavailable }:
                     question.answerAuthorId,
                     question.answerAuthorName ?? listing.sellerName ?? null
                   )
-                  return (
-                    <div key={question.id} className="rounded-2xl border border-[#14212e]/10 bg-white p-4">
-                      <p className="text-sm font-semibold text-[#14212e]">
-                        {displayQuestionerName(questionerFullName)}
-                        <span className="ml-2 text-xs font-normal text-[#14212e]/50">
-                          {relativeTimeFromNow(question.createdAt)}
-                        </span>
-                      </p>
-                      <p className="mt-2 whitespace-pre-wrap text-sm text-[#14212e]/80">
-                        {question.questionBody}
-                      </p>
-                      <div className="mt-3 rounded-2xl bg-[#14212e]/5 p-3">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-[#14212e]/70">
-                          Respuesta del vendedor · {relativeTimeFromNow(question.answeredAt)}
-                        </p>
-                        <p className="mt-2 whitespace-pre-wrap text-sm text-[#14212e]/90">
-                          {question.answerBody}
-                        </p>
-                        <p className="mt-2 text-xs text-[#14212e]/50">
-                          {displayAnswerAuthor(answerFullName, listing.sellerName)}
-                        </p>
-                        {isModerator && (
-                          <div className="mt-2 flex items-center justify-end gap-2">
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              className="px-3 py-1 text-xs"
-                              disabled={moderating[question.id]}
-                              onClick={() => void handleModeratorClearAnswer(question.id)}
-                            >
-                              Eliminar respuesta
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              className="px-3 py-1 text-xs text-red-700"
-                              disabled={moderating[question.id]}
-                              onClick={() => void handleModeratorDeleteQuestion(question.id)}
-                            >
-                              Eliminar consulta
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
+	                  return (
+	                    <div key={question.id} className="space-y-2">
+	                      <div className="rounded-2xl bg-gray-100 p-4">
+	                        <p className="text-xs font-semibold text-gray-900">
+	                          {displayQuestionerName(questionerFullName)}
+	                          <span className="ml-2 text-xs font-normal text-gray-500">
+	                            {relativeTimeFromNow(question.createdAt)}
+	                          </span>
+	                        </p>
+	                        <p className="mt-2 whitespace-pre-wrap text-sm text-gray-700">
+	                          {question.questionBody}
+	                        </p>
+	                      </div>
+	                      <div className="rounded-2xl border border-gray-200 bg-white p-4">
+	                        <div className="flex flex-wrap items-center justify-between gap-2">
+	                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-600">
+	                            Respuesta del vendedor
+	                          </p>
+	                          <p className="text-xs text-gray-500">
+	                            {relativeTimeFromNow(question.answeredAt)}
+	                          </p>
+	                        </div>
+	                        <p className="mt-2 whitespace-pre-wrap text-sm text-gray-800">
+	                          {question.answerBody}
+	                        </p>
+	                        <p className="mt-2 text-xs text-gray-500">
+	                          {displayAnswerAuthor(answerFullName, listing.sellerName)}
+	                        </p>
+	                        {isModerator && (
+	                          <div className="mt-2 flex items-center justify-end gap-2">
+	                            <Button
+	                              type="button"
+	                              variant="secondary"
+	                              className="px-3 py-1 text-xs"
+	                              disabled={moderating[question.id]}
+	                              onClick={() => void handleModeratorClearAnswer(question.id)}
+	                            >
+	                              Eliminar respuesta
+	                            </Button>
+	                            <Button
+	                              type="button"
+	                              variant="secondary"
+	                              className="px-3 py-1 text-xs text-red-700"
+	                              disabled={moderating[question.id]}
+	                              onClick={() => void handleModeratorDeleteQuestion(question.id)}
+	                            >
+	                              Eliminar consulta
+	                            </Button>
+	                          </div>
+	                        )}
+	                      </div>
+	                    </div>
+	                  )
+	                })}
+	              </div>
+	            )}
           </div>
           )}
         </>

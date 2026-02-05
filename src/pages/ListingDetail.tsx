@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import dayjs from 'dayjs'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import Container from '../components/Container'
-import ImageCarousel from '../components/ImageCarousel'
+import ListingGallery from '../components/ListingGallery'
 import Button from '../components/Button'
 import { mockListings } from '../mock/mockData'
 import { useCurrency } from '../context/CurrencyContext'
 import { formatListingPrice } from '../utils/pricing'
 import { getPlanLabel, hasPaidPlan, isPlanVerified } from '../utils/plans'
-import { useCompare } from '../context/CompareContext'
 import { useListingLike } from '../hooks/useServerLikes'
-import { fetchListing, updateListingPlan, deleteListing, setListingWhatsapp, updateListingStatus, archiveListing, reduceListingPrice, extendListingExpiryDays, updateListingFields, upgradeListingPlan, setListingHighlightDays, normalizeListingVigencies } from '../services/listings'
+import { fetchListing, deleteListing, setListingWhatsapp, updateListingStatus, archiveListing, reduceListingPrice, updateListingFields, upgradeListingPlan, setListingHighlightDays, normalizeListingVigencies, fetchListingsByCategory, fetchListingsCountBySeller } from '../services/listings'
 import { supabaseEnabled, getSupabaseClient } from '../services/supabase'
 import type { Listing } from '../types'
 import { formatNameWithInitial, computeTrustLevel, trustLabel, trustColorClasses, trustBadgeBgClasses } from '../utils/user'
@@ -21,12 +21,13 @@ import SeoHead, { type SeoHeadProps } from '../components/SeoHead'
 import { getOgImageUrlFromFirst } from '../lib/supabaseImages'
 import { resolveSiteOrigin, toAbsoluteUrl as absoluteUrl, buildBreadcrumbList, categoryToCanonicalPath } from '../utils/seo'
 import { trackMetaPixel } from '../lib/metaPixel'
-import { track, trackOncePerSession } from '../services/track'
+import { track } from '../services/track'
 import { useToast } from '../context/ToastContext'
 import ListingQuestionsSection from '../components/ListingQuestionsSection'
 import HorizontalSlider from '../components/HorizontalSlider'
 import ListingCard from '../components/ListingCard'
-import { fetchListingsBySeller } from '../services/listings'
+import ListingSpecs from '../components/ListingSpecs'
+import CicloTrust from '../components/CicloTrust'
 import { submitShareBoost } from '../services/shareBoost'
 import useUpload from '../hooks/useUpload'
 import { FALLBACK_PLANS } from '../services/plans'
@@ -51,12 +52,9 @@ export default function ListingDetail() {
   const [sellerVerified, setSellerVerified] = useState(false)
   const [applyingHighlight, setApplyingHighlight] = useState(false)
   const [sellerProfile, setSellerProfile] = useState<UserProfileRecord | null>(null)
+  const [sellerPublishedCount, setSellerPublishedCount] = useState<number>(0)
   const [sellerAuthEmail, setSellerAuthEmail] = useState<string | null>(null)
   const [sellerRating, setSellerRating] = useState<{ avg: number; count: number } | null>(null)
-  const [reduceOpen, setReduceOpen] = useState(false)
-  const [reduceValue, setReduceValue] = useState('')
-  const [extendOpen, setExtendOpen] = useState(false)
-  const [extendDays, setExtendDays] = useState('7')
   const [editTitleOpen, setEditTitleOpen] = useState(false)
   const [editTitleValue, setEditTitleValue] = useState('')
   const [editDescOpen, setEditDescOpen] = useState(false)
@@ -78,12 +76,61 @@ export default function ListingDetail() {
     setEditFieldValue(value != null ? String(value) : '')
     setEditFieldOpen(true)
   }
-  const { ids: compareIds, toggle: toggleCompare } = useCompare()
   const { liked: isFav, count: likeCount, toggle: toggleFav, canLike } = useListingLike(listing?.id || '')
   const listingKey = params.slug ?? params.id ?? ''
   const fallbackCanonicalPath = listingKey ? `/listing/${listingKey}` : undefined
   // Necesario antes de efectos que lo usan
   const isOwner = Boolean(user?.id && listing?.sellerId && user.id === listing.sellerId)
+
+  const buildEditFormUrl = (l: Listing) => {
+    const isBikeLegacy = String(l.category || '').toLowerCase() === 'bicicletas'
+    const bikeCats = new Set(['Ruta', 'MTB', 'Gravel', 'Urbana', 'Fixie', 'E-Bike', 'Niños', 'Pista', 'Triatlón'])
+    const type = l.category === 'Accesorios'
+      ? 'accessory'
+      : l.category === 'Indumentaria'
+        ? 'apparel'
+        : l.category === 'Nutrición'
+          ? 'nutrition'
+          : 'bike'
+    const params = new URLSearchParams()
+    params.set('id', l.id)
+    params.set('type', type)
+    if (type === 'bike') {
+      const subcat = isBikeLegacy
+        ? (l.subcategory || '')
+        : (bikeCats.has(l.category) ? l.category : (bikeCats.has(l.subcategory || '') ? (l.subcategory as string) : ''))
+      if (subcat) params.set('subcat', subcat)
+    } else if (l.subcategory) {
+      params.set('subcat', l.subcategory)
+    }
+    return `/publicar/nueva?${params.toString()}`
+  }
+  // Metadatos visibles bajo el título: Talle | Grupo transmisión | Ciudad
+  const headerMeta = useMemo(() => {
+    if (!listing) return ''
+    const tokens = (listing.extras ?? '')
+      .split('•')
+      .map((p) => p.trim())
+      .filter(Boolean)
+    const getExtra = (label: string) => {
+      const token = tokens.find((part) => part.toLowerCase().startsWith(`${label.toLowerCase()}:`))
+      if (!token) return null
+      return token.split(':').slice(1).join(':').trim() || null
+    }
+    const talle = (getExtra('Talle') || getExtra('Talles') || listing.frameSize || '').toString().trim() || null
+    const drivetrain = (listing.drivetrain || listing.drivetrainDetail || getExtra('Grupo') || getExtra('Transmisión') || getExtra('Transmision') || '').toString().trim() || null
+    const city = (() => {
+      const raw = listing.location?.split(',')[0]?.trim() || ''
+      if (!raw) return null
+      const norm = raw
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+      if (norm.includes('ciudad autonoma de buenos aires') || norm === 'caba' || norm.includes('capital federal')) return 'CABA'
+      return raw
+    })()
+    return [talle, drivetrain, city].filter(Boolean).join(' • ')
+  }, [listing])
   
   // Head meta config early to keep hook order stable across loading/not-found states
   const seoHeadConfig = useMemo<Partial<SeoHeadProps>>(() => {
@@ -152,27 +199,6 @@ export default function ListingDetail() {
     return { title: `${productName} en venta`, description, canonicalPath, ogImageUrl, jsonLd: jsonLdPayload }
   }, [listing, listingKey, fallbackCanonicalPath])
   
-  const parseExtrasMap = (extras?: string | null) => {
-    const out: Record<string, string> = {}
-    if (!extras) return out
-    const parts = extras.split('•').map((p) => p.trim()).filter(Boolean)
-    for (const p of parts) {
-      const idx = p.indexOf(':')
-      if (idx === -1) continue
-      const k = p.slice(0, idx).trim()
-      const v = p.slice(idx + 1).trim()
-      if (k) out[k] = v
-    }
-    return out
-  }
-  const getExtra = (map: Record<string,string>, key: string) => {
-    const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
-    const keyNorm = norm(key)
-    for (const k of Object.keys(map)) {
-      if (norm(k) === keyNorm) return map[k]
-    }
-    return ''
-  }
   const apiBase = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 
   async function startUpgrade(planCode: 'PREMIUM'|'PRO') {
@@ -237,26 +263,40 @@ export default function ListingDetail() {
         if (result) {
           setListing(result)
           setLoading(false)
-          try {
-            const flag = searchParams.get('post_publish')
-            if (flag === '1') setShowUpgradeModal(true)
-          } catch {}
-          try {
-            // Track ViewContent when a listing is loaded
-            trackMetaPixel('ViewContent', {
+	          try {
+	            const flag = searchParams.get('post_publish')
+	            if (flag === '1') setShowUpgradeModal(true)
+	          } catch { /* noop */ }
+	          try {
+	            // Track ViewContent when a listing is loaded
+	            trackMetaPixel('ViewContent', {
               content_ids: [result.id],
               content_type: 'product',
               content_category: result.category,
               value: Number(result.price) || 0,
               currency: (result.priceCurrency || 'ARS').toUpperCase()
             })
-            trackOncePerSession(`listing_view_${result.id}`, () => {
+            void (async () => {
+              let dbCounted = false
+              if (supabaseEnabled) {
+                try {
+                  const { error } = await getSupabaseClient().from('listing_views').insert({ listing_id: result.id })
+                  if (error) {
+                    console.warn('[views] listing_views insert failed', error)
+                  } else {
+                    dbCounted = true
+                  }
+                } catch (err) {
+                  console.warn('[views] listing_views insert unexpected error', err)
+                }
+              }
               track('listing_view', {
                 listing_id: result.id,
                 store_user_id: result.sellerId || null,
                 user_id: user?.id || null,
+                db_counted: dbCounted,
               })
-            })
+            })()
           } catch { /* noop */ }
           return
         }
@@ -273,12 +313,10 @@ export default function ListingDetail() {
             value: Number(fallback.price) || 0,
             currency: (fallback.priceCurrency || 'ARS').toUpperCase()
           })
-          trackOncePerSession(`listing_view_${fallback.id}`, () => {
-            track('listing_view', {
-              listing_id: fallback.id,
-              store_user_id: fallback.sellerId || null,
-              user_id: user?.id || null,
-            })
+          track('listing_view', {
+            listing_id: fallback.id,
+            store_user_id: fallback.sellerId || null,
+            user_id: user?.id || null,
           })
         } catch { /* noop */ }
       }
@@ -302,54 +340,33 @@ export default function ListingDetail() {
     if (forceShow || !seen) setShowUpgradeModal(true)
   }, [listing?.id, listing?.rankBoostUntil, user?.id, searchParams])
 
-  const markUpgradeSeen = () => {
-    try {
-      if (!listing) return
-      const key = `cm_upg_seen_${listing.id}`
-      window.localStorage.setItem(key, '1')
-    } catch {}
-  }
+	  const markUpgradeSeen = () => {
+	    try {
+	      if (!listing) return
+	      const key = `cm_upg_seen_${listing.id}`
+	      window.localStorage.setItem(key, '1')
+	    } catch { /* noop */ }
+	  }
 
-  // Load seller-related items once listing is known; runs before any return
+  // Load relacionados (misma categoría + subcategoría). Prioridad: boost > tier > usuario vs tienda > fecha.
   useEffect(() => {
     let active = true
     const load = async () => {
-      if (!listing?.sellerId) { setSellerRelated([]); return }
-      const all = await fetchListingsBySeller(listing.sellerId)
+      if (!listing?.category) { setSellerRelated([]); return }
+      const all = await fetchListingsByCategory(listing.category, listing.subcategory ?? null, { excludeId: listing.id, limit: 80 })
       if (!active || !Array.isArray(all)) return
-      const currentId = listing.id
-      const targetSub = (listing.subcategory || '').toLowerCase()
-      const groupFor = (cat: Listing['category']) => {
-        if (cat === 'Nutrición') return 'Nutrición'
-        if (cat === 'Indumentaria') return 'Indumentaria'
-        return 'bikes'
-      }
-      const targetGroup = groupFor(listing.category)
-      const allowed = all.filter((l) => {
-        if (!l || l.id === currentId) return false
-        const g = groupFor(l.category)
-        if (targetGroup === 'bikes') return g === 'bikes'
-        return g === targetGroup
-      })
-      const now = Date.now()
-      const score = (item: Listing) => {
-        const boost = typeof item.rankBoostUntil === 'number' && item.rankBoostUntil > now ? 2 : 0
-        const sameSub = targetSub && item.subcategory?.toLowerCase() === targetSub ? 1 : 0
-        const created = typeof item.createdAt === 'number' ? item.createdAt : 0
-        return boost * 1e12 + sameSub * 1e9 + created
-      }
-      const sorted = [...allowed].sort((a, b) => score(b) - score(a))
-      setSellerRelated(sorted)
+      setSellerRelated(all)
     }
     void load()
     return () => { active = false }
-  }, [listing?.id, listing?.sellerId, listing?.category])
+  }, [listing?.id, listing?.category, listing?.subcategory])
 
   useEffect(() => {
     const loadSellerProfile = async () => {
       if (!listing?.sellerId || !supabaseEnabled) {
         setSellerProfile(null)
         setSellerVerified(false)
+        setSellerPublishedCount(0)
         return
       }
       setSellerVerified(false)
@@ -358,6 +375,17 @@ export default function ListingDetail() {
       setSellerVerified(Boolean(profile?.verified))
     }
     void loadSellerProfile()
+  }, [listing?.sellerId])
+
+  useEffect(() => {
+    if (!listing?.sellerId || !supabaseEnabled) return
+    let active = true
+    ;(async () => {
+      const count = await fetchListingsCountBySeller(listing.sellerId)
+      if (!active) return
+      setSellerPublishedCount(count)
+    })()
+    return () => { active = false }
   }, [listing?.sellerId])
 
   // Aplicar destaque automáticamente tras volver de checkout (Option A)
@@ -513,7 +541,6 @@ export default function ListingDetail() {
   const paidPlanActive = hasPaidPlan(effectivePlan, listing.sellerPlanExpires)
   const hadBasicOrPremium = effectivePlan === 'basic' || effectivePlan === 'premium'
   const verifiedVendor = sellerVerified
-  const inCompare = compareIds.includes(listing.id)
   const isFeaturedListing = hasPaidPlan(effectivePlan, listing.sellerPlanExpires)
   const listingSold = listing.status === 'sold'
   const listingUnavailable = listingSold || listing.status === 'archived' || listing.status === 'paused' || listing.status === 'expired'
@@ -721,7 +748,7 @@ export default function ListingDetail() {
     }
   }
 
-  const handleModeratorUpgrade = async (plan: 'basic' | 'premium') => {
+  const handleModeratorUpgrade = async (plan: 'premium' | 'pro') => {
     if (!listing) return
     setModeratorUpdating(true)
     try {
@@ -736,7 +763,7 @@ export default function ListingDetail() {
         return
       }
       if (result.listing) setListing(result.listing)
-      showToast(`Aplicamos el plan ${plan === 'premium' ? 'Premium' : 'Básica'} a la publicación.`)
+      showToast(`Aplicamos el plan ${plan === 'pro' ? 'Pro (prioridad alta)' : 'Premium (prioridad)'}.`)
     } catch (err) {
       console.error('[listing-detail] moderator upgrade failed', err)
       alert('No pudimos aplicar el plan. Intentá nuevamente.')
@@ -749,15 +776,12 @@ export default function ListingDetail() {
     if (!modAction) return
     const confirmAll = ['delete'].includes(modAction) ? window.confirm('Confirmá la acción seleccionada.') : true
     if (!confirmAll) return
-    if (modAction === 'highlight7') return void handleModeratorHighlight('basic', 7)
-    if (modAction === 'highlight14') return void handleModeratorHighlight('premium', 14)
-    if (modAction === 'unhighlight') return void handleModeratorHighlight(null as any, null)
     if (modAction === 'verify') return void handleModeratorVerify(true)
     if (modAction === 'unverify') return void handleModeratorVerify(false)
     if (modAction === 'enable_wa') return void handleModeratorWhatsapp(true)
     if (modAction === 'disable_wa') return void handleModeratorWhatsapp(false)
-    if (modAction === 'upgrade_basic') return void handleModeratorUpgrade('basic')
     if (modAction === 'upgrade_premium') return void handleModeratorUpgrade('premium')
+    if (modAction === 'upgrade_pro') return void handleModeratorUpgrade('pro')
     if (modAction === 'delete') return void handleModeratorDelete()
     if (modAction === 'mark_sold') {
       if (!listing) return
@@ -798,97 +822,59 @@ export default function ListingDetail() {
       setModeratorUpdating(false)
       return
     }
-    if (modAction === 'extend_7' || modAction === 'extend_14') {
-      if (!listing) return
-      const days = modAction === 'extend_7' ? 7 : 14
-      setModeratorUpdating(true)
-      const updated = await extendListingExpiryDays(listing.id, days)
-      if (updated) setListing(updated)
-      setModeratorUpdating(false)
-      return
-    }
   }
 
   const ContactIcons = () => {
-    const items: Array<{ id: string; label: string; onClick?: () => void; href?: string; icon: ReactNode; disabled?: boolean; className?: string }> = []
     const emailRecipient = sellerAuthEmail || sellerProfile?.email || listing.sellerEmail || null
     const isStoreLocal = Boolean(sellerProfile?.store_enabled)
     const waAllowed = Boolean((listing as any).waPublic ?? (listing as any).wa_public ?? (hadBasicOrPremium || isStoreLocal))
     const canShowWhatsapp = Boolean(waLink && !isOwner && !listingUnavailable && waAllowed)
 
-    // WhatsApp habilitado para publicaciones Básica o Premium (aunque el destaque haya vencido)
-    if (canShowWhatsapp) {
-      items.push({
-        id: 'whatsapp',
-        label: 'Abrir WhatsApp',
-        href: waLink || undefined,
-        icon: <WhatsappIcon />,
-        className: 'bg-[#25D366]'
-      })
-    }
-    if (emailRecipient) {
-      items.push({
-        id: 'email',
-        label: 'Enviar correo',
-        href: `mailto:${emailRecipient}?subject=${mailtoSubjectParam}&body=${mailtoBodyParam}`,
-        icon: <MailIcon />,
-        className: 'bg-[#0b1724]'
-      })
-    }
-
-    if (items.length === 0) return null
+    if (!canShowWhatsapp && !emailRecipient) return null
 
     return (
-      <div className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-wide text-[#14212e]/60">
-          Contactate con el vendedor
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          {items.map((item) =>
-            item.href ? (
-              <a
-                key={item.id}
-                href={item.href}
-                target={item.href.startsWith('mailto:') ? undefined : '_blank'}
-                rel={item.href.startsWith('mailto:') ? undefined : 'noreferrer'}
-                className={`inline-flex h-10 w-10 items-center justify-center rounded-full text-white shadow transition hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70 ${item.className}`}
-                aria-label={item.label}
-                title={item.label}
-                onClick={() => {
-                  try {
-                    if (item.id === 'whatsapp') {
-                      trackMetaPixel('Contact', { method: 'whatsapp', content_ids: [listing.id], content_type: 'product' })
-                      logContactEvent({ sellerId: listing.sellerId, listingId: listing.id, buyerId: user?.id || null, type: 'whatsapp' })
-                      track('wa_click', {
-                        listing_id: listing.id,
-                        store_user_id: listing.sellerId || null,
-                        user_id: user?.id || null,
-                      })
-                    } else if (item.id === 'email') {
-                      trackMetaPixel('Contact', { method: 'email', content_ids: [listing.id], content_type: 'product' })
-                      logContactEvent({ sellerId: listing.sellerId, listingId: listing.id, buyerId: user?.id || null, type: 'email' })
-                    }
-                  } catch { /* noop */ }
-                }}
-              >
-                <span className="sr-only">{item.label}</span>
-                <span className="text-white">{item.icon}</span>
-              </a>
-            ) : (
-              <button
-                key={item.id}
-                type="button"
-                onClick={item.onClick}
-                disabled={item.disabled}
-                className={`inline-flex h-10 w-10 items-center justify-center rounded-full text-white shadow transition hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70 ${item.className} ${item.disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
-                aria-label={item.label}
-                title={item.label}
-              >
-                <span className="sr-only">{item.label}</span>
-                <span className="text-white">{item.icon}</span>
-              </button>
-            )
-          )}
+      <div className="space-y-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Contactar</p>
+        <div className="space-y-2">
+          {canShowWhatsapp ? (
+            <a
+              href={waLink || undefined}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#25D366] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:brightness-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mb-primary/40"
+              aria-label="Contactar por WhatsApp"
+              onClick={() => {
+                try {
+                  trackMetaPixel('Contact', { method: 'whatsapp', content_ids: [listing.id], content_type: 'product' })
+                  logContactEvent({ sellerId: listing.sellerId, listingId: listing.id, buyerId: user?.id || null, type: 'whatsapp' })
+                  track('wa_click', {
+                    listing_id: listing.id,
+                    store_user_id: listing.sellerId || null,
+                    user_id: user?.id || null,
+                  })
+                } catch { /* noop */ }
+              }}
+            >
+              <span className="h-5 w-5">{<WhatsappIcon />}</span>
+              WhatsApp
+            </a>
+          ) : null}
+          {emailRecipient ? (
+            <a
+              href={`mailto:${emailRecipient}?subject=${mailtoSubjectParam}&body=${mailtoBodyParam}`}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-900 shadow-sm transition hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mb-primary/40"
+              aria-label="Enviar correo"
+              onClick={() => {
+                try {
+                  trackMetaPixel('Contact', { method: 'email', content_ids: [listing.id], content_type: 'product' })
+                  logContactEvent({ sellerId: listing.sellerId, listingId: listing.id, buyerId: user?.id || null, type: 'email' })
+                } catch { /* noop */ }
+              }}
+            >
+              <span className="h-5 w-5">{<MailIcon />}</span>
+              Email
+            </a>
+          ) : null}
         </div>
       </div>
     )
@@ -930,21 +916,15 @@ export default function ListingDetail() {
   return (
     <>
       <SeoHead {...seoHeadConfig} />
-      <div className="bg-[#14212e]">
+      <div className="bg-gray-50">
         <Container>
-          <div className={isLifestyle
-            ? 'flex flex-col w-full gap-5 lg:gap-6 lg:grid lg:grid-cols-[2fr_3fr]'
-            : 'grid grid-cols-1 w-full gap-5 lg:gap-6 lg:grid-cols-[2fr_1fr]'}>
+          <div className="grid w-full grid-cols-1 gap-5 lg:gap-8 lg:grid-cols-[2fr_1fr]">
           {/* Fotos (siempre primero en mobile; desktop: col 1) */}
           <div className="w-full min-w-0 lg:col-start-1 lg:row-start-1">
-            {isLifestyle ? (
-              <ImageCarousel images={displayImages} aspect="auto" fit="contain" bg="light" maxHeightClass="lg:max-h-[500px]" thumbWhiteBg />
-            ) : (
-              <ImageCarousel images={displayImages} />
-            )}
+            <ListingGallery images={displayImages} variant={isLifestyle ? 'lifestyle' : 'bike'} />
             {isModerator && listing && (
               <div className="mt-3 flex flex-wrap items-center gap-3">
-                <Link to={`/publicar/nueva?id=${encodeURIComponent(listing.id)}`}>
+                <Link to={buildEditFormUrl(listing)}>
                   <Button>
                     Editar en formulario
                   </Button>
@@ -952,271 +932,10 @@ export default function ListingDetail() {
               </div>
             )}
           </div>
-          {/* Desktop only (non-lifestyle): left column shows specs + description beneath images */}
-          {!isLifestyle && (
-            <div className="hidden lg:block w-full min-w-0 lg:col-start-1 lg:row-start-2 lg:space-y-6">
-              <section className="card p-6">
-                <h2 className="text-lg font-semibold text-[#14212e]">Especificaciones</h2>
-                <div className="mt-4 grid grid-cols-2 gap-3">
-                  <Spec label="Marca" value={listing.brand} canEdit={isModerator} onEdit={() => openEditField('brand', listing.brand, 'text')} />
-                  <Spec label="Modelo" value={listing.model} canEdit={isModerator} onEdit={() => openEditField('model', listing.model, 'text')} />
-                  {listing.year ? <Spec label="Año" value={String(listing.year)} canEdit={isModerator} onEdit={() => openEditField('year', listing.year ?? '', 'number')} /> : null}
-                  <Spec label="Categoría" value={listing.category} />
-                  {/* Bike/Accesorios branch (non-lifestyle) */}
-                  {(() => {
-                    const parts = (listing.extras || '')
-                      .split('•')
-                      .map((p) => p.trim())
-                      .filter(Boolean)
-                    const token = parts.find((p) => p.toLowerCase().startsWith('talles:'))
-                    const multi = token ? token.split(':').slice(1).join(':').trim() : ''
-                    const sizeField = multi || listing.frameSize || null
-                    return (
-                      <>
-                        {listing.material ? <Spec label="Material" value={listing.material} canEdit={isModerator} onEdit={() => openEditField('material', listing.material, 'text')} /> : null}
-                        {listing.category === 'MTB' && specFork ? <Spec label="Horquilla" value={specFork} /> : null}
-                        {sizeField ? <Spec label="Talle / Medida" value={String(sizeField)} /> : null}
-                        {listing.wheelset ? <Spec label="Ruedas" value={listing.wheelset} /> : null}
-                        {listing.wheelSize ? <Spec label="Rodado" value={listing.wheelSize} /> : null}
-                        {(listing.drivetrain || listing.drivetrainDetail) ? (
-                          <Spec label="Grupo" value={(listing.drivetrain || listing.drivetrainDetail) as string} />
-                        ) : null}
-                        {isBikeCategory && specTxType ? <Spec label="Tipo de transmisión" value={specTxType} /> : null}
-                        {isBikeCategory && specBrake ? <Spec label="Freno" value={specBrake} /> : null}
-                        {listing.category === 'Fixie' && specFixieRatio ? <Spec label="Relación" value={specFixieRatio} /> : null}
-                        {listing.category === 'E-Bike' && specMotor ? <Spec label="Motor" value={specMotor} /> : null}
-                        {listing.category === 'E-Bike' && specCharge ? <Spec label="Batería / Carga" value={specCharge} /> : null}
-                        {isBikeCategory && specCondition ? <Spec label="Condición" value={specCondition} /> : null}
-                        {listing.extras ? <Spec label="Extras" value={listing.extras} fullWidth /> : null}
-                      </>
-                    )
-                  })()}
-                </div>
-              </section>
-              <section className="card p-6">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-semibold text-[#14212e]">Descripción</h2>
-                </div>
-                <p className="mt-3 text-sm leading-relaxed text-[#14212e]/80 whitespace-pre-wrap">
-                  {listing.description}
-                </p>
-              </section>
-            </div>
-          )}
-          <div className={`order-2 lg:order-none w-full min-w-0 mt-5 lg:mt-0 ${isLifestyle ? 'lg:col-start-2 lg:row-start-1 self-start' : 'lg:col-start-2 lg:row-start-1 self-start sticky top-[calc(var(--header-h)+16px)]'}`}>
-            <div className="card p-6 lg:p-5">
-              {/* Desktop (lg): unified two-column content for Nutrición/Indumentaria */}
-              {isLifestyle && (
-                <div className="hidden lg:grid lg:grid-cols-2 lg:gap-6 lg:divide-x lg:divide-[#14212e]/10">
-                  {/* Left subcolumn: Especificaciones + Descripción */}
-                  <div className="space-y-6">
-                    <section>
-                      <h2 className="text-lg font-semibold text-[#14212e]">Especificaciones</h2>
-                      <div className="mt-4 grid grid-cols-2 gap-3">
-                        <Spec label="Marca" value={listing.brand} canEdit={isModerator} onEdit={() => openEditField('brand', listing.brand, 'text')} />
-                        <Spec label="Modelo" value={listing.model} canEdit={isModerator} onEdit={() => openEditField('model', listing.model, 'text')} />
-                        {listing.year ? <Spec label="Año" value={String(listing.year)} canEdit={isModerator} onEdit={() => openEditField('year', listing.year ?? '', 'number')} /> : null}
-                        <Spec label="Categoría" value={listing.category} />
-                        {listing.category === 'Nutrición' ? (
-                          (() => {
-                            const map = parseExtrasMap(listing.extras)
-                            const porcion = getExtra(map, 'Porción') || getExtra(map, 'Porcion')
-                            const carbs = getExtra(map, 'Carbohidratos')
-                            const sodio = getExtra(map, 'Sodio')
-                            const cafeina = getExtra(map, 'Cafeína') || getExtra(map, 'Cafeina')
-                            const calorias = getExtra(map, 'Calorías') || getExtra(map, 'Calorias')
-                            const porciones = getExtra(map, 'Porciones')
-                            const sabor = getExtra(map, 'Sabor')
-                            const vence = getExtra(map, 'Vence')
-                            const ingredientes = getExtra(map, 'Ingredientes')
-                            const alerg = getExtra(map, 'Alérgenos') || getExtra(map, 'Alergenos')
-                            return (
-                              <>
-                                {listing.subcategory ? <Spec label="Tipo" value={listing.subcategory} /> : null}
-                                {porcion ? <Spec label="Porción" value={porcion} /> : null}
-                                {porciones ? <Spec label="Porciones" value={porciones} /> : null}
-                                {carbs ? <Spec label="Carbohidratos" value={`${carbs}`} /> : null}
-                                {sodio ? <Spec label="Sodio" value={`${sodio}`} /> : null}
-                                {cafeina ? <Spec label="Cafeína" value={`${cafeina}`} /> : null}
-                                {calorias ? <Spec label="Calorías" value={`${calorias}`} /> : null}
-                                {sabor ? <Spec label="Sabor" value={sabor} /> : null}
-                                {vence ? <Spec label="Vencimiento" value={vence} /> : null}
-                                {ingredientes ? <Spec label="Ingredientes" value={ingredientes} fullWidth /> : null}
-                                {alerg ? <Spec label="Alérgenos" value={alerg} fullWidth /> : null}
-                              </>
-                            )
-                          })()
-                        ) : (
-                          <>
-                            {listing.material ? <Spec label="Material" value={listing.material} canEdit={isModerator} onEdit={() => openEditField('material', listing.material, 'text')} /> : null}
-                            {listing.category === 'MTB' && specFork ? <Spec label="Horquilla" value={specFork} /> : null}
-                            {(() => {
-                              const parts = (listing.extras || '')
-                                .split('•')
-                                .map((p) => p.trim())
-                                .filter(Boolean)
-                              const token = parts.find((p) => p.toLowerCase().startsWith('talles:'))
-                              const multi = token ? token.split(':').slice(1).join(':').trim() : ''
-                              if (multi) return <Spec label="Talles" value={multi} />
-                              return listing.frameSize ? <Spec label="Talle / Medida" value={listing.frameSize} canEdit={isModerator} onEdit={() => openEditField('frameSize', listing.frameSize, 'text')} /> : null
-                            })()}
-                            {listing.wheelset ? <Spec label="Ruedas" value={listing.wheelset} canEdit={isModerator} onEdit={() => openEditField('wheelset', listing.wheelset, 'text')} /> : null}
-                            {listing.wheelSize ? <Spec label="Rodado" value={listing.wheelSize} canEdit={isModerator} onEdit={() => openEditField('wheelSize', listing.wheelSize, 'text')} /> : null}
-                          </>
-                        )}
-                      </div>
-                    </section>
-                    <section>
-                      <div className="flex items-center gap-2">
-                        <h2 className="text-lg font-semibold text-[#14212e]">Descripción</h2>
-                        {isModerator && (
-                          <button
-                            type="button"
-                            className="rounded-full border border-[#14212e]/20 p-1 text-[#14212e] hover:bg-white/50"
-                            aria-label="Editar descripción"
-                            onClick={() => { setEditDescValue(listing.description || ''); setEditDescOpen(true) }}
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25Zm14.71-9.04a1 1 0 0 0 0-1.41l-1.51-1.51a1 1 0 0 0-1.41 0l-1.13 1.13 3.75 3.75 1.3-1.46Z"/></svg>
-                          </button>
-                        )}
-                      </div>
-                      <p className="mt-3 text-sm leading-relaxed text-[#14212e]/80 whitespace-pre-wrap">
-                        {listing.description}
-                      </p>
-                    </section>
-                  </div>
-                  {/* Right subcolumn: Title/Price + Seller + CTAs */}
-                  <div className="space-y-4 lg:pl-6">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h1 className="text-xl font-bold text-[#14212e] leading-tight">{listing.title}</h1>
-                          {isModerator && (
-                            <button
-                              type="button"
-                              className="rounded-full border border-[#14212e]/20 p-1 text-[#14212e] hover:bg-white/50"
-                              aria-label="Editar título"
-                              onClick={() => { setEditTitleValue(listing.title || ''); setEditTitleOpen(true) }}
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25Zm14.71-9.04a1 1 0 0 0 0-1.41l-1.51-1.51a1 1 0 0 0-1.41 0l-1.13 1.13 3.75 3.75 1.3-1.46Z"/></svg>
-                            </button>
-                          )}
-                        </div>
-                        <p className="mt-1 text-sm text-[#14212e]/70">{listing.location}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {(() => {
-                          const displayCount = likeCount > 0 ? likeCount : (isFav ? 1 : 0)
-                          const content = displayCount > 0 ? `❤️ ${displayCount}` : '🤍'
-                          if (canLike) {
-                            return (
-                              <button
-                                type="button"
-                                className={`rounded-full px-2 py-1 text-xs ${isFav ? 'bg-white/90 text-[#14212e]' : 'bg-[#14212e]/70 text-white/80'} border border-white/20`}
-                                aria-label={isFav ? 'Quitar me gusta' : 'Me gusta'}
-                                onClick={() => toggleFav()}
-                              >
-                                {content}
-                              </button>
-                            )
-                          }
-                          return (
-                            <span
-                              className={`rounded-full px-2 py-1 text-xs ${displayCount > 0 ? 'bg-white/90 text-[#14212e]' : 'bg-[#14212e]/70 text-white/80'} border border-white/20`}
-                              aria-label={`Me gusta: ${displayCount}`}
-                            >
-                              {content}
-                            </span>
-                          )
-                        })()}
-                        <IconButton label={inCompare ? 'Quitar de comparativa' : 'Agregar a comparativa'} onClick={() => toggleCompare(listing.id)}>
-                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
-                            <path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4V4Zm2 0v16h6a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-6Z" />
-                          </svg>
-                        </IconButton>
-                      </div>
-                    </div>
-                    <div className="flex items-end gap-3">
-                      <span className="text-2xl font-extrabold text-[#14212e]">{formattedPrice}</span>
-                      {originalPriceLabel && <span className="text-sm text-[#14212e]/60 line-through">{originalPriceLabel}</span>}
-                    </div>
-                    {isLifestyle && <hr className="my-3 border-t border-[#14212e]/20" />}
-                    {/* Bloque de estado de publicación removido a pedido */}
-                    {isOwner && (
-                      <div className="flex flex-wrap gap-2 pt-1">
-                        <Link
-                          to={`/publicar/nueva?id=${encodeURIComponent(listing.id)}`}
-                          className="inline-flex items-center gap-2 rounded-full border border-[#14212e]/20 px-3 py-1.5 text-xs font-semibold text-[#14212e] hover:bg-[#14212e]/5"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25Z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M14.06 6.19l3.75 3.75" />
-                          </svg>
-                          Editar publicación
-                        </Link>
-                      </div>
-                    )}
-                    {/* Seller info + CTAs */}
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-3 min-w-0">
-                        {sellerAvatarUrl && (
-                          <img
-                            src={buildPublicUrlSafe(sellerAvatarUrl) || ''}
-                            sizes="40px"
-                            alt={formatNameWithInitial(listing.sellerName, 'Vendedor')}
-                            className="h-10 w-10 rounded-full object-cover border border-[#14212e]/10"
-                            loading="lazy"
-                            decoding="async"
-                          />
-                        )}
-                        <div className="min-w-0">
-                          <p className="text-sm text-[#14212e]/70">Publicado por:</p>
-                          <h3 className="text-lg font-semibold text-[#14212e]">
-                            {isStore ? (
-                              <Link to={storeLink!} className="inline-flex items-center gap-2 transition hover:text-mb-primary">
-                                <span className="truncate">{sellerDisplayName}</span>
-                                <span className="text-[#14212e]/40">|</span>
-                                <VerifiedCheck />
-                                <span className="text-sm text-[#14212e]/80">Tienda oficial</span>
-                              </Link>
-                            ) : (
-                              <Link to={`/vendedor/${listing.sellerId}`} className="inline-flex items-center gap-2 transition hover:text-mb-primary">
-                                {sellerDisplayName}
-                                {(() => {
-                                  const c = trustColorClasses(sellerTrustLevel)
-                                  return (
-                                    <span className={`relative -top-1 inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[12px] leading-none font-semibold ${trustBadgeBgClasses(sellerTrustLevel)} text-white border-[#0f1924]`}>
-                                      {trustLabel(sellerTrustLevel, 'short')}
-                                    </span>
-                                  )
-                                })()}
-                              </Link>
-                            )}
-                          </h3>
-                          {sellerRating && sellerRating.count > 0 && (
-                            <div className="mt-1 flex items-center gap-2 text-xs text-[#14212e]/70">
-                              <StarRating value={sellerRating.avg} />
-                              <span>({sellerRating.count})</span>
-                            </div>
-                          )}
-                          {isStore && (
-                            <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-[#14212e]/70">
-                              {sellerProfile?.store_website && (
-                                <a href={sellerProfile.store_website} target="_blank" rel="noreferrer" className="underline">Sitio web</a>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      {/* Visible divider before contact actions (lifestyle desktop) */}
-                      {isLifestyle && <hr className="my-3 border-t border-[#14212e]/20" />}
-                      <ContactIcons />
-                    </div>
-                  </div>
-                </div>
-              )}
-              {/* Mobile: keep existing seller content; Desktop: hide for Lifestyle */}
-              <div className={isLifestyle ? 'block lg:hidden' : ''}>
+          <aside className="order-2 w-full min-w-0 mt-5 lg:mt-0 lg:col-start-2 lg:row-start-1 self-start lg:sticky lg:top-[calc(var(--header-h)+16px)]">
+            <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-xl">
+              {/* Buy box */}
+              <div>
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <div className="flex items-center gap-2">
@@ -1232,7 +951,7 @@ export default function ListingDetail() {
                       </button>
                     )}
                   </div>
-                  <p className="mt-2 lg:mt-1 text-sm text-[#14212e]/70">{listing.location}</p>
+                  <p className="mt-2 lg:mt-1 text-sm text-[#14212e]/70">{headerMeta || listing.location}</p>
                   {/* Badge de destacada removido */}
                 </div>
                 <div className="flex items-center gap-2">
@@ -1260,26 +979,11 @@ export default function ListingDetail() {
                       </span>
                     )
                   })()}
-                  <IconButton label={inCompare ? 'Quitar de comparativa' : 'Agregar a comparativa'} onClick={() => toggleCompare(listing.id)}>
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
-                      <path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4V4Zm2 0v16h6a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-6Z" />
-                    </svg>
-                  </IconButton>
                 </div>
               </div>
               <div className="mt-2 flex items-end gap-3">
                 <span className="text-3xl lg:text-2xl font-extrabold text-[#14212e]">{formattedPrice}</span>
                 {originalPriceLabel && <span className="text-sm text-[#14212e]/60 line-through">{originalPriceLabel}</span>}
-                {isModerator && (
-                  <button
-                    type="button"
-                    className="ml-1 rounded-full border border-[#14212e]/20 p-1 text-[#14212e] hover:bg-white/50"
-                    aria-label="Editar precio"
-                    onClick={() => { setReduceValue(String(listing.price)); setReduceOpen(true) }}
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25Zm14.71-9.04a1 1 0 0 0 0-1.41l-1.51-1.51a1 1 0 0 0-1.41 0l-1.13 1.13 3.75 3.75 1.3-1.46Z"/></svg>
-                  </button>
-                )}
               </div>
               {/* Lifestyle mobile: no divider under price */}
               {isLifestyle && <div className="hidden lg:block"><hr className="my-3 border-t border-[#14212e]/20" /></div>}
@@ -1288,11 +992,7 @@ export default function ListingDetail() {
                   {/* Bloque de estado de publicación removido a pedido */}
               
               {/* Sección de información de la tienda (teléfono/dirección) removida a pedido */}
-              <p className="mt-4 text-xs text-[#14212e]/60 lg:hidden">
-                Guardá o compará esta bici para decidir más tarde.
-              </p>
-
-              <div className={`mt-5 lg:mt-4 space-y-3 lg:space-y-2 border-t pt-5 lg:pt-4 ${isLifestyle ? 'border-[#14212e]/20' : 'border-[#14212e]/10'}` }>
+	              <div className={`mt-5 lg:mt-4 space-y-3 lg:space-y-2 border-t pt-5 lg:pt-4 ${isLifestyle ? 'border-[#14212e]/20' : 'border-[#14212e]/10'}` }>
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0">
                     {sellerAvatarUrl && (
@@ -1343,9 +1043,10 @@ export default function ListingDetail() {
                           )}
                         </div>
                       )}
-                    </div>
-                  </div>
-                </div>
+	              </div>
+	            </div>
+	          </div>
+	          <CicloTrust profile={sellerProfile} paidPlanActive={paidPlanActive} publishedCount={sellerPublishedCount} />
                 {/* Quitar línea en mobile entre precio y publicado por; mantener solo en desktop si hiciera falta */}
                 <div className={isLifestyle ? 'hidden lg:block my-3 h-px w-full bg-[#14212e]/30' : 'hidden'} />
                 <div className="text-xs text-[#14212e]/60">
@@ -1353,13 +1054,13 @@ export default function ListingDetail() {
                     <Link to={storeLink!} className="inline-flex items-center gap-1 text-[#14212e] underline">
                       Ver tienda oficial
                     </Link>
-                  ) : (
-                    <Link to={`/vendedor/${listing.sellerId}`} className="inline-flex items-center gap-1 text-[#14212e] underline">
-                      Ver perfil del vendedor
-                    </Link>
-                  )}
-                </div>
-                <div className="space-y-3">
+	                  ) : (
+	                    <Link to={`/vendedor/${listing.sellerId}`} className="inline-flex items-center gap-1 text-[#14212e] underline">
+	                      Ver perfil del vendedor
+	                    </Link>
+	                  )}
+	                </div>
+	                <div className="space-y-3">
                   {/* Quitar línea antes de Contactate (mobile lifestyle).*/}
                   <div className={isLifestyle ? 'hidden lg:block my-3 h-px w-full bg-[#14212e]/30' : 'hidden'} />
                   <ContactIcons />
@@ -1370,7 +1071,7 @@ export default function ListingDetail() {
                           <div>
                             <p className="text-xs font-semibold uppercase tracking-wide text-[#14212e]/60">Mejorá tu aviso</p>
                             <p className="text-sm text-[#14212e]/80">Plan actual: Free · {listing.canUpgrade ? 'Podés subir a Premium/Pro' : 'Plan activo'}</p>
-                          </div>
+	                          </div>
                           <button
                             type="button"
                             className="inline-flex items-center gap-2 rounded-full bg-[#14212e] px-3 py-2 text-xs font-semibold text-white hover:bg-[#1b2f3f]"
@@ -1401,18 +1102,13 @@ export default function ListingDetail() {
                     <p className="text-xs uppercase tracking-wide text-[#14212e]/60">Acciones de moderador</p>
                     {/* Info de vigencias */}
                     <div className="text-xs text-[#14212e]/70">
-                      <div>Publicación (restante): {publicationRemainingLabel ?? 'sin fecha'}</div>
-                      {listingPlanDuration ? (
-                        <div>Plan: {listingPlanName ?? 'Estándar'} · {listingPlanDuration} días</div>
-                      ) : null}
-                      <div>Destaque (restante): {highlightRemainingLabel ?? 'sin destaque'}</div>
+                      <div>Fecha publicación: {listing?.createdAt ? dayjs(listing.createdAt).format('DD/MM/YYYY') : '—'}</div>
+                      <div>Plan: {listing.planStatus || listing.planTier || 'Free'}</div>
+                      <div>Boost vence: {listing.rankBoostUntil ? dayjs(listing.rankBoostUntil).format('DD/MM/YYYY') : 'sin boost'}</div>
                     </div>
                     {/* Botón primario dinámico (sólo mod) */}
                     {(() => {
-                      const hasHighlight = hasPaidPlan(listing.sellerPlan ?? (listing.plan as any), listing.sellerPlanExpires)
                       const isSold = listing.status === 'sold'
-                      const modBasicLabel = listingPlanCode === 'basic' ? 'Renovar plan Básica' : 'Aplicar plan Básica'
-                      const modPremiumLabel = listingPlanCode === 'premium' ? 'Renovar plan Premium' : 'Aplicar plan Premium'
                       return (
                         <div className="mb-2 flex flex-wrap gap-2">
                           <Button
@@ -1435,17 +1131,16 @@ export default function ListingDetail() {
                           >
                             Normalizar vigencias
                           </Button>
-                          {!hasHighlight && listing.status !== 'archived' && (
-                            <Button variant="ghost" disabled={moderatorUpdating} onClick={() => { setModAction('highlight7'); void runModeratorAction() }}>
-                              Destacar 7 días 🔥
-                            </Button>
+                          {listing.status !== 'archived' && (
+                            <>
+                              <Button variant="ghost" disabled={moderatorUpdating} onClick={() => { setModAction('upgrade_pro'); void runModeratorAction() }}>
+                                Boost 90d · Prioridad alta (PRO)
+                              </Button>
+                              <Button variant="ghost" disabled={moderatorUpdating} onClick={() => { setModAction('upgrade_premium'); void runModeratorAction() }}>
+                                Boost 90d · Prioridad (Premium)
+                              </Button>
+                            </>
                           )}
-                          <Button variant="ghost" disabled={moderatorUpdating} onClick={() => { setModAction('upgrade_basic'); void runModeratorAction() }}>
-                            {modBasicLabel}
-                          </Button>
-                          <Button variant="ghost" disabled={moderatorUpdating} onClick={() => { setModAction('upgrade_premium'); void runModeratorAction() }}>
-                            {modPremiumLabel}
-                          </Button>
                           {!isSold ? (
                             <Button variant="ghost" disabled={moderatorUpdating} onClick={() => { setModAction('mark_sold'); void runModeratorAction() }}>
                               Marcar vendida
@@ -1466,250 +1161,255 @@ export default function ListingDetail() {
                         onChange={(e) => setModAction(e.target.value)}
                       >
                         <option value="">Elegir acción…</option>
-                        <option value="highlight7">Destacar 7 días</option>
-                        <option value="highlight14">Destacar 14 días</option>
-                        <option value="unhighlight">Quitar destaque</option>
-                        <option value="upgrade_basic">Aplicar plan Básica</option>
-                        <option value="upgrade_premium">Aplicar plan Premium</option>
                         <option value="verify">Verificar vendedor</option>
                         <option value="unverify">Quitar verificación</option>
                         <option value="enable_wa">Habilitar WhatsApp</option>
                         <option value="disable_wa">Deshabilitar WhatsApp</option>
                         <option value="mark_sold">Marcar como vendida</option>
                         <option value="mark_active">Marcar disponible</option>
+                        <option value="upgrade_pro">Boost 90d · Prioridad alta (PRO)</option>
+                        <option value="upgrade_premium">Boost 90d · Prioridad (Premium)</option>
                         <option value="archive">Archivar publicación</option>
                         <option value="reduce_price">Reducir precio</option>
-                        <option value="extend_7">Extender 7 días</option>
-                        <option value="extend_14">Extender 14 días</option>
                         <option value="delete">Eliminar publicación</option>
                       </select>
                       <Button variant="ghost" disabled={moderatorUpdating || !modAction} onClick={runModeratorAction}>
                         Confirmar
                       </Button>
                     </div>
-                    {/* Modales: Reducir precio / Extender vigencia */}
-                    {reduceOpen && (
-                      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setReduceOpen(false)}>
-                        <div className="w-full max-w-sm rounded-2xl bg-white p-4" onClick={(e) => e.stopPropagation()}>
-                          <h3 className="text-sm font-semibold text-[#14212e]">Reducir precio</h3>
-                          <p className="mt-1 text-xs text-[#14212e]/70">Ingresá el nuevo precio. Debe ser menor al actual.</p>
-                          <input type="number" value={reduceValue} onChange={(e) => setReduceValue(e.target.value)} className="input mt-3 w-full" />
-                          <div className="mt-3 flex justify-end gap-2">
-                            <button className="rounded-full border border-[#14212e]/20 px-3 py-1.5 text-sm text-[#14212e]" onClick={() => setReduceOpen(false)}>Cancelar</button>
-                            <button
-                              className="rounded-full bg-[#14212e] px-3 py-1.5 text-sm font-semibold text-white"
-                              onClick={async () => {
-                                if (!listing) return
-                                const normalized = Number(String(reduceValue).replace(/,/g, '.'))
-                                if (!Number.isFinite(normalized) || normalized <= 0 || normalized >= listing.price) {
-                                  alert('Ingresá un monto válido menor al actual.')
-                                  return
-                                }
-                                setModeratorUpdating(true)
-                                const updated = await reduceListingPrice({ id: listing.id, newPrice: normalized, currentPrice: listing.price, originalPrice: listing.originalPrice })
-                                if (updated) setListing(updated)
-                                setModeratorUpdating(false)
-                                setReduceOpen(false)
-                              }}
-                            >
-                              Confirmar
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    {extendOpen && (
-                      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setExtendOpen(false)}>
-                        <div className="w-full max-w-sm rounded-2xl bg-white p-4" onClick={(e) => e.stopPropagation()}>
-                          <h3 className="text-sm font-semibold text-[#14212e]">Extender vigencia</h3>
-                          <p className="mt-1 text-xs text-[#14212e]/70">Cantidad de días para extender.</p>
-                          <input type="number" value={extendDays} onChange={(e) => setExtendDays(e.target.value)} className="input mt-3 w-full" />
-                          <div className="mt-3 flex justify-end gap-2">
-                            <button className="rounded-full border border-[#14212e]/20 px-3 py-1.5 text-sm text-[#14212e]" onClick={() => setExtendOpen(false)}>Cancelar</button>
-                            <button
-                              className="rounded-full bg-[#14212e] px-3 py-1.5 text-sm font-semibold text-white"
-                              onClick={async () => {
-                                if (!listing) return
-                                const val = parseInt(extendDays, 10)
-                                if (!Number.isFinite(val) || val <= 0) {
-                                  alert('Ingresá un número de días válido (> 0).')
-                                  return
-                                }
-                                setModeratorUpdating(true)
-                                const updated = await extendListingExpiryDays(listing.id, val)
-                                if (updated) setListing(updated)
-                                setModeratorUpdating(false)
-                                setExtendOpen(false)
-                              }}
-                            >
-                              Confirmar
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
                     {/* Botones individuales ocultos; usar el dropdown + Confirmar */}
                   </div>
                 )}
               </div>
             </div>
           </div>
+          </aside>
           
 
-          <div className={`${isLifestyle ? 'order-3 lg:hidden' : 'order-3 lg:hidden'} w-full min-w-0 mt-5 lg:mt-0 ${isLifestyle ? 'lg:col-start-3' : 'lg:col-start-1'} lg:row-start-2`}>
-            <section className="card p-6">
-              <h2 className="text-lg font-semibold text-[#14212e]">Especificaciones</h2>
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                <Spec label="Marca" value={listing.brand} canEdit={isModerator} onEdit={() => openEditField('brand', listing.brand, 'text')} />
-                <Spec label="Modelo" value={listing.model} canEdit={isModerator} onEdit={() => openEditField('model', listing.model, 'text')} />
-                {listing.year ? <Spec label="Año" value={String(listing.year)} canEdit={isModerator} onEdit={() => openEditField('year', listing.year ?? '', 'number')} /> : null}
-                <Spec label="Categoría" value={listing.category} />
+	          <div className="order-3 w-full min-w-0 mt-5 lg:mt-0 lg:col-start-1 lg:row-start-2">
+		            <section className="border-b border-gray-200 pb-6">
+		              <div className="flex items-center justify-between gap-3">
+		                <h2 className="text-lg font-semibold text-[#14212e]">Especificaciones</h2>
+		                {isOwner && (
+		                  <Link
+		                    to={buildEditFormUrl(listing)}
+		                    className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-semibold text-gray-900 hover:bg-gray-50"
+		                  >
+		                    Editar
+		                  </Link>
+		                )}
+		              </div>
+		              <div className="mt-4">
+		                <ListingSpecs
+		                  listing={listing}
+		                  isModerator={isModerator}
+		                  onEditField={openEditField}
+		                  specCondition={specCondition}
+		                  specBrake={specBrake}
+		                  specFork={specFork}
+		                  specFixieRatio={specFixieRatio}
+		                  specMotor={specMotor}
+		                  specCharge={specCharge}
+		                  specTxType={specTxType}
+		                />
+		              </div>
+		            </section>
 
-                {listing.category === 'Nutrición' ? (
-                  (() => {
-                    const map = parseExtrasMap(listing.extras)
-                    const porcion = getExtra(map, 'Porción') || getExtra(map, 'Porcion')
-                    const carbs = getExtra(map, 'Carbohidratos')
-                    const sodio = getExtra(map, 'Sodio')
-                    const cafeina = getExtra(map, 'Cafeína') || getExtra(map, 'Cafeina')
-                    const calorias = getExtra(map, 'Calorías') || getExtra(map, 'Calorias')
-                    const porciones = getExtra(map, 'Porciones')
-                    const sabor = getExtra(map, 'Sabor')
-                    const vence = getExtra(map, 'Vence')
-                    const ingredientes = getExtra(map, 'Ingredientes')
-                    const alerg = getExtra(map, 'Alérgenos') || getExtra(map, 'Alergenos')
-                    return (
-                      <>
-                        {listing.subcategory ? <Spec label="Tipo" value={listing.subcategory} /> : null}
-                        {porcion ? <Spec label="Porción" value={porcion} /> : null}
-                        {porciones ? <Spec label="Porciones" value={porciones} /> : null}
-                        {carbs ? <Spec label="Carbohidratos" value={`${carbs}`} /> : null}
-                        {sodio ? <Spec label="Sodio" value={`${sodio}`} /> : null}
-                        {cafeina ? <Spec label="Cafeína" value={`${cafeina}`} /> : null}
-                        {calorias ? <Spec label="Calorías" value={`${calorias}`} /> : null}
-                        {sabor ? <Spec label="Sabor" value={sabor} /> : null}
-                        {vence ? <Spec label="Vencimiento" value={vence} /> : null}
-                        {ingredientes ? <Spec label="Ingredientes" value={ingredientes} fullWidth /> : null}
-                        {alerg ? <Spec label="Alérgenos" value={alerg} fullWidth /> : null}
-                      </>
-                    )
-                  })()
-                ) : (
-                  <>
-                    {/* Orden: Material + Horquilla (si existe) + Talle */}
-                    {listing.material ? <Spec label="Material" value={listing.material} canEdit={isModerator} onEdit={() => openEditField('material', listing.material, 'text')} /> : null}
-                    {listing.category === 'MTB' && specFork ? <Spec label="Horquilla" value={specFork} /> : null}
-                    {(() => {
-                      const parts = (listing.extras || '')
-                        .split('•')
-                        .map((p) => p.trim())
-                        .filter(Boolean)
-                      const token = parts.find((p) => p.toLowerCase().startsWith('talles:'))
-                      const multi = token ? token.split(':').slice(1).join(':').trim() : ''
-                      if (multi) return <Spec label="Talles" value={multi} />
-                      return listing.frameSize ? <Spec label="Talle / Medida" value={listing.frameSize} canEdit={isModerator} onEdit={() => openEditField('frameSize', listing.frameSize, 'text')} /> : null
-                    })()}
-                    {/* Luego Ruedas + Rodado */}
-                    {listing.wheelset ? <Spec label="Ruedas" value={listing.wheelset} canEdit={isModerator} onEdit={() => openEditField('wheelset', listing.wheelset, 'text')} /> : null}
-                    {listing.wheelSize ? <Spec label="Rodado" value={listing.wheelSize} canEdit={isModerator} onEdit={() => openEditField('wheelSize', listing.wheelSize, 'text')} /> : null}
-                    {/* Grupo de transmisión */}
-                    {(listing.drivetrain || listing.drivetrainDetail) ? (
-                      <Spec label="Grupo" value={(listing.drivetrain || listing.drivetrainDetail) as string} canEdit={isModerator} onEdit={() => openEditField('drivetrain', (listing.drivetrain || listing.drivetrainDetail) as string, 'text')} />
-                    ) : null}
-                    {/* Tipo de transmisión */}
-                    {isBikeCategory && specTxType ? <Spec label="Tipo de transmisión" value={specTxType} /> : null}
-                    {/* Tipo de freno */}
-                    {isBikeCategory && specBrake ? <Spec label="Freno" value={specBrake} /> : null}
-                    {/* Opcionales según categoría */}
-                    {listing.category === 'Fixie' && specFixieRatio ? <Spec label="Relación" value={specFixieRatio} /> : null}
-                    {listing.category === 'E-Bike' && specMotor ? <Spec label="Motor" value={specMotor} /> : null}
-                    {listing.category === 'E-Bike' && specCharge ? <Spec label="Batería / Carga" value={specCharge} /> : null}
-                    {isBikeCategory && specCondition ? <Spec label="Condición" value={specCondition} /> : null}
-                    {listing.extras ? <Spec label="Extras" value={listing.extras} fullWidth canEdit={isModerator} onEdit={() => openEditField('extras', listing.extras, 'textarea')} /> : null}
-                  </>
-                )}
-              </div>
-            </section>
-          </div>
-
-          <div className={`${isLifestyle ? 'order-4 lg:hidden' : 'order-4 lg:hidden'} w-full min-w-0 mt-5 lg:mt-0 ${isLifestyle ? 'lg:col-start-2' : 'lg:col-start-1'} lg:row-start-3`}>
-            <section className="card p-6">
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-semibold text-[#14212e]">Descripción</h2>
-                {isModerator && (
-                  <button
-                    type="button"
-                    className="rounded-full border border-[#14212e]/20 p-1 text-[#14212e] hover:bg-white/50"
-                    aria-label="Editar descripción"
-                    onClick={() => { setEditDescValue(listing.description || ''); setEditDescOpen(true) }}
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25Zm14.71-9.04a1 1 0 0 0 0-1.41l-1.51-1.51a1 1 0 0 0-1.41 0l-1.13 1.13 3.75 3.75 1.3-1.46Z"/></svg>
-                  </button>
-                )}
-              </div>
-              <p className="mt-3 text-sm leading-relaxed text-[#14212e]/80 whitespace-pre-wrap">
-                {listing.description}
-              </p>
-            </section>
-          </div>
+		            <section className="pt-6">
+		              <div className="flex items-center gap-2">
+		                <h2 className="text-lg font-semibold text-[#14212e]">Descripción</h2>
+		                {isModerator && (
+		                  <button
+		                    type="button"
+		                    className="rounded-full border border-gray-200 bg-white p-1 text-gray-700 transition hover:bg-gray-50"
+		                    aria-label="Editar descripción"
+		                    onClick={() => { setEditDescValue(listing.description || ''); setEditDescOpen(true) }}
+		                  >
+		                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25Zm14.71-9.04a1 1 0 0 0 0-1.41l-1.51-1.51a1 1 0 0 0-1.41 0l-1.13 1.13 3.75 3.75 1.3-1.46Z"/></svg>
+		                  </button>
+		                )}
+		              </div>
+		              <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-gray-700">
+		                {listing.description}
+		              </p>
+		            </section>
+		          </div>
 
           
 
-          </div>
-        </div>
-        {/* Upgrade modal post-publicación */}
-        {showUpgradeModal && listing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" role="dialog" aria-modal="true" onClick={() => { markUpgradeSeen(); setShowUpgradeModal(false) }}>
-          <div className="mx-4 w-full max-w-xl rounded-2xl border border-white/10 bg-white p-6 text-[#14212e] shadow-2xl" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h3 className="text-xl font-bold">Destacá tu publicación y vendé más rápido</h3>
-                  <p className="mt-1 text-sm text-slate-600">Sumá prioridad en listado, WhatsApp directo y más fotos visibles. Sin volver a subir nada.</p>
-                </div>
-                <button aria-label="Cerrar" className="rounded-full border border-slate-200 p-2 hover:bg-slate-50" onClick={() => { markUpgradeSeen(); setShowUpgradeModal(false) }}>
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 6l12 12M6 18 18 6"/></svg>
-                </button>
-              </div>
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                <div className="rounded-xl border border-slate-200 p-4">
-                  <div className="text-xs font-bold uppercase tracking-wider text-amber-600">Premium</div>
-                  <div className="mt-1 text-2xl font-extrabold text-[#14212e]">$9.000</div>
-                  <ul className="mt-3 space-y-1 text-sm text-slate-700">
-                    <li>• 8 fotos visibles</li>
-                    <li>• Prioridad 90 días</li>
-                    <li>• WhatsApp directo</li>
-                  </ul>
-                <button className="mt-4 w-full rounded-lg bg-[#14212e] py-2 text-white hover:opacity-90" onClick={() => { markUpgradeSeen(); startUpgrade('PREMIUM') }}>Elegir Premium</button>
-              </div>
-              <div className="rounded-xl border border-slate-200 p-4 ring-2 ring-blue-500/50">
-                  <div className="text-xs font-bold uppercase tracking-wider text-blue-700">Pro</div>
-                  <div className="mt-1 text-2xl font-extrabold text-[#14212e]">$13.000</div>
-                  <ul className="mt-3 space-y-1 text-sm text-slate-700">
-                    <li>• 12 fotos visibles</li>
-                    <li>• Máxima prioridad 90 días</li>
-                    <li>• WhatsApp directo</li>
-                  </ul>
-                <button className="mt-4 w-full rounded-lg bg-blue-600 py-2 text-white hover:bg-blue-700" onClick={() => { markUpgradeSeen(); startUpgrade('PRO') }}>Elegir Pro</button>
-              </div>
-            </div>
-              <p className="mt-3 text-center text-xs text-slate-500">Al vencer el período, tu publicación sigue activa y vuelve a Free automáticamente.</p>
-            </div>
-          </div>
-        )}
-        {/* Slider: relacionados (boost primero, misma subcategoría cuando haya) */}
-        {sellerRelated.length > 0 && (
-          <div className="mt-8">
-            <HorizontalSlider
-              title="Bicicletas similares o relacionadas"
-              subtitle="Mostramos avisos parecidos según categoría y prioridad activa"
-              items={sellerRelated.slice(0, 20)}
-              maxItems={20}
-              initialLoad={8}
-              tone="dark"
-              renderCard={(it) => <ListingCard l={it} priority={false} />}
-            />
-          </div>
-        )}
+	          </div>
+		        {/* Upgrade modal post-publicación */}
+	        {showUpgradeModal && listing && (
+	        <div
+	          className="fixed inset-0 z-50 flex items-center justify-center bg-[#0b111a]/70 p-4 backdrop-blur-sm"
+	          role="dialog"
+	          aria-modal="true"
+	          aria-labelledby="upgrade-modal-title"
+	          aria-describedby="upgrade-modal-desc"
+	          tabIndex={-1}
+	          onKeyDown={(e) => {
+	            if (e.key === 'Escape') {
+	              markUpgradeSeen()
+	              setShowUpgradeModal(false)
+	            }
+	          }}
+	          onClick={() => { markUpgradeSeen(); setShowUpgradeModal(false) }}
+		        >
+		          <div
+		            className="relative flex w-full max-w-2xl max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-3xl border border-white/10 bg-white text-[#14212e] shadow-[0_30px_80px_rgba(0,0,0,0.55)]"
+		            onClick={(e) => e.stopPropagation()}
+		          >
+	            {/* Decorative background */}
+	            <div className="pointer-events-none absolute inset-0">
+	              <div className="absolute -top-24 -left-24 h-64 w-64 rounded-full bg-gradient-to-tr from-cyan-400/35 via-fuchsia-400/25 to-amber-300/30 blur-3xl" />
+	              <div className="absolute -bottom-28 -right-28 h-72 w-72 rounded-full bg-gradient-to-tr from-blue-500/25 via-emerald-400/20 to-orange-400/25 blur-3xl" />
+	              <div className="absolute inset-0 opacity-[0.06] [background-image:radial-gradient(#14212E_1px,transparent_1px)] [background-size:18px_18px]" />
+		            </div>
+
+		            {/* Header */}
+		            <div className="relative sticky top-0 z-10 bg-gradient-to-br from-[#14212E] via-[#14212E] to-slate-900 px-4 py-4 text-white sm:px-6 sm:py-5">
+		              <div className="flex items-start justify-between gap-4">
+		                <div>
+		                  <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold tracking-wide text-white/90 ring-1 ring-white/10">
+		                    <span className="h-2 w-2 rounded-full bg-gradient-to-r from-amber-300 via-pink-300 to-cyan-300" />
+		                    Upgrade rápido
+		                  </div>
+		                  <h3 id="upgrade-modal-title" className="mt-3 text-lg font-extrabold leading-tight sm:text-xl">
+		                    Destacá tu publicación y vendé más rápido
+		                  </h3>
+		                  <p id="upgrade-modal-desc" className="mt-1 text-sm text-white/75">
+		                    Sumá prioridad en el listado, WhatsApp directo y más fotos visibles. Sin volver a subir nada.
+		                  </p>
+		                </div>
+		                <button
+	                  type="button"
+	                  aria-label="Cerrar"
+	                  className="rounded-full bg-white/10 p-2 text-white/90 ring-1 ring-white/10 hover:bg-white/15"
+	                  onClick={() => { markUpgradeSeen(); setShowUpgradeModal(false) }}
+	                >
+	                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.5}>
+	                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 6l12 12M6 18 18 6" />
+	                  </svg>
+	                </button>
+	              </div>
+		            </div>
+
+		            {/* Content */}
+		            <div className="relative flex-1 overflow-y-auto px-4 pb-5 pt-4 sm:px-6 sm:pb-6 sm:pt-5">
+		              <div className="grid gap-4 sm:grid-cols-2">
+		                {/* PREMIUM */}
+		                <div className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+	                  <div className="pointer-events-none absolute inset-0 opacity-0 transition group-hover:opacity-100">
+	                    <div className="absolute -top-10 -left-10 h-40 w-40 rounded-full bg-gradient-to-tr from-amber-300/30 via-orange-300/20 to-pink-300/25 blur-2xl" />
+	                  </div>
+	                  <div className="relative">
+	                    <div className="flex items-center justify-between gap-3">
+	                      <div className="text-xs font-extrabold uppercase tracking-wider text-amber-700">Premium</div>
+	                      <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-800 ring-1 ring-amber-200/70">
+	                        Equilibrado
+	                      </span>
+	                    </div>
+		                    <div className="mt-2 flex items-end gap-2">
+		                      <div className="text-3xl font-extrabold tracking-tight text-[#14212e]">$9.000</div>
+		                      <div className="pb-1 text-xs font-semibold text-slate-500">/ 90 días</div>
+		                    </div>
+	                    <ul className="mt-4 space-y-2 text-sm text-slate-700">
+	                      <li className="flex items-center gap-2">
+	                        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-amber-100 text-amber-800">✓</span>
+	                        8 fotos visibles
+	                      </li>
+	                      <li className="flex items-center gap-2">
+	                        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-amber-100 text-amber-800">✓</span>
+	                        Prioridad 90 días
+	                      </li>
+	                      <li className="flex items-center gap-2">
+	                        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-amber-100 text-amber-800">✓</span>
+	                        WhatsApp directo
+	                      </li>
+	                    </ul>
+		                    <Button
+		                      className="mt-4 w-full justify-center rounded-xl sm:mt-5"
+		                      onClick={() => { markUpgradeSeen(); startUpgrade('PREMIUM') }}
+		                    >
+		                      Elegir Premium
+		                    </Button>
+		                  </div>
+		                </div>
+
+	                {/* PRO */}
+		                <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm ring-2 ring-cyan-500/30 sm:p-5">
+	                  <div className="pointer-events-none absolute inset-0">
+	                    <div className="absolute -top-12 -right-10 h-44 w-44 rounded-full bg-gradient-to-tr from-cyan-400/25 via-blue-500/20 to-fuchsia-400/20 blur-2xl" />
+	                  </div>
+	                  <div className="relative">
+	                    <div className="flex items-center justify-between gap-3">
+	                      <div className="text-xs font-extrabold uppercase tracking-wider text-cyan-800">Pro</div>
+	                      <span className="rounded-full bg-gradient-to-r from-cyan-500 to-blue-600 px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm">
+	                        Recomendado
+	                      </span>
+	                    </div>
+	                    <div className="mt-2 flex items-end gap-2">
+	                      <div className="text-3xl font-extrabold tracking-tight text-[#14212e]">$13.000</div>
+	                      <div className="pb-1 text-xs font-semibold text-slate-500">/ 90 días</div>
+	                    </div>
+	                    <ul className="mt-4 space-y-2 text-sm text-slate-700">
+	                      <li className="flex items-center gap-2">
+	                        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-cyan-100 text-cyan-900">✓</span>
+	                        12 fotos visibles
+	                      </li>
+	                      <li className="flex items-center gap-2">
+	                        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-cyan-100 text-cyan-900">✓</span>
+	                        Máxima prioridad 90 días
+	                      </li>
+	                      <li className="flex items-center gap-2">
+	                        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-cyan-100 text-cyan-900">✓</span>
+	                        WhatsApp directo
+	                      </li>
+	                    </ul>
+		                    <Button
+		                      variant="accent"
+		                      className="mt-4 w-full justify-center rounded-xl sm:mt-5"
+		                      onClick={() => { markUpgradeSeen(); startUpgrade('PRO') }}
+		                    >
+		                      Elegir Pro
+		                    </Button>
+		                  </div>
+		                </div>
+		              </div>
+
+	              <div className="mt-4 flex flex-col items-center gap-2 text-center">
+	                <p className="text-xs text-slate-500">
+	                  Al vencer el período, tu publicación sigue activa y vuelve a Free automáticamente.
+	                </p>
+	                <button
+	                  type="button"
+	                  className="text-xs font-semibold text-[#14212e]/80 underline decoration-[#14212e]/20 underline-offset-4 hover:text-[#14212e]"
+	                  onClick={() => { markUpgradeSeen(); setShowUpgradeModal(false) }}
+	                >
+	                  Seguir con Free
+	                </button>
+	              </div>
+		            </div>
+		          </div>
+		        </div>
+			        )}
+			        {/* Slider: relacionados (boost primero, misma subcategoría cuando haya) */}
+			        {sellerRelated.length > 0 && (
+		          <div className="mt-10">
+                <hr className="border-t border-gray-200" />
+	              <div className="mt-8">
+	                <HorizontalSlider
+	                  title="Productos relacionados"
+	                  subtitle="Misma categoría y subcategoría, priorizando avisos con boost activo."
+	                  items={sellerRelated.slice(0, 30)}
+	                  maxItems={30}
+	                  initialLoad={10}
+	                  tone="light"
+	                  renderCard={(it) => <ListingCard l={it} priority={false} />}
+	                />
+	              </div>
+	            </div>
+	        )}
         {/* Q&A: fuera de la grilla, sección aparte */}
         <div className="mt-5 lg:mt-8">
           <div className="lg:w-[70%] lg:mx-auto">
@@ -1848,7 +1548,7 @@ function IconCircleButton({ label, icon, onClick, className, size = 'md' }: { la
 }
 
 const WhatsappIcon = () => (
-  <img src="/whatsapp.webp" alt="" className="h-5 w-5" loading="lazy" decoding="async" aria-hidden="true" onError={(e)=>{try{const el=e.currentTarget as HTMLImageElement; if(el.src.endsWith('.webp')) el.src='/whatsapp.png';}catch{}}} />
+  <img src="/whatsapp.webp" alt="" className="h-5 w-5" loading="lazy" decoding="async" aria-hidden="true" onError={(e)=>{try{const el=e.currentTarget as HTMLImageElement; if(el.src.endsWith('.webp')) el.src='/whatsapp.png';}catch{ /* noop */ }}} />
 )
 
 const FacebookIcon = () => (
@@ -1896,40 +1596,6 @@ const MailIcon = () => (
     <path d="M4 5h16a2 2 0 0 1 2 2v10c0 1.1-.9 2-2 2H4a2 2 0 0 1-2-2V7c0-1.1.9-2 2-2Zm0 2v.5l8 5 8-5V7H4Zm16 10v-7.3l-7.4 4.6a1 1 0 0 1-1.2 0L4 9.7V17h16Z" />
   </svg>
 )
-
-function Spec({ label, value, fullWidth = false, canEdit = false, onEdit }: { label: string; value: string; fullWidth?: boolean; canEdit?: boolean; onEdit?: () => void }) {
-  return (
-    <div className={fullWidth ? 'col-span-2' : undefined}>
-      <div className="flex items-center gap-2">
-        <p className="text-xs uppercase tracking-wide text-[#14212e]/50">{label}</p>
-        {canEdit && onEdit && (
-          <button
-            type="button"
-            className="rounded-full border border-[#14212e]/20 p-0.5 text-[#14212e] hover:bg-white/50"
-            aria-label={`Editar ${label}`}
-            onClick={onEdit}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25Zm14.71-9.04a1 1 0 0 0 0-1.41l-1.51-1.51a1 1 0 0 0-1.41 0l-1.13 1.13 3.75 3.75 1.3-1.46Z"/></svg>
-          </button>
-        )}
-      </div>
-      <p className="mt-1 text-sm font-medium text-[#14212e]">{value || '—'}</p>
-    </div>
-  )
-}
-
-function IconButton({ label, children, onClick }: { label: string; children: ReactNode; onClick?: () => void }) {
-  return (
-    <button
-      type="button"
-      className="rounded-full border border-[#14212e]/10 bg-white/80 p-2 text-[#14212e] transition hover:bg-[#14212e]/10"
-      aria-label={label}
-      onClick={onClick}
-    >
-      {children}
-    </button>
-  )
-}
 
 function ShareBoostModal({ listingId, sellerId, onClose }: { listingId: string; sellerId: string; onClose: () => void }) {
   const { show: showToast } = useToast()

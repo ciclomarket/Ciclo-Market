@@ -16,6 +16,11 @@ const LISTING_QUESTION_EVENTS = new Set([
   'moderator_cleared_answer',
 ])
 
+function isUuid(value) {
+  if (!value) return false
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value))
+}
+
 function clamp(value, maxLength) {
   if (value == null) return null
   const text = String(value)
@@ -111,6 +116,20 @@ router.post('/api/track', async (req, res) => {
       console.error('[api] track insert failed', error)
       return res.status(500).json({ ok: false, error: 'insert_failed' })
     }
+
+    // Keep `public.listings.view_count` in sync via `public.listing_views` trigger.
+    // This makes the UI counter (which reads from `listings_enriched.view_count`) reflect real traffic,
+    // even if the client can't write directly to `listing_views` due to RLS/env issues.
+    const dbCounted = payload.db_counted === true
+    if (type === 'listing_view' && isUuid(payload.listing_id) && !dbCounted) {
+      try {
+        const { error: viewsError } = await supabase.from('listing_views').insert({ listing_id: payload.listing_id })
+        if (viewsError) console.warn('[api] listing_views insert failed', viewsError)
+      } catch (err) {
+        console.warn('[api] listing_views insert unexpected error', err?.message || err)
+      }
+    }
+
     return res.json({ ok: true })
   } catch (err) {
     console.error('[api] track unexpected error', err)

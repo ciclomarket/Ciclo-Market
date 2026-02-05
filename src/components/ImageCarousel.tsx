@@ -102,13 +102,13 @@ export default function ImageCarousel({ images, slides, aspect = 'video', fit = 
     }
   }, [aspect])
 
-  const containerBgClass = bg === 'light' ? 'bg-white' : 'bg-black/30'
+  const containerBgClass = bg === 'light' ? 'bg-white border border-gray-100' : 'bg-black/30 shadow-[0_18px_50px_rgba(5,12,22,0.45)] ring-1 ring-white/10'
   const imgFitClass = (fit === 'contain' || aspect === 'auto') ? 'object-contain' : 'object-cover'
   const imgSizeClass = (fit === 'contain' || aspect === 'auto') ? 'h-full w-auto mx-auto' : 'h-full w-full'
 
   return (
     <div className="w-full max-w-full overflow-hidden">
-      <div className={`relative ${aspectClass} w-full overflow-hidden rounded-2xl ${containerBgClass} shadow-[0_18px_50px_rgba(5,12,22,0.45)] ring-1 ring-white/10 ${aspect === 'auto' ? 'min-h-[220px]' : ''} ${maxHeightClass ?? ''}`}>
+      <div className={`relative ${aspectClass} w-full overflow-hidden rounded-2xl ${containerBgClass} ${aspect === 'auto' ? 'min-h-[220px]' : ''} ${maxHeightClass ?? ''}`}>
         {currentImage ? (
           <button type="button" className="h-full w-full" onClick={() => setLightbox(true)} aria-label="Ampliar imagen">
             <picture>
@@ -137,12 +137,12 @@ export default function ImageCarousel({ images, slides, aspect = 'video', fit = 
         )}
         {(currentSlide?.title || currentSlide?.desc) && (
           <div className="pointer-events-none absolute inset-x-3 bottom-3 z-10 max-w-[92%]">
-            <div className="inline-flex max-w-full flex-col gap-1 rounded-2xl border border-white/15 bg-[#0c1723]/80 px-4 py-3 text-left text-white shadow-[0_12px_26px_rgba(8,14,22,0.45)] backdrop-blur">
+            <div className={`inline-flex max-w-full flex-col gap-1 rounded-2xl border px-4 py-3 text-left backdrop-blur ${bg === 'light' ? 'border-gray-200 bg-white/90 text-mb-ink shadow-sm' : 'border-white/15 bg-[#0c1723]/80 text-white shadow-[0_12px_26px_rgba(8,14,22,0.45)]'}`}>
               {currentSlide.title ? (
                 <div className="text-sm font-semibold leading-tight">{currentSlide.title}</div>
               ) : null}
               {currentSlide.desc ? (
-                <div className="text-xs text-white/80 leading-snug">{currentSlide.desc}</div>
+                <div className={`text-xs leading-snug ${bg === 'light' ? 'text-gray-600' : 'text-white/80'}`}>{currentSlide.desc}</div>
               ) : null}
             </div>
           </div>
@@ -154,8 +154,10 @@ export default function ImageCarousel({ images, slides, aspect = 'video', fit = 
             <button
               key={idx}
               onClick={() => setI(idx)}
-              className={`${aspect === 'auto' || fit === 'contain' ? 'h-20 w-20 sm:h-24 sm:w-24' : 'w-24 sm:w-28 ' + aspectClass} flex-shrink-0 overflow-hidden rounded-xl2 border ${thumbWhiteBg ? 'bg-white' : ''} transition hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mb-primary/60 ${
-                safeIndex === idx ? 'border-mb-primary ring-2 ring-mb-primary/40' : 'border-white/10'
+              className={`${aspect === 'auto' || fit === 'contain' ? 'h-20 w-20 sm:h-24 sm:w-24' : 'w-24 sm:w-28 ' + aspectClass} flex-shrink-0 overflow-hidden border ${thumbWhiteBg ? 'bg-white' : ''} focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mb-primary/60 ${
+                bg === 'light' ? 'rounded-lg transition-all hover:ring-2 hover:ring-mb-primary/60' : 'rounded-xl2 transition hover:brightness-110'
+              } ${
+                safeIndex === idx ? 'border-mb-primary ring-2 ring-mb-primary/40' : (bg === 'light' ? 'border-gray-100' : 'border-white/10')
               }`}
               type="button"
               aria-label={`Ver imagen ${idx + 1}`}

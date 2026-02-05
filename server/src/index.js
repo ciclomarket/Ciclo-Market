@@ -455,21 +455,6 @@ app.post('/api/checkout', async (req, res) => {
       console.warn('[checkout] recordPayment pending failed', (e && e.message) || e)
     }
 
-    // Optionally create a pending credit row so UX can reflect it (best-effort)
-    if (planCode === 'basic' || planCode === 'premium') {
-      try {
-        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
-        const svc = supabaseService || getServerSupabaseClient()
-        const { error } = await svc
-          .from('publish_credits')
-          .insert({ user_id: userId, plan_code: planCode, status: 'pending', provider: 'mercadopago', preference_id: mp.id || null, provider_ref: mp.id || null, expires_at: expiresAt, ...(metadata.listingId ? { listing_id: metadata.listingId } : {}) })
-        if (error) console.warn('[checkout] insert pending credit failed', error)
-        else console.info('[checkout] pending credit inserted', { userId, planCode, preferenceId: mp?.id || null })
-      } catch (e) {
-        console.warn('[checkout] pending credit insert threw', (e && e.message) || e)
-      }
-    }
-
     return res.json({ ok: true, url: initPoint, preference_id: mp?.id || null })
   } catch (err) {
     const msg = (err && (err.message || err.toString())) || 'unknown_error'
@@ -904,113 +889,21 @@ app.get('/api/market/search', async (req, res) => {
 
 /* ----------------------------- Credits endpoints ------------------------- */
 app.get('/api/credits/me', async (req, res) => {
-  try {
-    const userId = String(req.query.userId || '').trim()
-    if (!userId) return res.status(400).json([])
-    const supabase = getServerSupabaseClient()
-    const { data, error } = await supabase
-      .from('publish_credits')
-      .select('id,created_at,plan_code,status,used_at,expires_at,listing_id')
-      .eq('user_id', userId)
-      .eq('status', 'available')
-      .order('created_at', { ascending: false })
-    if (error) return res.status(500).json([])
-    return res.json(Array.isArray(data) ? data : [])
-  } catch {
-    return res.status(500).json([])
-  }
+  return res.json([])
 })
 
 app.get('/api/credits/history', async (req, res) => {
-  try {
-    const userId = String(req.query.userId || '').trim()
-    if (!userId) return res.status(400).json([])
-    const supabase = getServerSupabaseClient()
-    const { data, error } = await supabase
-      .from('publish_credits')
-      .select('id,created_at,plan_code,status,used_at,expires_at,listing_id')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-    if (error) return res.status(500).json([])
-    return res.json(Array.isArray(data) ? data : [])
-  } catch {
-    return res.status(500).json([])
-  }
+  return res.json([])
 })
 
 // Canjear un crédito disponible (no cambia estado; devuelve uno para usar)
 app.post('/api/credits/redeem', async (req, res) => {
-  try {
-    const userId = String(req.body?.userId || '').trim()
-    const planCodeRaw = String(req.body?.planCode || '').trim().toLowerCase()
-    const planCode = planCodeRaw === 'premium' ? 'premium' : (planCodeRaw === 'basic' ? 'basic' : null)
-    if (!userId || !planCode) return res.status(400).json({ ok: false, error: 'invalid_params' })
-    const supabase = getServerSupabaseClient()
-    const { data: rows, error } = await supabase
-      .from('publish_credits')
-      .select('id,plan_code,status,expires_at')
-      .eq('user_id', userId)
-      .eq('plan_code', planCode)
-      .eq('status', 'available')
-      .order('expires_at', { ascending: true, nullsFirst: false })
-      .limit(1)
-    if (error) return res.status(500).json({ ok: false, error: 'query_failed' })
-    const credit = Array.isArray(rows) && rows[0] ? rows[0] : null
-    if (!credit) return res.status(404).json({ ok: false, error: 'not_found' })
-    return res.json({ ok: true, creditId: credit.id, planCode: credit.plan_code })
-  } catch (err) {
-    console.error('[credits/redeem] failed', err)
-    return res.status(500).json({ ok: false, error: 'unexpected_error' })
-  }
+  return res.status(410).json({ ok: false, error: 'credits_disabled' })
 })
 
 // Asociar un crédito a un listing y marcarlo como usado
 app.post('/api/credits/attach', async (req, res) => {
-  try {
-    const userId = String(req.body?.userId || '').trim()
-    const creditId = String(req.body?.creditId || '').trim()
-    const listingId = String(req.body?.listingId || '').trim()
-    if (!userId || !creditId || !listingId) return res.status(400).json({ ok: false, error: 'invalid_params' })
-    const supabase = getServerSupabaseClient()
-
-    // Verificar que el listing pertenezca al usuario
-    const { data: listing, error: listingErr } = await supabase
-      .from('listings')
-      .select('id,seller_id')
-      .eq('id', listingId)
-      .maybeSingle()
-    if (listingErr || !listing) return res.status(404).json({ ok: false, error: 'listing_not_found' })
-    if (String(listing.seller_id) !== userId) return res.status(403).json({ ok: false, error: 'forbidden' })
-
-    // Marcar crédito como usado y asociarlo al listing (solo si estaba disponible)
-    const nowIso = new Date().toISOString()
-    const { data: updated, error: updErr } = await supabase
-      .from('publish_credits')
-      .update({ status: 'used', used_at: nowIso, listing_id: listingId })
-      .eq('id', creditId)
-      .eq('user_id', userId)
-      .eq('status', 'available')
-      .select('id')
-      .maybeSingle()
-    if (updErr) return res.status(500).json({ ok: false, error: 'update_failed' })
-    if (!updated) {
-      // Si ya está usado con el mismo listing, consideramos idempotente
-      const { data: row } = await supabase
-        .from('publish_credits')
-        .select('id,status,listing_id')
-        .eq('id', creditId)
-        .eq('user_id', userId)
-        .maybeSingle()
-      if (row && row.status === 'used' && String(row.listing_id || '') === listingId) {
-        return res.json({ ok: true, creditId })
-      }
-      return res.status(409).json({ ok: false, error: 'credit_unavailable' })
-    }
-    return res.json({ ok: true, creditId })
-  } catch (err) {
-    console.error('[credits/attach] failed', err)
-    return res.status(500).json({ ok: false, error: 'unexpected_error' })
-  }
+  return res.status(410).json({ ok: false, error: 'credits_disabled' })
 })
 
 /* ----------------------------- Gifts endpoints --------------------------- */
@@ -1403,302 +1296,39 @@ app.post('/api/payments/confirm', async (req, res) => {
         }
       }
       if (planCode === 'basic' || planCode === 'premium') {
-        const creditStatus = status === 'succeeded' ? 'available' : (status === 'pending' ? 'pending' : 'cancelled')
-        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
-        let updatedCount = 0
-        if (prefId) {
-          try {
-            const svc = supabaseService || getServerSupabaseClient()
-            const { data: updRows } = await svc
-              .from('publish_credits')
-              .update({ status: creditStatus, provider_ref: String(paymentId), preference_id: prefId, expires_at: expiresAt, ...(upgradeListingId ? { listing_id: upgradeListingId } : {}) })
-              .eq('provider', 'mercadopago')
-              .or(`preference_id.eq.${prefId},provider_ref.eq.${prefId}`)
-              .select('id')
-            updatedCount = Array.isArray(updRows) ? updRows.length : 0
-            console.info('[webhook] credit update by prefId', { updatedCount })
-          } catch {}
-        }
-        if (!prefId && userId && updatedCount === 0) {
-          // Fallback: si no tenemos prefId, actualizar el crédito pending más reciente del usuario/plan
-          try {
-            const svc = supabaseService || getServerSupabaseClient()
-            const since = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString()
-            const { data: pendings } = await svc
-              .from('publish_credits')
-              .select('id,created_at')
-              .eq('provider', 'mercadopago')
-              .eq('user_id', userId)
-              .eq('plan_code', planCode)
-              .eq('status', 'pending')
-              .gte('created_at', since)
-              .order('created_at', { ascending: false })
-              .limit(1)
-            const row = Array.isArray(pendings) && pendings[0] ? pendings[0] : null
-            if (row?.id) {
-              const { data: updRows2 } = await svc
-                .from('publish_credits')
-                .update({ status: creditStatus, provider_ref: String(paymentId), expires_at: expiresAt, ...(upgradeListingId ? { listing_id: upgradeListingId } : {}) })
-                .eq('id', row.id)
-                .select('id')
-              updatedCount = Array.isArray(updRows2) ? updRows2.length : 0
-              console.info('[webhook] credit update by user fallback', { updatedCount, rowId: row.id })
-            }
-          } catch {}
-        }
-        if (updatedCount === 0) {
-          const baseUpdate = { user_id: userId, plan_code: planCode, status: creditStatus, provider: 'mercadopago', provider_ref: String(paymentId), preference_id: prefId, expires_at: expiresAt, ...(upgradeListingId ? { listing_id: upgradeListingId } : {}) }
-          try { await svc.from('publish_credits').upsert(baseUpdate, { onConflict: 'provider_ref,provider' }) } catch {}
-          if (prefId) { try { await svc.from('publish_credits').upsert(baseUpdate, { onConflict: 'preference_id,provider' }) } catch {} }
-        }
-
-        // Limpieza: si el pago quedó aprobado, cancelar otros créditos pendientes del mismo usuario/plan
-        if (creditStatus === 'available' && userId && planCode) {
-          try {
-            const { error: cancelErr } = await svc
-              .from('publish_credits')
-              .update({ status: 'cancelled' })
-              .eq('user_id', userId)
-              .eq('plan_code', planCode)
-              .eq('status', 'pending')
-              .neq('provider_ref', String(paymentId))
-            if (cancelErr) console.warn('[payments/confirm] cleanup pending credits failed', cancelErr)
-          } catch {}
-          // Marcar pago como aplicado
-          try { await markPaymentApplied(paymentId) } catch {}
-        }
-      }
-    } catch {}
-    return res.json({ ok: true, status, amount, currency })
-  } catch (err) {
-    console.error('[payments/confirm] failed', err)
-    return res.status(500).json({ ok: false, error: 'unexpected_error' })
-  }
-})
-
-/* ----------------------------- Mercado Pago webhook ---------------------- */
-async function applyPaymentUpdateByPaymentId(paymentId) {
-  try {
-    if (!mpClient) return { ok: false, error: 'payments_unavailable' }
-    const { Payment } = require('mercadopago')
-    const paymentClient = new Payment(mpClient)
-    const mpPayment = await paymentClient.get({ id: String(paymentId) })
-    const statusRaw = (mpPayment && mpPayment.status) ? String(mpPayment.status) : 'pending'
-    const status = statusRaw === 'approved' ? 'succeeded' : statusRaw
-    const amount = typeof mpPayment?.transaction_amount === 'number' ? mpPayment.transaction_amount : null
-    const currency = mpPayment?.currency_id || 'ARS'
-    await recordPayment({ userId: null, listingId: null, amount, currency, status, providerRef: String(paymentId) })
-
-    try {
-      const svc = supabaseService || getServerSupabaseClient()
-      const meta = (mpPayment && typeof mpPayment.metadata === 'object') ? mpPayment.metadata : {}
-      let userId = typeof meta?.userId === 'string' && meta.userId ? meta.userId : null
-      let planCode = normalisePlanCode(meta?.planCode || meta?.planId)
-      const listingIdRaw = meta?.listingId ?? meta?.listing_id ?? null
-      const upgradeListingId = typeof listingIdRaw === 'string' ? listingIdRaw.trim() || null : (listingIdRaw ? String(listingIdRaw) : null)
-      const merchantOrderId = mpPayment?.order?.id ? String(mpPayment.order.id) : null
-      let prefId = null
-      if (merchantOrderId) {
-        try {
-          const moAc = new AbortController()
-          const moTimer = setTimeout(() => moAc.abort(), 5000)
-          const moRes = await fetch(`https://api.mercadolibre.com/merchant_orders/${merchantOrderId}`, {
-            headers: { Authorization: `Bearer ${String(process.env.MERCADOPAGO_ACCESS_TOKEN || '')}` },
-            signal: moAc.signal,
-          })
-          clearTimeout(moTimer)
-          if (moRes.ok) {
-            const mo = await moRes.json()
-            if (mo && typeof mo.preference_id === 'string' && mo.preference_id) prefId = mo.preference_id
-          }
-        } catch {}
-      }
-      let pendingCredit = null
-      let highlightApplied = false
-
-      const highlightDaysRaw = meta?.highlightDays ?? meta?.highlight_days ?? meta?.highlight_days_number
-      const highlightDays = Number(highlightDaysRaw)
-      if (!Number.isNaN(highlightDays) && highlightDays > 0) {
-        try {
-          const targetSlug = typeof meta?.listingSlug === 'string' && meta.listingSlug ? meta.listingSlug : null
-          let highlightListingId = upgradeListingId
-          if (!highlightListingId && targetSlug) {
-            const { data: slugRow, error: slugErr } = await svc
-              .from('listings')
-              .select('id')
-              .eq('slug', targetSlug)
-              .order('created_at', { ascending: false })
-              .limit(1)
-              .maybeSingle()
-            if (!slugErr && slugRow?.id) highlightListingId = slugRow.id
-          }
-          if (highlightListingId) {
-            const { data: current } = await svc
-              .from('listings')
-              .select('highlight_expires')
-              .eq('id', highlightListingId)
-              .maybeSingle()
-            const now = Date.now()
-            const base = current?.highlight_expires ? Math.max(new Date(current.highlight_expires).getTime(), now) : now
-            const next = new Date(base + highlightDays * 24 * 60 * 60 * 1000).toISOString()
-            const { error: updErr } = await svc
-              .from('listings')
-              .update({ highlight_expires: next })
-              .eq('id', highlightListingId)
-            if (!updErr) {
-              highlightApplied = true
-              console.info('[webhook] highlight applied', { listingId: highlightListingId, highlightDays, next })
-            } else {
-              console.warn('[webhook] highlight update failed', updErr)
-            }
-          } else {
-            console.warn('[webhook] highlight metadata without listing reference')
-          }
-        } catch (err) {
-          console.warn('[webhook] highlight apply exception', err?.message || err)
-        }
-      }
-
-      try {
-        let pendingQuery = svc
-          .from('publish_credits')
-          .select('id,user_id,plan_code,status,created_at')
-          .eq('provider', 'mercadopago')
-          .eq('status', 'pending')
-          .order('created_at', { ascending: false })
-          .limit(1)
-        if (prefId) {
-          pendingQuery = pendingQuery.or(`preference_id.eq.${prefId},provider_ref.eq.${prefId}`)
-        } else {
-          pendingQuery = pendingQuery.or(`provider_ref.eq.${paymentId}${userId ? `,user_id.eq.${userId}` : ''}`)
-        }
-        const { data: pendingRows, error: pendingErr } = await pendingQuery
-        if (pendingErr) console.warn('[webhook] pending lookup error', pendingErr)
-        pendingCredit = Array.isArray(pendingRows) ? pendingRows[0] : null
-        if (pendingCredit) {
-          if (!userId && pendingCredit.user_id) {
-            userId = String(pendingCredit.user_id)
-            console.info('[webhook] fallback userId', { userId })
-          }
-          if (!planCode && pendingCredit.plan_code) {
-            planCode = normalisePlanCode(pendingCredit.plan_code)
-            console.info('[webhook] fallback planCode', { planCode })
-          }
-        }
-      } catch (err) {
-        console.warn('[webhook] fallback metadata lookup failed', err?.message || err)
-      }
-      if (!pendingCredit && userId) {
-        try {
-          const { data: fallbackRows, error: fallbackErr } = await svc
-            .from('publish_credits')
-            .select('id,user_id,plan_code,status,created_at')
-            .eq('provider', 'mercadopago')
-            .eq('status', 'pending')
-            .eq('user_id', userId)
-            .order('created_at', { ascending: false })
-            .limit(1)
-          if (fallbackErr) console.warn('[webhook] fallback pending lookup error', fallbackErr)
-          pendingCredit = Array.isArray(fallbackRows) ? fallbackRows[0] : null
-        } catch (err) {
-          console.warn('[webhook] fallback pending lookup failed', err?.message || err)
-        }
-        if (pendingCredit && !planCode && pendingCredit.plan_code) {
-          planCode = normalisePlanCode(pendingCredit.plan_code)
-          console.info('[webhook] fallback planCode', { planCode })
-        }
-      }
-
-      if (planCode === 'basic' || planCode === 'premium') {
-        const creditStatus = status === 'succeeded' ? 'available' : (status === 'pending' ? 'pending' : 'cancelled')
-        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
-        let updatedCount = 0
         const boostUntilIso = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString()
         const photoCap = planCode === 'premium' ? 8 : 8
-        if (prefId) {
+        if (upgradeListingId) {
           try {
-            const { data: updRows } = await svc
-              .from('publish_credits')
-              .update({ status: creditStatus, provider_ref: String(paymentId), preference_id: prefId, expires_at: expiresAt, ...(upgradeListingId ? { listing_id: upgradeListingId } : {}) })
-              .eq('provider', 'mercadopago')
-              .or(`preference_id.eq.${prefId},provider_ref.eq.${prefId}`)
-              .select('id')
-            updatedCount = Array.isArray(updRows) ? updRows.length : 0
-            console.info('[webhook] credit update by prefId', { updatedCount })
-          } catch {}
-        }
-        if (updatedCount === 0) {
-          try {
-            const { data: updRows } = await svc
-              .from('publish_credits')
-              .update({ status: creditStatus, provider_ref: String(paymentId), preference_id: prefId || null, expires_at: expiresAt, ...(upgradeListingId ? { listing_id: upgradeListingId } : {}) })
-              .eq('provider', 'mercadopago')
-              .eq('provider_ref', String(paymentId))
-              .select('id')
-            updatedCount = Array.isArray(updRows) ? updRows.length : 0
-            if (updatedCount) console.info('[webhook] credit update by paymentId', { updatedCount })
-          } catch {}
-        }
-        if (updatedCount === 0 && pendingCredit?.id) {
-          try {
-            const { data: updRows } = await svc
-              .from('publish_credits')
-              .update({ status: creditStatus, provider_ref: String(paymentId), preference_id: prefId || null, expires_at: expiresAt, ...(upgradeListingId ? { listing_id: upgradeListingId } : {}) })
-              .eq('id', pendingCredit.id)
-              .select('id')
-            updatedCount = Array.isArray(updRows) ? updRows.length : 0
-            if (updatedCount) console.info('[webhook] credit update by pending id', { updatedCount, id: pendingCredit.id })
-          } catch {}
-        }
-        if (updatedCount === 0) {
-          const baseUpdate = { user_id: userId, plan_code: planCode, status: creditStatus, provider: 'mercadopago', provider_ref: String(paymentId), preference_id: prefId, expires_at: expiresAt, ...(upgradeListingId ? { listing_id: upgradeListingId } : {}) }
-          try { await svc.from('publish_credits').upsert(baseUpdate, { onConflict: 'provider_ref,provider' }) } catch {}
-          if (prefId) { try { await svc.from('publish_credits').upsert(baseUpdate, { onConflict: 'preference_id,provider' }) } catch {} }
-          console.info('[webhook] credit upsert executed', { providerRef: paymentId, prefId })
-        }
+            const { data: currentRow } = await svc
+              .from('listings')
+              .select('granted_visible_photos, visible_images_count')
+              .eq('id', upgradeListingId)
+              .maybeSingle()
+            const currentGrant = Number(currentRow?.granted_visible_photos || 4)
+            const currentVisible = Number(currentRow?.visible_images_count || 4)
+            const nextGrant = Math.max(currentGrant, photoCap)
+            const nextVisible = Math.max(currentVisible, photoCap)
 
-        if (creditStatus === 'available' && userId && planCode) {
-          try {
-            const { error: cancelErr } = await svc
-              .from('publish_credits')
-              .update({ status: 'cancelled' })
-              .eq('user_id', userId)
-              .eq('plan_code', planCode)
-              .eq('status', 'pending')
-              .neq('provider_ref', String(paymentId))
-            if (cancelErr) console.warn('[webhook] cleanup pending credits failed', cancelErr)
-          } catch {}
-          // Aplicar upgrade directo al listing si vino en metadata
-          if (upgradeListingId) {
-            try {
-              const { data: currentRow } = await svc
-                .from('listings')
-                .select('granted_visible_photos, visible_images_count, whatsapp_enabled')
-                .eq('id', upgradeListingId)
-                .maybeSingle()
-              const currentGrant = Number(currentRow?.granted_visible_photos || 4)
-              const currentVisible = Number(currentRow?.visible_images_count || 4)
-              const nextGrant = Math.max(currentGrant, photoCap)
-              const nextVisible = Math.max(currentVisible, photoCap)
-              const nextWaEnabled = currentRow?.whatsapp_enabled === true ? true : true
-
-              const { error: updListErr } = await svc
-                .from('listings')
-                .update({
-                  plan_code: planCode,
-                  granted_visible_photos: nextGrant,
-                  visible_images_count: nextVisible,
-                  whatsapp_cap_granted: true,
-                  whatsapp_enabled: nextWaEnabled,
-                  rank_boost_until: boostUntilIso,
-                })
-                .eq('id', upgradeListingId)
-              if (updListErr) console.warn('[webhook] listing upgrade update failed', updListErr)
-              else console.info('[webhook] listing upgraded by payment', { listingId: upgradeListingId, planCode, boostUntilIso })
-            } catch (err) {
-              console.warn('[webhook] listing upgrade exception', err?.message || err)
-            }
+            const { error: updListErr } = await svc
+              .from('listings')
+              .update({
+                plan_code: planCode,
+                granted_visible_photos: nextGrant,
+                visible_images_count: nextVisible,
+                whatsapp_cap_granted: true,
+                whatsapp_enabled: true,
+                rank_boost_until: boostUntilIso,
+              })
+              .eq('id', upgradeListingId)
+            if (updListErr) console.warn('[webhook] listing upgrade update failed', updListErr)
+            else console.info('[webhook] listing upgraded by payment (no credits)', { listingId: upgradeListingId, planCode, boostUntilIso })
+          } catch (err) {
+            console.warn('[webhook] listing upgrade exception', err?.message || err)
           }
+        }
+        if (status === 'succeeded') {
+          try { await markPaymentApplied(paymentId) } catch {}
         }
       }
       else {
@@ -2019,37 +1649,9 @@ app.post('/api/listings/:id/upgrade', async (req, res) => {
       return res.status(400).json({ error: 'invalid_plan' })
     }
 
-    const useCredit = Boolean(req.body?.useCredit)
-    if (useCredit && !supabaseService) return res.status(500).json({ error: 'service_unavailable' })
-
-    let creditId = null
-    const ownerId = listing.seller_id
-    if (useCredit) {
-      const nowIso = new Date().toISOString()
-      const { data: creditRows, error: creditErr } = await supabaseService
-        .from('publish_credits')
-        .select('id')
-        .eq('user_id', ownerId)
-        .eq('plan_code', planCode)
-        .eq('status', 'available')
-        .gte('expires_at', nowIso)
-        .order('created_at', { ascending: true })
-        .limit(1)
-      if (creditErr) return res.status(500).json({ error: 'credit_lookup_failed' })
-      const credit = Array.isArray(creditRows) && creditRows[0] ? creditRows[0] : null
-      if (!credit?.id) return res.status(409).json({ error: 'no_available_credit' })
-      const { data: creditUpdate, error: creditUseErr } = await supabaseService
-        .from('publish_credits')
-        .update({ status: 'used', used_at: nowIso })
-        .eq('id', credit.id)
-        .eq('status', 'available')
-        .select('id')
-        .maybeSingle()
-      if (creditUseErr || !creditUpdate) return res.status(409).json({ error: 'credit_conflict' })
-      creditId = creditUpdate.id
-    } else if (!isModeratorUser) {
-      return res.status(409).json({ error: 'credit_required' })
-    }
+    // Sistema de créditos deshabilitado
+    const useCredit = false
+    const creditId = null
 
     let planRow = null
     if (supabaseService) {

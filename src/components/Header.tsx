@@ -3,13 +3,15 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { KEYWORDS } from '../data/keywords'
 import { BIKE_CATEGORIES } from '../constants/catalog'
+import { OTHER_CITY_OPTION, PROVINCES } from '../constants/locations'
 import { useAuth } from '../context/AuthContext'
 import { getSupabaseClient, supabaseEnabled, setAuthPersistence } from '../services/supabase'
-import { fetchStores, type StoreSummary } from '../services/users'
+import { createUserProfile, fetchStores, type StoreSummary } from '../services/users'
 import { fetchListings } from '../services/listings'
 import { fetchMyCredits } from '../services/credits'
 import { useToast } from '../context/ToastContext'
 import { SocialAuthButtons } from './SocialAuthButtons'
+import { deriveProfileSlug, pickDiscipline } from '../utils/user'
 
 type MegaCol = { title: string; links: Array<{ label: string; to: string }> }
 type MegaItem = { label: string; cols: MegaCol[] }
@@ -248,16 +250,36 @@ export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [mobileCategoryOpen, setMobileCategoryOpen] = useState<number | null>(null)
   const [loginOpen, setLoginOpen] = useState(false)
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
   const [loginEmail, setLoginEmail] = useState('')
   const [loginPassword, setLoginPassword] = useState('')
   const [rememberMe, setRememberMe] = useState(true)
   const [loginError, setLoginError] = useState<string | null>(null)
   const [loginLoading, setLoginLoading] = useState(false)
+  const [registerFullName, setRegisterFullName] = useState('')
+  const [registerProvince, setRegisterProvince] = useState('')
+  const [registerCity, setRegisterCity] = useState('')
+  const [registerCityOther, setRegisterCityOther] = useState('')
+  const [registerEmail, setRegisterEmail] = useState('')
+  const [registerPassword, setRegisterPassword] = useState('')
+  const [registerConfirm, setRegisterConfirm] = useState('')
+  const [registerAcceptedTerms, setRegisterAcceptedTerms] = useState(false)
+  const [registerError, setRegisterError] = useState<string | null>(null)
+  const [registerLoading, setRegisterLoading] = useState(false)
+  const [registerSuccess, setRegisterSuccess] = useState(false)
   const navigate = useNavigate()
   const hoverTimer = useRef<number | null>(null)
   const [stores, setStores] = useState<StoreSummary[]>([])
   const [storesOpen, setStoresOpen] = useState(false)
   const [creditCount, setCreditCount] = useState<number>(0)
+
+  const openAuth = (mode: 'login' | 'register') => {
+    setAuthMode(mode)
+    setLoginError(null)
+    setRegisterError(null)
+    setRegisterSuccess(false)
+    setLoginOpen(true)
+  }
   const [nutritionBrands, setNutritionBrands] = useState<string[]>([])
   const { show: showToast } = useToast()
   const publishLink = '/publicar'
@@ -516,6 +538,76 @@ export default function Header() {
     }
   }
 
+  const handleRegister: React.FormEventHandler<HTMLFormElement> = async (e) => {
+    e.preventDefault()
+    if (!enabled || !supabaseEnabled) {
+      setRegisterError('Registro deshabilitado: configurá Supabase en .env')
+      return
+    }
+    const email = registerEmail.trim()
+    const password = registerPassword
+    const fullName = registerFullName.trim()
+    const province = registerProvince
+    const city = registerCity === OTHER_CITY_OPTION ? registerCityOther.trim() : registerCity
+
+    if (!email) { setRegisterError('Ingresá un email válido'); return }
+    if (password.length < 8) { setRegisterError('La contraseña debe tener al menos 8 caracteres'); return }
+    if (password !== registerConfirm) { setRegisterError('Las contraseñas no coinciden'); return }
+    if (!fullName) { setRegisterError('Ingresá tu nombre completo'); return }
+    if (!province) { setRegisterError('Seleccioná una provincia'); return }
+    if (!registerCity) { setRegisterError('Seleccioná una ciudad'); return }
+    if (registerCity === OTHER_CITY_OPTION && !registerCityOther.trim()) { setRegisterError('Indicá tu ciudad'); return }
+    if (!registerAcceptedTerms) { setRegisterError('Debés aceptar los términos y condiciones'); return }
+
+    try {
+      setRegisterLoading(true)
+      setRegisterError(null)
+      setAuthPersistence(Boolean(rememberMe))
+      const supabase = getSupabaseClient()
+      const bikePrefs: string[] = []
+      const discipline = pickDiscipline(bikePrefs)
+      const profileSlug = deriveProfileSlug({
+        fullName,
+        discipline,
+        fallback: email.split('@')[0] ?? 'usuario',
+      })
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+            province,
+            city,
+            bike_preferences: bikePrefs,
+            profile_slug: profileSlug,
+            discipline,
+          }
+        }
+      })
+      if (error) throw error
+
+      if (data.user?.id) {
+        await createUserProfile({
+          id: data.user.id,
+          email,
+          fullName,
+          province,
+          city,
+          bikePreferences: bikePrefs,
+          profileSlug,
+        })
+      }
+      setRegisterSuccess(true)
+    } catch (err: any) {
+      const msg = err?.message ?? 'No pudimos registrarte. Intentá nuevamente.'
+      setRegisterError(msg)
+      setRegisterSuccess(false)
+    } finally {
+      setRegisterLoading(false)
+    }
+  }
+
   // Measure header height and expose via CSS var for sticky offsets
   const headerRef = useRef<HTMLElement | null>(null)
   useEffect(() => {
@@ -572,10 +664,10 @@ export default function Header() {
         <div className="ml-auto hidden md:flex items-center gap-2">
           {user ? (
             <Link
-              to="/dashboard"
-              aria-label="Ir a mi cuenta"
-              className="relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-black/10 hover:border-black/20 text-sm"
-            >
+		              to="/dashboard"
+		              aria-label="Ir a mi cuenta"
+		              className="relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-black/10 hover:border-black/20 text-sm"
+		            >
               <span className="sr-only">Mi cuenta</span>
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -593,89 +685,16 @@ export default function Header() {
                 </span>
               )}
             </Link>
-          ) : (
-            <div className="relative">
-              <button
-                type="button"
-                className="h-9 px-3 rounded-full border border-black/10 hover:border-black/20 text-sm"
-                onClick={() => setLoginOpen((prev) => !prev)}
-              >
-                Ingresar
-              </button>
-              {loginOpen && !isMobileViewport && (
-                <div className="absolute right-0 mt-2 w-80 rounded-2xl border border-white/10 bg-[#0c1723] text-white shadow-2xl p-5 z-50">
-                  <div className="space-y-4">
-                    <div className="text-center">
-                      <h2 className="text-lg font-semibold text-white">Ingresar</h2>
-                      <p className="mt-1 text-xs text-white/70">Elegí tu método preferido.</p>
-                    </div>
-                    <SocialAuthButtons
-                      buttons={[
-                        {
-                          id: 'google',
-                          label: 'Continuar con Google',
-                          loading: loginLoading,
-                          onClick: handleGoogleLogin,
-                        },
-                        {
-                          id: 'facebook',
-                          label: 'Continuar con Facebook',
-                          loading: loginLoading,
-                          onClick: handleFacebookLogin,
-                        },
-                      ]}
-                    />
-                    <div className="relative flex items-center gap-3 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/40">
-                      <span className="h-px flex-1 bg-white/10" />
-                      <span>o con email</span>
-                      <span className="h-px flex-1 bg-white/10" />
-                    </div>
-                    <form className="space-y-3" onSubmit={handleLogin}>
-                      <label className="text-[11px] font-semibold uppercase tracking-[0.28em] text-white/60">
-                        Email
-                        <input
-                          className="input mt-1 w-full border border-white/20 bg-white text-[#14212e] placeholder:text-black/60 focus:border-white/60"
-                          type="email"
-                          value={loginEmail}
-                          onChange={(e) => setLoginEmail(e.target.value)}
-                          placeholder="tu@email.com"
-                        />
-                      </label>
-                      <label className="text-[11px] font-semibold uppercase tracking-[0.28em] text-white/60">
-                        Contraseña
-                        <input
-                          className="input mt-1 w-full border border-white/20 bg-white text-[#14212e] placeholder:text-black/60 focus:border-white/60"
-                          type="password"
-                          value={loginPassword}
-                          onChange={(e) => setLoginPassword(e.target.value)}
-                          placeholder="••••••••"
-                        />
-                      </label>
-                      <label className="flex items-center gap-2 text-[11px] text-white/70">
-                        <input
-                          type="checkbox"
-                          className="accent-mb-primary"
-                          checked={rememberMe}
-                          onChange={(e) => setRememberMe(e.target.checked)}
-                        />
-                        Mantenerme conectado
-                      </label>
-                      {loginError && <p className="text-xs text-red-300">{loginError}</p>}
-                      <button type="submit" className="w-full rounded-2xl bg-white py-2 text-sm font-semibold text-[#14212e] hover:bg-white/90" disabled={loginLoading}>
-                        {loginLoading ? 'Ingresando…' : 'Ingresar con email'}
-                      </button>
-                      <p className="text-center text-[11px] text-white/50">
-                        ¿Aún no tenés cuenta?{' '}
-                        <Link to="/register" className="underline" onClick={() => setLoginOpen(false)}>
-                          Registrate
-                        </Link>
-                      </p>
-                    </form>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+	          ) : (
+	            <div className="relative flex items-center gap-2">
+	              <Link
+	                to="/login"
+	                className="inline-flex h-9 items-center justify-center rounded-full border border-black/10 px-3 text-sm hover:border-black/20"
+	              >
+	                Ingresar
+	              </Link>
+	            </div>
+	          )}
           <div className="relative">
             <Link
               to={publishLink}
@@ -697,12 +716,12 @@ export default function Header() {
         </div>
 
         {/* Hamburguesa a la derecha (solo mobile) */}
-        <button
-          type="button"
-          aria-label="Abrir menú"
-          className="md:hidden h-10 w-10 grid place-content-center rounded-full border border-black/10 hover:border-black/20"
-          onClick={toggleMobileMenu}
-        >
+		        <button
+		          type="button"
+		          aria-label="Abrir menú"
+		          className="md:hidden h-10 w-10 grid place-content-center rounded-full border border-black/10 hover:border-black/20"
+		          onClick={toggleMobileMenu}
+		        >
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-6 w-6" stroke="currentColor" fill="none" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5" />
           </svg>
@@ -715,13 +734,13 @@ export default function Header() {
           onMouseEnter={cancelCloseMega}
           onMouseLeave={() => { scheduleCloseMega() }}
         >
-          <Link
-            to="/marketplace"
-            className="py-2 px-5 rounded-full bg-mb-primary text-white font-bold shadow-sm hover:shadow-md hover:brightness-110 hover:scale-[1.01] transition-all"
-            onMouseEnter={() => { setOpenIdx(null); setStoresOpen(false) }}
-          >
-            Marketplace
-          </Link>
+	          <Link
+	            to="/marketplace"
+	            className="py-2 px-5 rounded-full bg-mb-primary text-white font-bold shadow-sm hover:shadow-md hover:brightness-110 hover:scale-[1.01] transition-all"
+	            onMouseEnter={() => { setOpenIdx(null); setStoresOpen(false) }}
+	          >
+	            Marketplace
+	          </Link>
           {MEGA.map((item, idx) => {
             const primary: Record<string, string> = {
               'Bicicletas': '/marketplace?bikes=1',
@@ -730,30 +749,30 @@ export default function Header() {
               'Nutrición': '/marketplace?cat=Nutrici%C3%B3n',
             }
             const first = primary[item.label] || item.cols?.[0]?.links?.[0]?.to || '/marketplace'
-            return (
-              <Link
-                key={item.label}
-                to={first}
-                className={`py-3 border-b-2 transition-all ${openIdx === idx ? 'border-b-[3px] border-[#14212e] text-[#14212e]' : 'border-transparent text-[#14212e]/80 hover:text-[#14212e] hover:border-[#14212e]'}`}
-                onMouseEnter={() => openMega(idx)}
-              >
-                {item.label}
-              </Link>
-            )
-          })}
-          <Link to="/como-publicar" className="py-3 text-[#14212e]/80 hover:text-[#14212e] border-b-2 border-transparent hover:border-[#14212e] transition-all" onMouseEnter={() => { setOpenIdx(null); setStoresOpen(false) }}>
-            Cómo publicar
-          </Link>
-          <Link to="/blog" className="py-3 text-[#14212e]/80 hover:text-[#14212e] border-b-2 border-transparent hover:border-[#14212e] transition-all" onMouseEnter={() => { setOpenIdx(null); setStoresOpen(false) }}>
-            Blog
-          </Link>
-          <Link
-            to="/tiendas"
-            className={`py-3 border-b-2 transition-all ${storesOpen ? 'border-b-[3px] border-[#14212e] text-[#14212e]' : 'border-transparent text-[#14212e]/80 hover:text-[#14212e] hover:border-[#14212e]'}`}
-            onMouseEnter={() => { setOpenIdx(null); setStoresOpen(true) }}
-          >
-            Tiendas oficiales
-          </Link>
+	            return (
+	              <Link
+	                key={item.label}
+	                to={first}
+	                className={`py-3 border-b-2 transition-all ${openIdx === idx ? 'border-b-[3px] border-[#14212e] text-[#14212e]' : 'border-transparent text-[#14212e]/80 hover:text-[#14212e] hover:border-[#14212e]'}`}
+	                onMouseEnter={() => openMega(idx)}
+	              >
+	                {item.label}
+	              </Link>
+		            )
+		          })}
+	          <Link to="/como-publicar" className="py-3 text-[#14212e]/80 hover:text-[#14212e] border-b-2 border-transparent hover:border-[#14212e] transition-all" onMouseEnter={() => { setOpenIdx(null); setStoresOpen(false) }}>
+	            Cómo publicar
+	          </Link>
+	          <Link to="/blog" className="py-3 text-[#14212e]/80 hover:text-[#14212e] border-b-2 border-transparent hover:border-[#14212e] transition-all" onMouseEnter={() => { setOpenIdx(null); setStoresOpen(false) }}>
+	            Blog
+	          </Link>
+	          <Link
+	            to="/tiendas"
+	            className={`py-3 border-b-2 transition-all ${storesOpen ? 'border-b-[3px] border-[#14212e] text-[#14212e]' : 'border-transparent text-[#14212e]/80 hover:text-[#14212e] hover:border-[#14212e]'}`}
+	            onMouseEnter={() => { setOpenIdx(null); setStoresOpen(true) }}
+	          >
+	            Tiendas oficiales
+	          </Link>
         </div>
 
         {openIdx !== null && (
@@ -875,9 +894,15 @@ export default function Header() {
                   >
                     Vender
                   </Link>
-                ) : (
-                  <Link to="/register" className="w-full inline-flex items-center justify-center rounded-full border border-black/10 bg-white px-4 py-3 text-base font-semibold text-[#14212e] shadow hover:bg-white/90" onClick={closeMobileMenu}>Registrarse</Link>
-                )}
+	                ) : (
+	                  <Link
+	                    to="/login"
+	                    className="w-full inline-flex items-center justify-center rounded-full border border-black/10 bg-white px-4 py-3 text-base font-semibold text-[#14212e] shadow hover:bg-white/90"
+	                    onClick={closeMobileMenu}
+	                  >
+	                    Ingresar
+	                  </Link>
+	                )}
               </div>
 
               {/* 2) Tiendas oficiales (row) */}
@@ -1000,18 +1025,12 @@ export default function Header() {
                       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
                     </Link>
                   </>
-                ) : (
-                  <>
-                    <button type="button" className="w-full flex items-center justify-between py-3 text-sm font-medium text-[#14212e]" onClick={() => { setLoginOpen(true); closeMobileMenu() }}>
-                      <span>Ingresar</span>
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
-                    </button>
-                    <Link to="/register" className="flex items-center justify-between py-3 text-sm font-medium text-[#14212e]" onClick={closeMobileMenu}>
-                      <span>Registrarse</span>
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
-                    </Link>
-                  </>
-                )}
+	                ) : (
+	                  <Link to="/login" className="flex items-center justify-between py-3 text-sm font-medium text-[#14212e]" onClick={closeMobileMenu}>
+	                    <span>Ingresar</span>
+	                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+	                  </Link>
+	                )}
                 <Link to="/ayuda" className="flex items-center justify-between py-3 text-sm font-medium text-[#14212e]" onClick={closeMobileMenu}>
                   <span>Ayuda</span>
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
@@ -1024,98 +1043,10 @@ export default function Header() {
       )
     : null
 
-  const loginOverlay = mounted && isMobileViewport && loginOpen && !user
-    ? createPortal(
-        <div className="md:hidden fixed inset-0 z-[60] bg-black/70" onClick={() => setLoginOpen(false)}>
-          <div
-            className="absolute inset-x-0 bottom-0 top-24 rounded-t-3xl border border-white/10 bg-[#0c1723] p-5 text-white shadow-2xl overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="space-y-4">
-              <div className="mx-auto mt-1 h-1.5 w-12 rounded-full bg-white/20" aria-hidden="true" />
-              <div className="flex items-start justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold text-white">Ingresar</h2>
-                  <p className="text-xs text-white/70">Elegí tu método preferido.</p>
-                </div>
-                <button type="button" aria-label="Cerrar" onClick={() => setLoginOpen(false)}>
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-6 w-6" stroke="currentColor" fill="none" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="m6 6 12 12M6 18 18 6" />
-                  </svg>
-                </button>
-              </div>
-
-              <SocialAuthButtons
-                buttons={[
-                  {
-                    id: 'google',
-                    label: 'Continuar con Google',
-                    loading: loginLoading,
-                    onClick: handleGoogleLogin,
-                  },
-                  {
-                    id: 'facebook',
-                    label: 'Continuar con Facebook',
-                    loading: loginLoading,
-                    onClick: handleFacebookLogin,
-                  },
-                ]}
-              />
-
-              <div className="relative flex items-center gap-3 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/40">
-                <span className="h-px flex-1 bg-white/10" />
-                <span>o con email</span>
-                <span className="h-px flex-1 bg-white/10" />
-              </div>
-
-              <form className="space-y-3" onSubmit={handleLogin}>
-                <label className="text-[11px] font-semibold uppercase tracking-[0.28em] text-white/60">
-                  Email
-                  <input
-                    className="input mt-1 w-full border border-white/20 bg-white text-[#14212e] placeholder:text-black/60 focus:border-white/60"
-                    type="email"
-                    value={loginEmail}
-                    onChange={(e) => setLoginEmail(e.target.value)}
-                    placeholder="tu@email.com"
-                  />
-                </label>
-                <label className="text-[11px] font-semibold uppercase tracking-[0.28em] text-white/60">
-                  Contraseña
-                  <input
-                    className="input mt-1 w-full border border-white/20 bg-white text-[#14212e] placeholder:text-black/60 focus:border-white/60"
-                    type="password"
-                    value={loginPassword}
-                    onChange={(e) => setLoginPassword(e.target.value)}
-                    placeholder="••••••••"
-                  />
-                </label>
-                <label className="flex items-center gap-2 text-[11px] text-white/70">
-                  <input type="checkbox" className="accent-mb-primary" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} />
-                  Mantenerme conectado
-                </label>
-                {loginError && <p className="text-xs text-red-300">{loginError}</p>}
-                <button type="submit" className="btn btn-primary w-full" disabled={loginLoading}>
-                  {loginLoading ? 'Ingresando…' : 'Ingresar'}
-                </button>
-                <p className="text-xs text-white/60 text-center">
-                  ¿Aún no tenés cuenta?{' '}
-                  <Link to="/register" className="underline" onClick={() => setLoginOpen(false)}>
-                    Registrate
-                  </Link>
-                </p>
-              </form>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )
-    : null
-
   return (
     <>
       {header}
       {mobileMenuOverlay}
-      {loginOverlay}
     </>
   )
 }

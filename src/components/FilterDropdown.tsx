@@ -4,6 +4,7 @@ type FilterDropdownProps = {
   label: string
   summary?: string
   align?: 'left' | 'right'
+  tone?: 'light' | 'dark'
   disabled?: boolean
   className?: string
   buttonClassName?: string
@@ -18,6 +19,7 @@ export default function FilterDropdown({
   label,
   summary,
   align = 'left',
+  tone = 'dark',
   disabled = false,
   className,
   buttonClassName,
@@ -50,6 +52,32 @@ export default function FilterDropdown({
     }
   }, [open])
 
+  const triggerBase =
+    tone === 'dark'
+      ? {
+          pill:
+            'rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm text-white transition focus:outline-none focus:ring-2 focus:ring-white/60',
+          inline: 'px-1.5 py-1 text-sm text-white/80 hover:text-white focus:outline-none',
+          hoverPill: 'hover:border-white/40 hover:bg-white/10',
+          labelInline: 'font-medium text-white',
+          summaryPill: 'text-xs text-white/60',
+          summaryInline: 'text-xs text-white/50',
+        }
+      : {
+          pill:
+            'rounded-full border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 shadow-sm transition focus:outline-none focus:ring-2 focus:ring-mb-primary/25',
+          inline: 'px-1.5 py-1 text-sm text-gray-700 hover:text-gray-900 focus:outline-none',
+          hoverPill: 'hover:border-gray-400 hover:bg-gray-50',
+          labelInline: 'font-medium text-gray-900',
+          summaryPill: 'text-xs text-gray-500',
+          summaryInline: 'text-xs text-gray-500',
+        }
+
+  const panelBase =
+    tone === 'dark'
+      ? 'border border-white/10 bg-[#0f1724] text-white shadow-xl backdrop-blur'
+      : 'border border-gray-200 bg-white text-gray-900 shadow-xl'
+
   return (
     <div ref={containerRef} className={`relative ${className ?? ''}`}>
       <button
@@ -58,12 +86,14 @@ export default function FilterDropdown({
         disabled={disabled}
         className={`group inline-flex items-center gap-2 ${
           variant === 'pill'
-            ? 'rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm text-white transition focus:outline-none focus:ring-2 focus:ring-white/60'
-            : 'px-1.5 py-1 text-sm text-white/80 hover:text-white focus:outline-none'
-        } ${disabled ? 'cursor-not-allowed opacity-60' : variant === 'pill' ? 'hover:border-white/40 hover:bg-white/10' : ''} ${buttonClassName ?? ''}`}
+            ? triggerBase.pill
+            : triggerBase.inline
+        } ${
+          disabled ? 'cursor-not-allowed opacity-60' : variant === 'pill' ? triggerBase.hoverPill : ''
+        } ${buttonClassName ?? ''}`}
       >
-        <span className={variant === 'pill' ? 'font-medium' : 'font-medium text-white'}>{label}</span>
-        <span className={variant === 'pill' ? 'text-xs text-white/60' : 'text-xs text-white/50'}>{summary || 'Todos'}</span>
+        <span className={variant === 'pill' ? 'font-medium' : triggerBase.labelInline}>{label}</span>
+        <span className={variant === 'pill' ? triggerBase.summaryPill : triggerBase.summaryInline}>{summary || 'Todos'}</span>
         <svg
           xmlns="http://www.w3.org/2000/svg"
           viewBox="0 0 24 24"
@@ -79,7 +109,7 @@ export default function FilterDropdown({
         <>
           {/* Desktop / tablet dropdown */}
           <div
-            className={`absolute z-30 mt-2 hidden w-64 rounded-2xl border border-white/10 bg-[#0f1724] p-4 text-white shadow-xl backdrop-blur sm:block ${
+            className={`absolute z-30 mt-2 hidden w-64 rounded-2xl p-4 sm:block ${panelBase} ${
               align === 'right' ? 'right-0' : 'left-0'
             }`}
           >
@@ -87,7 +117,7 @@ export default function FilterDropdown({
           </div>
           {/* Mobile inline expansion when requested */}
           {inlineOnMobile ? (
-            <div className="sm:hidden mt-2 rounded-2xl border border-white/10 bg-[#0f1724] p-4 text-white">
+            <div className={`sm:hidden mt-2 rounded-2xl p-4 ${panelBase}`}>
               {children({ close: () => setOpen(false) })}
             </div>
           ) : null}

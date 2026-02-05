@@ -8,6 +8,15 @@ import { canonicalPlanCode } from '../utils/planCodes'
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 
+const shouldFallbackToBaseListings = (error: any) => {
+  const code = typeof error?.code === 'string' ? error.code : ''
+  const message = typeof error?.message === 'string' ? error.message : ''
+  if (code === 'PGRST205' || code === '42P01') return true
+  if (/schema cache/i.test(message) && /listings_enriched/i.test(message)) return true
+  if (/does not exist/i.test(message) && /listings_enriched/i.test(message)) return true
+  return false
+}
+
 type ListingRow = {
   id: string
   title: string
@@ -58,6 +67,9 @@ type ListingRow = {
   priority_active?: boolean | null
   can_upgrade?: boolean | null
   is_tienda?: boolean | null
+  view_count?: number | null
+  views?: number | null
+  views_count?: number | null
 }
 
 const normalizeListing = (row: ListingRow): Listing => {
@@ -113,7 +125,11 @@ const normalizeListing = (row: ListingRow): Listing => {
     planTier: (row.plan_tier ?? undefined) as Listing['planTier'],
     priorityActive: row.priority_active ?? undefined,
     canUpgrade: row.can_upgrade ?? undefined,
-    isTienda: row.is_tienda ?? undefined
+    isTienda: row.is_tienda ?? undefined,
+    viewCount: typeof row.view_count === 'number' ? row.view_count
+      : typeof row.views === 'number' ? row.views
+      : typeof row.views_count === 'number' ? row.views_count
+      : undefined
   }
 }
 
@@ -144,10 +160,14 @@ export async function fetchListings(): Promise<Listing[]> {
   if (!supabaseEnabled) return []
   try {
     const supabase = getSupabaseClient()
-    const { data, error } = await supabase
-      .from('listings_enriched')
-      .select('*')
-      .order('created_at', { ascending: false })
+    const selectAllOrdered = async (table: 'listings_enriched' | 'listings') =>
+      supabase.from(table).select('*').order('created_at', { ascending: false })
+
+    let { data, error } = await selectAllOrdered('listings_enriched')
+    if (error && shouldFallbackToBaseListings(error)) {
+      console.warn('[listings] listings_enriched unavailable, falling back to listings', error)
+      ;({ data, error } = await selectAllOrdered('listings'))
+    }
     if (error || !data) return []
     const now = Date.now()
     const filtered = data.filter((row: any) => {
@@ -170,11 +190,14 @@ export async function fetchListing(identifier: string): Promise<Listing | null> 
   if (!supabaseEnabled) return null
   try {
     const supabase = getSupabaseClient()
-    const { data: bySlug, error: slugError } = await supabase
-      .from('listings_enriched')
-      .select('*')
-      .eq('slug', identifier)
-      .maybeSingle()
+    const selectBySlug = async (table: 'listings_enriched' | 'listings') =>
+      supabase.from(table).select('*').eq('slug', identifier).maybeSingle()
+
+    let { data: bySlug, error: slugError } = await selectBySlug('listings_enriched')
+    if (slugError && shouldFallbackToBaseListings(slugError)) {
+      console.warn('[listings] listings_enriched unavailable (slug), falling back to listings', slugError)
+      ;({ data: bySlug, error: slugError } = await selectBySlug('listings'))
+    }
 
     if (bySlug) {
       const status = typeof (bySlug as any)?.status === 'string' ? (bySlug as any).status.trim().toLowerCase() : undefined
@@ -185,11 +208,14 @@ export async function fetchListing(identifier: string): Promise<Listing | null> 
     if (slugError && slugError.code && slugError.code !== 'PGRST116') return null
 
     const lookupId = extractListingId(identifier)
-    const { data: byId, error: idError } = await supabase
-      .from('listings_enriched')
-      .select('*')
-      .eq('id', lookupId)
-      .maybeSingle()
+    const selectById = async (table: 'listings_enriched' | 'listings') =>
+      supabase.from(table).select('*').eq('id', lookupId).maybeSingle()
+
+    let { data: byId, error: idError } = await selectById('listings_enriched')
+    if (idError && shouldFallbackToBaseListings(idError)) {
+      console.warn('[listings] listings_enriched unavailable (id), falling back to listings', idError)
+      ;({ data: byId, error: idError } = await selectById('listings'))
+    }
     if (idError || !byId) return null
     const status = typeof (byId as any)?.status === 'string' ? (byId as any).status.trim().toLowerCase() : undefined
     const mod = typeof (byId as any)?.moderation_state === 'string' ? (byId as any).moderation_state.trim().toLowerCase() : 'approved'
@@ -221,10 +247,14 @@ export async function fetchListingsByIds(ids: string[]): Promise<Listing[]> {
   if (!supabaseEnabled || ids.length === 0) return []
   try {
     const supabase = getSupabaseClient()
-  const { data, error } = await supabase
-    .from('listings_enriched')
-    .select('*')
-    .in('id', ids)
+    const selectByIds = async (table: 'listings_enriched' | 'listings') =>
+      supabase.from(table).select('*').in('id', ids)
+
+    let { data, error } = await selectByIds('listings_enriched')
+    if (error && shouldFallbackToBaseListings(error)) {
+      console.warn('[listings] listings_enriched unavailable (ids), falling back to listings', error)
+      ;({ data, error } = await selectByIds('listings'))
+    }
     if (error || !data) return []
     const filtered = data.filter((row: any) => {
       const status = typeof row?.status === 'string' ? row.status.trim().toLowerCase() : ''
@@ -243,11 +273,18 @@ export async function fetchListingsBySeller(
   if (!supabaseEnabled) return []
   try {
     const supabase = getSupabaseClient()
-  const { data, error } = await supabase
-    .from('listings_enriched')
-    .select('*')
-    .eq('seller_id', sellerId)
-      .order('created_at', { ascending: false })
+    const selectBySeller = async (table: 'listings_enriched' | 'listings') =>
+      supabase
+        .from(table)
+        .select('*')
+        .eq('seller_id', sellerId)
+        .order('created_at', { ascending: false })
+
+    let { data, error } = await selectBySeller('listings_enriched')
+    if (error && shouldFallbackToBaseListings(error)) {
+      console.warn('[listings] listings_enriched unavailable (seller), falling back to listings', error)
+      ;({ data, error } = await selectBySeller('listings'))
+    }
     if (error || !data) return []
     const includeArchived = options?.includeArchived ?? false
     const filtered = data.filter((row: any) => {
@@ -259,6 +296,82 @@ export async function fetchListingsBySeller(
     return filtered.map((row: any) => normalizeListing(row as ListingRow))
   } catch {
     return []
+  }
+}
+
+export async function fetchListingsByCategory(
+  category: Listing['category'],
+  subcategory?: string | null,
+  options?: { excludeId?: string; limit?: number }
+): Promise<Listing[]> {
+  if (!supabaseEnabled) return []
+  try {
+    const supabase = getSupabaseClient()
+    const selectByCategory = async (table: 'listings_enriched' | 'listings') =>
+      supabase
+        .from(table)
+        .select('*')
+        .eq('category', category)
+        .order('created_at', { ascending: false })
+        .limit(options?.limit ?? 100)
+
+    let { data, error } = await selectByCategory('listings_enriched')
+    if (error && shouldFallbackToBaseListings(error)) {
+      console.warn('[listings] listings_enriched unavailable (category), falling back to listings', error)
+      ;({ data, error } = await selectByCategory('listings'))
+    }
+    if (error || !data) return []
+    const now = Date.now()
+    const filtered = data.filter((row: any) => {
+      if (options?.excludeId && row?.id === options.excludeId) return false
+      const status = typeof row?.status === 'string' ? row.status.trim().toLowerCase() : 'active'
+      if (status === 'draft' || status === 'deleted' || status === 'archived' || status === 'expired') return false
+      if (row?.archived_at) return false
+      const mod = typeof row?.moderation_state === 'string' ? row.moderation_state.trim().toLowerCase() : 'approved'
+      if (mod !== 'approved') return false
+      const expiresAt = row?.expires_at ? Date.parse(row.expires_at) : null
+      if (typeof expiresAt === 'number' && !Number.isNaN(expiresAt) && expiresAt > 0 && expiresAt < now) return false
+      if (subcategory) {
+        const subLc = String(subcategory).toLowerCase()
+        if (String(row?.subcategory || '').toLowerCase() !== subLc) return false
+      }
+      return true
+    })
+    const normalized = filtered.map((row: any) => normalizeListing(row as ListingRow))
+    const score = (l: Listing) => {
+      const priority = l.priorityActive ? 2 : 0
+      const tier = l.planTier === 'PRO' ? 2 : l.planTier === 'PREMIUM' ? 1 : 0
+      const userBoost = l.isTienda ? 0 : 1 // prefer usuarios vs tiendas a igual boost
+      const created = typeof l.createdAt === 'number' ? l.createdAt : 0
+      return priority * 1e12 + tier * 1e10 + userBoost * 1e9 + created
+    }
+    return normalized.sort((a, b) => score(b) - score(a))
+  } catch {
+    return []
+  }
+}
+
+export async function fetchListingsCountBySeller(sellerId: string): Promise<number> {
+  if (!supabaseEnabled) return 0
+  if (!sellerId) return 0
+  try {
+    const supabase = getSupabaseClient()
+    const selectCount = async (table: 'listings_enriched' | 'listings') =>
+      supabase
+        .from(table)
+        .select('id', { count: 'exact', head: true })
+        .eq('seller_id', sellerId)
+        .neq('status', 'deleted')
+
+    let { count, error } = await selectCount('listings_enriched')
+    if (error && shouldFallbackToBaseListings(error)) {
+      console.warn('[listings] listings_enriched unavailable (count), falling back to listings', error)
+      ;({ count, error } = await selectCount('listings'))
+    }
+    if (error) return 0
+    return typeof count === 'number' ? count : 0
+  } catch {
+    return 0
   }
 }
 

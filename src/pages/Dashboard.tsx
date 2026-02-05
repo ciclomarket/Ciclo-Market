@@ -32,8 +32,9 @@ import { trackMetaPixel } from '../lib/metaPixel'
 import { canonicalPlanCode } from '../utils/planCodes'
 import AdminFxPanel from '../components/AdminFxPanel'
 import { listSavedSearches, deleteSearch as deleteSavedSearch, updateSearch as updateSavedSearch, type SavedSearch } from '../services/savedSearches'
+import { buildCardImageUrlSafe } from '../lib/supabaseImages'
 
-const TABS = ['Perfil', 'Publicaciones', 'Créditos', 'Favoritos', 'Alertas', 'Notificaciones', 'Editar perfil', 'Editar tienda', 'Analítica', 'Verificá tu perfil', 'Cerrar sesión'] as const
+const TABS = ['Perfil', 'Publicaciones', 'Favoritos', 'Alertas', 'Notificaciones', 'Editar perfil', 'Editar tienda', 'Analítica', 'Verificá tu perfil', 'Cerrar sesión'] as const
 type SellerTab = (typeof TABS)[number]
 
 const TAB_METADATA: Record<SellerTab, { title: string; description: string }> = {
@@ -56,10 +57,6 @@ const TAB_METADATA: Record<SellerTab, { title: string; description: string }> = 
   Notificaciones: {
     title: 'Notificaciones',
     description: 'Leé alertas y pendientes importantes',
-  },
-  Créditos: {
-    title: 'Mis créditos',
-    description: 'Disponibles e historial de canjes',
   },
   'Editar perfil': {
     title: 'Editar perfil',
@@ -547,8 +544,6 @@ export default function Dashboard() {
         )
       case 'Notificaciones':
         return <NotificationsView />
-      case 'Créditos':
-        return <CreditsView credits={credits} />
       case 'Favoritos':
         return <FavoritesView favouriteIds={favouriteIdsRemote.length ? favouriteIdsRemote : favouriteIdsLocal} />
       case 'Alertas':
@@ -895,13 +890,9 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="relative isolate overflow-hidden min-h-[calc(100vh-120px)] bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] py-10">
-        <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
-          <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
-          <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
-        </div>
+      <div className="min-h-[calc(100vh-var(--header-h))] bg-gray-50 py-10">
         <Container>
-          <div className="rounded-[28px] border border-white/10 bg-white/5 p-10 text-center text-white/80">
+          <div className="rounded-xl border border-gray-200 bg-white p-10 text-center text-gray-600 shadow-sm">
             Cargando tu panel de vendedor…
           </div>
         </Container>
@@ -915,20 +906,16 @@ export default function Dashboard() {
     const displayName = profile?.full_name ?? sellerProfile?.sellerName ?? user?.email ?? 'Ciclista'
 
     return (
-      <div className="relative isolate overflow-hidden min-h-[calc(100vh-96px)] bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] py-6 text-white">
-        <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
-          <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
-          <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
-        </div>
+      <div className="min-h-[calc(100vh-var(--header-h))] bg-gray-50 py-6 text-gray-900">
         <Container>
           <div className="space-y-6">
-            <header className="rounded-3xl border border-white/15 bg-white/10 p-5 shadow-[0_18px_40px_rgba(6,12,24,0.35)]">
-              <p className="text-[11px] uppercase tracking-[0.35em] text-white/60">Panel de vendedor</p>
+            <header className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+              <p className="text-[11px] uppercase tracking-[0.35em] text-gray-500">Panel de vendedor</p>
               <h1 className="mt-2 text-2xl font-semibold">Hola, {displayName}</h1>
-              <p className="mt-1 text-sm text-white/70">Gestioná tu tienda y mantené al día tus publicaciones.</p>
+              <p className="mt-1 text-sm text-gray-600">Gestioná tu tienda y mantené al día tus publicaciones.</p>
           <div className="mt-4 flex flex-wrap gap-2">
             {profile?.store_enabled && profile?.store_slug && (
-              <Button to={`/tienda/${profile.store_slug}`} variant="ghost" className="border-white/30 text-white hover:bg-white/10">
+              <Button to={`/tienda/${profile.store_slug}`} variant="ghost" className="border-gray-300 text-[#14212e] hover:bg-gray-50">
                 Tu tienda
               </Button>
             )}
@@ -956,7 +943,7 @@ export default function Dashboard() {
                   <button
                     type="button"
                     onClick={() => setMobileActiveTab(null)}
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/20 text-white transition hover:border-white/40"
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 transition hover:bg-gray-50"
                     aria-label="Volver al menú"
                   >
                     <svg
@@ -971,11 +958,11 @@ export default function Dashboard() {
                     </svg>
                   </button>
                   <div>
-                    <p className="text-xs uppercase tracking-[0.3em] text-white/50">Sección</p>
+                    <p className="text-xs uppercase tracking-[0.3em] text-gray-500">Sección</p>
                     <h2 className="text-lg font-semibold">{activeMetadata?.title ?? mobileTab}</h2>
                   </div>
                 </div>
-                <div className="rounded-3xl border border-white/15 bg-white px-3 py-3 text-[#14212e] shadow-[0_18px_40px_rgba(6,12,24,0.25)]">
+                <div className="rounded-2xl border border-gray-200 bg-white px-3 py-3 text-[#14212e] shadow-sm">
                   {renderSection(mobileTab)}
                 </div>
               </div>
@@ -1016,15 +1003,15 @@ export default function Dashboard() {
                         key={tab}
                         type="button"
                         onClick={() => handleSelectTab(tab)}
-                        className="flex items-center justify-between gap-3 rounded-3xl border border-white/15 bg-white/10 p-4 text-left shadow-[0_18px_40px_rgba(6,12,24,0.25)] transition hover:bg-white/15"
+                        className="flex items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-white p-4 text-left shadow-sm transition hover:bg-gray-50"
                       >
                       <div className="flex w-full items-center gap-3">
-                        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/20 text-white">
+                        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gray-100 text-[#14212e]">
                           <TabIcon tab={tab} />
                         </span>
                         <div className="flex flex-1 flex-col">
-                          <p className="text-base font-semibold text-white">{meta.title}</p>
-                          <p className="text-xs text-white/70">{meta.description}</p>
+                          <p className="text-base font-semibold text-gray-900">{meta.title}</p>
+                          <p className="text-xs text-gray-500">{meta.description}</p>
                         </div>
                         {badge > 0 && (
                           <span className="inline-flex min-w-[26px] shrink-0 items-center justify-center rounded-full bg-[#ff6b6b] px-2 py-0.5 text-[11px] font-semibold text-white">
@@ -1035,7 +1022,7 @@ export default function Dashboard() {
                         <svg
                           xmlns="http://www.w3.org/2000/svg"
                           viewBox="0 0 24 24"
-                          className="h-5 w-5 text-white/50"
+                          className="h-5 w-5 text-gray-400"
                           stroke="currentColor"
                           fill="none"
                           strokeWidth={1.5}
@@ -1054,218 +1041,183 @@ export default function Dashboard() {
     )
   }
 
+  const displayName = profile?.full_name ?? sellerProfile?.sellerName ?? user?.email ?? 'Ciclista'
+  const activeMetadata = TAB_METADATA[activeTab]
+  const nowMs = Date.now()
+  const activeListingsCount = sellerListings.filter((listing) => {
+    if (listing.status === 'archived' || listing.status === 'sold' || listing.status === 'expired') return false
+    if (typeof listing.expiresAt === 'number' && listing.expiresAt > 0 && listing.expiresAt < nowMs) return false
+    return true
+  }).length
+  const totalViews = sellerListings.reduce((acc, listing) => {
+    const v = (typeof listing.viewCount === 'number'
+      ? listing.viewCount
+      : ((listing as any).views ?? (listing as any).view_count ?? (listing as any).views_count ?? 0)) as number
+    return acc + (Number.isFinite(v) ? Math.max(0, Math.trunc(v)) : 0)
+  }, 0)
+
   return (
-    <div className="relative isolate overflow-hidden min-h-[calc(100vh-120px)] bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] py-10">
-      <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
-        <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
-        <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
-      </div>
-      <Container>
-        {sellerListings.length === 0 && availableBasic > 0 && (
-          <div className="mb-4 rounded-2xl border border-emerald-300 bg-emerald-50 p-4 text-emerald-900 shadow">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="flex items-center gap-2 font-semibold">
-                  <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2}>
-                    <path d="m5 13 4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                  Crédito Básico disponible
-                </div>
-                <p className="mt-1 text-sm">Podés usar este crédito para crear una publicación Básica sin costo.</p>
-              </div>
-              <Link
-                to="/publicar"
-                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
-              >
-                Usar mi crédito
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14m-6-6 6 6-6 6" />
-                </svg>
-              </Link>
-            </div>
-          </div>
-        )}
-        <div className="overflow-visible rounded-[28px] border border-white/10 bg-white/5 backdrop-blur-xl shadow-[0_35px_80px_rgba(12,20,28,0.45)]">
-          <header className="border-b border-white/10 bg-[#14212e]/90 px-6 py-6 text-white">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-start justify-between gap-3 sm:block">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.4em] text-white/70">Panel de vendedor</p>
-                  <h1 className="text-2xl font-semibold">Bienvenido, {sellerProfile?.sellerName || 'Ciclista'}</h1>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setMobileNavOpen(true)}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/20 text-white transition hover:border-white/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70 sm:hidden"
-                  aria-label="Abrir menú del panel"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    className="h-6 w-6"
-                    stroke="currentColor"
-                    fill="none"
-                    strokeWidth={1.5}
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M4 12h16M4 17h16" />
-                  </svg>
-                </button>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="hidden sm:flex items-center gap-2 rounded-full border border-white/30 px-3 py-1.5 text-sm text-white/90">
-                  <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400" />
-                  Disponibles: Básica {availableBasic} • Premium {availablePremium}
-                </div>
-                {isModerator && (
-                  <button
-                    type="button"
-                    className="rounded-full border border-white/30 px-4 py-2 text-sm font-semibold text-white hover:border-white/60"
-                    onClick={async () => {
-                      setModOpen(true)
-                      setModLoading(true)
-                      try {
-                        const items = await fetchPendingShareBoosts()
-                        setModItems(items)
-                      } catch (e) {
-                        // ignore
-                      } finally {
-                        setModLoading(false)
-                      }
-                    }}
-                  >
-                    Moderación
-                  </button>
-                )}
-                {isModerator && (
-                  <button
-                    type="button"
-                    className="rounded-full border border-white/30 px-4 py-2 text-sm font-semibold text-white hover:border-white/60"
-                    onClick={() => setGiftOpen(true)}
-                  >
-                    Crear regalo
-                  </button>
-                )}
-                {isModerator && (
-                  (() => {
-                    const envBase = (import.meta.env.VITE_ADMIN_BASE_URL as string | undefined) || '/admin/'
-                    const adminHref = (() => {
-                      try {
-                        if (import.meta.env.DEV && typeof window !== 'undefined') {
-                          const proto = window.location.protocol
-                          const host = window.location.hostname
-                          return `${proto}//${host}:5273/`
-                        }
-                      } catch {}
-                      return envBase
-                    })()
-                    return (
-                      <a
-                        href={adminHref}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="rounded-full border border-white/30 px-4 py-2 text-sm font-semibold text-white hover:border-white/60"
-                        aria-label="Abrir panel admin"
-                      >
-                        Panel admin
-                      </a>
-                    )
-                  })()
-                )}
-                {profile?.store_enabled && profile?.store_slug && (
-                  <Button to={`/tienda/${profile.store_slug}`} variant="ghost" className="border-white/30 text-white hover:bg-white/10">
-                    Tu tienda
-                  </Button>
-                )}
-                <Button to="/publicar" className="bg-gradient-to-r from-[#0ea5e9] via-[#2563eb] to-[#1d4ed8] text-white shadow-[0_14px_40px_rgba(37,99,235,0.45)] hover:brightness-110">
-                  <span>Nueva publicación</span>
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14m-6-6 6 6-6 6" />
-                  </svg>
-                </Button>
-              </div>
-            </div>
-          </header>
-
-          <div className="grid gap-6 p-6 lg:grid-cols-[260px_1fr]">
-            <nav className="hidden rounded-3xl border border-white/10 bg-white/[0.08] p-3 text-sm text-white/80 md:block">
-              <ul className="grid gap-1">
-                {visibleTabs.map((tab) => (
-                  <li key={tab}>
-                    <button
-                      type="button"
-                      onClick={() => handleSelectTab(tab)}
-                      className={`w-full rounded-2xl px-4 py-3 text-left transition ${
-                        activeTab === tab
-                          ? 'bg-white text-[#14212e] shadow-lg'
-                          : 'hover:bg-white/10'
-                      }`}
-                    >
-                      {tab}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </nav>
-
-            <section className="rounded-3xl border border-white/10 bg-white px-7 py-6 md:p-6 shadow-[0_25px_60px_rgba(12,20,28,0.25)]">
-              {renderSection(activeTab)}
-            </section>
-          </div>
+    <div className="min-h-[calc(100vh-var(--header-h))] bg-gray-50">
+      <aside className="fixed left-0 top-[var(--header-h)] hidden h-[calc(100vh-var(--header-h))] w-64 flex-col border-r border-gray-200 bg-white md:flex">
+        <div className="border-b border-gray-200 px-5 py-5">
+          <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Dashboard</p>
+          <div className="mt-1 truncate text-sm font-semibold text-gray-900">{displayName}</div>
+          <div className="mt-2 text-xs text-gray-500">Créditos: Básica {availableBasic} · Premium {availablePremium}</div>
         </div>
-        {mobileNavOpen && (
-          <div
-            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm sm:hidden"
-            role="dialog"
-            aria-modal="true"
-            onClick={() => setMobileNavOpen(false)}
-          >
-            <div
-              className="absolute inset-x-4 top-24 rounded-3xl border border-[#14212e]/10 bg-white p-5 text-[#14212e] shadow-xl"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold">Secciones del panel</h2>
+        <nav className="flex-1 overflow-y-auto p-3">
+          <ul className="space-y-1">
+            {visibleTabs.map((tab) => {
+              const badge = tab === 'Notificaciones' ? unreadNotifications : tab === 'Favoritos' ? favouritesCount : 0
+              const active = activeTab === tab
+              return (
+                <li key={tab}>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectTab(tab)}
+                    className={`group flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition ${
+                      active
+                        ? 'bg-gray-100 font-medium text-gray-900'
+                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    }`}
+                  >
+                    <span className={`grid h-9 w-9 place-content-center rounded-lg ${
+                      active ? 'bg-white text-[#14212e] shadow-sm ring-1 ring-gray-200' : 'bg-gray-100 text-gray-500 group-hover:text-[#14212e]'
+                    }`}>
+                      <TabIcon tab={tab} />
+                    </span>
+                    <span className="min-w-0 flex-1 truncate">{tab}</span>
+                    {badge > 0 ? (
+                      <span className="inline-flex min-w-[26px] items-center justify-center rounded-full bg-[#ff6b6b] px-2 py-0.5 text-[11px] font-semibold text-white">
+                        {badge > 99 ? '99+' : badge}
+                      </span>
+                    ) : null}
+                    {active ? <span className="ml-1 h-6 w-1 rounded-full bg-[#14212e]" aria-hidden /> : null}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </nav>
+        <div className="border-t border-gray-200 p-4 text-xs text-gray-500">
+          Tip: completá tu perfil para aumentar la confianza.
+        </div>
+      </aside>
+
+      <div className="md:pl-64">
+        <div className="mx-auto max-w-7xl px-4 py-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Panel de vendedor</p>
+              <h1 className="mt-1 truncate text-2xl font-semibold text-mb-ink">{activeMetadata.title}</h1>
+              <p className="mt-1 text-sm text-gray-500">{activeMetadata.description}</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {isModerator && (
                 <button
                   type="button"
-                  aria-label="Cerrar menú"
-                  onClick={() => setMobileNavOpen(false)}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#14212e]/10 text-[#14212e] hover:border-[#14212e]/40"
+                  className="rounded-full border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50"
+                  onClick={async () => {
+                    setModOpen(true)
+                    setModLoading(true)
+                    try {
+                      const items = await fetchPendingShareBoosts()
+                      setModItems(items)
+                    } catch (e) {
+                      // ignore
+                    } finally {
+                      setModLoading(false)
+                    }
+                  }}
                 >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    className="h-5 w-5"
-                    stroke="currentColor"
-                    fill="none"
-                    strokeWidth={1.5}
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 6l12 12M6 18 18 6" />
-                  </svg>
+                  Moderación
                 </button>
-              </div>
-              <ul className="mt-4 grid gap-2">
-                {visibleTabs.map((tab) => (
-                  <li key={`mobile-${tab}`}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleSelectTab(tab)
-                      }}
-                      className={`w-full rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition ${
-                        activeTab === tab
-                          ? 'border-[#14212e] bg-[#14212e] text-white shadow'
-                          : 'border-[#14212e]/15 bg-white hover:border-[#14212e]/40'
-                      }`}
+              )}
+              {isModerator && (
+                <button
+                  type="button"
+                  className="rounded-full border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50"
+                  onClick={() => setGiftOpen(true)}
+                >
+                  Crear regalo
+                </button>
+              )}
+              {isModerator && (
+                (() => {
+                  const envBase = (import.meta.env.VITE_ADMIN_BASE_URL as string | undefined) || '/admin/'
+                  const adminHref = (() => {
+                    try {
+                      if (import.meta.env.DEV && typeof window !== 'undefined') {
+                        const proto = window.location.protocol
+                        const host = window.location.hostname
+                        return `${proto}//${host}:5273/`
+                      }
+                    } catch {}
+                    return envBase
+                  })()
+                  return (
+                    <a
+                      href={adminHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-full border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50"
+                      aria-label="Abrir panel admin"
                     >
-                      {tab}
-                    </button>
-                  </li>
-                ))}
-              </ul>
+                      Panel admin
+                    </a>
+                  )
+                })()
+              )}
+              {profile?.store_enabled && profile?.store_slug && (
+                <Button to={`/tienda/${profile.store_slug}`} variant="ghost" className="border-gray-300 text-[#14212e] hover:bg-gray-50">
+                  Tu tienda
+                </Button>
+              )}
+              <Button
+                to="/publicar"
+                className="bg-[#14212e] text-white shadow-sm hover:bg-[#1b2f3f]"
+              >
+                Nueva publicación
+              </Button>
             </div>
           </div>
-        )}
-      </Container>
+
+          {sellerListings.length === 0 && availableBasic > 0 && (
+            <div className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-900 shadow-sm">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold">Crédito Básico disponible</p>
+                  <p className="mt-1 text-sm text-emerald-900/80">Usalo para crear tu primera publicación gratis. Vence a los 180 días.</p>
+                </div>
+                <Link
+                  to="/publicar"
+                  className="inline-flex items-center justify-center rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
+                >
+                  Usar mi crédito
+                </Link>
+              </div>
+            </div>
+          )}
+
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+              <div className="text-sm font-medium text-gray-500">Publicaciones activas</div>
+              <div className="mt-2 text-3xl font-bold text-mb-ink">{activeListingsCount}</div>
+            </div>
+            <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+              <div className="text-sm font-medium text-gray-500">Vistas totales</div>
+              <div className="mt-2 text-3xl font-bold text-mb-ink">{totalViews.toLocaleString('es-AR')}</div>
+            </div>
+            <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+              <div className="text-sm font-medium text-gray-500">Favoritos</div>
+              <div className="mt-2 text-3xl font-bold text-mb-ink">{favouritesCount}</div>
+            </div>
+          </div>
+
+          <section className="mt-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            {renderSection(activeTab)}
+          </section>
+        </div>
+      </div>
       {modOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4" onClick={() => setModOpen(false)}>
           <div className="max-h-[80vh] w-full max-w-3xl overflow-auto rounded-3xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
@@ -1884,16 +1836,26 @@ function ListingsView({
   }, [openMenuFor])
   if (!listings.length) {
     return (
-      <div className="flex flex-col items-center justify-center gap-4 py-10 text-center">
-        <h3 className="text-lg font-semibold text-[#14212e]">Todavía no tenés publicaciones activas</h3>
-        <p className="max-w-md text-sm text-[#14212e]/70">
-          Subí tu primera bicicleta o accesorio y aparecé en las búsquedas del Marketplace. Recordá que podés destacarte con el plan Destacada o Pro.
+      <div className="flex flex-col items-center justify-center gap-4 py-12 text-center">
+        <div className="grid h-16 w-16 place-content-center rounded-2xl bg-gray-100 text-gray-500">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-8 w-8" fill="none" stroke="currentColor" strokeWidth={1.6}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m6-6H6" />
+          </svg>
+        </div>
+        <h3 className="text-lg font-semibold text-gray-900">Todavía no publicaste nada</h3>
+        <p className="max-w-md text-sm text-gray-600">
+          Convertí tu bici en efectivo hoy mismo. Publicar es gratis y podés mejorar tu visibilidad con planes.
         </p>
         <Button to="/publicar" className="bg-[#14212e] text-white hover:bg-[#1b2f3f]">
-          Publicar ahora
+          Vender mi bici
         </Button>
       </div>
     )
+  }
+
+  const getThumbSrc = (listing: Listing) => {
+    const raw = typeof listing.images?.[0] === 'string' ? listing.images[0] : null
+    return buildCardImageUrlSafe(raw) || '/no-image.webp'
   }
 
   const handleArchive = async (id: string) => {
@@ -2016,12 +1978,10 @@ function ListingsView({
       )}
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-[#14212e]">Tus publicaciones</h2>
-          <p className="text-sm text-[#14212e]/60">Gestioná precios, stock y visibilidad desde acá.</p>
+          <h2 className="text-xl font-semibold text-gray-900">Mis publicaciones</h2>
+          <p className="text-sm text-gray-500">Gestioná estado, planes y precios desde un solo lugar.</p>
         </div>
-        <Button to="/publicar" className="bg-[#14212e] text-white hover:bg-[#1b2f3f]">
-          Publicar nuevo aviso
-        </Button>
+        <Button to="/publicar" className="bg-[#14212e] text-white hover:bg-[#1b2f3f]">Nueva publicación</Button>
       </header>
       {expiredList.length > 0 && (
         <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800" role="status" aria-live="polite">
@@ -2034,10 +1994,9 @@ function ListingsView({
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 items-start relative">
-        {openMenuFor && (
-          <div className="fixed inset-0 z-40" onClick={() => setOpenMenuFor(null)} aria-hidden />
-        )}
+      {openMenuFor && <div className="fixed inset-0 z-40" onClick={() => setOpenMenuFor(null)} aria-hidden />}
+
+      <div className="md:hidden space-y-4">
         {listings.map((listing) => {
           const listingPlanCode = canonicalPlanCode(listing.plan ?? listing.sellerPlan ?? undefined)
           const basicOptionKey = `${listing.id}-basic`
@@ -2053,45 +2012,56 @@ function ListingsView({
           const basicCheckoutLabel = getCheckoutLabel(listingPlanCode, 'basic')
           const premiumCheckoutLabel = getCheckoutLabel(listingPlanCode, 'premium')
           const isExpired = listing.status === 'expired' || (typeof listing.expiresAt === 'number' && listing.expiresAt > 0 && listing.expiresAt < now)
+          const statusLabel = isExpired ? 'Vencida' : listing.status === 'sold' ? 'Vendida' : listing.status === 'archived' ? 'Pausada' : 'Activa'
+          const badgeClass =
+            statusLabel === 'Activa'
+              ? 'bg-green-50 text-green-700 ring-1 ring-green-600/20'
+              : statusLabel === 'Vendida'
+                ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-600/20'
+                : 'bg-yellow-50 text-yellow-700 ring-1 ring-yellow-600/20'
+          const viewCount = (typeof listing.viewCount === 'number' ? listing.viewCount : ((listing as any).views ?? 0)) as number
+          const thumbSrc = getThumbSrc(listing)
           return (
-            <div key={listing.id} id={`dashboard-listing-${listing.id}`} className="space-y-3">
-              <ListingCard l={listing} />
-              <div className="rounded-2xl border border-[#14212e]/10 bg-white/80 px-3 py-2 text-xs text-[#14212e]/70">
-                <p className="font-semibold uppercase tracking-[0.25em] text-[#14212e]/60">Estado</p>
-                <div className="mt-1 space-y-0.5">
-                  <ListingExpiryMeta listing={listing} />
+            <div key={listing.id} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 items-start gap-3">
+                  <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-gray-200 bg-gray-100">
+                    <img src={thumbSrc} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-gray-900 line-clamp-2">{listing.title}</div>
+                    <div className="mt-1 text-xs text-gray-500">
+                      Plan {canonicalPlanCode(listingPlanCode)?.toUpperCase() ?? 'FREE'} · {(Math.max(0, Math.trunc(viewCount || 0))).toLocaleString('es-AR')} vistas
+                    </div>
+                  </div>
                 </div>
+                <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${badgeClass}`}>{statusLabel}</span>
               </div>
-              <div className="relative flex items-center gap-2">
+              <div className="mt-3 flex gap-2">
                 <button
                   type="button"
-                  className="inline-flex items-center gap-2 rounded-full border border-[#14212e]/20 bg-white px-3 py-1.5 text-xs font-semibold text-[#14212e] shadow-sm hover:bg-white/90"
+                  className="flex-1 rounded-full border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
                   onClick={() => navigate(`/publicar/nueva?id=${encodeURIComponent(listing.id)}`)}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 3.487a1.75 1.75 0 1 1 2.475 2.475L8.25 17.05l-3.5.7.7-3.5 11.412-10.763Z" />
-                  </svg>
                   Editar
                 </button>
                 <button
                   type="button"
-                  className="inline-flex items-center gap-2 rounded-full border border-[#14212e]/20 bg-white px-3 py-1.5 text-xs font-semibold text-[#14212e] shadow-sm hover:bg-white/90"
+                  className="flex-1 rounded-full bg-[#14212e] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1b2f3f]"
                   onClick={() => setOpenMenuFor((prev) => (prev === listing.id ? null : listing.id))}
                   aria-haspopup="menu"
                   aria-expanded={openMenuFor === listing.id}
                 >
                   Opciones
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden>
-                    <path d="M6 9l6 6 6-6" />
-                  </svg>
                 </button>
+              </div>
 
-                {openMenuFor === listing.id && (
-                  <div className="absolute left-0 bottom-full z-50 mb-2 w-full min-w-[220px] rounded-xl border border-[#14212e]/10 bg-white p-2 text-sm text-[#14212e] shadow-xl">
-                    {/* 3 atajos */}
+              {openMenuFor === listing.id && (
+                <div className="relative">
+                  <div className="absolute left-0 top-3 z-50 w-full rounded-xl border border-gray-200 bg-white p-2 text-sm text-gray-900 shadow-xl">
                     <button
                       type="button"
-                      className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-[#14212e]/5"
+                      className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-gray-50"
                       onClick={() => { navigate(`/publicar/nueva?id=${encodeURIComponent(listing.id)}`); setOpenMenuFor(null) }}
                     >
                       Editar
@@ -2099,7 +2069,7 @@ function ListingsView({
                     {isExpired && (
                       <button
                         type="button"
-                        className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-[#14212e]/5"
+                        className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-gray-50"
                         onClick={() => { void handleRenew(listing); setOpenMenuFor(null) }}
                       >
                         Renovar publicación
@@ -2107,7 +2077,7 @@ function ListingsView({
                     )}
                     <button
                       type="button"
-                      className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-[#14212e]/5"
+                      className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-gray-50"
                       onClick={() => { void handleToggleSold(listing); setOpenMenuFor(null) }}
                     >
                       {listing.status === 'sold' ? 'Marcar disponible' : 'Marcar vendida'}
@@ -2115,7 +2085,7 @@ function ListingsView({
                     <button
                       type="button"
                       disabled={listing.status === 'sold'}
-                      className={`flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-[#14212e]/5 ${listing.status === 'sold' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      className={`flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-gray-50 ${listing.status === 'sold' ? 'cursor-not-allowed opacity-50' : ''}`}
                       onClick={() => { void handleReducePrice(listing); setOpenMenuFor(null) }}
                     >
                       Reducir precio
@@ -2123,9 +2093,9 @@ function ListingsView({
                     {showBasicCreditOption && (
                       <button
                         type="button"
-                        className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-[#14212e]/5"
+                        className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-gray-50"
                         disabled={upgradingKey === basicOptionKey}
-                        onClick={() => { void handleUpgrade(listing, 'basic') }}
+                        onClick={() => { void handleUpgrade(listing, 'basic'); setOpenMenuFor(null) }}
                       >
                         {upgradingKey === basicOptionKey ? 'Aplicando…' : basicUpgradeLabel}
                       </button>
@@ -2133,9 +2103,9 @@ function ListingsView({
                     {showPremiumCreditOption && (
                       <button
                         type="button"
-                        className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-[#14212e]/5"
+                        className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-gray-50"
                         disabled={upgradingKey === premiumOptionKey}
-                        onClick={() => { void handleUpgrade(listing, 'premium') }}
+                        onClick={() => { void handleUpgrade(listing, 'premium'); setOpenMenuFor(null) }}
                       >
                         {upgradingKey === premiumOptionKey ? 'Aplicando…' : premiumUpgradeLabel}
                       </button>
@@ -2143,9 +2113,9 @@ function ListingsView({
                     {showBasicCheckoutOption && (
                       <button
                         type="button"
-                        className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-[#14212e]/5"
+                        className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-gray-50"
                         disabled={processingPaymentKey === basicCheckoutKey}
-                        onClick={() => { void handleUpgradeCheckout(listing, 'basic') }}
+                        onClick={() => { void handleUpgradeCheckout(listing, 'basic'); setOpenMenuFor(null) }}
                       >
                         {processingPaymentKey === basicCheckoutKey ? 'Redirigiendo…' : basicCheckoutLabel}
                       </button>
@@ -2153,9 +2123,9 @@ function ListingsView({
                     {showPremiumCheckoutOption && (
                       <button
                         type="button"
-                        className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-[#14212e]/5"
+                        className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-gray-50"
                         disabled={processingPaymentKey === premiumCheckoutKey}
-                        onClick={() => { void handleUpgradeCheckout(listing, 'premium') }}
+                        onClick={() => { void handleUpgradeCheckout(listing, 'premium'); setOpenMenuFor(null) }}
                       >
                         {processingPaymentKey === premiumCheckoutKey ? 'Redirigiendo…' : premiumCheckoutLabel}
                       </button>
@@ -2163,7 +2133,7 @@ function ListingsView({
                     {!canInitiateCheckout && !showBasicCreditOption && !showPremiumCreditOption && (
                       <Link
                         to="/publicar"
-                        className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-[#14212e] hover:bg-[#14212e]/5"
+                        className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-[#14212e] hover:bg-gray-50"
                         onClick={() => setOpenMenuFor(null)}
                       >
                         Comprar crédito
@@ -2171,7 +2141,7 @@ function ListingsView({
                     )}
                     <button
                       type="button"
-                      className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-[#14212e]/5"
+                      className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-gray-50"
                       onClick={() => { void handleArchive(listing.id); setOpenMenuFor(null) }}
                     >
                       Archivar
@@ -2183,10 +2153,9 @@ function ListingsView({
                     >
                       Eliminar
                     </button>
-                    {/* Link a más acciones */}
                     <button
                       type="button"
-                      className="mt-1 flex w-full items-center justify-between rounded-lg bg-[#14212e]/90 px-3 py-2 text-white hover:bg-[#14212e]"
+                      className="mt-1 flex w-full items-center justify-between rounded-lg bg-[#14212e] px-3 py-2 text-white hover:bg-[#1b2f3f]"
                       onClick={() => {
                         const path = `/listing/${listing.slug || listing.id}`
                         navigate(path)
@@ -2196,11 +2165,201 @@ function ListingsView({
                       Más acciones…
                     </button>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           )
         })}
+      </div>
+
+      <div className="hidden md:block overflow-x-auto rounded-xl border border-gray-200">
+        <table className="min-w-full divide-y divide-gray-200 text-sm">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Publicación</th>
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Estado</th>
+              <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">Vistas</th>
+              <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">Acciones</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100 bg-white">
+            {listings.map((listing) => {
+              const listingPlanCode = canonicalPlanCode(listing.plan ?? listing.sellerPlan ?? undefined)
+              const basicOptionKey = `${listing.id}-basic`
+              const premiumOptionKey = `${listing.id}-premium`
+              const basicCheckoutKey = `${listing.id}-basic-checkout`
+              const premiumCheckoutKey = `${listing.id}-premium-checkout`
+              const showBasicCreditOption = creditAvailable('basic') && listingPlanCode !== 'premium'
+              const showPremiumCreditOption = creditAvailable('premium')
+              const showBasicCheckoutOption = canInitiateCheckout && listingPlanCode !== 'premium'
+              const showPremiumCheckoutOption = canInitiateCheckout
+              const basicUpgradeLabel = getUpgradeLabel(listingPlanCode, 'basic')
+              const premiumUpgradeLabel = getUpgradeLabel(listingPlanCode, 'premium')
+              const basicCheckoutLabel = getCheckoutLabel(listingPlanCode, 'basic')
+              const premiumCheckoutLabel = getCheckoutLabel(listingPlanCode, 'premium')
+              const isExpired = listing.status === 'expired' || (typeof listing.expiresAt === 'number' && listing.expiresAt > 0 && listing.expiresAt < now)
+              const statusLabel = isExpired ? 'Vencida' : listing.status === 'sold' ? 'Vendida' : listing.status === 'archived' ? 'Pausada' : 'Activa'
+              const badgeClass =
+                statusLabel === 'Activa'
+                  ? 'bg-green-50 text-green-700 ring-1 ring-green-600/20'
+                  : statusLabel === 'Vendida'
+                    ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-600/20'
+                    : 'bg-yellow-50 text-yellow-700 ring-1 ring-yellow-600/20'
+              const viewCount = (typeof listing.viewCount === 'number' ? listing.viewCount : ((listing as any).views ?? 0)) as number
+              const viewsValue = Number.isFinite(viewCount) ? Math.max(0, Math.trunc(viewCount)) : 0
+              const thumbSrc = getThumbSrc(listing)
+              return (
+                <tr key={listing.id} id={`dashboard-listing-${listing.id}`} className="hover:bg-gray-50">
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-gray-200 bg-gray-100">
+                        <img src={thumbSrc} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-medium text-gray-900 line-clamp-1">{listing.title}</div>
+                        <div className="mt-0.5 text-xs text-gray-500">Plan {canonicalPlanCode(listingPlanCode)?.toUpperCase() ?? 'FREE'}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${badgeClass}`}>{statusLabel}</span>
+                  </td>
+                  <td className="px-4 py-3 text-right text-gray-700">{viewsValue.toLocaleString('es-AR')}</td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="relative inline-flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="rounded-full border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                        onClick={() => navigate(`/publicar/nueva?id=${encodeURIComponent(listing.id)}`)}
+                      >
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-full border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                        onClick={() => setOpenMenuFor((prev) => (prev === listing.id ? null : listing.id))}
+                        aria-haspopup="menu"
+                        aria-expanded={openMenuFor === listing.id}
+                      >
+                        Opciones
+                      </button>
+
+                      {openMenuFor === listing.id && (
+                        <div className="absolute right-0 top-full z-50 mt-2 w-72 rounded-xl border border-gray-200 bg-white p-2 text-left text-sm text-gray-900 shadow-xl">
+                          <button
+                            type="button"
+                            className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-gray-50"
+                            onClick={() => { navigate(`/publicar/nueva?id=${encodeURIComponent(listing.id)}`); setOpenMenuFor(null) }}
+                          >
+                            Editar
+                          </button>
+                          {isExpired && (
+                            <button
+                              type="button"
+                              className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-gray-50"
+                              onClick={() => { void handleRenew(listing); setOpenMenuFor(null) }}
+                            >
+                              Renovar publicación
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-gray-50"
+                            onClick={() => { void handleToggleSold(listing); setOpenMenuFor(null) }}
+                          >
+                            {listing.status === 'sold' ? 'Marcar disponible' : 'Marcar vendida'}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={listing.status === 'sold'}
+                            className={`flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-gray-50 ${listing.status === 'sold' ? 'cursor-not-allowed opacity-50' : ''}`}
+                            onClick={() => { void handleReducePrice(listing); setOpenMenuFor(null) }}
+                          >
+                            Reducir precio
+                          </button>
+                          {showBasicCreditOption && (
+                            <button
+                              type="button"
+                              className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-gray-50"
+                              disabled={upgradingKey === basicOptionKey}
+                              onClick={() => { void handleUpgrade(listing, 'basic'); setOpenMenuFor(null) }}
+                            >
+                              {upgradingKey === basicOptionKey ? 'Aplicando…' : basicUpgradeLabel}
+                            </button>
+                          )}
+                          {showPremiumCreditOption && (
+                            <button
+                              type="button"
+                              className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-gray-50"
+                              disabled={upgradingKey === premiumOptionKey}
+                              onClick={() => { void handleUpgrade(listing, 'premium'); setOpenMenuFor(null) }}
+                            >
+                              {upgradingKey === premiumOptionKey ? 'Aplicando…' : premiumUpgradeLabel}
+                            </button>
+                          )}
+                          {showBasicCheckoutOption && (
+                            <button
+                              type="button"
+                              className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-gray-50"
+                              disabled={processingPaymentKey === basicCheckoutKey}
+                              onClick={() => { void handleUpgradeCheckout(listing, 'basic'); setOpenMenuFor(null) }}
+                            >
+                              {processingPaymentKey === basicCheckoutKey ? 'Redirigiendo…' : basicCheckoutLabel}
+                            </button>
+                          )}
+                          {showPremiumCheckoutOption && (
+                            <button
+                              type="button"
+                              className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-gray-50"
+                              disabled={processingPaymentKey === premiumCheckoutKey}
+                              onClick={() => { void handleUpgradeCheckout(listing, 'premium'); setOpenMenuFor(null) }}
+                            >
+                              {processingPaymentKey === premiumCheckoutKey ? 'Redirigiendo…' : premiumCheckoutLabel}
+                            </button>
+                          )}
+                          {!canInitiateCheckout && !showBasicCreditOption && !showPremiumCreditOption && (
+                            <Link
+                              to="/publicar"
+                              className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-[#14212e] hover:bg-gray-50"
+                              onClick={() => setOpenMenuFor(null)}
+                            >
+                              Comprar crédito
+                            </Link>
+                          )}
+                          <button
+                            type="button"
+                            className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-gray-50"
+                            onClick={() => { void handleArchive(listing.id); setOpenMenuFor(null) }}
+                          >
+                            Archivar
+                          </button>
+                          <button
+                            type="button"
+                            className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-red-600 hover:bg-red-50"
+                            onClick={() => { void handleDelete(listing.id); setOpenMenuFor(null) }}
+                          >
+                            Eliminar
+                          </button>
+                          <button
+                            type="button"
+                            className="mt-1 flex w-full items-center justify-between rounded-lg bg-[#14212e] px-3 py-2 text-white hover:bg-[#1b2f3f]"
+                            onClick={() => {
+                              const path = `/listing/${listing.slug || listing.id}`
+                              navigate(path)
+                              setOpenMenuFor(null)
+                            }}
+                          >
+                            Más acciones…
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   )
@@ -2444,13 +2603,6 @@ function TabIcon({ tab }: { tab: SellerTab }) {
           <path strokeLinecap="round" strokeLinejoin="round" d="M14.235 19.458a1.5 1.5 0 01-2.47 0M12 6a4.5 4.5 0 00-4.5 4.5v2.086a2 2 0 01-.586 1.414L6 15.914h12l-.914-.914a2 2 0 01-.586-1.414V10.5A4.5 4.5 0 0012 6z" />
         </svg>
       )
-    case 'Créditos':
-      return (
-        <svg {...common}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5v10.5H3.75z" />
-          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 10.5h16.5" />
-        </svg>
-      )
     case 'Editar perfil':
       return (
         <svg {...common}>
@@ -2493,99 +2645,8 @@ function TabIcon({ tab }: { tab: SellerTab }) {
 }
 
 function CreditsView({ credits }: { credits: Credit[] }) {
-  const available = credits.filter((c) => c.status === 'available')
-  const availableBasic = available.filter((c) => c.plan_code === 'basic').length
-  const availablePremium = available.filter((c) => c.plan_code === 'premium').length
-  const used = credits.filter((c) => c.status === 'used')
-  const pending = credits.filter((c) => c.status === 'pending')
-  const cancelled = credits.filter((c) => c.status === 'cancelled' || c.status === 'expired')
-  const planLabel = (code: string) => (code === 'premium' ? 'Premium' : 'Básica')
-  const statusLabel = (s: string) => s === 'available' ? 'Disponible' : s === 'used' ? 'Usado' : s === 'pending' ? 'Pendiente' : s === 'expired' ? 'Vencido' : 'Cancelado'
-  const formatDate = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString('es-AR') : '—')
-  const daysLeft = (iso?: string | null) => {
-    if (!iso) return null
-    const d = new Date(iso)
-    const diff = Math.ceil((d.getTime() - Date.now()) / (24 * 60 * 60 * 1000))
-    return isNaN(diff) ? null : diff
-  }
-
-  const rows = credits.slice(0, 100)
-
-  return (
-    <div className="space-y-6">
-      <div className="grid gap-3 sm:grid-cols-4">
-        <div className="rounded-2xl border border-[#14212e]/10 bg-white p-4 shadow">
-          <p className="text-xs uppercase tracking-wide text-[#14212e]/50">Disponibles</p>
-          <p className="mt-1 text-2xl font-semibold text-[#14212e]">{available.length}</p>
-          <p className="text-xs text-[#14212e]/60 mt-1">Básica {availableBasic} • Premium {availablePremium}</p>
-        </div>
-        <div className="rounded-2xl border border-[#14212e]/10 bg-white p-4 shadow">
-          <p className="text-xs uppercase tracking-wide text-[#14212e]/50">Usados</p>
-          <p className="mt-1 text-2xl font-semibold text-[#14212e]">{used.length}</p>
-        </div>
-        <div className="rounded-2xl border border-[#14212e]/10 bg-white p-4 shadow">
-          <p className="text-xs uppercase tracking-wide text-[#14212e]/50">Pendientes</p>
-          <p className="mt-1 text-2xl font-semibold text-[#14212e]">{pending.length}</p>
-        </div>
-        <div className="rounded-2xl border border-[#14212e]/10 bg-white p-4 shadow">
-          <p className="text-xs uppercase tracking-wide text-[#14212e]/50">Cancelados/Vencidos</p>
-          <p className="mt-1 text-2xl font-semibold text-[#14212e]">{cancelled.length}</p>
-        </div>
-      </div>
-
-      <div className="rounded-3xl border border-[#14212e]/10 bg-white p-4 shadow">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-[#14212e]">Historial de créditos</h3>
-          <Link to="/publicar" className="text-sm font-semibold text-[#14212e] underline">Usar crédito</Link>
-        </div>
-        {rows.length === 0 ? (
-          <p className="mt-3 text-sm text-[#14212e]/70">Todavía no tenés créditos. Iniciá un pago desde Publicar para generar uno.</p>
-        ) : (
-          <div className="mt-3 overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="text-left text-[#14212e]/60">
-                  <th className="px-2 py-2">Fecha</th>
-                  <th className="px-2 py-2">Plan</th>
-                  <th className="px-2 py-2">Estado</th>
-                  <th className="px-2 py-2">Vence</th>
-                  <th className="px-2 py-2">Detalle</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((c) => (
-                  <tr key={c.id} className="border-t border-[#14212e]/10">
-                    <td className="px-2 py-2 text-[#14212e]">{new Date(c.created_at).toLocaleString('es-AR')}</td>
-                    <td className="px-2 py-2 text-[#14212e]">{planLabel(c.plan_code)}</td>
-                    <td className="px-2 py-2 text-[#14212e]">{statusLabel(c.status)}</td>
-                    <td className="px-2 py-2 text-[#14212e]">
-                      {formatDate(c.expires_at)}
-                      {c.status === 'available' && daysLeft(c.expires_at) != null && (
-                        <span className="ml-1 text-xs text-[#14212e]/60">({daysLeft(c.expires_at)} días)</span>
-                      )}
-                    </td>
-                    <td className="px-2 py-2 text-[#14212e]">
-                      {c.status === 'used' && c.listing_id ? (
-                        <Link to={`/listing/${c.listing_id}`} className="underline">Usado en publicación</Link>
-                      ) : c.status === 'available' ? (
-                        'Crédito disponible'
-                      ) : c.status === 'pending' ? (
-                        'Acreditando pago'
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-    </div>
-  )
+  return null
 }
-
 function EditProfileView({
   profile,
   listing,
