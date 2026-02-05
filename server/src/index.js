@@ -1348,7 +1348,7 @@ app.post('/api/payments/confirm', async (req, res) => {
     console.error('[webhook] apply payment update failed', err)
     return { ok: false, error: 'unexpected_error' }
   }
-}
+})
 
 // MP sends either GET with query ?id=...&topic=payment or POST with JSON
 app.all('/api/mp/webhook', async (req, res) => {
