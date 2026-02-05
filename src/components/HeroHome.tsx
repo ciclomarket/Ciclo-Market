@@ -15,9 +15,20 @@ export default function HeroHome({
   return (
     <section className="relative w-full overflow-hidden bg-[#14212E] text-white">
       <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-[#1c2e3f] to-[#14212E] opacity-70" />
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0IiBoZWlnaHQ9IjQiIHZpZXdCb3g9IjAgMCA0IDQiPjxwYXRoIGZpbGw9IiM5YzkyOTkiIGZpbGwtb3BhY2l0eT0iMC4wNSIgZD0iTTEgM2gxdjFIMXptMiAwaDF2MUgzem0wLTJoMXYxSDN6bS0xIDFIMXYxSDF6Ii8+PC9zdmc+')] opacity-20 mix-blend-overlay" />
-      </div>
+	        <div className="absolute inset-0 opacity-[0.35]">
+	          <picture>
+	            <source srcSet="/bicicletas-home.webp" type="image/webp" />
+	            <img
+	              src="/bicicletas-home.jpg"
+	              alt=""
+	              className="h-full w-full object-cover object-[center_10%]"
+	              decoding="async"
+	            />
+	          </picture>
+	        </div>
+	        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-[#1c2e3f] to-[#14212E] opacity-70" />
+	        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0IiBoZWlnaHQ9IjQiIHZpZXdCb3g9IjAgMCA0IDQiPjxwYXRoIGZpbGw9IiM5YzkyOTkiIGZpbGwtb3BhY2l0eT0iMC4wNSIgZD0iTTEgM2gxdjFIMXptMiAwaDF2MUgzem0wLTJoMXYxSDN6bS0xIDFIMXYxSDF6Ii8+PC9zdmc+')] opacity-20 mix-blend-overlay" />
+	      </div>
 
       <div className="container relative z-10 mx-auto grid min-h-[560px] lg:min-h-[450px] max-w-7xl grid-cols-1 gap-12 px-6 py-16 lg:grid-cols-12 lg:items-center lg:py-16">
         <div className="flex flex-col justify-center lg:col-span-7">

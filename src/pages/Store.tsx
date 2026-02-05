@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { CalendarDays, Globe, Instagram, MapPin, Package } from 'lucide-react'
 import Container from '../components/Container'
 import SeoHead, { type SeoHeadProps } from '../components/SeoHead'
 import FilterDropdown from '../components/FilterDropdown'
@@ -453,7 +454,7 @@ function MultiSelectContent({ options, selected, onChange, close, placeholder = 
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder={placeholder}
-          className="input h-10 w-full rounded-full border border-white/10 bg-white px-4 text-sm text-[#14212e] placeholder:text-[#14212e]/60 focus:outline-none focus:ring-2 focus:ring-[#14212e]/20"
+          className="input h-10 w-full rounded-full border border-gray-200 bg-white px-4 text-sm text-[#14212e] placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-mb-primary/20"
         />
       ) : null}
       <div className="max-h-56 overflow-y-auto pr-1">
@@ -464,12 +465,12 @@ function MultiSelectContent({ options, selected, onChange, close, placeholder = 
               const checked = selectedSet.has(normalized)
               return (
                 <li key={option}>
-                  <label className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 hover:bg-white/10">
+                  <label className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 hover:bg-gray-50">
                     <input
                       type="checkbox"
                       checked={checked}
                       onChange={() => toggleOption(option)}
-                      className="h-4 w-4 accent-white"
+                      className="h-4 w-4 accent-mb-primary"
                     />
                     <span>{option}</span>
                   </label>
@@ -478,7 +479,7 @@ function MultiSelectContent({ options, selected, onChange, close, placeholder = 
             })}
           </ul>
         ) : (
-          <div className="py-4 text-sm text-white/60">Sin coincidencias.</div>
+          <div className="py-4 text-sm text-gray-500">Sin coincidencias.</div>
         )}
       </div>
       <div className="flex items-center justify-between pt-1 text-sm">
@@ -488,11 +489,11 @@ function MultiSelectContent({ options, selected, onChange, close, placeholder = 
             onChange([])
             close()
           }}
-          className="text-white/70 hover:text-white"
+          className="text-gray-600 hover:text-gray-900"
         >
           Limpiar
         </button>
-        <button type="button" onClick={close} className="rounded-full bg-white px-3 py-1 text-[#14212e] hover:bg-white/90">
+        <button type="button" onClick={close} className="rounded-full bg-mb-primary px-3 py-1 font-semibold text-white hover:bg-mb-primary/90">
           Listo
         </button>
       </div>
@@ -529,8 +530,8 @@ function SizeSelectContent({ options, selected, onChange, close }: { options: st
         {letterOptions.map((opt) => {
           const active = normalizedSelected.has(normalizeText(opt))
           return (
-            <label key={opt} className={`flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 hover:bg-white/10 ${active ? 'bg-white/10' : ''}`}>
-              <input type="checkbox" className="h-4 w-4 accent-white" checked={active} onChange={() => toggle(opt)} />
+            <label key={opt} className={`flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 hover:bg-gray-50 ${active ? 'bg-gray-50' : ''}`}>
+              <input type="checkbox" className="h-4 w-4 accent-mb-primary" checked={active} onChange={() => toggle(opt)} />
               <span>{labelFor(opt)}</span>
             </label>
           )
@@ -538,15 +539,15 @@ function SizeSelectContent({ options, selected, onChange, close }: { options: st
       </div>
       {otherOptions.length ? (
         <>
-          <div className="mt-1 text-xs text-white/60">Otros talles</div>
+          <div className="mt-1 text-xs text-gray-500">Otros talles</div>
           <div className="max-h-40 overflow-y-auto pr-1">
             <ul className="flex flex-col gap-2">
               {otherOptions.map((opt) => {
                 const active = normalizedSelected.has(normalizeText(opt))
                 return (
                   <li key={opt}>
-                    <label className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 hover:bg-white/10">
-                      <input type="checkbox" className="h-4 w-4 accent-white" checked={active} onChange={() => toggle(opt)} />
+                    <label className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 hover:bg-gray-50">
+                      <input type="checkbox" className="h-4 w-4 accent-mb-primary" checked={active} onChange={() => toggle(opt)} />
                       <span>{opt}</span>
                     </label>
                   </li>
@@ -557,8 +558,8 @@ function SizeSelectContent({ options, selected, onChange, close }: { options: st
         </>
       ) : null}
       <div className="flex items-center justify-between pt-1 text-sm">
-        <button type="button" onClick={() => { onChange([]); close() }} className="text-white/70 hover:text-white">Limpiar</button>
-        <button type="button" onClick={close} className="rounded-full bg-white px-3 py-1 text-[#14212e] hover:bg-white/90">Listo</button>
+        <button type="button" onClick={() => { onChange([]); close() }} className="text-gray-600 hover:text-gray-900">Limpiar</button>
+        <button type="button" onClick={close} className="rounded-full bg-mb-primary px-3 py-1 font-semibold text-white hover:bg-mb-primary/90">Listo</button>
       </div>
     </div>
   )
@@ -618,13 +619,15 @@ function PriceFilterContent({ min, max, bounds, currency, boundsByCur, onCurrenc
     <div className="flex flex-col gap-3 text-sm">
       <div className="flex items-center justify-end gap-2">
         {onCurrencyChange ? (
-          <div className="inline-flex items-center rounded-full border border-white/15 bg-white/5 p-0.5">
+          <div className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 p-0.5">
             {(['ARS','USD'] as const).map((cur) => (
               <button
                 key={cur}
                 type="button"
                 onClick={() => { const next = localCur === cur ? undefined : cur; setLocalCur(next); onCurrencyChange(next) }}
-                className={`px-2 py-1 text-xs rounded-full ${localCur === cur ? 'bg-white text-[#14212e]' : 'text-white/70 hover:text-white'}`}
+                className={`px-2 py-1 text-xs rounded-full ${
+                  localCur === cur ? 'bg-white text-[#14212e] shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                }`}
               >
                 {cur}
               </button>
@@ -632,31 +635,31 @@ function PriceFilterContent({ min, max, bounds, currency, boundsByCur, onCurrenc
           </div>
         ) : null}
       </div>
-      <div className="text-xs text-white/60">
+      <div className="text-xs text-gray-500">
         Rango disponible: {effBounds.min ? `${symbol}${localCur === 'USD' ? effBounds.min.toLocaleString('en-US') : effBounds.min.toLocaleString('es-AR')}` : '—'} – {effBounds.max ? `${symbol}${localCur === 'USD' ? effBounds.max.toLocaleString('en-US') : effBounds.max.toLocaleString('es-AR')}` : '—'}
       </div>
-      <div className="text-[11px] text-white/50">
+      <div className="text-[11px] text-gray-400">
         Conversión: 1 USD = {fx.toLocaleString('es-AR')} ARS
       </div>
       <div className="grid grid-cols-2 gap-3">
         <label className="flex flex-col gap-1">
-          <span className="text-xs text-white/60">Desde</span>
+          <span className="text-xs text-gray-500">Desde</span>
           <input
             type="number"
             min={0}
             value={minValue}
             onChange={(event) => setMinValue(event.target.value)}
-            className="input h-10 rounded-full border border-white/10 bg-white px-3 text-[#14212e] focus:outline-none focus:ring-2 focus:ring-[#14212e]/20"
+            className="input h-10 rounded-full border border-gray-200 bg-white px-3 text-[#14212e] focus:outline-none focus:ring-2 focus:ring-mb-primary/20"
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-xs text-white/60">Hasta</span>
+          <span className="text-xs text-gray-500">Hasta</span>
           <input
             type="number"
             min={0}
             value={maxValue}
             onChange={(event) => setMaxValue(event.target.value)}
-            className="input h-10 rounded-full border border-white/10 bg-white px-3 text-[#14212e] focus:outline-none focus:ring-2 focus:ring-[#14212e]/20"
+            className="input h-10 rounded-full border border-gray-200 bg-white px-3 text-[#14212e] focus:outline-none focus:ring-2 focus:ring-mb-primary/20"
           />
         </label>
       </div>
@@ -667,7 +670,7 @@ function PriceFilterContent({ min, max, bounds, currency, boundsByCur, onCurrenc
             onClear()
             close()
           }}
-          className="text-white/70 hover:text-white"
+          className="text-gray-600 hover:text-gray-900"
         >
           Limpiar
         </button>
@@ -675,14 +678,14 @@ function PriceFilterContent({ min, max, bounds, currency, boundsByCur, onCurrenc
           <button
             type="button"
             onClick={close}
-            className="rounded-full border border-white/20 px-3 py-1 text-white hover:border-white/40"
+            className="rounded-full border border-gray-200 px-3 py-1 text-gray-700 hover:bg-gray-50"
           >
             Cancelar
           </button>
           <button
             type="button"
             onClick={apply}
-            className="rounded-full bg-white px-3 py-1 font-semibold text-[#14212e] hover:bg-white/90"
+            className="rounded-full bg-mb-primary px-3 py-1 font-semibold text-white hover:bg-mb-primary/90"
           >
             Aplicar
           </button>
@@ -701,16 +704,16 @@ type DealFilterContentProps = {
 function DealFilterContent({ active, onToggle, close }: DealFilterContentProps) {
   return (
     <div className="flex flex-col gap-3 text-sm">
-      <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2 hover:border-white/30">
+      <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-gray-200 bg-white px-3 py-2 hover:bg-gray-50">
         <input
           type="checkbox"
           checked={active}
           onChange={(event) => onToggle(event.target.checked)}
-          className="h-4 w-4 accent-white"
+          className="h-4 w-4 accent-mb-primary"
         />
         <div>
-          <div className="font-medium text-white">Solo con descuento</div>
-          <div className="text-xs text-white/60 whitespace-normal break-words leading-snug">Productos con precio rebajado sobre el original.</div>
+          <div className="font-medium text-mb-ink">Solo con descuento</div>
+          <div className="text-xs text-gray-500 whitespace-normal break-words leading-snug">Productos con precio rebajado sobre el original.</div>
         </div>
       </label>
       <button
@@ -719,7 +722,7 @@ function DealFilterContent({ active, onToggle, close }: DealFilterContentProps) 
           onToggle(false)
           close()
         }}
-        className="self-end rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#14212e] hover:bg-white/90"
+        className="self-end rounded-full bg-mb-primary px-3 py-1 text-xs font-semibold text-white hover:bg-mb-primary/90"
       >
         Listo
       </button>
@@ -1501,7 +1504,7 @@ const handleClearFilters = useCallback(() => {
   }
 
   // Derivar campos de perfil una vez garantizado
-  const banner = profile.store_banner_url || '/og-preview.png'
+  const banner = profile.store_banner_url || null
   const bannerPosY = typeof profile.store_banner_position_y === 'number' ? profile.store_banner_position_y : 50
   const avatar = profile.store_avatar_url || profile.avatar_url || '/avatar-placeholder.png'
   const storeName = profile.store_name || profile.full_name || 'Tienda'
@@ -1510,132 +1513,172 @@ const handleClearFilters = useCallback(() => {
   const workingHours = (profile as any).store_hours as string | null
 
   return (
-    <div className="min-h-[70vh] relative isolate overflow-hidden text-white bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729]">
+    <div className="min-h-[70vh] overflow-x-hidden bg-gray-50 text-gray-900">
       <SeoHead {...seoConfig} />
-      <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
-        <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
-        <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
-      </div>
-      <div className="relative w-full">
-        <div className="mx-auto max-w-md sm:max-w-2xl md:max-w-4xl lg:max-w-6xl px-3 sm:px-4">
-          <div className="relative h-64 md:h-80 lg:h-96 overflow-hidden w-full">
+      <div className="w-full">
+        <div className="relative h-48 w-full overflow-hidden bg-gradient-to-r from-gray-800 to-gray-900 md:h-64">
+          {banner ? (
             <img
               src={buildPublicUrlSafe(banner) || ''}
-              alt="Banner"
-              className="h-full w-full object-cover block mx-auto"
+              alt="Banner de la tienda"
+              className="h-full w-full object-cover"
               style={{ objectPosition: `center ${bannerPosY}%` }}
               loading="eager"
               decoding="async"
             />
-          {/* Fade inferior sutil en todos los tamaños para legibilidad del título */}
-            <div
-              className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-28 md:h-40 lg:h-48 bg-gradient-to-t from-[#0f1729] via-[#0f1729]/60 to-transparent"
-              aria-hidden
-            />
-          </div>
+          ) : null}
+          <div className="pointer-events-none absolute inset-0 bg-black/10" aria-hidden="true" />
         </div>
-      </div>
-      <Container>
-        <div className="relative z-20 -mt-14 md:-mt-12 flex flex-col items-center gap-3 md:flex-row md:items-end md:gap-4">
-          <img
-            src={buildPublicUrlSafe(avatar) || ''}
-            alt={storeName}
-            className="h-24 w-24 md:h-28 md:w-28 lg:h-32 lg:w-32 rounded-full border-4 border-white object-cover shadow"
-            loading="eager"
-            decoding="async"
-          />
-          <div className="flex-1 min-w-0 w-full max-w-full overflow-visible pt-1 md:pb-1 text-center md:text-left">
-            <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
-              <h1 className="text-2xl md:text-3xl font-extrabold text-white truncate">{storeName}</h1>
-              <span className="inline-flex items-center gap-2 text-sm text-white/90">
-                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#1d9bf0] text-white" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 2 7.5 4.1 3 6v6c0 5 3.4 9.4 9 10 5.6-.6 9-5 9-10V6l-4.5-1.9L12 2Z" />
-                    <path d="m9 12 2 2 4-4" />
-                  </svg>
-                </span>
-                <span className="text-white/90">Tienda oficial</span>
-              </span>
-            </div>
-            <p className="mt-1 text-sm text-white/85 truncate">{address}</p>
-            <div className="mt-3 grid w-full max-w-md grid-cols-3 gap-2 justify-items-stretch md:max-w-none">
-              {phone && (
-                <a href={`tel:${phone}`} className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#14212e] shadow hover:bg-white/90 md:px-4 md:py-2 md:text-sm" aria-label="Llamar">
-                  <PhoneIcon /> Llamar
-                </a>
-              )}
-              <a href={storeEmail ? `mailto:${storeEmail}` : '#'} onClick={(e) => { if (!storeEmail) e.preventDefault() }} className={`inline-flex items-center justify-center gap-2 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#14212e] shadow md:px-4 md:py-2 md:text-sm ${storeEmail ? 'hover:bg-white/90' : 'opacity-60 cursor-not-allowed'}`} aria-label="E-mail">
-                <EmailIcon /> E‑mail
-              </a>
-              {(() => {
-                const waNumber = normaliseWhatsapp(profile.whatsapp_number || phone || '')
-                const trimmedStoreName = (storeName || '').trim()
-                const storeWaMessage = trimmedStoreName
-                  ? `Hola ${trimmedStoreName}! Vi tu tienda en Ciclo Market.`
-                  : 'Hola! Vi tu tienda en Ciclo Market.'
-                const waLink = buildWhatsappUrl(waNumber || (profile.whatsapp_number || phone || ''), storeWaMessage)
-                const href = waLink || undefined
-                const disabled = !href
-                const classes = `inline-flex items-center justify-center gap-2 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#14212e] shadow md:px-4 md:py-2 md:text-sm ${disabled ? 'opacity-60 cursor-not-allowed' : 'hover:bg-white/90'}`
-                return (
-                  <a href={href} target={disabled ? undefined : '_blank'} rel={disabled ? undefined : 'noreferrer'} className={classes} onClick={(e) => { if (disabled) e.preventDefault() }} aria-label="WhatsApp">
-                    <img src="/whatsapp.webp" alt="" className="h-4 w-4" aria-hidden onError={(e)=>{try{const el=e.currentTarget as HTMLImageElement; if(el.src.endsWith('.webp')) el.src='/whatsapp.png';}catch{}}} /> WhatsApp
-                  </a>
-                )
-              })()}
-            </div>
-            <div className="mt-3 flex flex-wrap items-center justify-center md:justify-start gap-2 text-xs text-white/80">
-              {(profile.store_instagram || profile.store_facebook || profile.store_website) ? (
-                <>
-                  <span className="text-white/70">Redes:</span>{' '}
-                  {profile.store_instagram ? (<a href={normalizeHandle(profile.store_instagram, 'ig')} target="_blank" rel="noreferrer" className="underline hover:text-white">Instagram</a>) : null}
-                  {profile.store_facebook ? (<><span>{' '}|{' '}</span><a href={normalizeHandle(profile.store_facebook, 'fb')} target="_blank" rel="noreferrer" className="underline hover:text-white">Facebook</a></>) : null}
-                  {profile.store_website ? (<><span>{' '}|{' '}</span><a href={profile.store_website} target="_blank" rel="noreferrer" className="underline hover:text-white">Web</a></>) : null}
-                </>
-              ) : null}
-              <span className="text-white/30">|</span>
-              <div className="relative" ref={hoursRef}>
+
+        <div className="bg-white border-b border-gray-200">
+          <Container className="pb-6">
+            <div className="relative -mt-4 flex flex-col gap-6 md:-mt-12 md:flex-row md:items-end md:justify-between">
+              <div className="flex items-end gap-4">
+                <img
+                  src={buildPublicUrlSafe(avatar) || ''}
+                  alt={storeName}
+                  className="h-24 w-24 rounded-2xl object-cover ring-4 ring-white shadow-sm md:h-28 md:w-28"
+                  loading="eager"
+                  decoding="async"
+                />
+                <div className="min-w-0 pb-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h1 className="text-2xl font-extrabold tracking-tight text-mb-ink md:text-3xl">{storeName}</h1>
+                  </div>
+
+                  <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-gray-600">
+                    {address ? (
+                      <span className="inline-flex min-w-0 items-start gap-2">
+                        <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" aria-hidden="true" />
+                        <span className="min-w-0 whitespace-normal break-words leading-snug">{address}</span>
+                      </span>
+                    ) : null}
+
+                    {(profile.store_instagram || profile.store_website) ? (
+                      <span className="inline-flex items-center gap-3">
+                        {profile.store_instagram ? (
+                          <a
+                            href={normalizeHandle(profile.store_instagram, 'ig')}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-2 font-semibold text-gray-700 hover:text-mb-primary"
+                          >
+                            <Instagram className="h-4 w-4" aria-hidden="true" />
+                            Instagram
+                          </a>
+                        ) : null}
+                        {profile.store_website ? (
+                          <a
+                            href={profile.store_website}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-2 font-semibold text-gray-700 hover:text-mb-primary"
+                          >
+                            <Globe className="h-4 w-4" aria-hidden="true" />
+                            Web
+                          </a>
+                        ) : null}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                {(() => {
+                  const waNumber = normaliseWhatsapp(profile.whatsapp_number || phone || '')
+                  const trimmedStoreName = (storeName || '').trim()
+                  const storeWaMessage = trimmedStoreName
+                    ? `Hola ${trimmedStoreName}! Vi tu tienda en Ciclo Market.`
+                    : 'Hola! Vi tu tienda en Ciclo Market.'
+                  const waLink = buildWhatsappUrl(waNumber || (profile.whatsapp_number || phone || ''), storeWaMessage)
+                  const href = waLink || undefined
+                  const disabled = !href
+                  return (
+                    <a
+                      href={href}
+                      target={disabled ? undefined : '_blank'}
+                      rel={disabled ? undefined : 'noreferrer'}
+                      className={`inline-flex items-center justify-center rounded-xl px-5 py-3 text-sm font-bold transition ${
+                        disabled
+                          ? 'cursor-not-allowed bg-emerald-600/50 text-white/80'
+                          : 'bg-emerald-600 text-white hover:bg-emerald-500'
+                      }`}
+                      onClick={(e) => {
+                        if (disabled) e.preventDefault()
+                      }}
+                      aria-label="Contactar por WhatsApp"
+                    >
+                      Contactar por WhatsApp
+                    </a>
+                  )
+                })()}
+
                 <button
                   type="button"
-                  className="inline-flex items-center gap-1 underline hover:text-white"
-                  aria-expanded={hoursOpen}
-                  aria-controls="store-hours-popover"
-                  onClick={() => setHoursOpen((v) => !v)}
+                  className="inline-flex items-center justify-center rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-bold text-mb-ink hover:bg-gray-50"
+                  aria-label="Seguir tienda"
                 >
-                  Horarios de atención
-                  <svg
-                    className={`h-4 w-4 transition-transform duration-200 ${hoursOpen ? 'rotate-180' : ''}`}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                  >
-                    <path d="m6 9 6 6 6-6" />
-                  </svg>
+                  Seguir
                 </button>
-                {hoursOpen && (
-                  <div className="fixed inset-0 z-40" aria-hidden onClick={() => setHoursOpen(false)}>
-                    {/* Popover */}
-                    <div
-                      id="store-hours-popover"
-                      className="rounded-xl border border-white/15 bg-[#0f1729]/95 backdrop-blur-sm p-4 text-white shadow-2xl max-h-64 overflow-auto z-50"
-                      role="dialog"
-                      aria-label="Horarios de atención"
-                      style={hoursStyle}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {/* caret */}
-                      <div className="absolute -top-2 h-4 w-4 rotate-45 border-l border-t border-white/15 bg-[#0f1729]/95" style={{ left: hoursArrowLeft, }} aria-hidden />
-                      <div className="mb-2 text-[11px] uppercase tracking-wide text-white/50">Horarios de atención</div>
-                      {renderWorkingHours(workingHours)}
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
+
+            <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm text-gray-600">
+              <span className="inline-flex items-center gap-2">
+                <Package className="h-4 w-4 text-gray-400" aria-hidden="true" />
+                {listings.length} productos publicados
+              </span>
+              {profile.created_at ? (
+                <span className="inline-flex items-center gap-2">
+                  <CalendarDays className="h-4 w-4 text-gray-400" aria-hidden="true" />
+                  En Ciclo Market desde {new Date(profile.created_at).toLocaleDateString('es-AR', { year: 'numeric', month: 'long' })}
+                </span>
+              ) : null}
+            </div>
+          </Container>
+        </div>
+      </div>
+
+      <Container className="pt-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div className="w-full md:max-w-md">
+            <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500">{`Buscar en ${storeName}`}</label>
+            <input
+              type="search"
+              value={filters.q || ''}
+              onChange={(e) => setFilters({ q: e.target.value ? e.target.value : undefined })}
+              placeholder={`Buscar en ${storeName}…`}
+              className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-mb-ink shadow-sm focus:border-mb-primary focus:ring-1 focus:ring-mb-primary"
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {[
+              { key: 'all', label: 'Todo', onClick: () => setSection('') },
+              { key: 'bikes', label: 'Bicis', onClick: () => setSection('', undefined, true) },
+              { key: 'accessories', label: 'Accesorios', onClick: () => setSection('accessories') },
+              { key: 'apparel', label: 'Indumentaria', onClick: () => setSection('apparel') },
+            ].map((chip) => {
+              const active =
+                (chip.key === 'all' && !activeSection && !bikesOnly) ||
+                (chip.key === 'bikes' && bikesOnly) ||
+                (chip.key === 'accessories' && activeSection === 'accessories' && !bikesOnly) ||
+                (chip.key === 'apparel' && activeSection === 'apparel' && !bikesOnly)
+              return (
+                <button
+                  key={chip.key}
+                  type="button"
+                  onClick={chip.onClick}
+                  className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                    active ? 'bg-mb-primary text-white' : 'bg-white text-mb-ink border border-gray-200 hover:bg-gray-50'
+                  }`}
+                  aria-pressed={active}
+                >
+                  {chip.label}
+                </button>
+              )
+            })}
           </div>
         </div>
 
@@ -1643,41 +1686,7 @@ const handleClearFilters = useCallback(() => {
 
         <div className="mt-6 space-y-6">
           {/* Horarios movidos al header junto a Redes */}
-
           <div className="space-y-6">
-            <div className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-4">
-              {STORE_CATEGORY_BANNERS.map((card) => {
-                const isActive = card.section ? (activeSection === card.section && !bikesOnly) : (!activeSection && bikesOnly)
-                return (
-                  <button
-                    key={card.key}
-                    type="button"
-                    onClick={() => {
-                      if (card.key === 'all') setSection('', undefined, true)
-                      else setSection(card.section)
-                    }}
-                    className={`relative w-full overflow-hidden rounded-3xl border-2 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#14212e] ${
-                      isActive ? 'border-white shadow-lg' : 'border-white/15 bg-white/5 hover:border-white/30 hover:shadow-md'
-                    }`}
-                    aria-pressed={isActive}
-                  >
-                    <div className="relative aspect-square sm:aspect-[17/5]">
-                      <picture className="block h-full w-full">
-                        <source media="(max-width: 640px)" srcSet={card.imageMobile} />
-                        <img src={card.image} alt={card.label} className="h-full w-full object-cover" loading="lazy" decoding="async" />
-                      </picture>
-                      <div className="absolute inset-0 bg-gradient-to-t from-[#050c18]/85 via-transparent to-transparent" aria-hidden />
-                      <div className="absolute inset-0 flex items-end p-2 sm:p-4">
-                        <div className="space-y-1 text-left">
-                          <span className="text-sm font-semibold text-white sm:text-lg">{card.label}</span>
-                          <span className="hidden text-xs text-white/80 sm:block">{card.description}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
 
             <div className="sm:hidden">
               <div className="flex w-full overflow-hidden rounded-2xl bg-white text-[#14212e] shadow">
@@ -1699,14 +1708,14 @@ const handleClearFilters = useCallback(() => {
               </div>
             </div>
 
-            <div className="sm:hidden text-xs text-white/70">{finalList.length} resultados</div>
+            <div className="sm:hidden text-xs text-gray-600">{finalList.length} resultados</div>
 
             <div className="hidden flex-col gap-3 sm:flex lg:flex-row lg:items-center lg:justify-between">
-              <div className="text-sm text-white/70">{finalList.length} resultados</div>
+              <div className="text-sm text-gray-600">{finalList.length} resultados</div>
               <div className="flex items-center gap-2 text-sm">
-                <span className="text-white/60">Ordenar</span>
+                <span className="text-gray-500">Ordenar</span>
                 <select
-                  className="input w-48 rounded-full border border-white/10 bg-white/90 text-sm text-[#14212e]"
+                  className="input w-48 rounded-full border border-gray-200 bg-white text-sm text-[#14212e]"
                   value={sortMode}
                   onChange={(e) => setSortMode(e.target.value as 'relevance' | 'newest' | 'asc' | 'desc')}
                 >
@@ -1724,11 +1733,12 @@ const handleClearFilters = useCallback(() => {
                 const rawOptions = facetsData.options[key]
                 const options = Array.from(new Set([...rawOptions, ...filters[key]]))
                 return (
-                  <div key={key} className="px-3 border-l border-white/20 first:border-l-0 whitespace-nowrap">
+                  <div key={key} className="px-3 border-l border-gray-200 first:border-l-0 whitespace-nowrap">
                     <FilterDropdown
                       label={MULTI_FILTER_LABELS[key]}
                       summary={summaryFor(key)}
                       disabled={key === 'size' ? false : !options.length}
+                      tone="light"
                       variant="inline"
                     >
                       {({ close }) => (
@@ -1753,8 +1763,8 @@ const handleClearFilters = useCallback(() => {
                   </div>
                 )
               })}
-              <div className="px-3 border-l border-white/20 first:border-l-0 whitespace-nowrap">
-              <FilterDropdown label="Precio" summary={priceSummary} variant="inline">
+              <div className="px-3 border-l border-gray-200 first:border-l-0 whitespace-nowrap">
+              <FilterDropdown label="Precio" summary={priceSummary} tone="light" variant="inline">
                 {({ close }) => (
                   <PriceFilterContent
                     min={filters.priceMin}
@@ -1774,11 +1784,12 @@ const handleClearFilters = useCallback(() => {
                 const rawOptions = facetsData.options[key]
                 const options = Array.from(new Set([...rawOptions, ...filters[key]]))
                 return (
-                  <div key={key} className="px-3 border-l border-white/20 first:border-l-0 whitespace-nowrap">
+                  <div key={key} className="px-3 border-l border-gray-200 first:border-l-0 whitespace-nowrap">
                     <FilterDropdown
                       label={MULTI_FILTER_LABELS[key]}
                       summary={summaryFor(key)}
                       disabled={!options.length}
+                      tone="light"
                       variant="inline"
                     >
                       {({ close }) => (
@@ -1794,8 +1805,8 @@ const handleClearFilters = useCallback(() => {
                   </div>
                 )
               })}
-              <div className="px-3 border-l border-white/20 first:border-l-0 whitespace-nowrap">
-              <FilterDropdown label="Promos" summary={filters.deal === '1' ? 'Activas' : 'Todas'} variant="inline">
+              <div className="px-3 border-l border-gray-200 first:border-l-0 whitespace-nowrap">
+              <FilterDropdown label="Promos" summary={filters.deal === '1' ? 'Activas' : 'Todas'} tone="light" variant="inline">
                 {({ close }) => (
                   <DealFilterContent
                     active={filters.deal === '1'}
@@ -1808,9 +1819,9 @@ const handleClearFilters = useCallback(() => {
             </div>
 
             {hasActiveFilters ? (
-              <div className="text-xs text-white/70">
+              <div className="text-xs text-gray-600">
                 Filtros activos: {activeFilterChips.map((c) => c.label).join(', ')}{' '}
-                <button type="button" onClick={handleClearFilters} className="underline hover:text-white">Limpiar</button>
+                <button type="button" onClick={handleClearFilters} className="underline hover:text-gray-900">Limpiar</button>
               </div>
             ) : null}
 
@@ -1841,25 +1852,25 @@ const handleClearFilters = useCallback(() => {
 
       {mobileFiltersOpen ? (
         <div
-          className="fixed inset-0 z-50 bg-[#050c18]/80 backdrop-blur-sm sm:hidden"
+          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm sm:hidden"
           onClick={() => setMobileFiltersOpen(false)}
         >
           <div
-            className="absolute right-0 top-0 h-full w-full bg-[#0f1724] shadow-2xl sm:hidden"
+            className="absolute right-0 top-0 h-full w-full bg-white shadow-2xl sm:hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex h-full flex-col">
-              <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
-                <h3 className="text-base font-semibold text-white">Filtros</h3>
+              <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+                <h3 className="text-base font-semibold text-mb-ink">Filtros</h3>
                 <button
                   type="button"
                   onClick={() => setMobileFiltersOpen(false)}
-                  className="rounded-full border border-white/20 px-3 py-1 text-xs text-white"
+                  className="rounded-full border border-gray-200 px-3 py-1 text-xs text-gray-700 hover:bg-gray-50"
                 >
                   Cerrar
                 </button>
               </div>
-              <div className="flex-1 overflow-y-auto px-5 py-4 pb-28 space-y-3 text-white">
+              <div className="flex-1 overflow-y-auto px-5 py-4 pb-28 space-y-3 text-mb-ink">
                 {UI_FILTERS_BEFORE_PRICE.map((key) => {
                   const rawOptions = facetsData.options[key]
                   const options = Array.from(new Set([...rawOptions, ...filters[key]]))
@@ -1869,6 +1880,7 @@ const handleClearFilters = useCallback(() => {
                       label={MULTI_FILTER_LABELS[key]}
                       summary={summaryFor(key)}
                       disabled={key === 'size' ? false : !options.length}
+                      tone="light"
                       className="w-full"
                       buttonClassName="w-full justify-between"
                       inlineOnMobile
@@ -1898,6 +1910,7 @@ const handleClearFilters = useCallback(() => {
                 <FilterDropdown
                   label="Precio"
                   summary={priceSummary}
+                  tone="light"
                   className="w-full"
                   buttonClassName="w-full justify-between"
                   inlineOnMobile
@@ -1926,6 +1939,7 @@ const handleClearFilters = useCallback(() => {
                       label={MULTI_FILTER_LABELS[key]}
                       summary={summaryFor(key)}
                       disabled={!options.length}
+                      tone="light"
                       className="w-full"
                       buttonClassName="w-full justify-between"
                       inlineOnMobile
@@ -1946,6 +1960,7 @@ const handleClearFilters = useCallback(() => {
                 <FilterDropdown
                   label="Promos"
                   summary={filters.deal === '1' ? 'Activas' : 'Todas'}
+                  tone="light"
                   className="w-full"
                   buttonClassName="w-full justify-between"
                   inlineOnMobile
@@ -1960,19 +1975,19 @@ const handleClearFilters = useCallback(() => {
                   )}
                 </FilterDropdown>
               </div>
-              <div className="border-t border-white/10 bg-[#0f1724] px-5 py-4">
+              <div className="border-t border-gray-200 bg-white px-5 py-4">
                 <div className="flex gap-3">
                   <button
                     type="button"
                     onClick={() => handleClearFilters()}
-                    className="flex-1 rounded-full border border-white/20 px-4 py-2 text-sm text-white hover:border-white/40 hover:bg-white/10"
+                    className="flex-1 rounded-full border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
                   >
                     Limpiar
                   </button>
                   <button
                     type="button"
                     onClick={() => setMobileFiltersOpen(false)}
-                    className="flex-1 rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#14212e] hover:bg-white/90"
+                    className="flex-1 rounded-full bg-mb-primary px-4 py-2 text-sm font-semibold text-white hover:bg-mb-primary/90"
                   >
                     Aplicar
                   </button>
@@ -1985,24 +2000,24 @@ const handleClearFilters = useCallback(() => {
 
       {mobileSortOpen ? (
         <div
-          className="fixed inset-0 z-50 bg-[#050c18]/80 backdrop-blur-sm sm:hidden"
+          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm sm:hidden"
           onClick={() => setMobileSortOpen(false)}
         >
           <div
-            className="absolute inset-x-0 bottom-0 rounded-t-3xl bg-[#0f1724] p-5 shadow-2xl"
+            className="absolute inset-x-0 bottom-0 rounded-t-3xl bg-white p-5 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
-              <h3 className="text-base font-semibold text-white">Ordenar por</h3>
+              <h3 className="text-base font-semibold text-mb-ink">Ordenar por</h3>
               <button
                 type="button"
                 onClick={() => setMobileSortOpen(false)}
-                className="rounded-full border border-white/20 px-3 py-1 text-xs text-white"
+                className="rounded-full border border-gray-200 px-3 py-1 text-xs text-gray-700 hover:bg-gray-50"
               >
                 Cerrar
               </button>
             </div>
-            <div className="mt-4 space-y-2 text-sm text-white">
+            <div className="mt-4 space-y-2 text-sm text-mb-ink">
               {[
                 { value: 'relevance', label: 'Relevancia' },
                 { value: 'newest', label: 'Más recientes' },
@@ -2019,7 +2034,7 @@ const handleClearFilters = useCallback(() => {
                       setMobileSortOpen(false)
                     }}
                     className={`w-full rounded-2xl border px-4 py-3 text-left transition ${
-                      active ? 'border-white bg-white/15' : 'border-white/15 hover:border-white/30 hover:bg-white/10'
+                      active ? 'border-mb-primary/40 bg-mb-primary/5' : 'border-gray-200 hover:bg-gray-50'
                     }`}
                   >
                     {option.label}
@@ -2046,7 +2061,7 @@ function normalizeHandle(value: string, type: 'ig' | 'fb') {
 }
 
 function PhoneIcon() {
-  return <img src="/call.webp" alt="" className="h-5 w-5" loading="lazy" decoding="async" aria-hidden onError={(e)=>{try{const el=e.currentTarget as HTMLImageElement; if(el.src.endsWith('.webp')) el.src='/call.png';}catch{}}} />
+  return <img src="/call.webp" alt="" className="h-5 w-5" loading="lazy" decoding="async" aria-hidden onError={(e)=>{try{const el=e.currentTarget as HTMLImageElement; if(el.src.endsWith('.webp')) el.src='/call.png';}catch{/* noop */}}} />
 }
 function EmailIcon() {
   return (

@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { MapPin, Package } from 'lucide-react'
 import Container from '../components/Container'
-import StoresMap from '../components/StoresMap'
-import GoogleStoresMap from '../components/GoogleStoresMap'
 import SeoHead from '../components/SeoHead'
 import { fetchStores, fetchStoreActivityCounts, type StoreSummary } from '../services/users'
 import { fetchListings } from '../services/listings'
@@ -10,15 +9,13 @@ import { buildPublicUrlSafe } from '../lib/supabaseImages'
 import type { Category } from '../types'
 
 type StoreCategoryFilter = 'Todos' | 'Accesorios' | 'Indumentaria'
-
 type StoreCategoryMap = Record<string, Category[]>
-
 type ProvinceCount = Record<string, number>
 
 const STORE_CATEGORY_CARDS: Array<{ key: StoreCategoryFilter; label: string; description: string }> = [
   { key: 'Todos', label: 'Todas', description: 'Todo el catálogo disponible' },
-  { key: 'Accesorios', label: 'Accesorios', description: 'Componentes, upgrades y servicios' },
-  { key: 'Indumentaria', label: 'Indumentaria', description: 'Ropa técnica y casual' }
+  { key: 'Accesorios', label: 'Accesorios', description: 'Componentes, upgrades y electrónica' },
+  { key: 'Indumentaria', label: 'Indumentaria', description: 'Ropa técnica y cascos' },
 ]
 
 const normalizeText = (value: string) =>
@@ -27,15 +24,6 @@ const normalizeText = (value: string) =>
     .replace(/[^a-zA-Z0-9\s]/g, '')
     .trim()
     .toLowerCase()
-
-function buildLocationLabel(store: StoreSummary): string {
-  const address = (store as any).store_address as string | null
-  const location = [store.city, store.province].filter(Boolean).join(', ')
-  if (address && location) return `${address} · ${location}`
-  if (address) return address
-  if (location) return location
-  return 'Ubicación no declarada'
-}
 
 export default function Tiendas() {
   const [stores, setStores] = useState<StoreSummary[]>([])
@@ -46,8 +34,6 @@ export default function Tiendas() {
   const [categoryFilter, setCategoryFilter] = useState<StoreCategoryFilter>('Todos')
   const [selectedProvinces, setSelectedProvinces] = useState<string[]>([])
   const [storeCategories, setStoreCategories] = useState<StoreCategoryMap>({})
-  const [activeStoreId, setActiveStoreId] = useState<string | null>(null)
-  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -62,7 +48,9 @@ export default function Tiendas() {
       try {
         const counts = await fetchStoreActivityCounts()
         if (active) setActivity(counts)
-      } catch { void 0 }
+      } catch {
+        void 0
+      }
       try {
         const listings = await fetchListings()
         if (active) {
@@ -76,11 +64,15 @@ export default function Tiendas() {
           }
           setStoreCategories(categories)
         }
-      } catch { void 0 }
+      } catch {
+        void 0
+      }
       if (active) setLoading(false)
     }
     void load()
-    return () => { active = false }
+    return () => {
+      active = false
+    }
   }, [])
 
   const provinceOptions = useMemo(() => {
@@ -105,6 +97,15 @@ export default function Tiendas() {
       return name.includes(q) || location.includes(q)
     })
   }, [stores, query])
+
+  const provinceCounts = useMemo<ProvinceCount>(() => {
+    const counts: ProvinceCount = {}
+    for (const store of queryFilteredStores) {
+      const key = store.province || 'Sin provincia'
+      counts[key] = (counts[key] || 0) + 1
+    }
+    return counts
+  }, [queryFilteredStores])
 
   const filteredStores = useMemo(() => {
     const provinceSet = new Set(selectedProvinces.map((value) => normalizeText(value)))
@@ -139,15 +140,6 @@ export default function Tiendas() {
     })
   }, [queryFilteredStores, activity, sortMode, categoryFilter, selectedProvinces, storeCategories])
 
-  const provinceCounts = useMemo<ProvinceCount>(() => {
-    const counts: ProvinceCount = {}
-    for (const store of queryFilteredStores) {
-      const key = store.province || 'Sin provincia'
-      counts[key] = (counts[key] || 0) + 1
-    }
-    return counts
-  }, [queryFilteredStores])
-
   const toggleProvince = useCallback((province: string) => {
     setSelectedProvinces((prev) => {
       const normalized = normalizeText(province)
@@ -163,34 +155,19 @@ export default function Tiendas() {
     setQuery('')
   }, [])
 
-  useEffect(() => {
-    if (activeStoreId && filteredStores.some((store) => store.id === activeStoreId)) return
-    setActiveStoreId(filteredStores[0]?.id ?? null)
-  }, [filteredStores, activeStoreId])
-
-  const mapStores = useMemo(() => filteredStores.map((store) => ({
-    id: store.id,
-    name: store.store_name || store.store_slug,
-    slug: store.store_slug,
-    avatarUrl: store.store_avatar_url,
-    address: (store as any).store_address ?? null,
-    city: store.city,
-    province: store.province,
-    lat: typeof (store as any).store_lat === 'number' ? (store as any).store_lat : null,
-    lon: typeof (store as any).store_lon === 'number' ? (store as any).store_lon : null,
-    phone: (store as any).store_phone ?? null,
-    website: (store as any).store_website ?? null,
-  })), [filteredStores])
-
   const activeFilterChips: Array<{ key: string; label: string; onRemove: () => void }> = []
   if (categoryFilter !== 'Todos') {
-    activeFilterChips.push({ key: 'category', label: `Categoría: ${categoryFilter}`, onRemove: () => setCategoryFilter('Todos') })
+    activeFilterChips.push({
+      key: 'category',
+      label: `Categoría: ${categoryFilter}`,
+      onRemove: () => setCategoryFilter('Todos'),
+    })
   }
   for (const province of selectedProvinces) {
     activeFilterChips.push({
       key: `province-${province}`,
       label: `Provincia: ${province}`,
-      onRemove: () => toggleProvince(province)
+      onRemove: () => toggleProvince(province),
     })
   }
   if (query.trim()) {
@@ -202,278 +179,217 @@ export default function Tiendas() {
     <>
       <SeoHead
         title="Tiendas oficiales | Ciclo Market"
-        description="Locales verificados con catálogo activo, contacto directo y métricas para seguir ventas. Encontrá tiendas por provincia y descubrí sus bicicletas destacadas."
+        description="Descubrí tiendas oficiales verificadas en Ciclo Market. Explorá su catálogo, filtrá por provincia y encontrá productos publicados por cada tienda."
         canonicalPath="/tiendas"
       />
-      <section className="relative overflow-hidden text-white">
-        <img
-          src="/hero-tiendas.webp"
-          alt="Tiendas oficiales"
-          className="absolute inset-0 h-full w-full object-cover md:object-[50%_30%]"
-        />
-        <div className="absolute inset-0 bg-[#0b131c]/80" />
-        <div className="relative">
-          <Container>
-            <div className="mx-auto max-w-3xl py-10 text-center">
-              <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Tiendas oficiales</h1>
-              <p className="mt-3 text-white/80">Locales y equipos con presencia verificada dentro de Ciclo Market. Ingresá para ver su catálogo y datos de contacto.</p>
+
+      <div className="min-h-[calc(100vh-var(--header-h))] bg-gray-50">
+        <Container className="pt-10 pb-6">
+          <div className="max-w-3xl">
+            <h1 className="text-3xl font-extrabold tracking-tight text-mb-ink sm:text-4xl">Tiendas oficiales</h1>
+            <p className="mt-2 text-gray-600">
+              Tiendas verificadas dentro de Ciclo Market. Entrá a cada tienda para ver su catálogo y contacto.
+            </p>
+          </div>
+
+          <div className="mt-6 grid gap-3 md:grid-cols-12 md:items-end">
+            <div className="md:col-span-6">
+              <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500">Buscar</label>
+              <input
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Nombre de tienda, ciudad o provincia…"
+                className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-mb-ink shadow-sm focus:border-mb-primary focus:ring-1 focus:ring-mb-primary"
+              />
             </div>
-          </Container>
-        </div>
-      </section>
-      <section className="relative isolate overflow-hidden bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] text-white overflow-x-hidden">
-        <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
-          <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
-          <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
-        </div>
-        <Container>
-          <div className="py-10 space-y-8">
+            <div className="md:col-span-3">
+              <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500">Provincia</label>
+              <select
+                value={selectedProvinces[0] ?? ''}
+                onChange={(event) => {
+                  const value = event.target.value
+                  setSelectedProvinces(value ? [value] : [])
+                }}
+                className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm text-mb-ink shadow-sm focus:border-mb-primary focus:ring-1 focus:ring-mb-primary"
+              >
+                <option value="">Todas</option>
+                {provinceOptions.map((p) => (
+                  <option key={p} value={p}>
+                    {p} ({provinceCounts[p] ?? 0})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="md:col-span-3">
+              <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500">Orden</label>
+              <select
+                value={sortMode}
+                onChange={(event) => setSortMode(event.target.value as 'active' | 'alpha')}
+                className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm text-mb-ink shadow-sm focus:border-mb-primary focus:ring-1 focus:ring-mb-primary"
+              >
+                <option value="active">Más activas</option>
+                <option value="alpha">Alfabético</option>
+              </select>
+            </div>
+          </div>
 
-            {loading ? (
-              <div className="rounded-3xl border border-white/10 bg-white/5 p-6 text-center text-white/80">Cargando tiendas…</div>
-            ) : (
-              <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
-                {/* Mapa primero en mobile */}
-                <div className="order-1 h-80 min-w-0 rounded-3xl border border-white/10 bg-white/5 p-3 sm:h-[420px] lg:order-2 lg:h-[calc(100vh-260px)]">
-                  <div className="h-full w-full overflow-hidden rounded-2xl">
-                    {(import.meta as any).env?.VITE_GOOGLE_MAPS_KEY
-                      ? <GoogleStoresMap stores={mapStores as any} focusStoreId={activeStoreId} />
-                      : <StoresMap stores={mapStores} focusStoreId={activeStoreId} onStoreClick={(id) => setActiveStoreId(id)} />}
-                  </div>
-                </div>
-                {/* Panel de búsqueda/lista segundo en mobile */}
-                <aside className="order-2 flex min-h-0 min-w-0 flex-col gap-4 rounded-3xl border border-white/10 bg-white/5 p-4 lg:order-1 lg:h-[calc(100vh-260px)] lg:pr-6">
-                  <div className="flex flex-col gap-3">
-                    <div className="flex gap-2">
-                      <input
-                        type="search"
-                        value={query}
-                        onChange={(event) => setQuery(event.target.value)}
-                        placeholder="Buscar por nombre o ciudad"
-                        className="input w-full bg-white text-[#14212e]"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setMobileFiltersOpen(true)}
-                        className="rounded-xl border border-white/10 bg-white/10 px-3 text-xs font-semibold uppercase tracking-wide text-white lg:hidden"
-                      >
-                        Filtros
-                      </button>
-                    </div>
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <span className="text-xs text-white/70">{filteredStores.length} tiendas verificadas</span>
-                      <select
-                        value={sortMode}
-                        onChange={(event) => setSortMode(event.target.value as 'active' | 'alpha')}
-                        className="input w-full sm:w-auto bg-white text-sm text-[#14212e]"
-                      >
-                        <option value="active">Más activas</option>
-                        <option value="alpha">Alfabético</option>
-                      </select>
-                    </div>
-                  </div>
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            {STORE_CATEGORY_CARDS.map((card) => {
+              const active = categoryFilter === card.key
+              return (
+                <button
+                  key={card.key}
+                  type="button"
+                  onClick={() => setCategoryFilter(card.key)}
+                  className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                    active
+                      ? 'bg-mb-primary text-white shadow-sm'
+                      : 'bg-white text-mb-ink border border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  {card.label}
+                </button>
+              )
+            })}
 
-                  {hasActiveFilters ? (
-                    <div className="flex flex-wrap items-center gap-2">
-                      {activeFilterChips.map((chip) => (
-                        <button
-                          key={chip.key}
-                          type="button"
-                          onClick={chip.onRemove}
-                          className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs text-white transition hover:border-white/40 hover:bg-white/20"
-                        >
-                          <span>{chip.label}</span>
-                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6m0 12L6 6" />
-                          </svg>
-                        </button>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={handleClearFilters}
-                        className="text-xs text-white/70 underline-offset-2 hover:text-white hover:underline"
-                      >
-                        Limpiar todo
-                      </button>
-                    </div>
-                  ) : null}
+            {hasActiveFilters ? (
+              <button
+                type="button"
+                onClick={handleClearFilters}
+                className="ml-auto text-sm font-semibold text-gray-600 underline-offset-4 hover:text-gray-900 hover:underline"
+              >
+                Limpiar filtros
+              </button>
+            ) : null}
+          </div>
 
-                  <div className="hidden lg:block">
-                    <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-white/60">
-                      <span>Provincias</span>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedProvinces([])}
-                        className="text-[11px] font-normal text-white/60 hover:text-white"
-                      >
-                        Ver todas
-                      </button>
-                    </div>
-                    <ul className="mt-2 max-h-56 space-y-2 overflow-y-auto pr-1 text-sm">
-                      {provinceOptions.map((province) => {
-                        const normalized = normalizeText(province)
-                        const active = selectedProvinces.some((value) => normalizeText(value) === normalized)
-                        const count = provinceCounts[province] ?? 0
-                        return (
-                          <li key={province}>
-                            <button
-                              type="button"
-                              onClick={() => toggleProvince(province)}
-                              className={`flex w-full items-center justify-between rounded-xl px-3 py-2 transition ${
-                                active ? 'bg-white/15 text-white' : 'bg-white/5 text-white/75 hover:bg-white/10'
-                              }`}
-                            >
-                              <span className="truncate">{province}</span>
-                              <span className="text-xs text-white/60">{count}</span>
-                            </button>
-                          </li>
-                        )
-                      })}
-                    </ul>
-                  </div>
+          {hasActiveFilters ? (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {activeFilterChips.map((chip) => (
+                <button
+                  key={chip.key}
+                  type="button"
+                  onClick={chip.onRemove}
+                  className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:border-gray-300"
+                >
+                  <span>{chip.label}</span>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    className="h-3.5 w-3.5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6m0 12L6 6" />
+                  </svg>
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </Container>
 
-                  <div className="max-h-[28rem] overflow-y-auto pr-1 sm:max-h-none sm:flex-1">
-                    {filteredStores.length ? (
-                      <ul className="space-y-3">
-                        {filteredStores.map((store) => {
-                          const isActive = activeStoreId === store.id
-                          const locationLabel = buildLocationLabel(store)
-                          const productCount = activity[store.id] || 0
-                          return (
-                            <li
-                              key={store.id}
-                              onMouseEnter={() => setActiveStoreId(store.id)}
-                              onFocus={() => setActiveStoreId(store.id)}
-                              className={`rounded-2xl border px-4 py-3 transition ${
-                                isActive ? 'border-white bg-white/10 shadow-lg' : 'border-white/10 bg-white/5 hover:border-white/30'
-                              }`}
-                            >
-                              <div className="flex gap-3">
-                                <div className="h-14 w-14 flex-shrink-0 overflow-hidden rounded-xl border border-white/15 bg-white/10">
-                                  {store.store_avatar_url ? (
-                                    <img
-                                      src={buildPublicUrlSafe(store.store_avatar_url) || ''}
-                                      sizes="56px"
-                                      alt={store.store_name || store.store_slug}
-                                      className="h-full w-full object-cover"
-                                      loading="lazy"
-                                      decoding="async"
-                                    />
-                                  ) : (
-                                    <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-white/70">
-                                      {(store.store_name || store.store_slug || '?').trim().charAt(0).toUpperCase()}
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="min-w-0">
-                                  <div className="flex items-start justify-between gap-2">
-                                    <h3 className="truncate text-sm font-semibold text-white">{store.store_name || store.store_slug}</h3>
-                                    {productCount ? (
-                                      <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] text-white/70">{productCount} prod.</span>
-                                    ) : null}
-                                  </div>
-                                  <p className="mt-1 truncate text-xs text-white/60">{locationLabel}</p>
-                                </div>
-                              </div>
-                              <div className="mt-3 flex flex-wrap gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => setActiveStoreId(store.id)}
-                                  className="rounded-full border border-white/20 px-3 py-1 text-xs text-white hover:border-white/40 hover:bg-white/10"
-                                >
-                                  Ver en mapa
-                                </button>
-                                <Link
-                                  to={`/tienda/${encodeURIComponent(store.store_slug)}`}
-                                  className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#14212e] hover:bg-white/90"
-                                >
-                                  Ver tienda
-                                </Link>
-                              </div>
-                            </li>
-                          )
-                        })}
-                      </ul>
-                    ) : (
-                      <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/70">
-                        {stores.length === 0 ? 'No hay tiendas publicadas aún.' : 'No encontramos tiendas con esos filtros.'}
+        <Container className="pb-12">
+          {loading ? (
+            <div className="rounded-2xl border border-gray-200 bg-white p-6 text-center text-gray-600">Cargando tiendas…</div>
+          ) : filteredStores.length ? (
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {filteredStores.map((store) => {
+                const storeName = store.store_name || store.store_slug
+                const avatar = buildPublicUrlSafe(store.store_avatar_url || '/avatar-placeholder.png') || ''
+                const banner = store.store_banner_url ? (buildPublicUrlSafe(store.store_banner_url) || '') : ''
+                const location = [store.city, store.province].filter(Boolean).join(', ') || 'Ubicación no declarada'
+                const productCount = activity[store.id] || 0
+
+                return (
+                  <Link
+                    key={store.id}
+                    to={`/tienda/${encodeURIComponent(store.store_slug)}`}
+                    className="group overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-xl"
+                    aria-label={`Ver tienda ${storeName}`}
+                  >
+                    <div className="relative z-0 h-32 overflow-hidden">
+                      {banner ? (
+                        <img src={banner} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" />
+                      ) : (
+                        <div className="h-full w-full bg-gradient-to-r from-gray-800 to-gray-900" aria-hidden="true" />
+                      )}
+                    </div>
+
+                    <div className="px-6 pb-6">
+                      <div className="relative z-10 -mt-10 flex justify-center">
+                        <img
+                          src={avatar}
+                          alt={storeName}
+                          className="h-20 w-20 rounded-full object-cover ring-4 ring-white shadow-sm"
+                          loading="lazy"
+                          decoding="async"
+                        />
                       </div>
-                    )}
-                  </div>
-                </aside>
-              </div>
-            )}
 
-            <div className="rounded-xl border border-white/10 bg-white/5 p-5">
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold">¿Querés abrir una tienda en Ciclo Market?</h2>
-                  <p className="text-sm text-white/80">Mostrá tu catálogo, sumá contacto directo y beneficios de difusión. ¡Comunicáte con nosotros!</p>
-                </div>
-                <div className="flex flex-wrap gap-3">
-                  <a href="mailto:admin@ciclomarket.ar" className="btn bg-white text-[#14212e]">admin@ciclomarket.ar</a>
-                  <Link to="/dashboard" className="btn bg-white text-[#14212e]">Ir al panel</Link>
-     
-                  <Link to="/publicar" className="btn bg-[#0c72ff] text-white">Ver planes</Link>
-                </div>
+                      <div className="mt-4 text-center">
+                        <div className="text-lg font-bold text-mb-ink">{storeName}</div>
+                        <div className="mt-2 flex flex-col items-center gap-1 text-sm text-gray-600">
+                          <div className="flex items-center gap-2">
+                            <MapPin className="h-4 w-4 text-gray-400" aria-hidden="true" />
+                            <span className="truncate">{location}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Package className="h-4 w-4 text-gray-400" aria-hidden="true" />
+                            <span>{productCount} productos publicados</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-5">
+                        <span className="inline-flex w-full items-center justify-center rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-mb-ink transition group-hover:border-gray-300 group-hover:bg-gray-50">
+                          Ver tienda
+                        </span>
+                      </div>
+                    </div>
+                  </Link>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-gray-200 bg-white p-6 text-center text-gray-600">
+              {stores.length === 0 ? 'No hay tiendas publicadas aún.' : 'No encontramos tiendas con esos filtros.'}
+            </div>
+          )}
+
+          <div className="mt-10 rounded-2xl border border-gray-200 bg-white p-6">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-mb-ink">¿Querés abrir una tienda en Ciclo Market?</h2>
+                <p className="mt-1 text-sm text-gray-600">
+                  Mostrá tu catálogo, sumá contacto directo y beneficios de difusión. Coordinemos la verificación.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <a
+                  href="mailto:admin@ciclomarket.ar"
+                  className="inline-flex items-center justify-center rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-mb-ink hover:bg-gray-50"
+                >
+                  admin@ciclomarket.ar
+                </a>
+                <Link
+                  to="/dashboard"
+                  className="inline-flex items-center justify-center rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-mb-ink hover:bg-gray-50"
+                >
+                  Ir al panel
+                </Link>
+                <Link
+                  to="/publicar"
+                  className="inline-flex items-center justify-center rounded-xl bg-mb-primary px-4 py-2 text-sm font-semibold text-white hover:bg-mb-primary/90"
+                >
+                  Ver planes
+                </Link>
               </div>
             </div>
           </div>
         </Container>
-      </section>
-
-      {mobileFiltersOpen ? (
-        <div
-          className="fixed inset-0 z-50 bg-[#050c18]/80 backdrop-blur-sm lg:hidden"
-          onClick={() => setMobileFiltersOpen(false)}
-        >
-          <div
-            className="absolute inset-x-0 bottom-0 max-h-[90vh] rounded-t-3xl bg-[#0f1724] p-5 shadow-2xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-semibold text-white">Filtrar por provincia</h3>
-              <button
-                type="button"
-                onClick={() => setMobileFiltersOpen(false)}
-                className="rounded-full border border-white/20 px-3 py-1 text-xs text-white"
-              >
-                Cerrar
-              </button>
-            </div>
-            <div className="mt-4 space-y-2 text-sm">
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedProvinces([])
-                  setMobileFiltersOpen(false)
-                }}
-                className="w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-left font-medium text-white hover:border-white/30 hover:bg-white/15"
-              >
-                Ver todas ({queryFilteredStores.length})
-              </button>
-              {provinceOptions.map((province) => {
-                const normalized = normalizeText(province)
-                const active = selectedProvinces.some((value) => normalizeText(value) === normalized)
-                const count = provinceCounts[province] ?? 0
-                return (
-                  <button
-                    key={`mobile-${province}`}
-                    type="button"
-                    onClick={() => toggleProvince(province)}
-                    className={`flex w-full items-center justify-between rounded-xl px-3 py-2 transition ${
-                      active ? 'bg-white/15 text-white' : 'bg-white/5 text-white/75 hover:bg-white/10'
-                    }`}
-                  >
-                    <span className="truncate">{province}</span>
-                    <span className="text-xs text-white/60">{count}</span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        </div>
-      ) : null}
+      </div>
     </>
   )
 }

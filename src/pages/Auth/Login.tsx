@@ -144,17 +144,19 @@ export default function Login() {
   }
 
   return (
-    <div className="relative flex min-h-screen lg:flex-row">
-      <div className="absolute inset-0 z-0 lg:relative lg:inset-auto lg:z-auto lg:order-2 lg:w-1/2">
-        <picture className="h-full w-full">
-          <source srcSet="/bicicletas-home.webp" type="image/webp" />
-          <img src="/bicicletas-home.jpg" alt="Ciclismo" className="h-full w-full object-cover" />
-        </picture>
-        <div className="absolute inset-0 bg-black/40 lg:hidden" />
+    <div className="relative flex min-h-[calc(100vh-var(--header-h))] lg:flex-row">
+      <div className="absolute inset-0 z-0 lg:relative lg:inset-auto lg:z-auto lg:order-2 lg:flex lg:w-1/2 lg:items-center lg:justify-center lg:bg-gray-50 lg:p-8">
+        <div className="relative h-full w-full lg:h-[min(780px,calc(100vh-var(--header-h)-64px))] lg:max-w-2xl lg:overflow-hidden lg:rounded-2xl lg:shadow-2xl">
+          <picture className="h-full w-full">
+            <source srcSet="/bicicletas-home.webp" type="image/webp" />
+            <img src="/bicicletas-home.jpg" alt="Ciclismo" className="h-full w-full object-cover" />
+          </picture>
+          <div className="absolute inset-0 bg-black/40 lg:hidden" />
+        </div>
       </div>
 
-      <div className="relative z-10 flex w-full items-center justify-center p-4 lg:order-1 lg:w-1/2 lg:bg-white lg:p-0">
-        <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-2xl lg:rounded-none lg:bg-transparent lg:p-12 lg:shadow-none">
+      <div className="relative z-10 flex w-full items-start justify-center px-4 pt-6 pb-6 lg:order-1 lg:w-1/2 lg:bg-white lg:px-0 lg:pt-10 lg:pb-10">
+        <div className="w-full max-w-md rounded-2xl bg-white px-8 py-3 shadow-2xl lg:rounded-none lg:bg-transparent lg:px-12 lg:py-4 lg:shadow-none">
           <h1 className="text-3xl font-bold tracking-tight text-mb-ink">Bienvenido</h1>
           <p className="mt-2 text-sm text-gray-500">
             Iniciá sesión con Google o con tu email para acceder a tu dashboard.

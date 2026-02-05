@@ -81,6 +81,15 @@ export default function ListingDetail() {
   const fallbackCanonicalPath = listingKey ? `/listing/${listingKey}` : undefined
   // Necesario antes de efectos que lo usan
   const isOwner = Boolean(user?.id && listing?.sellerId && user.id === listing.sellerId)
+  const ownerProfileMissing = useMemo(() => {
+    if (!isOwner) return []
+    const missing: string[] = []
+    if (!sellerProfile?.full_name) missing.push('nombre')
+    if (!sellerProfile?.avatar_url) missing.push('foto')
+    if (!sellerProfile?.whatsapp_number) missing.push('WhatsApp')
+    if (!sellerProfile?.province || !sellerProfile?.city) missing.push('ubicación')
+    return missing
+  }, [isOwner, sellerProfile])
 
   const buildEditFormUrl = (l: Listing) => {
     const isBikeLegacy = String(l.category || '').toLowerCase() === 'bicicletas'
@@ -203,12 +212,20 @@ export default function ListingDetail() {
 
   async function startUpgrade(planCode: 'PREMIUM'|'PRO') {
     try {
+      if (!listing) return
+      const tierRaw = (listing.planTier || listing.planStatus || '').toString().trim().toUpperCase()
+      const tier = tierRaw === 'PRO' || tierRaw === 'PREMIUM' ? tierRaw : 'FREE'
+      const upgradeBlocked = listing.canUpgrade === false || tier !== 'FREE'
+      if (upgradeBlocked) {
+        alert(`Tu publicación ya tiene un plan activo (${tier}). No es necesario volver a pagar.`)
+        return
+      }
       const amount = planCode === 'PRO' ? 13000 : 9000
       const supabase = getSupabaseClient()
       const { data: session } = await supabase.auth.getSession()
       const token = session.session?.access_token
       const userId = session.session?.user?.id
-      if (!userId || !listing) return
+      if (!userId) return
       const redirectBase = window.location.origin
       const back = {
         success: `${redirectBase}/listing/${listing.slug || listing.id}`,
@@ -334,7 +351,10 @@ export default function ListingDetail() {
     if (!listing || !user?.id || user.id !== listing.sellerId) return
     const premiumActive = typeof listing.rankBoostUntil === 'number' && listing.rankBoostUntil > Date.now()
     const forceShow = searchParams.get('post_publish') === '1'
-    if (premiumActive) return
+    const tierRaw = (listing.planTier || listing.planStatus || '').toString().trim().toUpperCase()
+    const tier = tierRaw === 'PRO' || tierRaw === 'PREMIUM' ? tierRaw : 'FREE'
+    const upgradeBlocked = listing.canUpgrade === false || tier !== 'FREE'
+    if (premiumActive || upgradeBlocked) return
     const key = `cm_upg_seen_${listing.id}`
     const seen = typeof window !== 'undefined' ? window.localStorage.getItem(key) === '1' : false
     if (forceShow || !seen) setShowUpgradeModal(true)
@@ -828,7 +848,7 @@ export default function ListingDetail() {
     const emailRecipient = sellerAuthEmail || sellerProfile?.email || listing.sellerEmail || null
     const isStoreLocal = Boolean(sellerProfile?.store_enabled)
     const waAllowed = Boolean((listing as any).waPublic ?? (listing as any).wa_public ?? (hadBasicOrPremium || isStoreLocal))
-    const canShowWhatsapp = Boolean(waLink && !isOwner && !listingUnavailable && waAllowed)
+  const canShowWhatsapp = Boolean(waLink && !listingUnavailable && waAllowed)
 
     if (!canShowWhatsapp && !emailRecipient) return null
 
@@ -1043,14 +1063,30 @@ export default function ListingDetail() {
                           )}
                         </div>
                       )}
-	              </div>
-	            </div>
-	          </div>
-	          <CicloTrust profile={sellerProfile} paidPlanActive={paidPlanActive} publishedCount={sellerPublishedCount} />
-                {/* Quitar línea en mobile entre precio y publicado por; mantener solo en desktop si hiciera falta */}
-                <div className={isLifestyle ? 'hidden lg:block my-3 h-px w-full bg-[#14212e]/30' : 'hidden'} />
-                <div className="text-xs text-[#14212e]/60">
-                  {isStore ? (
+		              </div>
+		            </div>
+		          </div>
+		          <CicloTrust profile={sellerProfile} paidPlanActive={paidPlanActive} publishedCount={sellerPublishedCount} />
+                  {isOwner && (
+                    <div className="mt-3 rounded-2xl border border-[#14212e]/10 bg-white p-3">
+                      <p className="text-sm font-semibold text-[#14212e]">Aumentá tu nivel de confianza</p>
+                      <p className="mt-1 text-sm text-[#14212e]/70">
+                        {ownerProfileMissing.length === 0
+                          ? 'Tu perfil ya está completo. Eso ayuda a generar confianza y cerrar ventas.'
+                          : `Completá tu perfil (${ownerProfileMissing.join(', ')}) para que más compradores te contacten.`}
+                      </p>
+                      <Link
+                        to="/dashboard?tab=Editar%20perfil"
+                        className="mt-3 inline-flex items-center justify-center rounded-full bg-[#14212e] px-3 py-2 text-xs font-semibold text-white hover:bg-[#1b2f3f]"
+                      >
+                        Completar perfil
+                      </Link>
+                    </div>
+                  )}
+	                {/* Quitar línea en mobile entre precio y publicado por; mantener solo en desktop si hiciera falta */}
+	                <div className={isLifestyle ? 'hidden lg:block my-3 h-px w-full bg-[#14212e]/30' : 'hidden'} />
+	                <div className="text-xs text-[#14212e]/60">
+	                  {isStore ? (
                     <Link to={storeLink!} className="inline-flex items-center gap-1 text-[#14212e] underline">
                       Ver tienda oficial
                     </Link>
@@ -1070,21 +1106,59 @@ export default function ListingDetail() {
                         <div className="flex items-center justify-between gap-2">
                           <div>
                             <p className="text-xs font-semibold uppercase tracking-wide text-[#14212e]/60">Mejorá tu aviso</p>
-                            <p className="text-sm text-[#14212e]/80">Plan actual: Free · {listing.canUpgrade ? 'Podés subir a Premium/Pro' : 'Plan activo'}</p>
+                            {(() => {
+                              const tierRaw = (listing.planTier || listing.planStatus || '').toString().trim().toUpperCase()
+                              const tier = tierRaw === 'PRO' || tierRaw === 'PREMIUM' ? tierRaw : 'FREE'
+                              const upgradeBlocked = listing.canUpgrade === false || tier !== 'FREE'
+                              return (
+                                <p className="text-sm text-[#14212e]/80">
+                                  Plan actual: {tier} · {upgradeBlocked ? 'Ya está activo' : 'Podés subir a Premium/Pro'}
+                                </p>
+                              )
+                            })()}
 	                          </div>
                           <button
                             type="button"
                             className="inline-flex items-center gap-2 rounded-full bg-[#14212e] px-3 py-2 text-xs font-semibold text-white hover:bg-[#1b2f3f]"
-                            onClick={() => setShowUpgradeModal(true)}
+                            onClick={() => {
+                              const tierRaw = (listing.planTier || listing.planStatus || '').toString().trim().toUpperCase()
+                              const tier = tierRaw === 'PRO' || tierRaw === 'PREMIUM' ? tierRaw : 'FREE'
+                              const upgradeBlocked = listing.canUpgrade === false || tier !== 'FREE'
+                              if (upgradeBlocked) return
+                              setShowUpgradeModal(true)
+                            }}
+                            disabled={(() => {
+                              const tierRaw = (listing.planTier || listing.planStatus || '').toString().trim().toUpperCase()
+                              const tier = tierRaw === 'PRO' || tierRaw === 'PREMIUM' ? tierRaw : 'FREE'
+                              return listing.canUpgrade === false || tier !== 'FREE'
+                            })()}
                           >
-                            Ver planes
+                            {(() => {
+                              const tierRaw = (listing.planTier || listing.planStatus || '').toString().trim().toUpperCase()
+                              const tier = tierRaw === 'PRO' || tierRaw === 'PREMIUM' ? tierRaw : 'FREE'
+                              return listing.canUpgrade === false || tier !== 'FREE' ? 'Plan activo' : 'Ver planes'
+                            })()}
                           </button>
                         </div>
-                        <ul className="mt-2 text-xs text-[#14212e]/70 space-y-1">
-                          <li>• Más fotos visibles (8/12)</li>
-                          <li>• Prioridad 90 días en el listado</li>
-                          <li>• WhatsApp directo con compradores</li>
-                        </ul>
+                        {(() => {
+                          const tierRaw = (listing.planTier || listing.planStatus || '').toString().trim().toUpperCase()
+                          const tier = tierRaw === 'PRO' || tierRaw === 'PREMIUM' ? tierRaw : 'FREE'
+                          const upgradeBlocked = listing.canUpgrade === false || tier !== 'FREE'
+                          if (upgradeBlocked) {
+                            return (
+                              <div className="mt-2 text-xs text-[#14212e]/70">
+                                Tu publicación ya tiene un plan activo. No es necesario volver a pagar.
+                              </div>
+                            )
+                          }
+                          return (
+                            <ul className="mt-2 text-xs text-[#14212e]/70 space-y-1">
+                              <li>• Más fotos visibles (8/12)</li>
+                              <li>• Prioridad 90 días en el listado</li>
+                              <li>• WhatsApp directo con compradores</li>
+                            </ul>
+                          )
+                        })()}
                       </div>
                     </div>
                   )}

@@ -197,9 +197,6 @@ function renderOgHtml({
     <meta name="twitter:title" content="${safeTitle}" />
     <meta name="twitter:description" content="${safeDesc}" />
     <meta name="twitter:image" content="${safeImage}" />
-
-    <meta http-equiv="refresh" content="0; url=${safeUrl}" />
-    <script>window.location.replace(${JSON.stringify(url)});</script>
     <style>
       body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 2rem; color: #14212e; }
       a { color: #0c72ff; }
@@ -211,7 +208,7 @@ function renderOgHtml({
     <div class="card">
       <img src="${safeImage}" alt="${safeTitle}" loading="lazy" />
       <h1>${safeTitle}</h1>
-      <p>Redirigiendo al contenido original…</p>
+      <p>Vista previa para compartir.</p>
       <p><a href="${safeUrl}">Abrir en Ciclo Market →</a></p>
     </div>
   </body>

@@ -33,6 +33,7 @@ import { canonicalPlanCode } from '../utils/planCodes'
 import AdminFxPanel from '../components/AdminFxPanel'
 import { listSavedSearches, deleteSearch as deleteSavedSearch, updateSearch as updateSavedSearch, type SavedSearch } from '../services/savedSearches'
 import { buildCardImageUrlSafe } from '../lib/supabaseImages'
+import { BadgeCheck, BarChart3, Bell, Heart, LayoutList, LogOut, Pencil, Store, UserRound } from 'lucide-react'
 
 const TABS = ['Perfil', 'Publicaciones', 'Favoritos', 'Alertas', 'Notificaciones', 'Editar perfil', 'Editar tienda', 'Analítica', 'Verificá tu perfil', 'Cerrar sesión'] as const
 type SellerTab = (typeof TABS)[number]
@@ -1151,7 +1152,7 @@ export default function Dashboard() {
                         const host = window.location.hostname
                         return `${proto}//${host}:5273/`
                       }
-                    } catch {}
+                    } catch { /* noop */ }
                     return envBase
                   })()
                   return (
@@ -2021,8 +2022,22 @@ function ListingsView({
                 : 'bg-yellow-50 text-yellow-700 ring-1 ring-yellow-600/20'
           const viewCount = (typeof listing.viewCount === 'number' ? listing.viewCount : ((listing as any).views ?? 0)) as number
           const thumbSrc = getThumbSrc(listing)
+          const listingPath = `/listing/${listing.slug || listing.id}`
           return (
-            <div key={listing.id} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+            <div
+              key={listing.id}
+              role="link"
+              tabIndex={0}
+              className="cursor-pointer rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition hover:border-gray-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-mb-primary/25"
+              onClick={() => navigate(listingPath)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  navigate(listingPath)
+                }
+              }}
+              aria-label={`Ver publicación: ${listing.title}`}
+            >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex min-w-0 items-start gap-3">
                   <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-gray-200 bg-gray-100">
@@ -2041,14 +2056,20 @@ function ListingsView({
                 <button
                   type="button"
                   className="flex-1 rounded-full border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
-                  onClick={() => navigate(`/publicar/nueva?id=${encodeURIComponent(listing.id)}`)}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    navigate(`/publicar/nueva?id=${encodeURIComponent(listing.id)}`)
+                  }}
                 >
                   Editar
                 </button>
                 <button
                   type="button"
                   className="flex-1 rounded-full bg-[#14212e] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1b2f3f]"
-                  onClick={() => setOpenMenuFor((prev) => (prev === listing.id ? null : listing.id))}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setOpenMenuFor((prev) => (prev === listing.id ? null : listing.id))
+                  }}
                   aria-haspopup="menu"
                   aria-expanded={openMenuFor === listing.id}
                 >
@@ -2561,84 +2582,28 @@ function NotificationsView() {
 }
 
 function TabIcon({ tab }: { tab: SellerTab }) {
-  const common = {
-    className: 'h-6 w-6',
-    stroke: 'currentColor',
-    fill: 'none',
-    strokeWidth: 1.6,
-    xmlns: 'http://www.w3.org/2000/svg',
-    viewBox: '0 0 24 24'
-  } as const
-
+  const common = { className: 'h-5 w-5', strokeWidth: 1.8 } as const
   switch (tab) {
     case 'Perfil':
-      return (
-        <svg {...common}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 7.5a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
-          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 19.5a7.5 7.5 0 0115 0" />
-        </svg>
-      )
+      return <UserRound {...common} />
     case 'Publicaciones':
-      return (
-        <svg {...common}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M6 6h12M6 12h12M6 18h7" />
-        </svg>
-      )
+      return <LayoutList {...common} />
     case 'Favoritos':
-      return (
-        <svg {...common}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.04-4.5-4.55-4.5-1.74 0-3.42 1.008-4.45 2.708C10.97 4.758 9.29 3.75 7.55 3.75 5.04 3.75 3 5.765 3 8.25c0 5.25 7.5 9 9 9s9-3.75 9-9z" />
-        </svg>
-      )
+      return <Heart {...common} />
     case 'Alertas':
-      return (
-        <svg {...common}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M11 5.25a5.75 5.75 0 104.21 9.64l3.82 3.82-1.06 1.06-3.82-3.82A5.75 5.75 0 1011 5.25z" />
-          <path strokeLinecap="round" strokeLinejoin="round" d="M11 7.5v3.75l2.25 1.5" />
-        </svg>
-      )
+      return <Bell {...common} />
     case 'Notificaciones':
-      return (
-        <svg {...common}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M14.235 19.458a1.5 1.5 0 01-2.47 0M12 6a4.5 4.5 0 00-4.5 4.5v2.086a2 2 0 01-.586 1.414L6 15.914h12l-.914-.914a2 2 0 01-.586-1.414V10.5A4.5 4.5 0 0012 6z" />
-        </svg>
-      )
+      return <Bell {...common} />
     case 'Editar perfil':
-      return (
-        <svg {...common}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.651-1.651a1.5 1.5 0 112.121 2.121L8.25 17.341 4.5 18.75l1.409-3.75L16.862 4.487z" />
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5v6a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 16.5V8.25A2.25 2.25 0 016.75 6h6" />
-        </svg>
-      )
+      return <Pencil {...common} />
     case 'Editar tienda':
-      return (
-        <svg {...common}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 9l1.5-5.25h12L19.5 9M3 9h18v9.75a1.5 1.5 0 01-1.5 1.5H4.5a1.5 1.5 0 01-1.5-1.5V9z" />
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 14.25h6v5.25H9z" />
-        </svg>
-      )
+      return <Store {...common} />
     case 'Analítica':
-      return (
-        <svg {...common}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l3-3 3 3 6-6 3 3" />
-          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 19.5h16.5M3.75 4.5h16.5M4.5 4.5v15M19.5 4.5v15" />
-        </svg>
-      )
+      return <BarChart3 {...common} />
     case 'Verificá tu perfil':
-      return (
-        <svg {...common}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.75a3.75 3.75 0 103.75 3.75A3.75 3.75 0 0012 6.75z" />
-          <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 20.25A6.75 6.75 0 0118.75 15" />
-          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 15.75l1.5 1.5 3-3" />
-        </svg>
-      )
+      return <BadgeCheck {...common} />
     case 'Cerrar sesión':
-      return (
-        <svg {...common}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V4.5a1.5 1.5 0 00-1.5-1.5h-6A1.5 1.5 0 006.75 4.5v15a1.5 1.5 0 001.5 1.5h6a1.5 1.5 0 001.5-1.5V15" />
-          <path strokeLinecap="round" strokeLinejoin="round" d="M18 12H9m9 0l-2.25-2.25M18 12l-2.25 2.25" />
-        </svg>
-      )
+      return <LogOut {...common} />
     default:
       return null
   }
