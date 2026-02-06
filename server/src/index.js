@@ -147,6 +147,7 @@ function normalizeOrigin(frontendUrlEnv) {
 }
 
 const app = express()
+app.set('trust proxy', 1) // Confiar en el primer proxy (Cloudflare/Render)
 
 // --- SITEMAP FIX: PRIMERO QUE NADA ---
 app.get('/sitemap.xml', async (req, res) => {
@@ -202,18 +203,20 @@ app.get('/sitemap.xml', async (req, res) => {
 })
 // -------------------------------------
 
-app.set('trust proxy', true)
 app.use(express.json())
 
 app.use((req, res, next) => {
-  const rawHost = String(req.headers.host || '').trim()
+  const forwardedHostHeader = req.headers['x-forwarded-host']
+  const forwardedHost = Array.isArray(forwardedHostHeader) ? forwardedHostHeader[0] : forwardedHostHeader
+  const rawHost = String(forwardedHost || req.headers.host || '').split(',')[0]?.trim()
   const protoHeader = req.headers['x-forwarded-proto']
   const forwardedProto = Array.isArray(protoHeader) ? protoHeader[0] : protoHeader
   const currentProto = String(forwardedProto || req.protocol || 'http').toLowerCase()
 
-  const prefersCiclomarket = /(?:^|\.)ciclomarket\.ar$/i.test(rawHost)
-  const enforceHost = /^ciclomarket\.ar$/i.test(rawHost)
-  const targetHost = enforceHost ? 'www.ciclomarket.ar' : rawHost
+  const hostOnly = (rawHost || '').split(':')[0]
+  const prefersCiclomarket = /(?:^|\.)ciclomarket\.ar$/i.test(hostOnly)
+  const enforceHost = /^ciclomarket\.ar$/i.test(hostOnly)
+  const targetHost = enforceHost ? 'www.ciclomarket.ar' : hostOnly
   const shouldForceHttps = prefersCiclomarket && currentProto !== 'https'
 
   if ((enforceHost || shouldForceHttps) && targetHost) {
