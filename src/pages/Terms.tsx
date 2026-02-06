@@ -1,36 +1,68 @@
 import type { ReactNode } from 'react'
-import Container from '../components/Container'
 
-const LAST_UPDATE = '23 de octubre de 2025'
+const LAST_UPDATE = '06 de febrero de 2026'
+
+const INDEX = [
+  { id: 'objeto-y-aceptacion', label: '1. Objeto y aceptación' },
+  { id: 'naturaleza-de-la-plataforma', label: '2. Naturaleza de la Plataforma' },
+  { id: 'registro-y-cuentas', label: '3. Registro y cuentas de usuario' },
+  { id: 'publicaciones-planes-y-creditos', label: '4. Publicaciones, planes y créditos' },
+  { id: 'estados-y-vencimiento', label: '5. Estados y vencimiento de avisos' },
+  { id: 'operaciones-entre-usuarios', label: '6. Operaciones entre usuarios' },
+  { id: 'contenido-generado', label: '7. Contenido generado por los usuarios' },
+  { id: 'preguntas-whatsapp-y-contacto', label: '8. Preguntas, WhatsApp y contacto' },
+  { id: 'prohibiciones', label: '9. Prohibiciones' },
+  { id: 'resenas-y-reputacion', label: '10. Reseñas y reputación' },
+  { id: 'moderacion', label: '11. Herramientas de moderación' },
+  { id: 'ciclo-trust', label: '12. Ciclo Trust y Verificación de Identidad' },
+  { id: 'tiendas-oficiales', label: '13. Tiendas oficiales' },
+  { id: 'analiticas', label: '14. Analíticas y métricas' },
+  { id: 'propiedad-intelectual', label: '15. Propiedad intelectual' },
+  { id: 'comunicaciones', label: '16. Comunicaciones' },
+  { id: 'limitacion-de-responsabilidad', label: '17. Limitación de responsabilidad' },
+  { id: 'legislacion-y-jurisdiccion', label: '18. Legislación y jurisdicción aplicable' },
+  { id: 'contacto', label: '19. Contacto' },
+] as const
 
 export default function Terms() {
   return (
-    <div className="bg-[#14212e] py-10 text-white">
-      <Container className="text-sm leading-relaxed">
-        <div className="mx-auto max-w-3xl space-y-8">
-          <header className="space-y-3">
-            <p className="text-xs uppercase tracking-[0.3em] text-white/50">Ciclo Market</p>
-            <h1 className="text-3xl font-semibold">Términos y Condiciones de Uso</h1>
-            <p className="text-white/60">Última actualización: {LAST_UPDATE}</p>
+    <div className="bg-gray-50">
+      <div className="mx-auto max-w-4xl px-6">
+        <div className="my-10 rounded-2xl border border-gray-100 bg-white p-8 shadow-sm md:p-12">
+          <header>
+            <h1 className="text-3xl font-bold text-mb-ink mb-2">Términos y Condiciones de Uso</h1>
+            <p className="text-gray-500 mb-8">Última actualización: {LAST_UPDATE}</p>
           </header>
 
-          <Section title="1. Objeto y aceptación">
+          <div className="mb-10 rounded-2xl border border-gray-100 bg-gray-50 p-5">
+            <p className="text-sm font-semibold text-gray-900">Índice</p>
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {INDEX.map((entry) => (
+                <a key={entry.id} href={`#${entry.id}`} className="text-sm text-mb-primary hover:underline">
+                  {entry.label}
+                </a>
+              ))}
+            </div>
+          </div>
+
+          <Section id="objeto-y-aceptacion" title="1. Objeto y aceptación">
             <p>
-              Estos Términos y Condiciones (los “Términos”) regulan el acceso y uso del sitio web{' '}
-              <strong>Ciclo Market</strong> (la “Plataforma”). El uso de la Plataforma implica la aceptación plena de
-              estos Términos. Si no estás de acuerdo con ellos, no utilices el sitio ni los servicios asociados.
+              Estos Términos y Condiciones (los “Términos”) regulan el acceso y uso del sitio web Ciclo Market (la
+              “Plataforma”). El uso de la Plataforma implica la aceptación plena de estos Términos. Si no estás de acuerdo
+              con ellos, no utilices el sitio ni los servicios asociados.
             </p>
             <p>
               La empresa se reserva el derecho de modificar estos Términos en cualquier momento. Las nuevas versiones se
               publicarán en esta página e indicarán la fecha de vigencia. El uso posterior a la publicación implica la
-              aceptación de los cambios.
-            </p>
-            <p>
-              Consultas formales o notificaciones pueden dirigirse a <a href="mailto:admin@ciclomarket.ar" className="underline">admin@ciclomarket.ar</a>.
+              aceptación de los cambios. Consultas formales o notificaciones pueden dirigirse a{' '}
+              <a href="mailto:admin@ciclomarket.ar" className="underline">
+                admin@ciclomarket.ar
+              </a>
+              .
             </p>
           </Section>
 
-          <Section title="2. Naturaleza de la Plataforma">
+          <Section id="naturaleza-de-la-plataforma" title="2. Naturaleza de la Plataforma">
             <p>
               Ciclo Market es un marketplace que permite la publicación de bicicletas y productos vinculados por parte de
               vendedores independientes y la interacción con potenciales compradores. La empresa no es propietaria de los
@@ -38,18 +70,18 @@ export default function Terms() {
               financiero.
             </p>
             <p>
-              <strong>Los usuarios son los únicos responsables</strong> de la veracidad de la información publicada, del
-              estado de los productos ofrecidos, del cumplimiento de sus obligaciones fiscales y contractuales, así como
-              de cualquier pago, entrega, pérdida, robo o estafa que pudiese ocurrir durante la operación.
+              Los usuarios son los únicos responsables de la veracidad de la información publicada, del estado de los
+              productos ofrecidos, del cumplimiento de sus obligaciones fiscales y contractuales, así como de cualquier
+              pago, entrega, pérdida, robo o estafa que pudiese ocurrir durante la operación.
             </p>
           </Section>
 
-          <Section title="3. Registro y cuentas de usuario">
+          <Section id="registro-y-cuentas" title="3. Registro y cuentas de usuario">
             <p>
               Podrán registrarse personas mayores de 18 años con capacidad legal o personas jurídicas representadas por
               quien cuente con facultades suficientes. Es obligatorio completar el formulario con datos veraces, exactos y
-              actualizados, así como mantener vigente una dirección de correo electrónico. Cada cuenta es personal, única
-              e intransferible.
+              actualizados, así como mantener vigente una dirección de correo electrónico. Cada cuenta es personal, única e
+              intransferible.
             </p>
             <p>
               El usuario es responsable por la confidencialidad de su contraseña y por todas las operaciones realizadas
@@ -58,7 +90,7 @@ export default function Terms() {
             </p>
           </Section>
 
-          <Section title="4. Publicaciones, planes y créditos">
+          <Section id="publicaciones-planes-y-creditos" title="4. Publicaciones, planes y créditos">
             <p>
               Los vendedores pueden publicar productos respetando las categorías disponibles y los requisitos de la
               Plataforma. Es obligatorio describir el artículo con claridad, incluir fotografías reales y consignar precio,
@@ -66,170 +98,144 @@ export default function Terms() {
               del vendedor.
             </p>
             <p>
-              La Plataforma ofrece planes y beneficios diferenciales, incluidos: <strong>Gratis</strong> (orientado a
-              publicaciones con vencimiento corto), <strong>Básico</strong> y <strong>Premium</strong> (con mayores
-              límites de fotos, contacto por WhatsApp habilitado y opciones de destaque/redes), y <strong>Pro</strong>
-              para <em>tiendas verificadas</em>. Las características (duración, cantidad de avisos, fotos, destaque y
-              exposición en redes) se informan en la propia Plataforma y pueden actualizarse.
-            </p>
-            <p>
-              Para contratar planes pagos o publicar con destaque, el usuario puede adquirir <strong>créditos de
-              publicación</strong> a través de un proveedor de pagos (p. ej., Mercado Pago). Dichos créditos tienen un
-              ciclo de vida (pendiente, disponible, usado, expirado o cancelado) y pueden <strong>vencer</strong> si no se
-              utilizan dentro del plazo informado. Salvo lo exigido por normativa aplicable, los importes pagados no son
-              reembolsables.
+              La Plataforma ofrece planes y beneficios diferenciales (Gratis, Básico, Premium, Pro). Para contratar planes
+              pagos o publicar con destaque, el usuario puede adquirir créditos de publicación a través de un proveedor de
+              pagos. Dichos créditos pueden vencer si no se utilizan dentro del plazo informado. Salvo lo exigido por
+              normativa aplicable, los importes pagados no son reembolsables.
             </p>
           </Section>
 
-          <Section title="5. Estados y vencimiento de avisos">
+          <Section id="estados-y-vencimiento" title="5. Estados y vencimiento de avisos">
             <p>
               Los avisos pueden encontrarse en estados como activo, pausado o eliminado/archivado. Las publicaciones del
-              plan <strong>Gratis</strong> vencen automáticamente a los <strong>15 días</strong> salvo indicación en
-              contrario en la Plataforma. Las publicaciones asociadas a tiendas verificadas (plan <strong>Pro</strong>)
-              no tienen vencimiento mientras el perfil de tienda permanezca vigente, salvo incumplimientos de estos
-              Términos o disposiciones legales.
-            </p>
-            <p>
-              La Plataforma puede depurar u ocultar automáticamente avisos vencidos, eliminados o que infrinjan políticas,
-              así como permitir su reactivación si el plan vigente lo habilita.
+              plan Gratis vencen automáticamente según lo indicado en la plataforma (ej. 15 días) salvo indicación en
+              contrario. Las publicaciones asociadas a tiendas verificadas o planes superiores tienen condiciones de
+              duración extendida. La Plataforma puede depurar u ocultar automáticamente avisos vencidos.
             </p>
           </Section>
 
-          <Section title="6. Operaciones entre usuarios">
+          <Section id="operaciones-entre-usuarios" title="6. Operaciones entre usuarios">
             <p>
               Toda negociación, pago, entrega, retiro o servicio logístico que derive del uso de la Plataforma se realiza
               directamente entre usuarios. La empresa no interviene en la selección de medios de pago, transportistas,
-              condiciones de entrega ni garantías y no controla el cumplimiento de las partes. Cada usuario asume la
-              totalidad de los riesgos asociados a su operación.
-            </p>
-            <p>
-              Recomendamos utilizar medios de pago seguros, conservar comprobantes y acordar entregas en lugares públicos
-              o con verificación previa del producto.
+              condiciones de entrega ni garantías. Recomendamos utilizar medios de pago seguros y acordar entregas en
+              lugares públicos.
             </p>
           </Section>
 
-          <Section title="7. Contenido generado por los usuarios">
+          <Section id="contenido-generado" title="7. Contenido generado por los usuarios">
             <p>
-              Todo contenido publicado (textos, fotos, precios, videos, etc.) es responsabilidad del usuario que lo genera.
-              El material no debe infringir derechos de terceros, violar leyes vigentes ni contener información falsa o
-              desactualizada. La empresa puede editar o remover contenidos que incumplan estas condiciones.
+              Todo contenido publicado es responsabilidad del usuario que lo genera. El material no debe infringir
+              derechos de terceros, violar leyes vigentes ni contener información falsa. La empresa puede editar o remover
+              contenidos que incumplan estas condiciones.
             </p>
           </Section>
 
-          <Section title="8. Preguntas, WhatsApp y contacto">
+          <Section id="preguntas-whatsapp-y-contacto" title="8. Preguntas, WhatsApp y contacto">
             <p>
-              La Plataforma ofrece secciones de <strong>preguntas y respuestas</strong> en los avisos para canalizar
-              consultas de potenciales compradores, y un botón de <strong>WhatsApp</strong> en planes habilitados. Está
-              <strong>prohibido</strong> publicar o intentar compartir números de teléfono, enlaces a WhatsApp o datos de
-              contacto directo en descripciones, campos adicionales, preguntas o respuestas. El contacto debe realizarse
-              a través de las funciones previstas por la Plataforma.
-            </p>
-            <p>
-              Podemos bloquear, editar o eliminar contenido que incluya datos de contacto directo o que eluda los
-              mecanismos de comunicación establecidos, sin derecho a compensación.
+              La Plataforma ofrece secciones de preguntas y respuestas. El botón de WhatsApp está disponible solo en planes
+              habilitados. Está prohibido publicar datos de contacto directo en las preguntas públicas para eludir los
+              mecanismos de la plataforma.
             </p>
           </Section>
 
-          <Section title="9. Prohibiciones">
+          <Section id="prohibiciones" title="9. Prohibiciones">
             <p>
               Está prohibido publicar artículos robados, falsificados, armas, sustancias ilegales o cualquier producto cuyo
-              comercio esté restringido o requiera autorización legal. Asimismo, se prohíbe el uso de la Plataforma para
-              realizar spam, captar correos electrónicos, ejecutar ataques informáticos o utilizar la marca Ciclo Market sin
-              autorización.
+              comercio esté restringido. Se prohíbe el uso de la Plataforma para realizar spam o ejecutar ataques
+              informáticos.
             </p>
           </Section>
 
-          <Section title="10. Reseñas y reputación">
+          <Section id="resenas-y-reputacion" title="10. Reseñas y reputación">
             <p>
-              Los compradores pueden dejar <strong>reseñas</strong> y calificaciones sobre su experiencia con un vendedor.
-              La Plataforma puede enviar <em>recordatorios</em> para facilitar dichas reseñas. Los vendedores pueden
-              publicar una <strong>respuesta</strong> a la reseña del comprador. Nos reservamos el derecho de moderar,
-              ocultar o remover reseñas o respuestas que vulneren estos Términos o la ley. Los indicadores de reputación
-              son orientativos y no constituyen aval expreso de la empresa.
+              Los compradores pueden dejar reseñas y calificaciones. Nos reservamos el derecho de moderar reseñas que
+              vulneren estos Términos. Los indicadores de reputación son orientativos.
             </p>
           </Section>
 
-          <Section title="11. Herramientas de moderación">
+          <Section id="moderacion" title="11. Herramientas de moderación">
             <p>
-              La empresa podrá requerir documentación adicional, suspender temporalmente funcionalidades, retirar
-              publicaciones, marcar vendedores verificados o cancelar cuentas cuando detecte incumplimientos, sospechas de
-              fraude o incumplimiento legal. Estas medidas buscan proteger a la comunidad y no generan derecho a reclamos o
-              indemnizaciones.
+              La empresa podrá requerir documentación adicional, suspender funcionalidades o cancelar cuentas ante sospechas
+              de fraude o incumplimiento, sin derecho a indemnización.
             </p>
           </Section>
 
-          <Section title="12. Tiendas oficiales">
+          <Section id="ciclo-trust" title="12. Ciclo Trust y Verificación de Identidad">
             <p>
-              Determinados usuarios pueden habilitar <strong>perfiles de tienda</strong> con identidad visual, horarios y
-              enlaces públicos. Las tiendas verificadas (plan <strong>Pro</strong>) pueden acceder a beneficios como mayor
-              exposición y publicaciones sin vencimiento. La información de tienda es provista por su titular y debe
-              mantenerse actualizada. La verificación no implica garantía sobre inventario, cumplimiento o idoneidad del
-              vendedor.
+              La Plataforma ofrece el programa &quot;Ciclo Trust&quot; mediante el cual ciertos usuarios pueden obtener una
+              insignia de verificación tras validar su identidad (ej. mediante validación biométrica o documental).
+            </p>
+            <ul className="list-disc pl-5 space-y-2">
+              <li>
+                <strong>Alcance:</strong> La insignia Ciclo Trust indica únicamente que el usuario ha completado un proceso
+                de validación de identidad en un momento dado.
+              </li>
+              <li>
+                <strong>No Garantía:</strong> Ciclo Trust <strong>NO constituye una garantía</strong> sobre la honestidad
+                del usuario, la calidad del producto, ni el éxito de la transacción. Ciclo Market no se responsabiliza por
+                actos fraudulentos realizados por usuarios, cuenten o no con la insignia Ciclo Trust.
+              </li>
+              <li>
+                <strong>Revocación:</strong> Ciclo Market se reserva el derecho de remover la insignia y suspender la cuenta
+                si detecta un uso indebido o cambios en la identidad del titular.
+              </li>
+            </ul>
+          </Section>
+
+          <Section id="tiendas-oficiales" title="13. Tiendas oficiales">
+            <p>
+              Las tiendas verificadas (Plan Pro) acceden a perfiles con identidad visual. La verificación de tienda no
+              implica garantía sobre inventario o cumplimiento comercial por parte de Ciclo Market.
             </p>
           </Section>
 
-          <Section title="13. Analíticas y métricas">
+          <Section id="analiticas" title="14. Analíticas y métricas">
             <p>
-              Registramos eventos de uso (p. ej., vistas del sitio, de avisos y de tiendas, y clics en WhatsApp) para
-              mejorar el servicio y brindar <strong>métricas</strong> a los titulares, incluidas vistas y tasas de clics.
-              Las tiendas pueden acceder a <em>sus propias</em> métricas agregadas. El tratamiento de datos personales se
-              detalla en la <a href="/privacidad" className="underline">Política de privacidad</a>.
+              Registramos eventos de uso para mejorar el servicio y brindar métricas a los vendedores. El tratamiento de
+              datos se detalla en la Política de Privacidad.
             </p>
           </Section>
 
-          <Section title="14. Propiedad intelectual">
+          <Section id="propiedad-intelectual" title="15. Propiedad intelectual">
             <p>
-              Los derechos sobre la marca Ciclo Market, logos, diseño, software, bases de datos y demás elementos propios
-              de la Plataforma pertenecen a la empresa o a sus licenciantes. Queda prohibido reproducir, distribuir o crear
-              obras derivadas sin autorización expresa. El contenido generado por los usuarios sigue siendo de su
-              propiedad, pero autorizan a la empresa a exhibirlo dentro de la Plataforma.
+              Los derechos sobre la marca Ciclo Market pertenecen a la empresa. Queda prohibido reproducir la plataforma
+              sin autorización.
             </p>
           </Section>
 
-          <Section title="15. Comunicaciones y newsletter">
+          <Section id="comunicaciones" title="16. Comunicaciones">
+            <p>Podremos enviarte comunicaciones operativas y novedades. Podés gestionar tus preferencias de contacto.</p>
+          </Section>
+
+          <Section id="limitacion-de-responsabilidad" title="17. Limitación de responsabilidad">
             <p>
-              Podremos enviarte comunicaciones operativas relacionadas con tu cuenta, publicaciones, preguntas, reseñas o
-              recordatorios, así como <strong>novedades</strong> y contenidos informativos del marketplace. Podés gestionar
-              tus preferencias o solicitar la baja de comunicaciones comerciales por los canales habilitados.
+              La Plataforma se ofrece “tal como está”. La empresa no garantiza que el servicio sea ininterrumpido. No se
+              responde por daños indirectos o lucro cesante derivados del uso del sitio.
             </p>
           </Section>
 
-          <Section title="16. Limitación de responsabilidad">
+          <Section id="legislacion-y-jurisdiccion" title="18. Legislación y jurisdicción aplicable">
             <p>
-              La Plataforma se ofrece “tal como está” y “según disponibilidad”. La empresa no garantiza que el servicio sea
-              ininterrumpido o libre de errores, ni que los resultados satisfagan expectativas particulares. Dentro de los
-              límites legales, no se responde por daños indirectos, lucro cesante, pérdida de chance ni por cualquier
-              perjuicio derivado del uso o imposibilidad de uso del sitio.
+              Estos Términos se rigen por las leyes de la República Argentina. Se establece la jurisdicción de los
+              tribunales ordinarios de la Ciudad Autónoma de Buenos Aires.
             </p>
           </Section>
 
-          <Section title="17. Legislación y jurisdicción aplicable">
-            <p>
-              Estos Términos se rigen por las leyes de la República Argentina. Para cualquier controversia que no pueda
-              resolverse de forma directa entre las partes, se establece la jurisdicción de los tribunales ordinarios de la
-              Ciudad Autónoma de Buenos Aires, renunciando a cualquier otro fuero o jurisdicción.
-            </p>
-          </Section>
-
-          <Section title="18. Contacto">
-            <p>
-              Ante dudas, reclamos o solicitudes legales podés escribir a{' '}
-              <a href="mailto:admin@ciclomarket.ar" className="font-medium text-white hover:underline">
-                admin@ciclomarket.ar
-              </a>. También podés utilizar el formulario de contacto disponible en la Plataforma.
-            </p>
+          <Section id="contacto" title="19. Contacto">
+            <p>Ante dudas o reclamos: admin@ciclomarket.ar.</p>
           </Section>
         </div>
-      </Container>
+      </div>
     </div>
   )
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
-    <section className="space-y-3">
-      <h2 className="text-xl font-semibold text-white">{title}</h2>
-      <div className="space-y-3 text-white/80">{children}</div>
+    <section id={id} className="scroll-mt-28">
+      <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">{title}</h2>
+      <div className="space-y-4 text-gray-600 leading-relaxed text-base">{children}</div>
     </section>
   )
 }

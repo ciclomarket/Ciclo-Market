@@ -150,6 +150,62 @@ const app = express()
 app.set('trust proxy', true)
 app.use(express.json())
 
+// ---------------------------------------------------------------------------
+// Sitemaps: servir SIEMPRE 200 desde el dominio canónico (SEO)
+// Importante: esto debe ir ANTES de cualquier middleware global de redirección
+// ---------------------------------------------------------------------------
+app.get('/sitemap.xml', async (req, res) => {
+  try {
+    const baseUrl = 'https://www.ciclomarket.ar'
+    const xmlHeader = '<?xml version="1.0" encoding="UTF-8"?>'
+
+    const escapeXml = (value) =>
+      String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;')
+
+    const nowIso = new Date().toISOString()
+    const listingsPerPage = 500
+    let totalPages = 1
+
+    try {
+      const supabase = getServerSupabaseClient()
+      const { count, error } = await supabase.from('listings').select('id', { count: 'exact', head: true }).eq('status', 'active')
+      if (!error && typeof count === 'number' && count > 0) {
+        totalPages = Math.max(1, Math.ceil(count / listingsPerPage))
+      }
+    } catch (err) {
+      console.warn('[sitemap] count lookup failed (fallback to 1 page)', err?.message || err)
+    }
+
+    const entries = [
+      { loc: `${baseUrl}/sitemap-static.xml`, lastmod: nowIso },
+      { loc: `${baseUrl}/sitemap-categories.xml`, lastmod: nowIso },
+      { loc: `${baseUrl}/sitemap-stores.xml`, lastmod: nowIso },
+      { loc: `${baseUrl}/sitemap-blog.xml`, lastmod: nowIso },
+      { loc: `${baseUrl}/sitemap-shopping.xml`, lastmod: nowIso },
+    ]
+    for (let page = 1; page <= totalPages; page += 1) {
+      entries.push({ loc: `${baseUrl}/sitemap-listings-${page}.xml`, lastmod: nowIso })
+    }
+
+    const payload = entries
+      .map(({ loc, lastmod }) => `  <sitemap>\n    <loc>${escapeXml(loc)}</loc>\n    <lastmod>${escapeXml(lastmod)}</lastmod>\n  </sitemap>`)
+      .join('\n')
+
+    const xml = `${xmlHeader}\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${payload}\n</sitemapindex>`
+
+    res.header('Content-Type', 'application/xml; charset=utf-8')
+    return res.status(200).send(xml)
+  } catch (e) {
+    console.error('[sitemap] /sitemap.xml failed', e)
+    return res.status(500).end()
+  }
+})
+
 app.use((req, res, next) => {
   const rawHost = String(req.headers.host || '').trim()
   const protoHeader = req.headers['x-forwarded-proto']
