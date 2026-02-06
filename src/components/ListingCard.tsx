@@ -121,7 +121,11 @@ export default function ListingCard({
   const premiumActive = (l as any).premium_active === true
   const hasPriority = Boolean(l.priorityActive || l.planTier === 'PRO' || l.planTier === 'PREMIUM')
   const isOfficialStore = Boolean(storeLogoUrl) || Boolean(l.isTienda)
-  const waPublic = typeof (l as any).wa_public === 'boolean' ? (l as any).wa_public : premiumActive && !!l.whatsappEnabled
+  const waPublicFlag = typeof (l as any).wa_public === 'boolean' ? (l as any).wa_public : undefined
+  const tier = l.planTier ?? l.planStatus
+  const hasPaidListingTier = tier === 'PREMIUM' || tier === 'PRO'
+  const whatsappEnabled = (l.whatsappEnabled ?? true) && !(l as any).whatsapp_user_disabled && !l.whatsappUserDisabled
+  const waPublic = Boolean(waPublicFlag ?? (hasPaidListingTier && whatsappEnabled) ?? (premiumActive && whatsappEnabled))
   const viewCount = (typeof l.viewCount === 'number' ? l.viewCount : ((l as any).views ?? (l as any).view_count ?? (l as any).views_count ?? 0)) as number
   const usingTransformed = Boolean(media?.src) && currentImageSrc === media?.src
   void highlighted

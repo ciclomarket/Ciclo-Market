@@ -45,6 +45,7 @@ export interface Listing {
   grantedVisiblePhotos?: number
   whatsappCapGranted?: boolean
   whatsappEnabled?: boolean
+  whatsappUserDisabled?: boolean
   rankBoostUntil?: number | null
   // Derived/public fields from listings_enriched
   publicPhotosLimit?: number

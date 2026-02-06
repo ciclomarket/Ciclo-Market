@@ -1065,7 +1065,15 @@ async function importMercadoLibreHandler(req, res) {
 
     if (productId && externalId === productId) {
       const productUrl = `https://api.mercadolibre.com/products/${encodeURIComponent(productId)}`
-      const productRes = await fetch(productUrl)
+      const token = bodyToken || String(process.env.MERCADOLIBRE_ACCESS_TOKEN || process.env.MELI_ACCESS_TOKEN || '').trim()
+      const productHeaders = {
+        Accept: 'application/json',
+        'Accept-Language': 'es-AR,es;q=0.9,en;q=0.8',
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      }
+      const productRes = await fetch(productUrl, { headers: productHeaders })
       if (productRes.ok) {
         const product = await productRes.json().catch(() => null)
         const winnerItemId = product?.buy_box_winner?.item_id
@@ -1087,49 +1095,91 @@ async function importMercadoLibreHandler(req, res) {
       }
     }
 
+    async function fetchMeliJson(url, { token, useQueryToken = false }) {
+      const headers = {
+        Accept: 'application/json',
+        'Accept-Language': 'es-AR,es;q=0.9,en;q=0.8',
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        ...(token && !useQueryToken ? { Authorization: `Bearer ${token}` } : {}),
+      }
+      const finalUrl = (() => {
+        if (!token || !useQueryToken) return url
+        try {
+          const u = new URL(url)
+          u.searchParams.set('access_token', token)
+          return u.toString()
+        } catch {
+          const join = url.includes('?') ? '&' : '?'
+          return `${url}${join}access_token=${encodeURIComponent(token)}`
+        }
+      })()
+
+      const response = await fetch(finalUrl, { headers })
+      const contentType = String(response.headers.get('content-type') || '')
+      const requestId = response.headers.get('x-request-id') || null
+      const policyCode = response.headers.get('x-policy-agent-block-code') || null
+      const policyReason = response.headers.get('x-policy-agent-block-reason') || null
+      const payload = contentType.includes('application/json') ? await response.json().catch(() => null) : null
+      return {
+        ok: response.ok,
+        status: response.status,
+        payload,
+        meta: { contentType, requestId, policyCode, policyReason, usedQueryToken: Boolean(useQueryToken) },
+      }
+    }
+
     const itemUrl = `https://api.mercadolibre.com/items/${encodeURIComponent(externalId)}`
     const descUrl = `https://api.mercadolibre.com/items/${encodeURIComponent(externalId)}/description`
 
     const token = bodyToken || String(process.env.MERCADOLIBRE_ACCESS_TOKEN || process.env.MELI_ACCESS_TOKEN || '').trim()
-    const headers = {
-      Accept: 'application/json',
-      'Accept-Language': 'es-AR,es;q=0.9,en;q=0.8',
-      // Some upstream policies reject generic/empty User-Agent; use a browser-like UA for this POC.
-      'User-Agent':
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+
+    // Try: Authorization header → query param token (some proxies/policies differ) → bulk endpoint fallback.
+    let itemAttempt = await fetchMeliJson(itemUrl, { token, useQueryToken: false })
+    if (!itemAttempt.ok && token && (itemAttempt.status === 401 || itemAttempt.status === 403)) {
+      itemAttempt = await fetchMeliJson(itemUrl, { token, useQueryToken: true })
+    }
+    if (!itemAttempt.ok && token && (itemAttempt.status === 401 || itemAttempt.status === 403)) {
+      const bulkUrl = `https://api.mercadolibre.com/items?ids=${encodeURIComponent(externalId)}`
+      const bulkAttempt = await fetchMeliJson(bulkUrl, { token, useQueryToken: true })
+      if (bulkAttempt.ok && Array.isArray(bulkAttempt.payload) && bulkAttempt.payload[0]?.body) {
+        itemAttempt = { ...bulkAttempt, payload: bulkAttempt.payload[0].body }
+      } else if (bulkAttempt.ok && Array.isArray(bulkAttempt.payload) && bulkAttempt.payload[0]?.code && bulkAttempt.payload[0]?.body) {
+        itemAttempt = { ...bulkAttempt, payload: bulkAttempt.payload[0].body }
+      }
     }
 
-    const [itemRes, descRes] = await Promise.all([
-      fetch(itemUrl, { headers }),
-      fetch(descUrl, { headers }),
-    ])
+    let descAttempt = await fetchMeliJson(descUrl, { token, useQueryToken: false })
+    if (!descAttempt.ok && token && (descAttempt.status === 401 || descAttempt.status === 403)) {
+      descAttempt = await fetchMeliJson(descUrl, { token, useQueryToken: true })
+    }
 
-    if (itemRes.status === 404) {
+    if (itemAttempt.status === 404) {
       return res.status(404).json({ ok: false, error: 'item_not_found', message: 'El ítem no existe en MercadoLibre.' })
     }
-    if (!itemRes.ok) {
-      const data = await itemRes.json().catch(() => ({}))
+    if (!itemAttempt.ok) {
+      const data = itemAttempt.payload && typeof itemAttempt.payload === 'object' ? itemAttempt.payload : {}
       const message = data?.message || data?.error || 'meli_item_fetch_failed'
-      if (itemRes.status === 401 || itemRes.status === 403) {
-        return res.status(401).json({
+      if (itemAttempt.status === 401 || itemAttempt.status === 403) {
+        return res.status(403).json({
           ok: false,
-          error: 'meli_unauthorized',
+          error: 'meli_forbidden',
           message,
-          status: itemRes.status,
+          status: itemAttempt.status,
+          meta: itemAttempt.meta,
           hint:
-            'MercadoLibre está requiriendo autorización para este request. Configurá `MERCADOLIBRE_ACCESS_TOKEN` (o `MELI_ACCESS_TOKEN`) en el backend, o enviá `access_token` en el body (solo POC).',
+            'MercadoLibre devolvió 401/403. Si ya estás enviando token, puede ser bloqueo por políticas/IP (datacenter). Probá correr el backend local o usar un token de Authorization Code (usuario) en vez de client_credentials.',
         })
       }
-      return res.status(502).json({ ok: false, error: 'meli_error', message, status: itemRes.status })
+      return res.status(502).json({ ok: false, error: 'meli_error', message, status: itemAttempt.status, meta: itemAttempt.meta })
     }
 
-    const item = await itemRes.json().catch(() => null)
+    const item = itemAttempt.payload
     if (!item || typeof item !== 'object') {
       return res.status(502).json({ ok: false, error: 'meli_error', message: 'Respuesta inválida de MercadoLibre (item).' })
     }
 
-    const descriptionPayload = descRes.ok ? await descRes.json().catch(() => ({})) : {}
+    const descriptionPayload = descAttempt.ok && descAttempt.payload && typeof descAttempt.payload === 'object' ? descAttempt.payload : {}
     const descriptionText =
       typeof descriptionPayload?.plain_text === 'string'
         ? descriptionPayload.plain_text

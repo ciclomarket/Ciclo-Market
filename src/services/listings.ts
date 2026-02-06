@@ -58,6 +58,7 @@ type ListingRow = {
   granted_visible_photos?: number | null
   whatsapp_cap_granted?: boolean | null
   whatsapp_enabled?: boolean | null
+  whatsapp_user_disabled?: boolean | null
   rank_boost_until?: string | null
   public_photos_limit?: number | null
   public_photos_visible?: number | null
@@ -117,6 +118,7 @@ const normalizeListing = (row: ListingRow): Listing => {
     grantedVisiblePhotos: typeof row.granted_visible_photos === 'number' ? row.granted_visible_photos : undefined,
     whatsappCapGranted: Boolean(row.whatsapp_cap_granted),
     whatsappEnabled: row.whatsapp_enabled ?? undefined,
+    whatsappUserDisabled: row.whatsapp_user_disabled ?? undefined,
     rankBoostUntil: row.rank_boost_until ? Date.parse(row.rank_boost_until) : null,
     publicPhotosLimit: typeof row.public_photos_limit === 'number' ? row.public_photos_limit : undefined,
     publicPhotosVisible: typeof row.public_photos_visible === 'number' ? row.public_photos_visible : undefined,
@@ -644,7 +646,7 @@ async function tryClientModeratorUpgrade({
   try {
     const { data: listing, error } = await supabase
       .from('listings')
-      .select('id,seller_id,plan,plan_code,seller_plan,seller_whatsapp,contact_methods,expires_at,highlight_expires')
+      .select('id,seller_id,plan,plan_code,seller_plan,seller_whatsapp,contact_methods,expires_at,highlight_expires,rank_boost_until,granted_visible_photos,whatsapp_cap_granted,whatsapp_enabled,whatsapp_user_disabled')
       .eq('id', id)
       .maybeSingle()
 
@@ -692,6 +694,15 @@ async function tryClientModeratorUpgrade({
 
     const contactMethods = ensureWhatsappInMethods((listing as any).contact_methods)
 
+    const PREMIUM_BOOST_DAYS = 90
+    const targetCap = planCode === 'pro' ? 12 : 8
+    const nowTs = Date.now()
+    const baseBoost = (listing as any).rank_boost_until ? Math.max(Date.parse((listing as any).rank_boost_until), nowTs) : nowTs
+    const nextRankBoostIso = new Date(baseBoost + PREMIUM_BOOST_DAYS * DAY_MS).toISOString()
+    const nextGrantedPhotos = Math.max(Number((listing as any).granted_visible_photos || 4), targetCap)
+    const nextWhatsappCap = true
+    const nextWhatsappEnabled = (listing as any).whatsapp_user_disabled ? Boolean((listing as any).whatsapp_enabled) : true
+
     const { data: updated, error: updateErr } = await supabase
       .from('listings')
       .update({
@@ -702,6 +713,11 @@ async function tryClientModeratorUpgrade({
         contact_methods: contactMethods,
         expires_at: nextExpires,
         highlight_expires: nextHighlightIso,
+        rank_boost_until: nextRankBoostIso,
+        granted_visible_photos: nextGrantedPhotos,
+        visible_images_count: targetCap,
+        whatsapp_cap_granted: nextWhatsappCap,
+        whatsapp_enabled: nextWhatsappEnabled,
         status: 'active'
       })
       .eq('id', id)

@@ -1694,6 +1694,7 @@ app.post('/api/listings/:id/upgrade', async (req, res) => {
       .maybeSingle()
     if (listingError || !listing) return res.status(404).json({ error: 'not_found' })
 
+    const ownerId = String(listing.seller_id || '')
     const isOwner = listing.seller_id === user.id
     let isModeratorUser = false
     if (!isOwner) {
@@ -1702,10 +1703,11 @@ app.post('/api/listings/:id/upgrade', async (req, res) => {
     if (!isOwner && !isModeratorUser) return res.status(403).json({ error: 'forbidden' })
 
     const planCode = normalisePlanCode(req.body?.planCode || req.body?.plan)
-    const planTier = String(req.body?.plan_tier || '').trim().toUpperCase() // 'PREMIUM' | 'PRO'
-    if (!planCode || (planCode !== 'basic' && planCode !== 'premium')) {
+    const requestedTier = String(req.body?.plan_tier || '').trim().toUpperCase() // 'PREMIUM' | 'PRO'
+    if (!planCode || (planCode !== 'basic' && planCode !== 'premium' && planCode !== 'pro')) {
       return res.status(400).json({ error: 'invalid_plan' })
     }
+    const effectiveTier = requestedTier === 'PRO' || planCode === 'pro' ? 'PRO' : 'PREMIUM'
 
     // Sistema de créditos deshabilitado
     const useCredit = false
@@ -1746,7 +1748,7 @@ app.post('/api/listings/:id/upgrade', async (req, res) => {
       const fallbackWhatsapp = profile?.whatsapp_number || profile?.store_phone || ''
       profileWhatsapp = normalizeWhatsappForStorage(fallbackWhatsapp)
     }
-    if ((planCode === 'basic' || planCode === 'premium') && !profileWhatsapp) {
+    if ((planCode === 'basic' || planCode === 'premium' || planCode === 'pro') && !profileWhatsapp) {
       if (creditId && supabaseService) {
         await supabaseService
           .from('publish_credits')
@@ -1773,7 +1775,7 @@ app.post('/api/listings/:id/upgrade', async (req, res) => {
       : ensureWhatsappInContactMethods(['email', 'chat'])
 
     // Determine benefits to grant
-    const targetCap = planTier === 'PRO' ? 12 : 8
+    const targetCap = effectiveTier === 'PRO' ? 12 : 8
     const nextGrantedPhotos = Math.max(Number(listing.granted_visible_photos || 4), targetCap)
     const nextWhatsappCap = true
     // Respect explicit off: if user disabled, do not force-enable on upgrade
@@ -1816,7 +1818,7 @@ app.post('/api/listings/:id/upgrade', async (req, res) => {
         const expiresAt = new Date(now + PREMIUM_BOOST_DAYS * 24 * 60 * 60 * 1000).toISOString()
         await supabaseService
           .from('listing_plan_periods')
-          .insert({ listing_id: id, plan_code: (planTier || (nextGrantedPhotos >= 12 ? 'PRO' : 'PREMIUM')), started_at: new Date().toISOString(), expires_at: expiresAt, payment_id: null })
+          .insert({ listing_id: id, plan_code: (effectiveTier || (nextGrantedPhotos >= 12 ? 'PRO' : 'PREMIUM')), started_at: new Date().toISOString(), expires_at: expiresAt, payment_id: null })
       } catch (err) {
         console.warn('[upgrade] listing_plan_periods insert failed (non-fatal)', err?.message || err)
       }

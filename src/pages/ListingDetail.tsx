@@ -847,8 +847,12 @@ export default function ListingDetail() {
   const ContactIcons = () => {
     const emailRecipient = sellerAuthEmail || sellerProfile?.email || listing.sellerEmail || null
     const isStoreLocal = Boolean(sellerProfile?.store_enabled)
-    const waAllowed = Boolean((listing as any).waPublic ?? (listing as any).wa_public ?? (hadBasicOrPremium || isStoreLocal))
-  const canShowWhatsapp = Boolean(waLink && !listingUnavailable && waAllowed)
+    const waPublicFlag = (listing as any).waPublic ?? (listing as any).wa_public
+    const whatsappEnabled = Boolean(waLink) && (listing.whatsappEnabled ?? true) && !(listing as any).whatsapp_user_disabled && !listing.whatsappUserDisabled
+    const tier = listing.planTier ?? listing.planStatus
+    const hasPaidListingTier = tier === 'PREMIUM' || tier === 'PRO'
+    const waAllowed = Boolean(waPublicFlag ?? ((hasPaidListingTier || hadBasicOrPremium || isStoreLocal) && whatsappEnabled))
+    const canShowWhatsapp = Boolean(waLink && !listingUnavailable && waAllowed)
 
     if (!canShowWhatsapp && !emailRecipient) return null
 
