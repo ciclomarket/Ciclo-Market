@@ -147,13 +147,8 @@ function normalizeOrigin(frontendUrlEnv) {
 }
 
 const app = express()
-app.set('trust proxy', true)
-app.use(express.json())
 
-// ---------------------------------------------------------------------------
-// Sitemaps: servir SIEMPRE 200 desde el dominio canónico (SEO)
-// Importante: esto debe ir ANTES de cualquier middleware global de redirección
-// ---------------------------------------------------------------------------
+// --- SITEMAP FIX: PRIMERO QUE NADA ---
 app.get('/sitemap.xml', async (req, res) => {
   try {
     const baseUrl = 'https://www.ciclomarket.ar'
@@ -205,6 +200,10 @@ app.get('/sitemap.xml', async (req, res) => {
     return res.status(500).end()
   }
 })
+// -------------------------------------
+
+app.set('trust proxy', true)
+app.use(express.json())
 
 app.use((req, res, next) => {
   const rawHost = String(req.headers.host || '').trim()
