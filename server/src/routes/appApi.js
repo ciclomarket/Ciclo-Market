@@ -1015,4 +1015,133 @@ router.get('/api/newsletter/unsubscribe', async (req, res) => {
   }
 })
 
+/* -------------------------------------------------------------------------- */
+/* MercadoLibre import (POC)                                                  */
+/* -------------------------------------------------------------------------- */
+
+function pickAttributeValue(attributes, id) {
+  if (!Array.isArray(attributes) || !id) return null
+  const target = attributes.find((attr) => String(attr?.id || '').toUpperCase() === String(id).toUpperCase())
+  const value = target?.value_name ?? target?.value_struct?.name ?? null
+  return value ? String(value) : null
+}
+
+async function importMercadoLibreHandler(req, res) {
+  try {
+    const rawUrl = typeof req.body?.url === 'string' ? req.body.url.trim() : ''
+    if (!rawUrl) {
+      return res.status(400).json({ ok: false, error: 'missing_url', message: 'Falta `url` en el body.' })
+    }
+
+    const normalizedForParse = rawUrl.startsWith('http://') || rawUrl.startsWith('https://') ? rawUrl : `https://${rawUrl}`
+    let parsedUrl
+    try {
+      parsedUrl = new URL(normalizedForParse)
+    } catch {
+      return res.status(400).json({ ok: false, error: 'invalid_url', message: 'La URL ingresada no es válida.' })
+    }
+
+    const hostname = String(parsedUrl.hostname || '').toLowerCase()
+    if (!hostname.endsWith('mercadolibre.com.ar')) {
+      return res.status(400).json({ ok: false, error: 'invalid_domain', message: 'La URL debe ser de mercadolibre.com.ar.' })
+    }
+
+    const upperRawUrl = rawUrl.toUpperCase()
+    const wid = String(parsedUrl.searchParams.get('wid') || '').toUpperCase().match(/MLA\d+/)?.[0] || null
+    const itemIdFromUrl = upperRawUrl.match(/MLA-?\d+/g)?.map((m) => m.replace('-', '')) || []
+    const lastMatch = itemIdFromUrl.length ? itemIdFromUrl[itemIdFromUrl.length - 1] : null
+
+    const productMatch = parsedUrl.pathname.toUpperCase().match(/\/P\/(MLA\d+)/)
+    const productId = productMatch ? productMatch[1] : null
+
+    let externalId = wid || lastMatch
+    if (!externalId && productId) {
+      externalId = productId
+    }
+    if (!externalId) {
+      return res.status(400).json({ ok: false, error: 'invalid_item_id', message: 'No pudimos extraer el ID (ej: MLA12345678).' })
+    }
+
+    if (productId && externalId === productId) {
+      const productUrl = `https://api.mercadolibre.com/products/${encodeURIComponent(productId)}`
+      const productRes = await fetch(productUrl)
+      if (productRes.ok) {
+        const product = await productRes.json().catch(() => null)
+        const winnerItemId = product?.buy_box_winner?.item_id
+        if (typeof winnerItemId === 'string' && /^MLA\d+$/i.test(winnerItemId)) {
+          externalId = winnerItemId.toUpperCase()
+        } else {
+          return res.status(400).json({
+            ok: false,
+            error: 'product_url_requires_item',
+            message: 'La URL es de producto (catálogo). Probá copiar el link de la publicación (ítem) o usá una URL que incluya `wid=MLA...`.',
+          })
+        }
+      } else if (productRes.status === 404) {
+        return res.status(404).json({ ok: false, error: 'product_not_found', message: 'No encontramos el producto en MercadoLibre.' })
+      } else {
+        const data = await productRes.json().catch(() => ({}))
+        const message = data?.message || data?.error || 'meli_product_fetch_failed'
+        return res.status(502).json({ ok: false, error: 'meli_error', message, status: productRes.status })
+      }
+    }
+
+    const itemUrl = `https://api.mercadolibre.com/items/${encodeURIComponent(externalId)}`
+    const descUrl = `https://api.mercadolibre.com/items/${encodeURIComponent(externalId)}/description`
+
+    const [itemRes, descRes] = await Promise.all([fetch(itemUrl), fetch(descUrl)])
+
+    if (itemRes.status === 404) {
+      return res.status(404).json({ ok: false, error: 'item_not_found', message: 'El ítem no existe en MercadoLibre.' })
+    }
+    if (!itemRes.ok) {
+      const data = await itemRes.json().catch(() => ({}))
+      const message = data?.message || data?.error || 'meli_item_fetch_failed'
+      return res.status(502).json({ ok: false, error: 'meli_error', message, status: itemRes.status })
+    }
+
+    const item = await itemRes.json().catch(() => null)
+    if (!item || typeof item !== 'object') {
+      return res.status(502).json({ ok: false, error: 'meli_error', message: 'Respuesta inválida de MercadoLibre (item).' })
+    }
+
+    const descriptionPayload = descRes.ok ? await descRes.json().catch(() => ({})) : {}
+    const descriptionText =
+      typeof descriptionPayload?.plain_text === 'string'
+        ? descriptionPayload.plain_text
+        : typeof descriptionPayload?.text === 'string'
+          ? descriptionPayload.text
+          : null
+
+    const pictures = Array.isArray(item.pictures) ? item.pictures : []
+    const images = pictures
+      .map((p) => p?.secure_url || p?.url)
+      .filter((u) => typeof u === 'string' && u.length)
+
+    const rawCondition = String(item.condition || '').toLowerCase()
+    const condition = rawCondition === 'new' ? 'new' : rawCondition === 'used' ? 'used' : null
+
+    const normalized = {
+      source: 'mercadolibre',
+      external_id: externalId,
+      title: typeof item.title === 'string' ? item.title : null,
+      price: typeof item.price === 'number' ? item.price : item.price != null ? Number(item.price) : null,
+      currency: typeof item.currency_id === 'string' ? item.currency_id : null,
+      condition,
+      description: descriptionText,
+      images,
+      brand: pickAttributeValue(item.attributes, 'BRAND'),
+      model: pickAttributeValue(item.attributes, 'MODEL'),
+    }
+
+    return res.json(normalized)
+  } catch (err) {
+    console.error('[api] import mercadolibre unexpected error', err)
+    return res.status(500).json({ ok: false, error: 'unexpected_error' })
+  }
+}
+
+router.post('/import/mercadolibre', importMercadoLibreHandler)
+router.post('/api/import/mercadolibre', importMercadoLibreHandler)
+
 module.exports = router

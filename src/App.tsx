@@ -44,6 +44,7 @@ const Nutricion = lazyWithRetry(() => import('./pages/seo/Nutricion'))
 const BlogListPage = lazyWithRetry(() => import('./pages/Blog'))
 const BlogPostDetail = lazyWithRetry(() => import('./pages/Blog/PostDetail'))
 const BlogAdminPage = lazyWithRetry(() => import('./pages/Admin/Blog'))
+const ForStores = lazyWithRetry(() => import('./pages/ForStores'))
 import { AuthProvider } from './context/AuthContext'
 import { CurrencyProvider } from './context/CurrencyContext'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -63,6 +64,7 @@ import GlobalJsonLd from './components/GlobalJsonLd'
 import { useRef } from 'react'
 import { trackMetaPixel } from './lib/metaPixel'
 const MyListingsPage = lazyWithRetry(() => import('./pages/MyListings'))
+const MercadoLibreImportPOC = lazyWithRetry(() => import('./pages/Dev/MercadoLibreImportPOC'))
 
 // Helper opcional por si quisieras redirigir preservando query-string
 function RedirectWithSearch({ to }: { to: string }) {
@@ -111,6 +113,14 @@ function resolveSeoForPath(pathname: string, search: string): Partial<SeoHeadPro
         'Entrá directo al marketplace, ofertas, tiendas oficiales y contenido destacado desde el link en bio de Ciclo Market.',
       image: '/og-preview.png',
       noIndex: true
+    }
+  }
+
+  if (normalized.startsWith('/__poc/')) {
+    return {
+      title: 'POC · Ciclo Market',
+      description: 'Página interna para pruebas.',
+      noIndex: true,
     }
   }
 
@@ -169,6 +179,22 @@ function resolveSeoForPath(pathname: string, search: string): Partial<SeoHeadPro
         'vender bici argentina',
         'planes de publicación bicicletas'
       ]
+    }
+  }
+
+  if (normalized.startsWith('/vender/tiendas')) {
+    return {
+      title: 'Tiendas Oficiales · Vendé online como e-commerce',
+      description:
+        'Abrí tu Tienda Oficial en Ciclo Market: publicaciones ilimitadas, WhatsApp directo, analítica real y verificación para vender más.',
+      image: '/hero-tiendas.webp',
+      keywords: [
+        'tienda oficial bicicletas',
+        'vender bicicletas online',
+        'bicicleterias argentina',
+        'tiendanube bicicletas',
+        'shopify bicicletas',
+      ],
     }
   }
 
@@ -469,18 +495,21 @@ export default function App() {
                       <Route path="/blog" element={<BlogListPage />} />
                       <Route path="/blog/:slug" element={<BlogPostDetail />} />
 
-                      {/* Publicar: elegir tipo, luego formulario */}
-                      <Route path="/publicar" element={<ChooseType />} />
+	                      {/* Publicar: elegir tipo, luego formulario */}
+	                      <Route path="/publicar" element={<ChooseType />} />
                       {/* Campaña: Publicá gratis */}
                       
                       <Route
                         path="/publicar/nueva"
                         element={<PublishNew />}
                       />
-                      <Route path="/publicar/crear" element={<CreateListing />} />
-                      {/* Alias legado */}
-                      <Route path="/publish" element={<Navigate to="/publicar" replace />} />
-                      <Route path="/publish/new" element={<Navigate to="/publicar" replace />} />
+	                      <Route path="/publicar/crear" element={<CreateListing />} />
+
+	                      {/* Vender (B2B) */}
+	                      <Route path="/vender/tiendas" element={<ForStores />} />
+	                      {/* Alias legado */}
+	                      <Route path="/publish" element={<Navigate to="/publicar" replace />} />
+	                      <Route path="/publish/new" element={<Navigate to="/publicar" replace />} />
 
                       {/* Detalle */}
                       <Route path="/listing/:slug" element={<ListingDetail />} />
@@ -545,6 +574,9 @@ export default function App() {
                       <Route path="/privacidad" element={<Privacy />} />
                       <Route path="/eliminar-datos" element={<DataDeletion />} />
                       <Route path="/comparar" element={<Compare />} />
+
+                      {/* Hidden POC */}
+                      <Route path="/__poc/import-mercadolibre" element={<MercadoLibreImportPOC />} />
 
                       {/* Fallback */}
                       <Route path="*" element={<Navigate to="/" replace />} />

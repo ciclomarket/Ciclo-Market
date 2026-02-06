@@ -710,3 +710,48 @@ exports.sendUpgradeEmail = onRequest(
     }
   }
 )
+
+// Sitemap proxy (evita redirects cross-domain en Firebase Hosting)
+exports.sitemapProxy = onRequest({ region: 'us-central1', memory: '256MiB' }, async (req, res) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    res.set('Allow', 'GET, HEAD')
+    return res.status(405).send('Method Not Allowed')
+  }
+
+  const upstreamBase = (process.env.SITEMAP_UPSTREAM_ORIGIN || 'https://ciclo-market.onrender.com').replace(/\/$/, '')
+  const upstreamUrl = `${upstreamBase}${req.originalUrl || req.url || '/sitemap.xml'}`
+
+  try {
+    const upstream = await fetch(upstreamUrl, {
+      method: req.method,
+      headers: {
+        'user-agent': req.get('user-agent') || 'Mozilla/5.0',
+        accept: req.get('accept') || 'application/xml,text/xml,*/*',
+      },
+      redirect: 'manual',
+    })
+
+    // Nunca redirigir al cliente
+    if (upstream.status >= 300 && upstream.status < 400) {
+      console.warn('[sitemapProxy] upstream redirect blocked', {
+        status: upstream.status,
+        location: upstream.headers.get('location'),
+      })
+      return res.status(502).type('text/plain').send('Bad Gateway')
+    }
+
+    res.set('Content-Type', upstream.headers.get('content-type') || 'application/xml; charset=utf-8')
+    res.set('Cache-Control', upstream.headers.get('cache-control') || 'public, max-age=300, s-maxage=3600')
+    res.set('X-Robots-Tag', 'all')
+
+    if (req.method === 'HEAD') {
+      return res.status(upstream.status).end()
+    }
+
+    const text = await upstream.text()
+    return res.status(upstream.status).send(text)
+  } catch (err) {
+    console.error('[sitemapProxy] fetch failed', err)
+    return res.status(502).type('text/plain').send('Bad Gateway')
+  }
+})
