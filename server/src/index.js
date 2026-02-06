@@ -131,6 +131,167 @@ async function markPaymentApplied(providerRef) {
   }
 }
 
+async function applyPaymentUpdateByPaymentId(paymentIdRaw) {
+  const paymentId = String(paymentIdRaw || '').trim()
+  if (!paymentId) return { ok: false, error: 'missing_payment_id' }
+  if (!mpClient) return { ok: false, error: 'payments_unavailable' }
+
+  const svc = supabaseService || getServerSupabaseClient()
+
+  try {
+    const { data: existing } = await svc
+      .from('payments')
+      .select('id,status,applied')
+      .eq('provider', 'mercadopago')
+      .eq('provider_ref', paymentId)
+      .maybeSingle()
+    if (existing?.id && existing.applied) {
+      return { ok: true, status: existing.status || 'succeeded', alreadyApplied: true }
+    }
+  } catch {}
+
+  try {
+    const { Payment } = require('mercadopago')
+    const paymentClient = new Payment(mpClient)
+    const mpPayment = await paymentClient.get({ id: paymentId })
+
+    const statusRaw = (mpPayment && mpPayment.status) ? String(mpPayment.status).toLowerCase() : 'pending'
+    const status = statusRaw === 'approved' ? 'succeeded' : statusRaw
+    const amount = typeof mpPayment?.transaction_amount === 'number' ? mpPayment.transaction_amount : null
+    const currency = mpPayment?.currency_id || 'ARS'
+    const meta = (mpPayment && typeof mpPayment.metadata === 'object' && mpPayment.metadata) ? mpPayment.metadata : {}
+
+    let userId = null
+    try {
+      userId = typeof meta?.userId === 'string' && meta.userId ? meta.userId : (meta?.user_id ? String(meta.user_id) : null)
+    } catch {}
+    let planCode = normalisePlanCode(meta?.planCode || meta?.plan_code || meta?.planId || meta?.plan_id || meta?.upgradePlanCode || meta?.upgrade_plan_code)
+    const listingIdRaw = meta?.listingId ?? meta?.listing_id ?? null
+    let upgradeListingId = listingIdRaw ? String(listingIdRaw).trim() : null
+
+    await recordPayment({ userId, listingId: upgradeListingId, amount, currency, status, provider: 'mercadopago', providerRef: paymentId })
+
+    if (status !== 'succeeded') return { ok: true, status }
+
+    // Fallback: derive preference_id from merchant order and attempt to enrich metadata from a pending preference record.
+    if (!userId || !upgradeListingId || !planCode) {
+      const merchantOrderId = mpPayment?.order?.id ? String(mpPayment.order.id) : null
+      if (merchantOrderId) {
+        try {
+          const ac = new AbortController()
+          const timer = setTimeout(() => ac.abort(), 5000)
+          const moRes = await fetch(`https://api.mercadolibre.com/merchant_orders/${encodeURIComponent(merchantOrderId)}`, {
+            headers: { Authorization: `Bearer ${String(process.env.MERCADOPAGO_ACCESS_TOKEN || '')}` },
+            signal: ac.signal,
+          })
+          clearTimeout(timer)
+          if (moRes.ok) {
+            const mo = await moRes.json().catch(() => null)
+            const prefId = mo && typeof mo.preference_id === 'string' ? mo.preference_id : null
+            if (prefId) {
+              const { data: pendingPref } = await svc
+                .from('payments')
+                .select('user_id,listing_id')
+                .eq('provider', 'mercadopago')
+                .eq('provider_ref', String(prefId))
+                .maybeSingle()
+              if (!userId && pendingPref?.user_id) userId = String(pendingPref.user_id)
+              if (!upgradeListingId && pendingPref?.listing_id) upgradeListingId = String(pendingPref.listing_id).trim() || null
+            }
+          }
+        } catch {}
+      }
+    }
+
+    // If we enriched metadata after the initial record, persist it best-effort.
+    try {
+      if (userId || upgradeListingId) {
+        await recordPayment({ userId, listingId: upgradeListingId, amount, currency, status, provider: 'mercadopago', providerRef: paymentId })
+      }
+    } catch {}
+
+    let listingUpdated = false
+
+    if (upgradeListingId && (planCode === 'basic' || planCode === 'premium' || planCode === 'pro')) {
+      const now = Date.now()
+
+      let planRow = null
+      try {
+        const { data: row } = await svc
+          .from('plans')
+          .select('code, listing_duration_days, period_days, featured_days, featured_slots')
+          .eq('code', planCode)
+          .maybeSingle()
+        planRow = row
+      } catch {}
+
+      const listingDays = Number(planRow?.listing_duration_days || planRow?.period_days || 60)
+      const includedHighlightDays = Number(planRow?.featured_days || planRow?.featured_slots || 0)
+      const nextExpires = new Date(now + listingDays * 24 * 60 * 60 * 1000).toISOString()
+
+      const { data: currentListing } = await svc
+        .from('listings')
+        .select('id,highlight_expires,rank_boost_until,granted_visible_photos,visible_images_count,whatsapp_user_disabled,whatsapp_enabled')
+        .eq('id', upgradeListingId)
+        .maybeSingle()
+
+      if (currentListing?.id) {
+        let nextHighlightIso = currentListing.highlight_expires || null
+        if (includedHighlightDays > 0) {
+          const baseHighlight = currentListing.highlight_expires ? Math.max(new Date(currentListing.highlight_expires).getTime(), now) : now
+          nextHighlightIso = new Date(baseHighlight + includedHighlightDays * 24 * 60 * 60 * 1000).toISOString()
+        }
+
+        const PREMIUM_BOOST_DAYS = 90
+        const baseBoost = currentListing.rank_boost_until ? Math.max(new Date(currentListing.rank_boost_until).getTime(), now) : now
+        const nextRankBoostIso = new Date(baseBoost + PREMIUM_BOOST_DAYS * 24 * 60 * 60 * 1000).toISOString()
+
+        const targetCap = planCode === 'pro' ? 12 : 8
+        const nextGrantedPhotos = Math.max(Number(currentListing.granted_visible_photos || 4), targetCap)
+        const nextVisible = Math.max(Number(currentListing.visible_images_count || 4), targetCap)
+        const nextWhatsappEnabled = currentListing.whatsapp_user_disabled ? currentListing.whatsapp_enabled : true
+
+        const { error: updListErr } = await svc
+          .from('listings')
+          .update({
+            plan: planCode,
+            plan_code: planCode,
+            seller_plan: planCode,
+            expires_at: nextExpires,
+            highlight_expires: nextHighlightIso,
+            rank_boost_until: nextRankBoostIso,
+            granted_visible_photos: nextGrantedPhotos,
+            visible_images_count: nextVisible,
+            whatsapp_cap_granted: true,
+            whatsapp_enabled: nextWhatsappEnabled,
+            status: 'active',
+          })
+          .eq('id', upgradeListingId)
+
+        if (updListErr) {
+          console.warn('[webhook] listing update failed', { listingId: upgradeListingId, planCode, error: updListErr })
+        } else {
+          listingUpdated = true
+          console.info('[webhook] listing updated by payment', { listingId: upgradeListingId, planCode, nextExpires })
+        }
+      } else {
+        console.warn('[webhook] listing not found for payment', { listingId: upgradeListingId, planCode, paymentId })
+      }
+    }
+
+    if (listingUpdated) {
+      try { await markPaymentApplied(paymentId) } catch {}
+      return { ok: true, status, applied: true }
+    }
+
+    console.warn('[webhook] payment succeeded but no action taken', { paymentId, planCode, listingId: upgradeListingId })
+    return { ok: false, error: 'no_action_taken' }
+  } catch (err) {
+    console.error('[webhook] apply payment update failed', err)
+    return { ok: false, error: 'unexpected_error' }
+  }
+}
+
 function normalizeOrigin(frontendUrlEnv) {
   const raw = (frontendUrlEnv || '').split(',')[0]?.trim()
   if (!raw) return 'https://www.ciclomarket.ar'
@@ -967,7 +1128,10 @@ app.post('/api/credits/attach', async (req, res) => {
 /* ----------------------------- Gifts endpoints --------------------------- */
 function normalizePlanCode(value) {
   const v = String(value || '').toLowerCase().trim()
-  return v === 'premium' ? 'premium' : (v === 'basic' ? 'basic' : null)
+  if (v === 'premium') return 'premium'
+  if (v === 'basic') return 'basic'
+  if (v === 'pro') return 'pro'
+  return null
 }
 
 // British spelling alias used elsewhere in this file
@@ -1275,136 +1439,12 @@ app.post('/api/payments/confirm', async (req, res) => {
     }
     const paymentId = String(req.body?.payment_id || req.query?.payment_id || '').trim()
     if (!paymentId) return res.status(400).json({ ok: false, error: 'missing_payment_id' })
-    const { Payment } = require('mercadopago')
-    const paymentClient = new Payment(mpClient)
-    const mpPayment = await paymentClient.get({ id: String(paymentId) })
-    const statusRaw = (mpPayment && mpPayment.status) ? String(mpPayment.status) : 'pending'
-    const status = statusRaw === 'approved' ? 'succeeded' : statusRaw
-    const amount = typeof mpPayment?.transaction_amount === 'number' ? mpPayment.transaction_amount : null
-    const currency = mpPayment?.currency_id || 'ARS'
-    await recordPayment({ userId: null, listingId: null, amount, currency, status, providerRef: String(paymentId) })
-    // Best-effort: también actualizar créditos si corresponde
-    try {
-      const svc = supabaseService || getServerSupabaseClient()
-      const meta = (mpPayment && typeof mpPayment.metadata === 'object') ? mpPayment.metadata : {}
-      console.info('[webhook] metadata', meta)
-      let userId = typeof meta?.userId === 'string' && meta.userId ? meta.userId : null
-      let planCode = normalisePlanCode(meta?.planCode || meta?.planId)
-      const listingIdRaw = meta?.listingId ?? meta?.listing_id ?? null
-      const upgradeListingId = typeof listingIdRaw === 'string' ? listingIdRaw.trim() || null : (listingIdRaw ? String(listingIdRaw) : null)
-      const merchantOrderId = mpPayment?.order?.id ? String(mpPayment.order.id) : null
-      let prefId = null
-      if (merchantOrderId) {
-        try {
-          const moAc = new AbortController()
-          const moTimer = setTimeout(() => moAc.abort(), 5000)
-          const moRes = await fetch(`https://api.mercadolibre.com/merchant_orders/${merchantOrderId}`, {
-            headers: { Authorization: `Bearer ${String(process.env.MERCADOPAGO_ACCESS_TOKEN || '')}` },
-            signal: moAc.signal,
-          })
-          clearTimeout(moTimer)
-          if (moRes.ok) {
-            const mo = await moRes.json()
-            if (mo && typeof mo.preference_id === 'string' && mo.preference_id) prefId = mo.preference_id
-          }
-        } catch {}
-      }
-      if (!userId || !planCode) {
-        try {
-          let pending = null
-          let pendingQuery = svc
-            .from('publish_credits')
-            .select('id,user_id,plan_code,status,created_at')
-            .eq('provider', 'mercadopago')
-            .eq('status', 'pending')
-            .order('created_at', { ascending: false })
-            .limit(1)
-          if (prefId) {
-            pendingQuery = pendingQuery.or(`preference_id.eq.${prefId},provider_ref.eq.${prefId}`)
-          } else {
-            pendingQuery = pendingQuery.eq('provider_ref', String(paymentId))
-          }
-          const { data: pendingRows, error: pendingErr } = await pendingQuery
-          if (pendingErr) console.warn('[webhook] pending lookup error', pendingErr)
-          if (Array.isArray(pendingRows) && pendingRows[0]) pending = pendingRows[0]
-          if (!pending && userId) {
-            const { data: fallbackRows, error: fallbackErr } = await svc
-              .from('publish_credits')
-              .select('id,user_id,plan_code,status,created_at')
-              .eq('provider', 'mercadopago')
-              .eq('status', 'pending')
-              .eq('user_id', userId)
-              .order('created_at', { ascending: false })
-              .limit(1)
-            if (fallbackErr) console.warn('[webhook] fallback pending lookup error', fallbackErr)
-            if (Array.isArray(fallbackRows) && fallbackRows[0]) pending = fallbackRows[0]
-          }
-          if (pending) {
-            if (!userId && pending.user_id) {
-              userId = String(pending.user_id)
-              console.info('[webhook] fallback userId', { userId })
-            }
-            if (!planCode && pending.plan_code) {
-              planCode = normalisePlanCode(pending.plan_code)
-              console.info('[webhook] fallback planCode', { planCode })
-            }
-          }
-        } catch (err) {
-          console.warn('[webhook] fallback metadata lookup failed', err?.message || err)
-        }
-      }
-      if (planCode === 'basic' || planCode === 'premium') {
-        const boostUntilIso = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString()
-        const photoCap = planCode === 'premium' ? 8 : 8
-        if (upgradeListingId) {
-          try {
-            const { data: currentRow } = await svc
-              .from('listings')
-              .select('granted_visible_photos, visible_images_count')
-              .eq('id', upgradeListingId)
-              .maybeSingle()
-            const currentGrant = Number(currentRow?.granted_visible_photos || 4)
-            const currentVisible = Number(currentRow?.visible_images_count || 4)
-            const nextGrant = Math.max(currentGrant, photoCap)
-            const nextVisible = Math.max(currentVisible, photoCap)
-
-            const { error: updListErr } = await svc
-              .from('listings')
-              .update({
-                plan_code: planCode,
-                granted_visible_photos: nextGrant,
-                visible_images_count: nextVisible,
-                whatsapp_cap_granted: true,
-                whatsapp_enabled: true,
-                rank_boost_until: boostUntilIso,
-              })
-              .eq('id', upgradeListingId)
-            if (updListErr) console.warn('[webhook] listing upgrade update failed', updListErr)
-            else console.info('[webhook] listing upgraded by payment (no credits)', { listingId: upgradeListingId, planCode, boostUntilIso })
-          } catch (err) {
-            console.warn('[webhook] listing upgrade exception', err?.message || err)
-          }
-        }
-        if (status === 'succeeded') {
-          try { await markPaymentApplied(paymentId) } catch {}
-        }
-      }
-      else {
-        if (highlightApplied) {
-          console.info('[webhook] highlight-only payment applied', { paymentId })
-        } else {
-          console.warn('[webhook] skipping credit update (planCode missing or not eligible)', { planCode, userId })
-        }
-      }
-      // Marcar pago como aplicado si terminó en algo útil (crédito o highlight)
-      if (status === 'succeeded' && (highlightApplied || (planCode === 'basic' || planCode === 'premium'))) {
-        try { await markPaymentApplied(paymentId) } catch {}
-      }
-    } catch {}
-    return { ok: true, status }
+    const result = await applyPaymentUpdateByPaymentId(paymentId)
+    if (!result.ok) return res.status(500).json(result)
+    return res.json(result)
   } catch (err) {
-    console.error('[webhook] apply payment update failed', err)
-    return { ok: false, error: 'unexpected_error' }
+    console.error('[payments/confirm] failed', err)
+    return res.status(500).json({ ok: false, error: 'unexpected_error' })
   }
 })
 
@@ -1748,24 +1788,13 @@ app.post('/api/listings/:id/upgrade', async (req, res) => {
       const fallbackWhatsapp = profile?.whatsapp_number || profile?.store_phone || ''
       profileWhatsapp = normalizeWhatsappForStorage(fallbackWhatsapp)
     }
-    if ((planCode === 'basic' || planCode === 'premium' || planCode === 'pro') && !profileWhatsapp) {
+    if (!sellerWhatsapp) sellerWhatsapp = profileWhatsapp
+    if ((planCode === 'basic' || planCode === 'premium' || planCode === 'pro') && !sellerWhatsapp) {
       if (creditId && supabaseService) {
         await supabaseService
           .from('publish_credits')
           .update({ status: 'available', used_at: null })
-          .eq('id', creditId)
-      }
-      return res.status(409).json({ error: 'missing_whatsapp' })
-    }
-    if (!sellerWhatsapp) {
-      sellerWhatsapp = profileWhatsapp
-    }
-    if (!sellerWhatsapp) {
-      if (creditId && supabaseService) {
-        await supabaseService
-          .from('publish_credits')
-          .update({ status: 'available', used_at: null })
-          .eq('id', creditId)
+        .eq('id', creditId)
       }
       return res.status(409).json({ error: 'missing_whatsapp' })
     }
