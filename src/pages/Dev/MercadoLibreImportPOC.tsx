@@ -35,6 +35,13 @@ function resolveApiBase(): string {
 
 export default function MercadoLibreImportPOC() {
   const [url, setUrl] = useState('')
+  const [accessToken, setAccessToken] = useState(() => {
+    try {
+      return localStorage.getItem('poc_meli_access_token') || ''
+    } catch {
+      return ''
+    }
+  })
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<ImportResponse | null>(null)
   const [httpStatus, setHttpStatus] = useState<number | null>(null)
@@ -56,7 +63,7 @@ export default function MercadoLibreImportPOC() {
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url, access_token: accessToken.trim() || undefined }),
       })
       setHttpStatus(res.status)
       const contentType = res.headers.get('content-type')
@@ -107,6 +114,25 @@ export default function MercadoLibreImportPOC() {
             {loading ? 'Importando…' : 'Importar'}
           </button>
         </div>
+
+        <label className="mt-4 block text-sm font-medium text-[#14212e]" htmlFor="meli-token">
+          Access token (opcional, solo POC)
+        </label>
+        <input
+          id="meli-token"
+          value={accessToken}
+          onChange={(e) => {
+            const next = e.target.value
+            setAccessToken(next)
+            try {
+              localStorage.setItem('poc_meli_access_token', next)
+            } catch {
+              // ignore
+            }
+          }}
+          placeholder="APP_USR-…"
+          className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono outline-none focus:border-[#14212e]/50"
+        />
       </form>
 
       <div className="mt-6 grid grid-cols-1 gap-4">

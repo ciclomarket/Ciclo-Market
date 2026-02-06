@@ -1032,6 +1032,7 @@ async function importMercadoLibreHandler(req, res) {
     if (!rawUrl) {
       return res.status(400).json({ ok: false, error: 'missing_url', message: 'Falta `url` en el body.' })
     }
+    const bodyToken = typeof req.body?.access_token === 'string' ? req.body.access_token.trim() : ''
 
     const normalizedForParse = rawUrl.startsWith('http://') || rawUrl.startsWith('https://') ? rawUrl : `https://${rawUrl}`
     let parsedUrl
@@ -1089,7 +1090,7 @@ async function importMercadoLibreHandler(req, res) {
     const itemUrl = `https://api.mercadolibre.com/items/${encodeURIComponent(externalId)}`
     const descUrl = `https://api.mercadolibre.com/items/${encodeURIComponent(externalId)}/description`
 
-    const token = String(process.env.MERCADOLIBRE_ACCESS_TOKEN || process.env.MELI_ACCESS_TOKEN || '').trim()
+    const token = bodyToken || String(process.env.MERCADOLIBRE_ACCESS_TOKEN || process.env.MELI_ACCESS_TOKEN || '').trim()
     const headers = {
       Accept: 'application/json',
       'Accept-Language': 'es-AR,es;q=0.9,en;q=0.8',
@@ -1110,14 +1111,14 @@ async function importMercadoLibreHandler(req, res) {
     if (!itemRes.ok) {
       const data = await itemRes.json().catch(() => ({}))
       const message = data?.message || data?.error || 'meli_item_fetch_failed'
-      if (itemRes.status === 403) {
-        return res.status(502).json({
+      if (itemRes.status === 401 || itemRes.status === 403) {
+        return res.status(401).json({
           ok: false,
-          error: 'meli_error',
+          error: 'meli_unauthorized',
           message,
           status: itemRes.status,
           hint:
-            'MercadoLibre respondió 403. Probá nuevamente más tarde, o configurá `MERCADOLIBRE_ACCESS_TOKEN` (opcional) si MELI aplica políticas al request desde el servidor.',
+            'MercadoLibre está requiriendo autorización para este request. Configurá `MERCADOLIBRE_ACCESS_TOKEN` (o `MELI_ACCESS_TOKEN`) en el backend, o enviá `access_token` en el body (solo POC).',
         })
       }
       return res.status(502).json({ ok: false, error: 'meli_error', message, status: itemRes.status })
