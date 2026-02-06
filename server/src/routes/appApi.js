@@ -1089,7 +1089,20 @@ async function importMercadoLibreHandler(req, res) {
     const itemUrl = `https://api.mercadolibre.com/items/${encodeURIComponent(externalId)}`
     const descUrl = `https://api.mercadolibre.com/items/${encodeURIComponent(externalId)}/description`
 
-    const [itemRes, descRes] = await Promise.all([fetch(itemUrl), fetch(descUrl)])
+    const token = String(process.env.MERCADOLIBRE_ACCESS_TOKEN || process.env.MELI_ACCESS_TOKEN || '').trim()
+    const headers = {
+      Accept: 'application/json',
+      'Accept-Language': 'es-AR,es;q=0.9,en;q=0.8',
+      // Some upstream policies reject generic/empty User-Agent; use a browser-like UA for this POC.
+      'User-Agent':
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    }
+
+    const [itemRes, descRes] = await Promise.all([
+      fetch(itemUrl, { headers }),
+      fetch(descUrl, { headers }),
+    ])
 
     if (itemRes.status === 404) {
       return res.status(404).json({ ok: false, error: 'item_not_found', message: 'El ítem no existe en MercadoLibre.' })
@@ -1097,6 +1110,16 @@ async function importMercadoLibreHandler(req, res) {
     if (!itemRes.ok) {
       const data = await itemRes.json().catch(() => ({}))
       const message = data?.message || data?.error || 'meli_item_fetch_failed'
+      if (itemRes.status === 403) {
+        return res.status(502).json({
+          ok: false,
+          error: 'meli_error',
+          message,
+          status: itemRes.status,
+          hint:
+            'MercadoLibre respondió 403. Probá nuevamente más tarde, o configurá `MERCADOLIBRE_ACCESS_TOKEN` (opcional) si MELI aplica políticas al request desde el servidor.',
+        })
+      }
       return res.status(502).json({ ok: false, error: 'meli_error', message, status: itemRes.status })
     }
 

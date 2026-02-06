@@ -48,16 +48,25 @@ function StorePreviewCard({
   avatarSrc,
   storeName,
   location,
+  bannerPositionY = 50,
 }: {
   bannerSrc: string
   avatarSrc: string
   storeName: string
   location: string
+  bannerPositionY?: number
 }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
       <div className="relative h-32">
-        <img src={bannerSrc} alt="" className="h-full w-full object-cover object-[center_25%]" loading="lazy" decoding="async" />
+        <img
+          src={bannerSrc}
+          alt=""
+          className="h-full w-full object-cover"
+          style={{ objectPosition: `center ${bannerPositionY}%` }}
+          loading="lazy"
+          decoding="async"
+        />
         <div className="absolute inset-0 bg-gradient-to-r from-[#14212E]/55 to-[#14212E]/10" />
       </div>
       <div className="relative px-5 pb-5">
@@ -225,6 +234,7 @@ export default function ForStores() {
                     avatarSrc="https://jmtsgywgeysagnfgdovr.supabase.co/storage/v1/object/public/avatars/stores/40014f13-b9e9-4041-a791-affb9a1531aa/avatar_1762378292509_IMG_3493.webp"
                     storeName="Giant La Lucila"
                     location="La Lucila, Buenos Aires"
+                    bannerPositionY={75}
                   />
                   <CicloTrustMaxProof />
                   <div className="grid grid-cols-1 gap-3">
@@ -323,6 +333,7 @@ export default function ForStores() {
                   avatarSrc="https://jmtsgywgeysagnfgdovr.supabase.co/storage/v1/object/public/avatars/stores/40014f13-b9e9-4041-a791-affb9a1531aa/avatar_1762378292509_IMG_3493.webp"
                   storeName="Giant La Lucila"
                   location="La Lucila, Buenos Aires"
+                  bannerPositionY={75}
                 />
               </div>
             </div>

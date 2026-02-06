@@ -22,6 +22,17 @@ type ImportResponse =
       raw?: string
     }
 
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+
+function resolveApiBase(): string {
+  if (API_BASE) return API_BASE
+  if (typeof window === 'undefined') return ''
+  const origin = window.location?.origin?.replace(/\/$/, '') || ''
+  const host = window.location?.hostname?.toLowerCase?.() || ''
+  if (host.endsWith('ciclomarket.ar')) return 'https://ciclo-market.onrender.com'
+  return origin
+}
+
 export default function MercadoLibreImportPOC() {
   const [url, setUrl] = useState('')
   const [loading, setLoading] = useState(false)
@@ -40,7 +51,9 @@ export default function MercadoLibreImportPOC() {
     setHttpStatus(null)
 
     try {
-      const res = await fetch('/api/import/mercadolibre', {
+      const base = resolveApiBase()
+      const endpoint = base ? `${base}/api/import/mercadolibre` : '/api/import/mercadolibre'
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url }),
