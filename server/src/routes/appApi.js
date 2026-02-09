@@ -1110,15 +1110,31 @@ async function importMercadoLibreHandler(req, res) {
 
     if (productId && externalId === productId) {
       const productUrl = `https://api.mercadolibre.com/products/${encodeURIComponent(productId)}`
-      const token = bodyToken || String(process.env.MERCADOLIBRE_ACCESS_TOKEN || process.env.MELI_ACCESS_TOKEN || '').trim()
-      const productHeaders = {
-        Accept: 'application/json',
-        'Accept-Language': 'es-AR,es;q=0.9,en;q=0.8',
-        'User-Agent':
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      let productRes = await fetch(productUrl, {
+        headers: {
+          Accept: 'application/json',
+          'Accept-Language': 'es-AR,es;q=0.9,en;q=0.8',
+          'User-Agent':
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        },
+      })
+      if (!productRes.ok && (productRes.status === 401 || productRes.status === 403 || productRes.status === 429)) {
+        const token =
+          bodyToken ||
+          String(process.env.MERCADOLIBRE_ACCESS_TOKEN || process.env.MELI_ACCESS_TOKEN || '').trim() ||
+          (await getMeliAppAccessToken().catch(() => null))
+        if (token) {
+          productRes = await fetch(productUrl, {
+            headers: {
+              Accept: 'application/json',
+              'Accept-Language': 'es-AR,es;q=0.9,en;q=0.8',
+              'User-Agent':
+                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+              Authorization: `Bearer ${token}`,
+            },
+          })
+        }
       }
-      const productRes = await fetch(productUrl, { headers: productHeaders })
       if (productRes.ok) {
         const product = await productRes.json().catch(() => null)
         const winnerItemId = product?.buy_box_winner?.item_id
@@ -1170,7 +1186,14 @@ async function importMercadoLibreHandler(req, res) {
         ok: response.ok,
         status: response.status,
         payload,
-        meta: { contentType, requestId, policyCode, policyReason, usedQueryToken: Boolean(useQueryToken) },
+        meta: {
+          contentType,
+          requestId,
+          policyCode,
+          policyReason,
+          usedQueryToken: Boolean(useQueryToken),
+          usedToken: Boolean(token),
+        },
       }
     }
 
@@ -1185,8 +1208,12 @@ async function importMercadoLibreHandler(req, res) {
         return null
       }))
 
-    // Try: Authorization header → query param token (some proxies/policies differ) → bulk endpoint fallback.
-    let itemAttempt = await fetchMeliJson(itemUrl, { token, useQueryToken: false })
+    // Prefer anonymous fetch first (public endpoint). Only add token if needed.
+    let itemAttempt = await fetchMeliJson(itemUrl, { token: null, useQueryToken: false })
+    if (!itemAttempt.ok && token && (itemAttempt.status === 401 || itemAttempt.status === 403 || itemAttempt.status === 429)) {
+      // Try: Authorization header → query param token (some proxies/policies differ) → bulk endpoint fallback.
+      itemAttempt = await fetchMeliJson(itemUrl, { token, useQueryToken: false })
+    }
     if (!itemAttempt.ok && token && itemAttempt.status === 401) {
       const msg = String(itemAttempt.payload?.message || '').toLowerCase()
       if (msg.includes('invalid access token')) {
@@ -1207,7 +1234,10 @@ async function importMercadoLibreHandler(req, res) {
       }
     }
 
-    let descAttempt = await fetchMeliJson(descUrl, { token, useQueryToken: false })
+    let descAttempt = await fetchMeliJson(descUrl, { token: null, useQueryToken: false })
+    if (!descAttempt.ok && token && (descAttempt.status === 401 || descAttempt.status === 403 || descAttempt.status === 429)) {
+      descAttempt = await fetchMeliJson(descUrl, { token, useQueryToken: false })
+    }
     if (!descAttempt.ok && token && (descAttempt.status === 401 || descAttempt.status === 403)) {
       descAttempt = await fetchMeliJson(descUrl, { token, useQueryToken: true })
     }
