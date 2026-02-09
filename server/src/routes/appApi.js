@@ -1199,6 +1199,8 @@ async function importMercadoLibreHandler(req, res) {
 
     const itemUrl = `https://api.mercadolibre.com/items/${encodeURIComponent(externalId)}`
     const descUrl = `https://api.mercadolibre.com/items/${encodeURIComponent(externalId)}/description`
+    const bulkUrl = `https://api.mercadolibre.com/items?ids=${encodeURIComponent(externalId)}`
+    const attempts = []
 
     let token =
       bodyToken ||
@@ -1210,23 +1212,39 @@ async function importMercadoLibreHandler(req, res) {
 
     // Prefer anonymous fetch first (public endpoint). Only add token if needed.
     let itemAttempt = await fetchMeliJson(itemUrl, { token: null, useQueryToken: false })
+    attempts.push({ step: 'item_anon', status: itemAttempt.status, meta: itemAttempt.meta })
+
+    // If item endpoint is blocked, try the bulk endpoint anonymously (sometimes policies differ).
+    if (!itemAttempt.ok && (itemAttempt.status === 403 || itemAttempt.status === 429)) {
+      const bulkAnon = await fetchMeliJson(bulkUrl, { token: null, useQueryToken: false })
+      attempts.push({ step: 'bulk_anon', status: bulkAnon.status, meta: bulkAnon.meta })
+      if (bulkAnon.ok && Array.isArray(bulkAnon.payload) && bulkAnon.payload[0]?.body) {
+        itemAttempt = { ...bulkAnon, payload: bulkAnon.payload[0].body }
+      } else if (bulkAnon.ok && Array.isArray(bulkAnon.payload) && bulkAnon.payload[0]?.code && bulkAnon.payload[0]?.body) {
+        itemAttempt = { ...bulkAnon, payload: bulkAnon.payload[0].body }
+      }
+    }
+
     if (!itemAttempt.ok && token && (itemAttempt.status === 401 || itemAttempt.status === 403 || itemAttempt.status === 429)) {
       // Try: Authorization header → query param token (some proxies/policies differ) → bulk endpoint fallback.
       itemAttempt = await fetchMeliJson(itemUrl, { token, useQueryToken: false })
+      attempts.push({ step: 'item_auth_header', status: itemAttempt.status, meta: itemAttempt.meta })
     }
     if (!itemAttempt.ok && token && itemAttempt.status === 401) {
       const msg = String(itemAttempt.payload?.message || '').toLowerCase()
       if (msg.includes('invalid access token')) {
         token = await getMeliAppAccessToken({ forceRefresh: true }).catch(() => token)
         itemAttempt = await fetchMeliJson(itemUrl, { token, useQueryToken: false })
+        attempts.push({ step: 'item_auth_header_refresh', status: itemAttempt.status, meta: itemAttempt.meta })
       }
     }
     if (!itemAttempt.ok && token && (itemAttempt.status === 401 || itemAttempt.status === 403)) {
       itemAttempt = await fetchMeliJson(itemUrl, { token, useQueryToken: true })
+      attempts.push({ step: 'item_query_token', status: itemAttempt.status, meta: itemAttempt.meta })
     }
     if (!itemAttempt.ok && token && (itemAttempt.status === 401 || itemAttempt.status === 403)) {
-      const bulkUrl = `https://api.mercadolibre.com/items?ids=${encodeURIComponent(externalId)}`
       const bulkAttempt = await fetchMeliJson(bulkUrl, { token, useQueryToken: true })
+      attempts.push({ step: 'bulk_query_token', status: bulkAttempt.status, meta: bulkAttempt.meta })
       if (bulkAttempt.ok && Array.isArray(bulkAttempt.payload) && bulkAttempt.payload[0]?.body) {
         itemAttempt = { ...bulkAttempt, payload: bulkAttempt.payload[0].body }
       } else if (bulkAttempt.ok && Array.isArray(bulkAttempt.payload) && bulkAttempt.payload[0]?.code && bulkAttempt.payload[0]?.body) {
@@ -1235,11 +1253,14 @@ async function importMercadoLibreHandler(req, res) {
     }
 
     let descAttempt = await fetchMeliJson(descUrl, { token: null, useQueryToken: false })
+    attempts.push({ step: 'desc_anon', status: descAttempt.status, meta: descAttempt.meta })
     if (!descAttempt.ok && token && (descAttempt.status === 401 || descAttempt.status === 403 || descAttempt.status === 429)) {
       descAttempt = await fetchMeliJson(descUrl, { token, useQueryToken: false })
+      attempts.push({ step: 'desc_auth_header', status: descAttempt.status, meta: descAttempt.meta })
     }
     if (!descAttempt.ok && token && (descAttempt.status === 401 || descAttempt.status === 403)) {
       descAttempt = await fetchMeliJson(descUrl, { token, useQueryToken: true })
+      attempts.push({ step: 'desc_query_token', status: descAttempt.status, meta: descAttempt.meta })
     }
 
     if (itemAttempt.status === 404) {
@@ -1255,11 +1276,14 @@ async function importMercadoLibreHandler(req, res) {
           message,
           status: itemAttempt.status,
           meta: itemAttempt.meta,
+          attempts,
           hint:
             'MercadoLibre devolvió 401/403. Si el token es inválido, regeneralo; si estás usando `client_credentials`, podés configurar `MELI_CLIENT_ID`/`MELI_CLIENT_SECRET` para que el backend emita tokens automáticamente. Si persiste, puede ser bloqueo por políticas/IP o requerir OAuth Authorization Code (usuario).',
         })
       }
-      return res.status(502).json({ ok: false, error: 'meli_error', message, status: itemAttempt.status, meta: itemAttempt.meta })
+      return res
+        .status(502)
+        .json({ ok: false, error: 'meli_error', message, status: itemAttempt.status, meta: itemAttempt.meta, attempts })
     }
 
     const item = itemAttempt.payload

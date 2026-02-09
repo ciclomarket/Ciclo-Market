@@ -9,6 +9,7 @@ try {
 
 const express = require('express')
 const cors = require('cors')
+const crypto = require('crypto')
 const { MercadoPagoConfig, Preference } = require('mercadopago')
 const { createClient: createSupabaseServerClient } = require('@supabase/supabase-js')
 const { sendMail, isMailConfigured } = require('./lib/mail')
@@ -412,45 +413,59 @@ app.post('/api/checkout', async (req, res) => {
     const userId = (authUser && authUser.id) ? authUser.id : fallbackUserId
     if (!userId) return res.status(401).json({ ok: false, error: 'unauthorized' })
 
-    const metadata = {
-      userId,
-      planCode: planCode || null,
-      planId: String(body.planId || rawPlan || ''),
-      listingId: body.listingId ? String(body.listingId) : undefined,
-      listingSlug: body.listingSlug ? String(body.listingSlug) : undefined,
-      upgradePlanCode: planCode || undefined,
-      ...((typeof body.metadata === 'object' && body.metadata) || {}),
-    }
+	    const metadata = {
+	      userId,
+	      planCode: planCode || null,
+	      planId: String(body.planId || rawPlan || ''),
+	      listingId: body.listingId ? String(body.listingId) : undefined,
+	      listingSlug: body.listingSlug ? String(body.listingSlug) : undefined,
+	      upgradePlanCode: planCode || undefined,
+	      ...((typeof body.metadata === 'object' && body.metadata) || {}),
+	    }
+
+	    const checkoutRef = typeof crypto.randomUUID === 'function'
+	      ? `mb_${crypto.randomUUID()}`
+	      : `mb_${Date.now()}_${Math.random().toString(16).slice(2)}`
+	    metadata.checkoutRef = checkoutRef
+
+	    const itemCategoryId = String(process.env.MERCADOPAGO_ITEM_CATEGORY_ID || 'services').trim()
+	    const itemId = String(body.itemId || `plan_${planCode || metadata.planId || 'checkout'}`).trim()
+	    const itemDescription = String(body.itemDescription || `Compra: ${planName}`).trim()
 
     const pref = new Preference(mpClient)
     const publicBase = (process.env.PUBLIC_BASE_URL || '').toString().replace(/\/$/, '')
     const notificationUrl = publicBase ? `${publicBase}/api/mp/webhook` : undefined
-    console.info('[checkout] creating preference', {
-      userId,
-      planCode,
-      amount,
-      currency,
-      hasNotificationUrl: Boolean(notificationUrl),
-      notificationUrl,
-    })
-    const mp = await pref.create({
-      body: {
-        items: [
-          {
-            title: planName,
-            quantity: 1,
-            unit_price: expectedAmount,
-            currency_id: currency,
-          },
-        ],
-        payer: { email: authUser?.email || undefined },
-        metadata,
-        back_urls: backUrls,
-        ...(notificationUrl ? { notification_url: notificationUrl } : {}),
-        auto_return: 'approved',
-        statement_descriptor: 'CICLO MARKET',
-      },
-    })
+	    console.info('[checkout] creating preference', {
+	      userId,
+	      planCode,
+	      checkoutRef,
+	      amount,
+	      currency,
+	      hasNotificationUrl: Boolean(notificationUrl),
+	      notificationUrl,
+	    })
+	    const mp = await pref.create({
+	      body: {
+	        external_reference: checkoutRef,
+	        items: [
+	          {
+	            id: itemId,
+	            title: planName,
+	            description: itemDescription,
+	            ...(itemCategoryId ? { category_id: itemCategoryId } : {}),
+	            quantity: 1,
+	            unit_price: expectedAmount,
+	            currency_id: currency,
+	          },
+	        ],
+	        payer: { email: authUser?.email || undefined },
+	        metadata,
+	        back_urls: backUrls,
+	        ...(notificationUrl ? { notification_url: notificationUrl } : {}),
+	        auto_return: 'approved',
+	        statement_descriptor: 'CICLO MARKET',
+	      },
+	    })
 
     const initPoint = mp?.init_point || mp?.sandbox_init_point || null
     if (!initPoint) return res.status(500).json({ ok: false, error: 'mp_init_point_missing' })
@@ -459,11 +474,11 @@ app.post('/api/checkout', async (req, res) => {
     try {
       console.info('[checkout:init]', { userId, planCode, amount, currency, preferenceId: mp?.id || null, listingId: metadata.listingId || null })
     } catch {}
-    try {
-      await recordPaymentIntent({ userId, listingId: metadata.listingId || null, amount, currency, status: 'pending', providerRef: mp?.id || null })
-    } catch (e) {
-      console.warn('[checkout] recordPayment pending failed', (e && e.message) || e)
-    }
+	    try {
+	      await recordPaymentIntent({ userId, listingId: metadata.listingId || null, amount, currency, status: 'pending', providerRef: checkoutRef })
+	    } catch (e) {
+	      console.warn('[checkout] recordPayment pending failed', (e && e.message) || e)
+	    }
 
     return res.json({ ok: true, url: initPoint, preference_id: mp?.id || null })
   } catch (err) {
