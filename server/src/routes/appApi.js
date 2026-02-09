@@ -1031,6 +1031,129 @@ const meliAppTokenCache = {
   expiresAtMs: 0,
 }
 
+function decodeHtmlEntities(input) {
+  if (!input) return ''
+  return String(input)
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+}
+
+function extractMetaTagContent(html, { name, property }) {
+  if (!html) return null
+  const key = name ? 'name' : 'property'
+  const value = name || property
+  if (!value) return null
+  const re = new RegExp(`<meta[^>]+${key}=["']${String(value).replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}["'][^>]*>`, 'i')
+  const tag = html.match(re)?.[0] || null
+  if (!tag) return null
+  const content = tag.match(/content=["']([^"']+)["']/i)?.[1] || null
+  return content ? decodeHtmlEntities(content) : null
+}
+
+function normalizeSchemaCondition(value) {
+  const v = String(value || '').toLowerCase()
+  if (!v) return null
+  if (v.includes('newcondition') || v === 'new') return 'new'
+  if (v.includes('usedcondition') || v === 'used') return 'used'
+  return null
+}
+
+function pickJsonLdProduct(payload) {
+  if (!payload) return null
+  const candidates = []
+
+  function pushMaybe(node) {
+    if (!node || typeof node !== 'object') return
+    const type = node['@type']
+    const types = Array.isArray(type) ? type : type ? [type] : []
+    if (types.some((t) => String(t).toLowerCase() === 'product')) candidates.push(node)
+  }
+
+  function walk(node) {
+    if (!node) return
+    if (Array.isArray(node)) {
+      for (const entry of node) walk(entry)
+      return
+    }
+    if (typeof node !== 'object') return
+    pushMaybe(node)
+    if (node['@graph']) walk(node['@graph'])
+  }
+
+  walk(payload)
+  return candidates[0] || null
+}
+
+async function importFromMeliHtml({ pageUrl, externalId }) {
+  const headers = {
+    Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'es-AR,es;q=0.9,en;q=0.8',
+    'User-Agent':
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+  }
+  const resp = await fetch(pageUrl, { headers, redirect: 'follow' })
+  const contentType = String(resp.headers.get('content-type') || '')
+  const status = resp.status
+  const html = await resp.text().catch(() => '')
+  if (!resp.ok) {
+    return { ok: false, status, contentType, error: 'html_fetch_failed' }
+  }
+
+  const scripts = [...html.matchAll(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)]
+  let product = null
+  for (const match of scripts) {
+    const raw = match?.[1]
+    if (!raw) continue
+    try {
+      const parsed = JSON.parse(raw.trim())
+      product = pickJsonLdProduct(parsed)
+      if (product) break
+    } catch {
+      // ignore invalid json-ld blocks
+    }
+  }
+
+  const title = (typeof product?.name === 'string' && product.name) || extractMetaTagContent(html, { property: 'og:title' }) || null
+  const description =
+    (typeof product?.description === 'string' && product.description) || extractMetaTagContent(html, { property: 'og:description' }) || null
+
+  const imagesRaw = product?.image ?? null
+  const images = (Array.isArray(imagesRaw) ? imagesRaw : imagesRaw ? [imagesRaw] : [])
+    .filter((u) => typeof u === 'string' && u.length)
+    .slice(0, 20)
+
+  const offer = Array.isArray(product?.offers) ? product.offers[0] : product?.offers || null
+  const price =
+    typeof offer?.price === 'number' ? offer.price : offer?.price != null && String(offer.price).trim() ? Number(offer.price) : null
+  const currency = typeof offer?.priceCurrency === 'string' ? offer.priceCurrency : null
+  const condition = normalizeSchemaCondition(offer?.itemCondition || product?.itemCondition)
+
+  const brand =
+    typeof product?.brand === 'string' ? product.brand : typeof product?.brand?.name === 'string' ? product.brand.name : null
+  const model = typeof product?.model === 'string' ? product.model : null
+
+  return {
+    ok: true,
+    normalized: {
+      source: 'mercadolibre',
+      external_id: externalId,
+      title,
+      price: Number.isFinite(price) ? price : null,
+      currency,
+      condition,
+      description,
+      images,
+      brand,
+      model,
+    },
+    meta: { status, contentType, scriptsFound: scripts.length },
+  }
+}
+
 async function getMeliAppAccessToken({ forceRefresh = false } = {}) {
   const now = Date.now()
   if (!forceRefresh && meliAppTokenCache.token && meliAppTokenCache.expiresAtMs - now > 60_000) {
@@ -1267,6 +1390,26 @@ async function importMercadoLibreHandler(req, res) {
       return res.status(404).json({ ok: false, error: 'item_not_found', message: 'El ítem no existe en MercadoLibre.' })
     }
     if (!itemAttempt.ok) {
+      const looksLikePolicyAgent =
+        itemAttempt.status === 403 &&
+        itemAttempt.payload &&
+        typeof itemAttempt.payload === 'object' &&
+        (itemAttempt.payload?.blocked_by === 'PolicyAgent' ||
+          String(itemAttempt.payload?.code || '').toUpperCase().startsWith('PA_') ||
+          String(itemAttempt.payload?.message || '').toLowerCase().includes('policy'))
+
+      if (looksLikePolicyAgent) {
+        const htmlFallback = await importFromMeliHtml({ pageUrl: parsedUrl.toString(), externalId }).catch((err) => ({
+          ok: false,
+          status: 0,
+          contentType: null,
+          error: err instanceof Error ? err.message : 'html_fallback_failed',
+        }))
+        if (htmlFallback?.ok && htmlFallback.normalized) {
+          return res.json({ ...htmlFallback.normalized, meta: { html: htmlFallback.meta } })
+        }
+      }
+
       const data = itemAttempt.payload && typeof itemAttempt.payload === 'object' ? itemAttempt.payload : {}
       const message = data?.message || data?.error || 'meli_item_fetch_failed'
       if (itemAttempt.status === 401 || itemAttempt.status === 403) {
@@ -1278,7 +1421,7 @@ async function importMercadoLibreHandler(req, res) {
           meta: itemAttempt.meta,
           attempts,
           hint:
-            'MercadoLibre devolvió 401/403. Si el token es inválido, regeneralo; si estás usando `client_credentials`, podés configurar `MELI_CLIENT_ID`/`MELI_CLIENT_SECRET` para que el backend emita tokens automáticamente. Si persiste, puede ser bloqueo por políticas/IP o requerir OAuth Authorization Code (usuario).',
+            'MercadoLibre devolvió 401/403. Si el token es inválido, regeneralo; si estás usando `client_credentials`, podés configurar `MELI_CLIENT_ID`/`MELI_CLIENT_SECRET` para que el backend emita tokens automáticamente. Si persiste y ves `PolicyAgent`, suele ser bloqueo por políticas/IP y puede requerir OAuth Authorization Code (token de usuario) o un fallback por HTML.',
         })
       }
       return res

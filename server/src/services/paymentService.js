@@ -31,6 +31,7 @@ function extractMetadata(mpPayment) {
   const meta = (mpPayment && typeof mpPayment.metadata === 'object' && mpPayment.metadata) ? mpPayment.metadata : {}
 
   const paymentId = mpPayment?.id ? String(mpPayment.id) : null
+  const externalReference = mpPayment?.external_reference ? String(mpPayment.external_reference).trim() : null
   const userIdRaw = meta.userId ?? meta.user_id ?? null
   const listingIdRaw = meta.listingId ?? meta.listing_id ?? null
   const planRaw = meta.planCode ?? meta.plan_code ?? meta.planId ?? meta.plan_id ?? meta.upgradePlanCode ?? meta.upgrade_plan_code
@@ -43,13 +44,14 @@ function extractMetadata(mpPayment) {
   const currency = mpPayment?.currency_id ? String(mpPayment.currency_id) : 'ARS'
   const status = mapMpStatus(mpPayment?.status)
 
-  return { paymentId, userId, listingId, planCode, amount, currency, status }
+  return { paymentId, externalReference, userId, listingId, planCode, amount, currency, status }
 }
 
 async function upsertPaymentRecord(supabase, payload) {
   const provider = 'mercadopago'
   const providerRef = String(payload.provider_ref || payload.providerRef || '').trim()
   if (!providerRef) throw new Error('missing_provider_ref')
+  const externalReference = String(payload.external_reference || payload.externalReference || '').trim() || null
 
   const { data: existing, error: selErr } = await supabase
     .from('payments')
@@ -73,6 +75,23 @@ async function upsertPaymentRecord(supabase, payload) {
     const { error: updErr } = await supabase.from('payments').update(row).eq('id', existing.id)
     if (updErr) throw updErr
     return { id: existing.id, applied: Boolean(existing.applied), status: existing.status }
+  }
+
+  // If we created a "pending" record during checkout using `external_reference`,
+  // reconcile it to the actual Mercado Pago payment id to avoid duplicates.
+  if (externalReference && externalReference !== providerRef) {
+    const { data: byExternal, error: extErr } = await supabase
+      .from('payments')
+      .select('id,applied')
+      .eq('provider', provider)
+      .eq('provider_ref', externalReference)
+      .maybeSingle()
+    if (extErr) throw extErr
+    if (byExternal?.id) {
+      const { error: updErr } = await supabase.from('payments').update(row).eq('id', byExternal.id)
+      if (updErr) throw updErr
+      return { id: byExternal.id, applied: Boolean(byExternal.applied), status: row.status }
+    }
   }
 
   const { data: inserted, error: insErr } = await supabase
@@ -178,6 +197,7 @@ async function processPayment(paymentIdRaw) {
       currency: extracted.currency,
       status: extracted.status,
       provider_ref: paymentId,
+      external_reference: extracted.externalReference,
     })
 
     if (extracted.status !== 'succeeded') return { ok: true, status: extracted.status }
