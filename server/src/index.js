@@ -43,6 +43,7 @@ const { buildStoreAnalyticsHTML } = (() => {
 const { buildEmailHtml: buildFree2PaidEmailHtml } = (() => {
   try { return require('./jobs/campaignFreeToPaid') } catch { return {} }
 })()
+const { processPayment, recordPaymentIntent } = require('./services/paymentService')
 const appApiRouter = require('./routes/appApi')
 // Sweepstake feature removed
 const path = require('path')
@@ -79,218 +80,6 @@ const mpClient = (() => {
     return null
   }
 })()
-
-// Minimal helper to record a payment (falls back to request-scoped client if needed)
-async function recordPayment({ userId, listingId, amount, currency = 'ARS', status = 'succeeded', provider = 'mercadopago', providerRef = null }) {
-  try {
-    const svc = supabaseService || getServerSupabaseClient()
-    const payload = {
-      user_id: userId || null,
-      listing_id: listingId || null,
-      amount: typeof amount === 'number' ? amount : null,
-      currency,
-      status,
-      provider,
-      provider_ref: providerRef,
-    }
-    if (providerRef) {
-      const { data: existing } = await svc
-        .from('payments')
-        .select('id,applied')
-        .eq('provider', provider)
-        .eq('provider_ref', providerRef)
-        .maybeSingle()
-      if (existing?.id) {
-        await svc
-          .from('payments')
-          .update({ amount: payload.amount, currency: payload.currency, status: payload.status, user_id: payload.user_id, listing_id: payload.listing_id })
-          .eq('id', existing.id)
-      } else {
-        await svc.from('payments').insert({ ...payload, applied: false })
-      }
-    } else {
-      await svc.from('payments').insert({ ...payload, applied: false })
-    }
-  } catch (err) {
-    console.warn('[payments] recordPayment failed (non-fatal)', err?.message || err)
-  }
-}
-
-async function markPaymentApplied(providerRef) {
-  try {
-    if (!providerRef) return
-    const svc = supabaseService || getServerSupabaseClient()
-    const nowIso = new Date().toISOString()
-    await svc
-      .from('payments')
-      .update({ applied: true, applied_at: nowIso, status: 'succeeded' })
-      .eq('provider', 'mercadopago')
-      .eq('provider_ref', String(providerRef))
-  } catch (err) {
-    console.warn('[payments] markApplied failed', err?.message || err)
-  }
-}
-
-async function applyPaymentUpdateByPaymentId(paymentIdRaw) {
-  const paymentId = String(paymentIdRaw || '').trim()
-  if (!paymentId) return { ok: false, error: 'missing_payment_id' }
-  if (!mpClient) return { ok: false, error: 'payments_unavailable' }
-
-  const svc = supabaseService || getServerSupabaseClient()
-
-  try {
-    const { data: existing } = await svc
-      .from('payments')
-      .select('id,status,applied')
-      .eq('provider', 'mercadopago')
-      .eq('provider_ref', paymentId)
-      .maybeSingle()
-    if (existing?.id && existing.applied) {
-      return { ok: true, status: existing.status || 'succeeded', alreadyApplied: true }
-    }
-  } catch {}
-
-  try {
-    const { Payment } = require('mercadopago')
-    const paymentClient = new Payment(mpClient)
-    const mpPayment = await paymentClient.get({ id: paymentId })
-
-    const statusRaw = (mpPayment && mpPayment.status) ? String(mpPayment.status).toLowerCase() : 'pending'
-    const status = statusRaw === 'approved' ? 'succeeded' : statusRaw
-    const amount = typeof mpPayment?.transaction_amount === 'number' ? mpPayment.transaction_amount : null
-    const currency = mpPayment?.currency_id || 'ARS'
-    const meta = (mpPayment && typeof mpPayment.metadata === 'object' && mpPayment.metadata) ? mpPayment.metadata : {}
-
-    let userId = null
-    try {
-      userId = typeof meta?.userId === 'string' && meta.userId ? meta.userId : (meta?.user_id ? String(meta.user_id) : null)
-    } catch {}
-    let planCode = normalisePlanCode(meta?.planCode || meta?.plan_code || meta?.planId || meta?.plan_id || meta?.upgradePlanCode || meta?.upgrade_plan_code)
-    const listingIdRaw = meta?.listingId ?? meta?.listing_id ?? null
-    let upgradeListingId = listingIdRaw ? String(listingIdRaw).trim() : null
-
-    await recordPayment({ userId, listingId: upgradeListingId, amount, currency, status, provider: 'mercadopago', providerRef: paymentId })
-
-    if (status !== 'succeeded') return { ok: true, status }
-
-    // Fallback: derive preference_id from merchant order and attempt to enrich metadata from a pending preference record.
-    if (!userId || !upgradeListingId || !planCode) {
-      const merchantOrderId = mpPayment?.order?.id ? String(mpPayment.order.id) : null
-      if (merchantOrderId) {
-        try {
-          const ac = new AbortController()
-          const timer = setTimeout(() => ac.abort(), 5000)
-          const moRes = await fetch(`https://api.mercadolibre.com/merchant_orders/${encodeURIComponent(merchantOrderId)}`, {
-            headers: { Authorization: `Bearer ${String(process.env.MERCADOPAGO_ACCESS_TOKEN || '')}` },
-            signal: ac.signal,
-          })
-          clearTimeout(timer)
-          if (moRes.ok) {
-            const mo = await moRes.json().catch(() => null)
-            const prefId = mo && typeof mo.preference_id === 'string' ? mo.preference_id : null
-            if (prefId) {
-              const { data: pendingPref } = await svc
-                .from('payments')
-                .select('user_id,listing_id')
-                .eq('provider', 'mercadopago')
-                .eq('provider_ref', String(prefId))
-                .maybeSingle()
-              if (!userId && pendingPref?.user_id) userId = String(pendingPref.user_id)
-              if (!upgradeListingId && pendingPref?.listing_id) upgradeListingId = String(pendingPref.listing_id).trim() || null
-            }
-          }
-        } catch {}
-      }
-    }
-
-    // If we enriched metadata after the initial record, persist it best-effort.
-    try {
-      if (userId || upgradeListingId) {
-        await recordPayment({ userId, listingId: upgradeListingId, amount, currency, status, provider: 'mercadopago', providerRef: paymentId })
-      }
-    } catch {}
-
-    let listingUpdated = false
-
-    if (upgradeListingId && (planCode === 'basic' || planCode === 'premium' || planCode === 'pro')) {
-      const now = Date.now()
-
-      let planRow = null
-      try {
-        const { data: row } = await svc
-          .from('plans')
-          .select('code, listing_duration_days, period_days, featured_days, featured_slots')
-          .eq('code', planCode)
-          .maybeSingle()
-        planRow = row
-      } catch {}
-
-      const listingDays = Number(planRow?.listing_duration_days || planRow?.period_days || 60)
-      const includedHighlightDays = Number(planRow?.featured_days || planRow?.featured_slots || 0)
-      const nextExpires = new Date(now + listingDays * 24 * 60 * 60 * 1000).toISOString()
-
-      const { data: currentListing } = await svc
-        .from('listings')
-        .select('id,highlight_expires,rank_boost_until,granted_visible_photos,visible_images_count,whatsapp_user_disabled,whatsapp_enabled')
-        .eq('id', upgradeListingId)
-        .maybeSingle()
-
-      if (currentListing?.id) {
-        let nextHighlightIso = currentListing.highlight_expires || null
-        if (includedHighlightDays > 0) {
-          const baseHighlight = currentListing.highlight_expires ? Math.max(new Date(currentListing.highlight_expires).getTime(), now) : now
-          nextHighlightIso = new Date(baseHighlight + includedHighlightDays * 24 * 60 * 60 * 1000).toISOString()
-        }
-
-        const PREMIUM_BOOST_DAYS = 90
-        const baseBoost = currentListing.rank_boost_until ? Math.max(new Date(currentListing.rank_boost_until).getTime(), now) : now
-        const nextRankBoostIso = new Date(baseBoost + PREMIUM_BOOST_DAYS * 24 * 60 * 60 * 1000).toISOString()
-
-        const targetCap = planCode === 'pro' ? 12 : 8
-        const nextGrantedPhotos = Math.max(Number(currentListing.granted_visible_photos || 4), targetCap)
-        const nextVisible = Math.max(Number(currentListing.visible_images_count || 4), targetCap)
-        const nextWhatsappEnabled = currentListing.whatsapp_user_disabled ? currentListing.whatsapp_enabled : true
-
-        const { error: updListErr } = await svc
-          .from('listings')
-          .update({
-            plan: planCode,
-            plan_code: planCode,
-            seller_plan: planCode,
-            expires_at: nextExpires,
-            highlight_expires: nextHighlightIso,
-            rank_boost_until: nextRankBoostIso,
-            granted_visible_photos: nextGrantedPhotos,
-            visible_images_count: nextVisible,
-            whatsapp_cap_granted: true,
-            whatsapp_enabled: nextWhatsappEnabled,
-            status: 'active',
-          })
-          .eq('id', upgradeListingId)
-
-        if (updListErr) {
-          console.warn('[webhook] listing update failed', { listingId: upgradeListingId, planCode, error: updListErr })
-        } else {
-          listingUpdated = true
-          console.info('[webhook] listing updated by payment', { listingId: upgradeListingId, planCode, nextExpires })
-        }
-      } else {
-        console.warn('[webhook] listing not found for payment', { listingId: upgradeListingId, planCode, paymentId })
-      }
-    }
-
-    if (listingUpdated) {
-      try { await markPaymentApplied(paymentId) } catch {}
-      return { ok: true, status, applied: true }
-    }
-
-    console.warn('[webhook] payment succeeded but no action taken', { paymentId, planCode, listingId: upgradeListingId })
-    return { ok: false, error: 'no_action_taken' }
-  } catch (err) {
-    console.error('[webhook] apply payment update failed', err)
-    return { ok: false, error: 'unexpected_error' }
-  }
-}
 
 function normalizeOrigin(frontendUrlEnv) {
   const raw = (frontendUrlEnv || '').split(',')[0]?.trim()
@@ -405,6 +194,7 @@ const publicDir = path.join(__dirname, '..', '..', 'public')
 // Admin panel (built separately)
 const adminDistDir = path.join(__dirname, '..', '..', 'dist-admin')
 const sitemapRouter = require('./routes/sitemaps')
+const feedsRouter = require('./routes/feeds')
 
 app.use(
   express.static(distDir, {
@@ -450,6 +240,7 @@ app.use(
 
 // Sitemaps & custom API endpoints
 app.use(sitemapRouter)
+app.use(feedsRouter)
 
 // Preview endpoint for Free→Paid campaign email (HTML)
 app.get('/api/preview/campaign/free2paid', async (req, res) => {
@@ -669,7 +460,7 @@ app.post('/api/checkout', async (req, res) => {
       console.info('[checkout:init]', { userId, planCode, amount, currency, preferenceId: mp?.id || null, listingId: metadata.listingId || null })
     } catch {}
     try {
-      await recordPayment({ userId, listingId: metadata.listingId || null, amount, currency, status: 'pending', provider: 'mercadopago', providerRef: mp?.id || null })
+      await recordPaymentIntent({ userId, listingId: metadata.listingId || null, amount, currency, status: 'pending', providerRef: mp?.id || null })
     } catch (e) {
       console.warn('[checkout] recordPayment pending failed', (e && e.message) || e)
     }
@@ -1439,7 +1230,7 @@ app.post('/api/payments/confirm', async (req, res) => {
     }
     const paymentId = String(req.body?.payment_id || req.query?.payment_id || '').trim()
     if (!paymentId) return res.status(400).json({ ok: false, error: 'missing_payment_id' })
-    const result = await applyPaymentUpdateByPaymentId(paymentId)
+    const result = await processPayment(paymentId)
     if (!result.ok) return res.status(500).json(result)
     return res.json(result)
   } catch (err) {
@@ -1449,62 +1240,54 @@ app.post('/api/payments/confirm', async (req, res) => {
 })
 
 // MP sends either GET with query ?id=...&topic=payment or POST with JSON
-app.all('/api/mp/webhook', async (req, res) => {
-  try {
-    const q = req.query || {}
-    const b = (req.body && typeof req.body === 'object') ? req.body : {}
-    const queryTopic = (q.topic || q.type || '').toString()
-    const bodyTopic = (b.topic || b.type || '').toString()
-    const topic = (queryTopic || bodyTopic || '').toLowerCase()
+app.all('/api/mp/webhook', (req, res) => {
+  const q = req.query || {}
+  const b = (req.body && typeof req.body === 'object') ? req.body : {}
 
-    const queryId = q.id || q['data.id']
-    const bodyId = (b.data && (b.data.id || b.data['id'])) || b.id
-    const rawId = String(queryId || bodyId || '').trim()
+  const topic = String(q.topic || q.type || b.topic || b.type || '').toLowerCase()
+  const id = String(b?.data?.id || b?.id || q?.id || q?.['data.id'] || '').trim()
 
-    console.info('[webhook] received', { topic, id: rawId })
+  console.info('[webhook] received', { topic, id })
 
-    // Case 1: payment notification with payment_id
-    if (rawId && (!topic || topic === 'payment')) {
-      const result = await applyPaymentUpdateByPaymentId(rawId)
-      if (!result.ok) return res.status(500).json(result)
-      return res.json({ ok: true })
-    }
+  // Respond immediately to avoid MP retries/timeouts.
+  res.status(200).json({ ok: true })
 
-    // Case 2: merchant_order notification; need to fetch to get payment id(s)
-    if (rawId && topic === 'merchant_order') {
-      try {
-        const moRes = await fetch(`https://api.mercadolibre.com/merchant_orders/${encodeURIComponent(rawId)}`, {
-          headers: { Authorization: `Bearer ${String(process.env.MERCADOPAGO_ACCESS_TOKEN || '')}` },
+  ;(async () => {
+    try {
+      if (!id) return
+
+      if (topic === 'merchant_order') {
+        const token = String(process.env.MERCADOPAGO_ACCESS_TOKEN || '').trim()
+        if (!token) return
+
+        const moRes = await fetch(`https://api.mercadolibre.com/merchant_orders/${encodeURIComponent(id)}`, {
+          headers: { Authorization: `Bearer ${token}` },
         })
         if (!moRes.ok) {
           const txt = await moRes.text().catch(() => '')
-          console.warn('[webhook] merchant_order fetch failed', { id: rawId, status: moRes.status, body: txt })
-          return res.status(200).json({ ok: true })
+          console.warn('[webhook] merchant_order fetch failed', { id, status: moRes.status, body: txt })
+          return
         }
         const mo = await moRes.json().catch(() => null)
         const payments = Array.isArray(mo?.payments) ? mo.payments : []
         const approved = payments.find((p) => String(p?.status || '').toLowerCase() === 'approved')
-        const candidate = approved?.id || payments[0]?.id || null
-        if (!candidate) {
-          console.info('[webhook] merchant_order without payments yet', { id: rawId })
-          return res.status(200).json({ ok: true })
+        const paymentId = approved?.id || payments[0]?.id || null
+        if (!paymentId) {
+          console.info('[webhook] merchant_order without payments yet', { id })
+          return
         }
-        const result = await applyPaymentUpdateByPaymentId(String(candidate))
-        if (!result.ok) return res.status(500).json(result)
-        return res.json({ ok: true })
-      } catch (err) {
-        console.error('[webhook] merchant_order handling failed', err)
-        return res.status(200).json({ ok: true })
+        const result = await processPayment(String(paymentId))
+        if (!result.ok) console.warn('[webhook] processPayment failed', { paymentId, result })
+        return
       }
-    }
 
-    // Unknown event format; acknowledge to avoid retries, but log
-    console.warn('[webhook] unrecognized payload', { query: q, body: b })
-    return res.status(200).json({ ok: true })
-  } catch (err) {
-    console.error('[webhook] failed', err)
-    return res.status(500).json({ ok: false })
-  }
+      // Default: payment notification
+      const result = await processPayment(id)
+      if (!result.ok) console.warn('[webhook] processPayment failed', { paymentId: id, result })
+    } catch (err) {
+      console.error('[webhook] background handling failed', err)
+    }
+  })()
 })
 
 /* ----------------------------- SPA fallback ------------------------------ */

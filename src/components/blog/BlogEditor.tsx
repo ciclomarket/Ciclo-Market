@@ -56,6 +56,7 @@ const DEFAULT_FORM: FormState = {
 export default function BlogEditor({ authorId, initialPost, onCancel, onSaved }: BlogEditorProps) {
   const isEditing = Boolean(initialPost)
   const { show: showToast } = useToast()
+  const draftStorageKey = useMemo(() => `ciclomarket:blogDraft:${authorId}`, [authorId])
   const [form, setForm] = useState<FormState>(() => {
     if (!initialPost) return DEFAULT_FORM
     return {
@@ -89,6 +90,37 @@ export default function BlogEditor({ authorId, initialPost, onCancel, onSaved }:
       setSlugManuallyEdited(false)
     }
   }, [initialPost])
+
+  useEffect(() => {
+    if (isEditing) return
+    try {
+      const raw = window.localStorage.getItem(draftStorageKey)
+      if (!raw) return
+      const parsed = JSON.parse(raw) as { v?: number; form?: FormState; slugManuallyEdited?: boolean } | null
+      if (!parsed || parsed.v !== 1 || !parsed.form) return
+      const draft = parsed.form
+      if (typeof draft.title !== 'string' || typeof draft.htmlContent !== 'string') return
+      setForm(draft)
+      setSlugManuallyEdited(Boolean(parsed.slugManuallyEdited))
+      showToast('Borrador restaurado')
+    } catch {
+      // ignore storage/JSON errors
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftStorageKey, isEditing])
+
+  useEffect(() => {
+    if (isEditing) return
+    const timer = window.setTimeout(() => {
+      try {
+        const payload = { v: 1, form, slugManuallyEdited, savedAt: Date.now() }
+        window.localStorage.setItem(draftStorageKey, JSON.stringify(payload))
+      } catch {
+        // ignore quota errors
+      }
+    }, 500)
+    return () => window.clearTimeout(timer)
+  }, [draftStorageKey, form, isEditing, slugManuallyEdited])
 
   const previewHtml = useMemo(() => sanitizeHtml(form.htmlContent), [form.htmlContent])
 
@@ -265,6 +297,13 @@ export default function BlogEditor({ authorId, initialPost, onCancel, onSaved }:
       }
       setSaving(false)
       showToast(isEditing ? 'Entrada actualizada' : 'Entrada creada')
+      if (!isEditing) {
+        try {
+          window.localStorage.removeItem(draftStorageKey)
+        } catch {
+          // ignore
+        }
+      }
       onSaved(saved)
     } catch (err) {
       console.error('[blog] save error', err)

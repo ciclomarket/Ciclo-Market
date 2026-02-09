@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Navigate, useSearchParams } from 'react-router-dom'
 import BlogEditor from '../../../components/blog/BlogEditor'
 import type { BlogPost } from '../../../types/blog'
 import { deleteBlogPost, listAllBlogPosts } from '../../../services/blog'
@@ -27,6 +27,7 @@ type EditorState = { mode: 'create'; post: null } | { mode: 'edit'; post: BlogPo
 export default function BlogAdminPage() {
   const { user, loading, isModerator } = useAuth()
   const { show: showToast } = useToast()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [fetching, setFetching] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [posts, setPosts] = useState<BlogPost[]>([])
@@ -61,6 +62,32 @@ export default function BlogAdminPage() {
     }
   }, [loading, isModerator])
 
+  useEffect(() => {
+    const wantsNew = searchParams.get('new') === '1'
+    const editId = searchParams.get('edit')
+
+    if (wantsNew) {
+      setEditorState((prev) => {
+        if (prev?.mode === 'create') return prev
+        return { mode: 'create', post: null }
+      })
+      return
+    }
+
+    if (editId) {
+      const match = posts.find((post) => post.id === editId) || null
+      if (match) {
+        setEditorState((prev) => {
+          if (prev?.mode === 'edit' && prev.post.id === match.id) return prev
+          return { mode: 'edit', post: match }
+        })
+      }
+      return
+    }
+
+    setEditorState(null)
+  }, [posts, searchParams])
+
   const handleDelete = async (post: BlogPost) => {
     const confirmed = window.confirm(
       `¿Seguro que querés eliminar “${post.title}”? Esta acción no se puede deshacer.`,
@@ -78,7 +105,7 @@ export default function BlogAdminPage() {
   }
 
   const handleEditorSaved = (_saved: BlogPost) => {
-    setEditorState(null)
+    setSearchParams({}, { replace: true })
     void refreshPosts()
   }
 
@@ -110,7 +137,7 @@ export default function BlogAdminPage() {
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={() => setEditorState({ mode: 'create', post: null })}
+              onClick={() => setSearchParams({ new: '1' })}
               className="rounded-full bg-[#14212e] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#1f2d3a] disabled:cursor-not-allowed disabled:bg-[#14212e]/60"
               disabled={!supabaseEnabled || !authorId}
             >
@@ -131,7 +158,7 @@ export default function BlogAdminPage() {
           <BlogEditor
             authorId={authorId}
             initialPost={editorState.mode === 'edit' ? editorState.post : undefined}
-            onCancel={() => setEditorState(null)}
+            onCancel={() => setSearchParams({}, { replace: true })}
             onSaved={handleEditorSaved}
           />
         ) : null}
@@ -200,7 +227,7 @@ export default function BlogAdminPage() {
                       <div className="flex justify-end gap-2">
                         <button
                           type="button"
-                          onClick={() => setEditorState({ mode: 'edit', post })}
+                          onClick={() => setSearchParams({ edit: post.id })}
                           className="rounded-full border border-[#1f2d3a] px-4 py-1.5 text-xs font-semibold text-[#14212e] transition hover:border-[#14212e] hover:text-[#0f1729]"
                         >
                           Editar
