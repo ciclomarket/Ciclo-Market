@@ -1026,6 +1026,51 @@ function pickAttributeValue(attributes, id) {
   return value ? String(value) : null
 }
 
+const meliAppTokenCache = {
+  token: null,
+  expiresAtMs: 0,
+}
+
+async function getMeliAppAccessToken({ forceRefresh = false } = {}) {
+  const now = Date.now()
+  if (!forceRefresh && meliAppTokenCache.token && meliAppTokenCache.expiresAtMs - now > 60_000) {
+    return meliAppTokenCache.token
+  }
+
+  const clientId = String(process.env.MELI_CLIENT_ID || process.env.MERCADOLIBRE_CLIENT_ID || '').trim()
+  const clientSecret = String(process.env.MELI_CLIENT_SECRET || process.env.MERCADOLIBRE_CLIENT_SECRET || '').trim()
+  if (!clientId || !clientSecret) return null
+
+  const body = new URLSearchParams()
+  body.set('grant_type', 'client_credentials')
+  body.set('client_id', clientId)
+  body.set('client_secret', clientSecret)
+
+  const resp = await fetch('https://api.mercadolibre.com/oauth/token', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Accept: 'application/json',
+      'User-Agent':
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    },
+    body,
+  })
+
+  const payload = await resp.json().catch(() => ({}))
+  if (!resp.ok) {
+    const msg = payload?.message || payload?.error || 'meli_oauth_failed'
+    throw new Error(msg)
+  }
+  const token = typeof payload?.access_token === 'string' ? payload.access_token : null
+  const expiresIn = typeof payload?.expires_in === 'number' ? payload.expires_in : Number(payload?.expires_in || 0)
+  if (!token) throw new Error('meli_oauth_missing_token')
+
+  meliAppTokenCache.token = token
+  meliAppTokenCache.expiresAtMs = now + Math.max(0, expiresIn) * 1000
+  return token
+}
+
 async function importMercadoLibreHandler(req, res) {
   try {
     const rawUrl = typeof req.body?.url === 'string' ? req.body.url.trim() : ''
@@ -1132,10 +1177,23 @@ async function importMercadoLibreHandler(req, res) {
     const itemUrl = `https://api.mercadolibre.com/items/${encodeURIComponent(externalId)}`
     const descUrl = `https://api.mercadolibre.com/items/${encodeURIComponent(externalId)}/description`
 
-    const token = bodyToken || String(process.env.MERCADOLIBRE_ACCESS_TOKEN || process.env.MELI_ACCESS_TOKEN || '').trim()
+    let token =
+      bodyToken ||
+      String(process.env.MERCADOLIBRE_ACCESS_TOKEN || process.env.MELI_ACCESS_TOKEN || '').trim() ||
+      (await getMeliAppAccessToken().catch((err) => {
+        console.warn('[api] meli oauth token failed', err?.message || err)
+        return null
+      }))
 
     // Try: Authorization header → query param token (some proxies/policies differ) → bulk endpoint fallback.
     let itemAttempt = await fetchMeliJson(itemUrl, { token, useQueryToken: false })
+    if (!itemAttempt.ok && token && itemAttempt.status === 401) {
+      const msg = String(itemAttempt.payload?.message || '').toLowerCase()
+      if (msg.includes('invalid access token')) {
+        token = await getMeliAppAccessToken({ forceRefresh: true }).catch(() => token)
+        itemAttempt = await fetchMeliJson(itemUrl, { token, useQueryToken: false })
+      }
+    }
     if (!itemAttempt.ok && token && (itemAttempt.status === 401 || itemAttempt.status === 403)) {
       itemAttempt = await fetchMeliJson(itemUrl, { token, useQueryToken: true })
     }
@@ -1168,7 +1226,7 @@ async function importMercadoLibreHandler(req, res) {
           status: itemAttempt.status,
           meta: itemAttempt.meta,
           hint:
-            'MercadoLibre devolvió 401/403. Si ya estás enviando token, puede ser bloqueo por políticas/IP (datacenter). Probá correr el backend local o usar un token de Authorization Code (usuario) en vez de client_credentials.',
+            'MercadoLibre devolvió 401/403. Si el token es inválido, regeneralo; si estás usando `client_credentials`, podés configurar `MELI_CLIENT_ID`/`MELI_CLIENT_SECRET` para que el backend emita tokens automáticamente. Si persiste, puede ser bloqueo por políticas/IP o requerir OAuth Authorization Code (usuario).',
         })
       }
       return res.status(502).json({ ok: false, error: 'meli_error', message, status: itemAttempt.status, meta: itemAttempt.meta })

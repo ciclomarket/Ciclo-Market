@@ -67,6 +67,8 @@
       { "source": "/sitemap-shopping.xml", "function": "sitemapProxy" },
       { "source": "/sitemap-listings-:page.xml", "function": "sitemapProxy" },
       { "source": "/merchant-feed.xml", "function": "sitemapProxy" },
+      { "source": "/api/feed/google.xml", "function": "sitemapProxy" },
+      { "source": "/feed/google.xml", "function": "sitemapProxy" },
       { "source": "/blog/**", "function": "shareBlog" },
       { "source": "/listing/**", "function": "shareListing" },
       { "source": "/tienda/**", "function": "shareStore" },

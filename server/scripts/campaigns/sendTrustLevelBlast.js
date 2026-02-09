@@ -566,8 +566,11 @@ function parseArgs(argv) {
   const live = args.has('--live')
   const debug = args.has('--debug')
   const force = args.has('--force')
+  const includeStores = args.has('--include-stores')
   const cooldownIndex = argv.findIndex((a) => a === '--cooldown-days')
   const cooldownDays = cooldownIndex >= 0 ? Number(argv[cooldownIndex + 1]) : null
+  const lookbackIndex = argv.findIndex((a) => a === '--lookback-days')
+  const lookbackDays = lookbackIndex >= 0 ? Number(argv[lookbackIndex + 1]) : null
   const delayIndex = argv.findIndex((a) => a === '--delay')
   const delayMs = delayIndex >= 0 ? Number(argv[delayIndex + 1]) : null
   const limitIndex = argv.findIndex((a) => a === '--limit')
@@ -583,7 +586,9 @@ function parseArgs(argv) {
     live,
     debug,
     force,
+    includeStores,
     cooldownDays: Number.isFinite(cooldownDays) && cooldownDays > 0 ? cooldownDays : (Number(process.env.TRUST_BLAST_COOLDOWN_DAYS) || 90),
+    lookbackDays: Number.isFinite(lookbackDays) && lookbackDays > 0 ? lookbackDays : (Number(process.env.TRUST_BLAST_LOOKBACK_DAYS) || null),
     delayMs: Number.isFinite(delayMs) && delayMs >= 0 ? delayMs : (Number(process.env.CAMPAIGN_DELAY_MS) || 500),
     limit: Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : null,
     testTo: testTo || null,
@@ -593,7 +598,7 @@ function parseArgs(argv) {
 }
 
 async function main() {
-  const { live, debug, force, cooldownDays, delayMs, limit, testTo, onlyEmail, onlySellerId } = parseArgs(process.argv.slice(2))
+  const { live, debug, force, includeStores, cooldownDays, lookbackDays, delayMs, limit, testTo, onlyEmail, onlySellerId } = parseArgs(process.argv.slice(2))
   const dryRun = !live
 
   if (live && !isMailConfigured()) {
@@ -607,10 +612,27 @@ async function main() {
   const verifyUrl = `${buildDashboardTabLink(baseFront, 'Verificá tu perfil')}&${utm}`
   const supabase = getServerSupabaseClient()
 
-  const listings = await fetchActiveListings(supabase)
+  let listings = await fetchActiveListings(supabase)
   if (!listings.length) {
     console.info('[trustBlast] No se encontraron publicaciones activas')
     return
+  }
+
+  if (lookbackDays) {
+    const sinceMs = Date.now() - lookbackDays * 24 * 60 * 60 * 1000
+    const before = listings.length
+    listings = listings.filter((l) => {
+      const raw = l?.created_at
+      if (!raw) return false
+      const ts = Date.parse(String(raw))
+      if (Number.isNaN(ts)) return false
+      return ts >= sinceMs
+    })
+    console.info('[trustBlast] lookback filter', { lookbackDays, before, after: listings.length })
+    if (!listings.length) {
+      console.info('[trustBlast] No hay publicaciones dentro del lookback')
+      return
+    }
   }
 
   const bySeller = new Map()
@@ -686,7 +708,7 @@ async function main() {
     const emailRaw = typeof user.email === 'string' ? user.email.trim() : ''
     const isOfficialStore = Boolean(user.store_enabled)
 
-    if (isOfficialStore) {
+    if (isOfficialStore && !includeStores) {
       skippedOfficialStores += 1
       console.log(`[${processed}/${sellerIds.length}] Saltando tienda oficial: seller_id=${sellerId} (${emailRaw || 'sin email'})`)
       continue
