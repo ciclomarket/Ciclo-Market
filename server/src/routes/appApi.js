@@ -1470,7 +1470,6 @@ async function importMercadoLibreHandler(req, res) {
   }
 }
 
-router.post('/import/mercadolibre', importMercadoLibreHandler)
-router.post('/api/import/mercadolibre', importMercadoLibreHandler)
+// MercadoLibre import endpoint moved to `./import` router (Puppeteer scraping).
 
 module.exports = router

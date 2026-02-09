@@ -20,8 +20,7 @@
     "review-reminder:once": "node -e \"require('./server/src/jobs/reviewReminder').runReviewReminderOnce(Number(process.env.REVIEW_REMINDER_BATCH_LIMIT)||50).then(()=>process.exit(0)).catch((e)=>{console.error(e);process.exit(1)})\"",
     "optimize:images": "node scripts/optimize-public-images.mjs",
     "supabase:image-matrix": "node scripts/supabase-image-matrix.mjs",
-    "saved-search:digest:once": "node -e \"require('./server/src/jobs/savedSearchDigest').runSavedSearchDigestOnce().then((n)=>{console.log('[digest] sent',n);process.exit(0)}).catch((e)=>{console.error(e);process.exit(1)})\""
-    ,
+    "saved-search:digest:once": "node -e \"require('./server/src/jobs/savedSearchDigest').runSavedSearchDigestOnce().then((n)=>{console.log('[digest] sent',n);process.exit(0)}).catch((e)=>{console.error(e);process.exit(1)})\"",
     "campaign:trustblast": "node server/scripts/campaigns/sendTrustLevelBlast.js"
   },
   "dependencies": {
@@ -37,6 +36,9 @@
     "lucide-react": "^0.563.0",
     "mercadopago": "^2.9.0",
     "node-cron": "^3.0.3",
+    "puppeteer": "^23.11.1",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-helmet-async": "^2.0.5",

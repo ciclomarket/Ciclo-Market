@@ -46,6 +46,7 @@ const { buildEmailHtml: buildFree2PaidEmailHtml } = (() => {
 })()
 const { processPayment, recordPaymentIntent } = require('./services/paymentService')
 const appApiRouter = require('./routes/appApi')
+const importRouter = require('./routes/import')
 // Sweepstake feature removed
 const path = require('path')
 // const https = require('https') // removed: used only for Google rating proxy
@@ -332,6 +333,9 @@ const corsOptions = {
 
 app.use(cors(corsOptions))
 app.options('*', cors(corsOptions))
+
+// Import endpoints (MercadoLibre, etc.)
+app.use(importRouter)
 
 // Custom application API (analytics, reviews, share boost, etc.)
 app.use(appApiRouter)
