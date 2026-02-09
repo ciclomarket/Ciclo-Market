@@ -1,5 +1,6 @@
 const puppeteerExtra = require('puppeteer-extra')
 const StealthPlugin = require('puppeteer-extra-plugin-stealth')
+const puppeteer = require('puppeteer')
 
 puppeteerExtra.use(StealthPlugin())
 
@@ -52,7 +53,8 @@ function parsePriceToNumber(value) {
 }
 
 async function launchBrowser() {
-  const executablePath = String(process.env.PUPPETEER_EXECUTABLE_PATH || process.env.CHROME_EXECUTABLE_PATH || '').trim()
+  const executablePathEnv = String(process.env.PUPPETEER_EXECUTABLE_PATH || process.env.CHROME_EXECUTABLE_PATH || '').trim()
+  const executablePath = executablePathEnv || (typeof puppeteer.executablePath === 'function' ? puppeteer.executablePath() : '')
   const args = [
     '--no-sandbox',
     '--disable-setuid-sandbox',
@@ -73,7 +75,11 @@ async function launchBrowser() {
   } catch (err) {
     const e = err instanceof Error ? err : new Error(String(err || 'browser_launch_failed'))
     e.code = 'browser_launch_failed'
-    e.details = { executablePath: executablePath || null }
+    e.details = {
+      executablePath: executablePath || null,
+      executablePathEnv: executablePathEnv || null,
+      cacheDir: process.env.PUPPETEER_CACHE_DIR || null,
+    }
     throw e
   }
 }
