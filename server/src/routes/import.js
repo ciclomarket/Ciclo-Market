@@ -38,9 +38,28 @@ async function importMercadoLibre(req, res) {
   } catch (err) {
     const code = err && typeof err === 'object' ? err.code : null
     const status = err && typeof err === 'object' ? err.httpStatus : null
+    const debugEnabled = String(process.env.IMPORT_DEBUG || '').toLowerCase() === 'true'
+    const debug = debugEnabled
+      ? {
+          code: code || null,
+          name: err instanceof Error ? err.name : null,
+          message: err instanceof Error ? err.message : String(err || ''),
+          details: err && typeof err === 'object' ? err.details || null : null,
+        }
+      : undefined
 
     if (code === 'invalid_domain' || code === 'invalid_url' || code === 'missing_url') {
       return res.status(400).json({ ok: false, error: code })
+    }
+
+    if (code === 'browser_launch_failed') {
+      return res.status(503).json({
+        ok: false,
+        error: 'browser_launch_failed',
+        message:
+          'No se pudo iniciar Chromium. En Render (sin Docker) suele faltar librerías del sistema; alternativa: deploy con Docker e instalar chromium + deps o setear `PUPPETEER_EXECUTABLE_PATH` a un chromium disponible.',
+        debug,
+      })
     }
 
     if (code === 'waf_blocked') {
@@ -51,11 +70,12 @@ async function importMercadoLibre(req, res) {
         message: 'Bloqueado por WAF/anti-bot de MercadoLibre.',
         hint: 'Probá con stealth + puppeteer (ya activo) y revisá si ML muestra captcha/403. Puede requerir proxy residencial.',
         excerpt: err.excerpt || null,
+        debug,
       })
     }
 
     console.error('[import] mercadolibre failed', err)
-    return res.status(500).json({ ok: false, error: 'unexpected_error' })
+    return res.status(500).json({ ok: false, error: 'unexpected_error', debug })
   }
 }
 

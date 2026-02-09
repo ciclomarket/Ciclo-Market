@@ -63,12 +63,19 @@ async function launchBrowser() {
     '--disable-features=site-per-process,IsolateOrigins',
   ]
 
-  return puppeteerExtra.launch({
-    headless: 'new',
-    executablePath: executablePath || undefined,
-    args,
-    ignoreHTTPSErrors: true,
-  })
+  try {
+    return await puppeteerExtra.launch({
+      headless: 'new',
+      executablePath: executablePath || undefined,
+      args,
+      ignoreHTTPSErrors: true,
+    })
+  } catch (err) {
+    const e = err instanceof Error ? err : new Error(String(err || 'browser_launch_failed'))
+    e.code = 'browser_launch_failed'
+    e.details = { executablePath: executablePath || null }
+    throw e
+  }
 }
 
 async function scrapeMercadoLibre(url) {
@@ -127,7 +134,14 @@ async function scrapeMercadoLibre(url) {
       }
     })
 
-    const response = await page.goto(normalizedUrl, { waitUntil: 'domcontentloaded', timeout: 45_000 })
+    let response
+    try {
+      response = await page.goto(normalizedUrl, { waitUntil: 'domcontentloaded', timeout: 45_000 })
+    } catch (err) {
+      const e = err instanceof Error ? err : new Error(String(err || 'navigation_failed'))
+      e.code = e.code || 'navigation_failed'
+      throw e
+    }
     const status = response ? response.status() : null
 
     await page.waitForTimeout(350)
@@ -271,4 +285,3 @@ async function scrapeMercadoLibre(url) {
 }
 
 module.exports = { scrapeMercadoLibre }
-
