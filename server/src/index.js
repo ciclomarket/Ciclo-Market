@@ -264,10 +264,11 @@ app.get('/api/preview/campaign/free2paid', async (req, res) => {
     } else {
       let query = supabase
         .from('listings')
-        .select('id,seller_id,title,price,price_currency,images,plan,plan_code,seller_plan,status,slug,location,seller_location,updated_at')
+        // Nota: algunas instalaciones no tienen `updated_at` en `listings`.
+        .select('id,seller_id,title,price,price_currency,images,plan,plan_code,seller_plan,status,slug,location,seller_location,created_at')
         .or('status.in.(active,published),status.is.null')
         .or('plan.eq.free,plan_code.eq.free,seller_plan.eq.free')
-        .order('updated_at', { ascending: false, nullsLast: true })
+        .order('created_at', { ascending: false, nullsLast: true })
         .limit(1)
       if (sellerId) query = query.eq('seller_id', sellerId)
       const { data } = await query

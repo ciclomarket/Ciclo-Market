@@ -49,6 +49,24 @@ export function transformSupabasePublicUrl(url: string, opts: TransformOpts = {}
   }
 }
 
+/**
+ * Fuerza el uso del endpoint de render de Supabase para imágenes públicas, sin depender de `VITE_SUPABASE_IMG_TRANSFORM`.
+ * Útil para casos donde querés garantizar transformaciones (p.ej. LCP en mobile).
+ */
+export function forceTransformSupabasePublicUrl(url: string, opts: TransformOpts = {}): string {
+  if (!url || typeof url !== 'string') return url
+  try {
+    const parsed = new URL(url)
+    if (parsed.pathname.includes(RENDER_PATH)) {
+      return applyOpts(parsed, opts).toString()
+    }
+    if (!parsed.pathname.includes(PUBLIC_PATH)) return url
+    return buildRenderUrl(parsed, opts)
+  } catch {
+    return url
+  }
+}
+
 export function buildSupabaseSrcSet(url: string, widths: number[], opts: Omit<TransformOpts, 'width'> = {}): string | undefined {
   if (!Array.isArray(widths) || !widths.length) return undefined
   const seen = new Set<number>()

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import Container from '../components/Container'
 import Button from '../components/Button'
@@ -30,6 +30,7 @@ import { createGift, claimGift } from '../services/gifts'
 import { fetchCreditsHistory, type Credit } from '../services/credits'
 import { trackMetaPixel } from '../lib/metaPixel'
 import { canonicalPlanCode } from '../utils/planCodes'
+import { parseMoneyInput } from '../utils/money'
 import AdminFxPanel from '../components/AdminFxPanel'
 import { listSavedSearches, deleteSearch as deleteSavedSearch, updateSearch as updateSavedSearch, type SavedSearch } from '../services/savedSearches'
 import { buildCardImageUrlSafe } from '../lib/supabaseImages'
@@ -1921,7 +1922,7 @@ function ListingsView({
   const handleReducePrice = async (listing: Listing) => {
     const input = window.prompt('Reducí el precio (ingresá el nuevo valor, usa el mismo formato que la moneda actual):', String(listing.price))
     if (input === null) return
-    const normalized = Number(input.replace(/,/g, '.'))
+    const normalized = parseMoneyInput(input, { allowDecimals: true })
     if (!Number.isFinite(normalized) || normalized <= 0) {
       alert('Ingresá un monto válido mayor a cero.')
       return
@@ -1995,7 +1996,7 @@ function ListingsView({
         </div>
       )}
 
-      {openMenuFor && <div className="fixed inset-0 z-40" onClick={() => setOpenMenuFor(null)} aria-hidden />}
+      {openMenuFor && <div className="fixed inset-0 z-40 md:hidden" onClick={() => setOpenMenuFor(null)} aria-hidden />}
 
       <div className="md:hidden space-y-4">
         {listings.map((listing) => {
@@ -2080,6 +2081,17 @@ function ListingsView({
               {openMenuFor === listing.id && (
                 <div className="relative">
                   <div className="absolute left-0 top-3 z-50 w-full rounded-xl border border-gray-200 bg-white p-2 text-sm text-gray-900 shadow-xl">
+                    <button
+                      type="button"
+                      className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-gray-50"
+                      onClick={() => {
+                        const path = `/listing/${listing.slug || listing.id}`
+                        navigate(path)
+                        setOpenMenuFor(null)
+                      }}
+                    >
+                      Ver publicación
+                    </button>
                     <button
                       type="button"
                       className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-gray-50"
@@ -2177,13 +2189,9 @@ function ListingsView({
                     <button
                       type="button"
                       className="mt-1 flex w-full items-center justify-between rounded-lg bg-[#14212e] px-3 py-2 text-white hover:bg-[#1b2f3f]"
-                      onClick={() => {
-                        const path = `/listing/${listing.slug || listing.id}`
-                        navigate(path)
-                        setOpenMenuFor(null)
-                      }}
+                      onClick={() => setOpenMenuFor(null)}
                     >
-                      Más acciones…
+                      Cerrar
                     </button>
                   </div>
                 </div>
@@ -2193,8 +2201,9 @@ function ListingsView({
         })}
       </div>
 
-      <div className="hidden md:block overflow-x-auto rounded-xl border border-gray-200">
-        <table className="min-w-full divide-y divide-gray-200 text-sm">
+      <div className="hidden md:block rounded-xl border border-gray-200 overflow-visible">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200 text-sm">
           <thead className="bg-gray-50">
             <tr>
               <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Publicación</th>
@@ -2230,7 +2239,8 @@ function ListingsView({
               const viewsValue = Number.isFinite(viewCount) ? Math.max(0, Math.trunc(viewCount)) : 0
               const thumbSrc = getThumbSrc(listing)
               return (
-                <tr key={listing.id} id={`dashboard-listing-${listing.id}`} className="hover:bg-gray-50">
+                <Fragment key={listing.id}>
+                <tr id={`dashboard-listing-${listing.id}`} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-gray-200 bg-gray-100">
@@ -2264,9 +2274,36 @@ function ListingsView({
                       >
                         Opciones
                       </button>
+                    </div>
+                  </td>
+                </tr>
+                {openMenuFor === listing.id && (
+                  <tr className="bg-white">
+                    <td colSpan={4} className="px-4 pb-4">
+                      <div className="relative z-50 rounded-xl border border-gray-200 bg-white p-2 text-left text-sm text-gray-900 shadow-sm">
+                        <div className="flex flex-wrap items-center justify-between gap-2 px-2 py-1">
+                          <div className="text-xs font-semibold uppercase tracking-wider text-gray-500">Opciones</div>
+                          <button
+                            type="button"
+                            onClick={() => setOpenMenuFor(null)}
+                            className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                          >
+                            Cerrar
+                          </button>
+                        </div>
 
-                      {openMenuFor === listing.id && (
-                        <div className="absolute right-0 top-full z-50 mt-2 w-72 rounded-xl border border-gray-200 bg-white p-2 text-left text-sm text-gray-900 shadow-xl">
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-gray-50"
+                            onClick={() => {
+                              const path = `/listing/${listing.slug || listing.id}`
+                              navigate(path)
+                              setOpenMenuFor(null)
+                            }}
+                          >
+                            Ver publicación
+                          </button>
                           <button
                             type="button"
                             className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-gray-50"
@@ -2274,7 +2311,7 @@ function ListingsView({
                           >
                             Editar
                           </button>
-                          {isExpired && (
+                          {isExpired ? (
                             <button
                               type="button"
                               className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-gray-50"
@@ -2282,14 +2319,18 @@ function ListingsView({
                             >
                               Renovar publicación
                             </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-gray-50"
+                              onClick={() => { void handleToggleSold(listing); setOpenMenuFor(null) }}
+                            >
+                              {listing.status === 'sold' ? 'Marcar disponible' : 'Marcar vendida'}
+                            </button>
                           )}
-                          <button
-                            type="button"
-                            className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-gray-50"
-                            onClick={() => { void handleToggleSold(listing); setOpenMenuFor(null) }}
-                          >
-                            {listing.status === 'sold' ? 'Marcar disponible' : 'Marcar vendida'}
-                          </button>
+                        </div>
+
+                        <div className="mt-2 grid grid-cols-2 gap-2">
                           <button
                             type="button"
                             disabled={listing.status === 'sold'}
@@ -2298,55 +2339,6 @@ function ListingsView({
                           >
                             Reducir precio
                           </button>
-                          {showBasicCreditOption && (
-                            <button
-                              type="button"
-                              className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-gray-50"
-                              disabled={upgradingKey === basicOptionKey}
-                              onClick={() => { void handleUpgrade(listing, 'basic'); setOpenMenuFor(null) }}
-                            >
-                              {upgradingKey === basicOptionKey ? 'Aplicando…' : basicUpgradeLabel}
-                            </button>
-                          )}
-                          {showPremiumCreditOption && (
-                            <button
-                              type="button"
-                              className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-gray-50"
-                              disabled={upgradingKey === premiumOptionKey}
-                              onClick={() => { void handleUpgrade(listing, 'premium'); setOpenMenuFor(null) }}
-                            >
-                              {upgradingKey === premiumOptionKey ? 'Aplicando…' : premiumUpgradeLabel}
-                            </button>
-                          )}
-                          {showBasicCheckoutOption && (
-                            <button
-                              type="button"
-                              className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-gray-50"
-                              disabled={processingPaymentKey === basicCheckoutKey}
-                              onClick={() => { void handleUpgradeCheckout(listing, 'basic'); setOpenMenuFor(null) }}
-                            >
-                              {processingPaymentKey === basicCheckoutKey ? 'Redirigiendo…' : basicCheckoutLabel}
-                            </button>
-                          )}
-                          {showPremiumCheckoutOption && (
-                            <button
-                              type="button"
-                              className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-gray-50"
-                              disabled={processingPaymentKey === premiumCheckoutKey}
-                              onClick={() => { void handleUpgradeCheckout(listing, 'premium'); setOpenMenuFor(null) }}
-                            >
-                              {processingPaymentKey === premiumCheckoutKey ? 'Redirigiendo…' : premiumCheckoutLabel}
-                            </button>
-                          )}
-                          {!canInitiateCheckout && !showBasicCreditOption && !showPremiumCreditOption && (
-                            <Link
-                              to="/publicar"
-                              className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-[#14212e] hover:bg-gray-50"
-                              onClick={() => setOpenMenuFor(null)}
-                            >
-                              Comprar crédito
-                            </Link>
-                          )}
                           <button
                             type="button"
                             className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-gray-50"
@@ -2354,6 +2346,66 @@ function ListingsView({
                           >
                             Archivar
                           </button>
+                        </div>
+
+                        {(showBasicCreditOption || showPremiumCreditOption || showBasicCheckoutOption || showPremiumCheckoutOption) ? (
+                          <div className="mt-2 grid grid-cols-1 gap-2">
+                            {showBasicCreditOption && (
+                              <button
+                                type="button"
+                                className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-gray-50"
+                                disabled={upgradingKey === basicOptionKey}
+                                onClick={() => { void handleUpgrade(listing, 'basic'); setOpenMenuFor(null) }}
+                              >
+                                {upgradingKey === basicOptionKey ? 'Aplicando…' : basicUpgradeLabel}
+                              </button>
+                            )}
+                            {showPremiumCreditOption && (
+                              <button
+                                type="button"
+                                className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-gray-50"
+                                disabled={upgradingKey === premiumOptionKey}
+                                onClick={() => { void handleUpgrade(listing, 'premium'); setOpenMenuFor(null) }}
+                              >
+                                {upgradingKey === premiumOptionKey ? 'Aplicando…' : premiumUpgradeLabel}
+                              </button>
+                            )}
+                            {showBasicCheckoutOption && (
+                              <button
+                                type="button"
+                                className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-gray-50"
+                                disabled={processingPaymentKey === basicCheckoutKey}
+                                onClick={() => { void handleUpgradeCheckout(listing, 'basic'); setOpenMenuFor(null) }}
+                              >
+                                {processingPaymentKey === basicCheckoutKey ? 'Redirigiendo…' : basicCheckoutLabel}
+                              </button>
+                            )}
+                            {showPremiumCheckoutOption && (
+                              <button
+                                type="button"
+                                className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-gray-50"
+                                disabled={processingPaymentKey === premiumCheckoutKey}
+                                onClick={() => { void handleUpgradeCheckout(listing, 'premium'); setOpenMenuFor(null) }}
+                              >
+                                {processingPaymentKey === premiumCheckoutKey ? 'Redirigiendo…' : premiumCheckoutLabel}
+                              </button>
+                            )}
+                          </div>
+                        ) : null}
+
+                        {!canInitiateCheckout && !showBasicCreditOption && !showPremiumCreditOption && (
+                          <div className="mt-2">
+                            <Link
+                              to="/publicar"
+                              className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-[#14212e] hover:bg-gray-50"
+                              onClick={() => setOpenMenuFor(null)}
+                            >
+                              Comprar crédito
+                            </Link>
+                          </div>
+                        )}
+
+                        <div className="mt-2">
                           <button
                             type="button"
                             className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-red-600 hover:bg-red-50"
@@ -2361,26 +2413,29 @@ function ListingsView({
                           >
                             Eliminar
                           </button>
-                          <button
-                            type="button"
-                            className="mt-1 flex w-full items-center justify-between rounded-lg bg-[#14212e] px-3 py-2 text-white hover:bg-[#1b2f3f]"
-                            onClick={() => {
-                              const path = `/listing/${listing.slug || listing.id}`
-                              navigate(path)
-                              setOpenMenuFor(null)
-                            }}
-                          >
-                            Más acciones…
-                          </button>
                         </div>
-                      )}
-                    </div>
-                  </td>
-                </tr>
+
+                        <button
+                          type="button"
+                          className="mt-2 flex w-full items-center justify-between rounded-lg bg-[#14212e] px-3 py-2 text-white hover:bg-[#1b2f3f]"
+                          onClick={() => {
+                            const path = `/listing/${listing.slug || listing.id}`
+                            navigate(path)
+                            setOpenMenuFor(null)
+                          }}
+                        >
+                          Más acciones…
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               )
             })}
           </tbody>
-        </table>
+          </table>
+        </div>
       </div>
     </div>
   )

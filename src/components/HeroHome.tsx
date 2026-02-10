@@ -13,7 +13,7 @@ export default function HeroHome({
   storeLogoUrl?: string | null
 }) {
   return (
-    <section className="relative w-full overflow-hidden bg-[#14212E] text-white">
+    <section className="hero-lcp-placeholder relative w-full overflow-hidden bg-[#14212E] text-white">
       <div className="absolute inset-0 pointer-events-none">
 	        <div className="absolute inset-0 opacity-[0.35]">
 	          <picture>
@@ -23,6 +23,8 @@ export default function HeroHome({
 	              alt=""
 	              className="h-full w-full object-cover object-[center_10%]"
 	              decoding="async"
+                loading="eager"
+                fetchPriority="high"
 	            />
 	          </picture>
 	        </div>
@@ -78,14 +80,14 @@ export default function HeroHome({
           <div className="grid grid-cols-2 gap-4 items-start">
             <div className="-translate-y-6">
               {offerListing ? (
-                <ListingCard l={offerListing} />
+                <ListingCard l={offerListing} imagePreset="homeCard" />
               ) : (
                 <div className="h-[340px] rounded-2xl border border-white/10 bg-white/5" />
               )}
             </div>
             <div className="translate-y-6">
               {storeListing ? (
-                <ListingCard l={storeListing} storeLogoUrl={storeLogoUrl || null} />
+                <ListingCard l={storeListing} storeLogoUrl={storeLogoUrl || null} imagePreset="homeCard" />
               ) : (
                 <div className="h-[340px] rounded-2xl border border-white/10 bg-white/5" />
               )}

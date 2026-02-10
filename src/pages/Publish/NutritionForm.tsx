@@ -9,6 +9,7 @@ import { getSupabaseClient, supabaseEnabled } from '../../services/supabase'
 import { useToast } from '../../context/ToastContext'
 import { fetchUserProfile } from '../../services/users'
 import { PROVINCES, OTHER_CITY_OPTION } from '../../constants/locations'
+import { parseMoneyInput } from '../../utils/money'
 
 type Condition = 'Nuevo' | 'Como nuevo' | 'Usado'
 
@@ -75,8 +76,8 @@ export default function NutritionForm() {
   useEffect(() => { if (city !== OTHER_CITY_OPTION) setCityOther('') }, [city])
 
   const priceNumber = useMemo(() => {
-    const n = Number(priceInput)
-    return Number.isFinite(n) && n > 0 ? n : 0
+    const n = parseMoneyInput(priceInput, { allowDecimals: true })
+    return n && n > 0 ? n : 0
   }, [priceInput])
 
   const autoTitle = useMemo(() => `${brand.trim()} ${model.trim()}`.trim() || 'Producto de nutrición', [brand, model])

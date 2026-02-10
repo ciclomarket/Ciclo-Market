@@ -1,15 +1,13 @@
 // src/pages/Home.tsx
 import Container from '../components/Container'
 import Button from '../components/Button'
-import ListingCard from '../components/ListingCard'
 import EmptyState from '../components/EmptyState'
 import { mockListings } from '../mock/mockData'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from 'react'
 import SkeletonCard from '../components/SkeletonCard'
 import { Link, useNavigate } from 'react-router-dom'
 import { useCurrency } from '../context/CurrencyContext'
 import { formatListingPrice } from '../utils/pricing'
-import HorizontalSlider from '../components/HorizontalSlider'
 import { buildImageSource } from '../lib/imageUrl'
 import { fetchListings } from '../services/listings'
 import { fetchStoresMeta } from '../services/users'
@@ -21,6 +19,7 @@ import { hasPaidPlan } from '../utils/plans'
 import { track, trackOncePerSession } from '../services/track'
 import { useAuth } from '../context/AuthContext'
 import HeroHome from '../components/HeroHome'
+import { forceTransformSupabasePublicUrl } from '../utils/supabaseImage'
 
 import specializedLogo from '/brands/specialized.webp'
 import canyonLogo from '/brands/canyon.webp'
@@ -53,6 +52,9 @@ const BRAND_LOGOS: Record<(typeof BRANDS)[number]['slug'], string> = {
   cervelo: cerveloLogo,
   colner: colnerLogo,
 }
+
+const HorizontalSlider = lazy(() => import('../components/HorizontalSlider'))
+const ListingCard = lazy(() => import('../components/ListingCard'))
 
 function shuffleArray<T>(input: T[], limit?: number): T[] {
   const arr = input.slice()
@@ -136,10 +138,10 @@ function OfferCard({ l }: { l: any }) {
   }
   const metaDisplay = metaParts.filter(Boolean) as string[]
   const primaryImage = typeof l.images?.[0] === 'string' ? l.images[0] : null
-  const media = buildImageSource(primaryImage, { profile: 'card', sizes: '(max-width: 1023px) 100vw, 33vw' })
-  const imageSrc = media?.src || primaryImage || ''
-  const imageSrcSet = media?.srcSet
-  const imageSizes = media?.sizes || '(max-width: 1023px) 100vw, 33vw'
+  const rawSrc = primaryImage || ''
+  const imageSrc = rawSrc
+    ? forceTransformSupabasePublicUrl(rawSrc, { width: 400, resize: 'cover', format: 'webp', quality: 70 })
+    : ''
   return (
 	    <Link to={`/listing/${slug}`} className="card-flat group flex h-full flex-col overflow-hidden">
 	        <div className="relative">
@@ -148,8 +150,6 @@ function OfferCard({ l }: { l: any }) {
               <>
                 <img
                   src={imageSrc}
-                  srcSet={imageSrcSet}
-                  sizes={imageSizes}
                   alt=""
                   loading="lazy"
                   decoding="async"
@@ -158,8 +158,6 @@ function OfferCard({ l }: { l: any }) {
                 />
                 <img
                   src={imageSrc}
-                  srcSet={imageSrcSet}
-                  sizes={imageSizes}
                   alt={l.title}
                   className="absolute inset-0 h-full w-full object-contain"
                   loading="lazy"
@@ -274,6 +272,21 @@ export default function Home() {
   const { user } = useAuth()
   useEffect(() => {
     trackOncePerSession('site_view_home', () => track('site_view'))
+  }, [])
+  const [belowFoldReady, setBelowFoldReady] = useState(false)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const enable = () => setBelowFoldReady(true)
+    try {
+      const ric = (window as any).requestIdleCallback as ((cb: () => void, opts?: any) => number) | undefined
+      const cic = (window as any).cancelIdleCallback as ((id: number) => void) | undefined
+      if (typeof ric === 'function') {
+        const id = ric(enable, { timeout: 1500 })
+        return () => { try { cic && cic(id) } catch { /* noop */ } }
+      }
+    } catch { /* noop */ }
+    const t = window.setTimeout(enable, 600)
+    return () => window.clearTimeout(t)
   }, [])
   const [listings, setListings] = useState<Listing[]>([])
   const [dataStatus, setDataStatus] = useState<'idle' | 'loading' | 'ready'>('loading')
@@ -494,6 +507,7 @@ export default function Home() {
   }, [listings, storeLogos])
 
   const heroStoreLogoUrl = heroStoreListing?.sellerId ? (storeLogos[heroStoreListing.sellerId] || null) : null
+  const firstBikeId = featuredListings[0]?.id || null
 
   return (
     <div
@@ -502,264 +516,287 @@ export default function Home() {
       {/* HERO */}
       <HeroHome offerListing={heroOfferListing} storeListing={heroStoreListing} storeLogoUrl={heroStoreLogoUrl} />
 
-      {/* BICICLETAS DESTACADAS */}
-      {featuredListings.length > 0 && (
-        <section className="relative py-1 border-b border-gray-200/80">
-          <Container>
-            <HorizontalSlider
-              title="Bicicletas destacadas"
-              subtitle="Avisos con planes Premium o Básico activos"
-              items={featuredListings}
-              maxItems={24}
-              initialLoad={8}
-              renderCard={(l: any, idx?: number) => <ListingCard l={l} storeLogoUrl={storeLogos[l.sellerId] || null} priority={(idx ?? 0) < 4} likeCount={likesFeatured[l.id]} />}
-              tone="light"
-            />
-          </Container>
-        </section>
-      )}
-
-      {routeListings.length > 0 && (
-        <section className="relative py-1 border-b border-gray-200/80">
-          <Container>
-            <HorizontalSlider
-              title="Bicicletas de ruta"
-              subtitle="Modelos listos para el asfalto y las largas distancias"
-              items={routeListings}
-              maxItems={24}
-              initialLoad={8}
-              renderCard={(l: any, idx?: number) => (
-                <ListingCard l={l} storeLogoUrl={storeLogos[l.sellerId] || null} priority={(idx ?? 0) < 4} likeCount={likesRoute[l.id]} />
-              )}
-              tone="light"
-            />
-          </Container>
-        </section>
-      )}
-
-      {mtbListings.length > 0 && (
-        <section className="relative py-1 border-b border-gray-200/80">
-          <Container>
-            <HorizontalSlider
-              title="Bicicletas de MTB"
-              subtitle="Rigidas y doble suspensión para dominar los senderos"
-              items={mtbListings}
-              maxItems={24}
-              initialLoad={8}
-              renderCard={(l: any, idx?: number) => (
-                <ListingCard l={l} storeLogoUrl={storeLogos[l.sellerId] || null} priority={(idx ?? 0) < 4} likeCount={likesMtb[l.id]} />
-              )}
-              tone="light"
-            />
-          </Container>
-        </section>
-      )}
-
-      {triListings.length > 0 && (
-        <section className="relative py-1 border-b border-gray-200/80">
-          <Container>
-            <HorizontalSlider
-              title="Bicicletas de triatlón"
-              subtitle="Geometría y aerodinámica pensadas para ganar tiempo"
-              items={triListings}
-              maxItems={24}
-              initialLoad={8}
-              renderCard={(l: any, idx?: number) => (
-                <ListingCard l={l} storeLogoUrl={storeLogos[l.sellerId] || null} priority={(idx ?? 0) < 4} likeCount={likesTri[l.id]} />
-              )}
-              tone="light"
-            />
-          </Container>
-        </section>
-      )}
-
-      {officialStoreListings.length > 0 && (
-        <section className="relative py-1 border-b border-gray-200/80">
-          <Container>
-            <HorizontalSlider
-              title="Tiendas oficiales"
-              subtitle="Productos seleccionados de tiendas verificadas"
-              items={officialStoreListings}
-              maxItems={24}
-              initialLoad={8}
-              renderCard={(l: any, idx?: number) => (
-                <ListingCard l={l} storeLogoUrl={storeLogos[l.sellerId] || null} priority={(idx ?? 0) < 4} likeCount={likesStores[l.id]} />
-              )}
-              tone="light"
-            />
-          </Container>
-        </section>
-      )}
-
-      {/* ÚLTIMAS PUBLICADAS */}
-      <section id="explorar" className="relative py-1 border-b border-gray-200/80">
-        <Container>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold">Últimas publicadas</h2>
-          </div>
-
-          {loading ? (
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-              {Array.from({length:6}).map((_,i)=><SkeletonCard key={i}/>)}
-            </div>
-          ) : filtered.length ? (
-            <HorizontalSlider
-              title=" "
-              items={filtered}
-              maxItems={20}
-              initialLoad={8}
-              renderCard={(l:any, idx?: number) => <ListingCard l={l} storeLogoUrl={storeLogos[l.sellerId] || null} priority={(idx ?? 0) < 4} likeCount={likesRecent[l.id]} />}
-              tone="light"
-            />
-          ) : (
-            <EmptyState />
-          )}
-        </Container>
-      </section>
-
-      {/* CATEGORÍAS RÁPIDAS (Bicis / Accesorios / Indumentaria / Nutrición) */}
-      <section className="relative py-1 border-b border-gray-200/80">
-        <Container>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-lg font-semibold">Buscá por categoría</h3>
-          </div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-4">
-            {[
-              {
-                key: 'bikes',
-                label: 'Bicicletas',
-                description: 'Solo bicicletas',
-                image: '/design/Banners/1.webp',
-                imageMobile: '/design/Banners-Mobile/1.webp',
-                to: '/marketplace?bikes=1',
-              },
-              {
-                key: 'acc',
-                label: 'Accesorios',
-                description: 'Componentes y upgrades',
-                image: '/design/Banners/2.webp',
-                imageMobile: '/design/Banners-Mobile/2.webp',
-                to: '/marketplace?cat=Accesorios',
-              },
-              {
-                key: 'app',
-                label: 'Indumentaria',
-                description: 'Ropa técnica y casual',
-                image: '/design/Banners/3.webp',
-                imageMobile: '/design/Banners-Mobile/3.webp',
-                to: '/marketplace?cat=Indumentaria',
-              },
-              {
-                key: 'nut',
-                label: 'Nutrición',
-                description: 'Energía e hidratación',
-                image: '/design/Banners/4.webp',
-                imageMobile: '/design/Banners-Mobile/4.webp',
-                to: '/marketplace?cat=Nutrici%C3%B3n',
-              },
-            ].map((card) => (
-              <Link
-                key={card.key}
-                to={card.to}
-                className="relative w-full overflow-hidden rounded-3xl border border-gray-200 bg-white transition hover:border-gray-300 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-mb-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-50"
-              >
-                <div className="relative aspect-square sm:aspect-[17/5]">
-                  <picture className="block h-full w-full">
-                    <source media="(max-width: 640px)" srcSet={card.imageMobile} />
-                    <img src={card.image} alt={card.label} className="h-full w-full object-cover" loading="lazy" decoding="async" />
-                  </picture>
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#050c18]/85 via-transparent to-transparent" aria-hidden />
-                  <div className="absolute inset-0 flex items-end p-2 sm:p-4">
-                    <div className="space-y-1 text-left">
-                      <span className="text-sm font-semibold text-white sm:text-lg drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">{card.label}</span>
-                      <span className="hidden text-xs text-white/80 sm:block">{card.description}</span>
-                    </div>
+      {belowFoldReady ? (
+        <>
+          <Suspense
+            fallback={
+              <div className="border-b border-gray-200/80 py-10">
+                <Container>
+                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
                   </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </Container>
-      </section>
-
-      {/* MARCAS con logos clickeables */}
-      <section className="py-10" style={{ contentVisibility: 'auto' as any }}>
-        <Container>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold">Marcas destacadas</h3>
-            {brand && (
-              <button
-                className="inline-flex items-center gap-2 rounded-xl2 border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:border-gray-300 hover:bg-gray-50"
-                onClick={clearBrand}
-              >
-                Limpiar marca
-              </button>
+                </Container>
+              </div>
+            }
+          >
+            {/* BICICLETAS DESTACADAS */}
+            {featuredListings.length > 0 && (
+              <section className="relative py-1 border-b border-gray-200/80">
+                    <Container>
+                  <HorizontalSlider
+                    title="Bicicletas destacadas"
+                    subtitle="Avisos con planes Premium o Básico activos"
+                    items={featuredListings}
+                    maxItems={24}
+                    initialLoad={8}
+                    renderCard={(l: any) => (
+                      <ListingCard
+                        l={l}
+                        storeLogoUrl={storeLogos[l.sellerId] || null}
+                        priority={Boolean(firstBikeId && l.id === firstBikeId)}
+                        likeCount={likesFeatured[l.id]}
+                        imagePreset="homeCard"
+                      />
+                    )}
+                    tone="light"
+                  />
+                </Container>
+              </section>
             )}
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-4">
-            {BRANDS.map(b => (
-              <BrandLogo
-                key={b.slug}
-                brand={b}
-                active={brand.toLowerCase() === b.name.toLowerCase()}
-                onClick={() => handleBrandClick(b.name)}
-              />
-            ))}
-          </div>
-        </Container>
-      </section>
 
-      {/* ¿CÓMO FUNCIONA? */}
-      <section className="section-soft py-10" style={{ contentVisibility: 'auto' as any }}>
-        <Container>
-          <div className="text-center mb-8">
-            <h2 className="text-2xl font-semibold">Cómo funciona</h2>
-            <p className="text-sm text-gray-600">Publicá en 4 pasos, sin vueltas.</p>
-          </div>
-          <div className="relative">
-            <div className="pointer-events-none absolute left-0 right-0 top-1/2 hidden h-px -translate-y-1/2 bg-gradient-to-r from-transparent via-[#14212e]/10 to-transparent md:block" />
-            <div className="grid gap-4 md:grid-cols-4 items-stretch">
-              <Step
-                icon={(
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={1.8}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5Zm0 2c-4 0-7 2-7 4v1h14v-1c0-2-3-4-7-4Z" />
-                  </svg>
+            {routeListings.length > 0 && (
+              <section className="relative py-1 border-b border-gray-200/80">
+                <Container>
+                  <HorizontalSlider
+                    title="Bicicletas de ruta"
+                    subtitle="Modelos listos para el asfalto y las largas distancias"
+                    items={routeListings}
+                    maxItems={24}
+                    initialLoad={8}
+                    renderCard={(l: any) => (
+                      <ListingCard l={l} storeLogoUrl={storeLogos[l.sellerId] || null} priority={false} likeCount={likesRoute[l.id]} imagePreset="homeCard" />
+                    )}
+                    tone="light"
+                  />
+                </Container>
+              </section>
+            )}
+
+            {mtbListings.length > 0 && (
+              <section className="relative py-1 border-b border-gray-200/80">
+                <Container>
+                  <HorizontalSlider
+                    title="Bicicletas de MTB"
+                    subtitle="Rigidas y doble suspensión para dominar los senderos"
+                    items={mtbListings}
+                    maxItems={24}
+                    initialLoad={8}
+                    renderCard={(l: any) => (
+                      <ListingCard l={l} storeLogoUrl={storeLogos[l.sellerId] || null} priority={false} likeCount={likesMtb[l.id]} imagePreset="homeCard" />
+                    )}
+                    tone="light"
+                  />
+                </Container>
+              </section>
+            )}
+
+            {triListings.length > 0 && (
+              <section className="relative py-1 border-b border-gray-200/80">
+                <Container>
+                  <HorizontalSlider
+                    title="Bicicletas de triatlón"
+                    subtitle="Geometría y aerodinámica pensadas para ganar tiempo"
+                    items={triListings}
+                    maxItems={24}
+                    initialLoad={8}
+                    renderCard={(l: any) => (
+                      <ListingCard l={l} storeLogoUrl={storeLogos[l.sellerId] || null} priority={false} likeCount={likesTri[l.id]} imagePreset="homeCard" />
+                    )}
+                    tone="light"
+                  />
+                </Container>
+              </section>
+            )}
+
+            {officialStoreListings.length > 0 && (
+              <section className="relative py-1 border-b border-gray-200/80">
+                <Container>
+                  <HorizontalSlider
+                    title="Tiendas oficiales"
+                    subtitle="Productos seleccionados de tiendas verificadas"
+                    items={officialStoreListings}
+                    maxItems={24}
+                    initialLoad={8}
+                    renderCard={(l: any) => (
+                      <ListingCard l={l} storeLogoUrl={storeLogos[l.sellerId] || null} priority={false} likeCount={likesStores[l.id]} imagePreset="homeCard" />
+                    )}
+                    tone="light"
+                  />
+                </Container>
+              </section>
+            )}
+
+            {/* ÚLTIMAS PUBLICADAS */}
+            <section id="explorar" className="relative py-1 border-b border-gray-200/80">
+              <Container>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-semibold">Últimas publicadas</h2>
+                </div>
+
+                {loading ? (
+                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {Array.from({length:6}).map((_,i)=><SkeletonCard key={i}/>)}
+                  </div>
+                ) : filtered.length ? (
+                  <HorizontalSlider
+                    title=" "
+                    items={filtered}
+                    maxItems={20}
+                    initialLoad={8}
+                    renderCard={(l:any) => <ListingCard l={l} storeLogoUrl={storeLogos[l.sellerId] || null} priority={false} likeCount={likesRecent[l.id]} imagePreset="homeCard" />}
+                    tone="light"
+                  />
+                ) : (
+                  <EmptyState />
                 )}
-                t="Registrate"
-                d="Creá tu cuenta en minutos. Es gratis."
-              />
-              <Step
-                icon={(
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={1.8}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M4 12h16M4 17h10" />
-                  </svg>
+              </Container>
+            </section>
+          </Suspense>
+
+          {/* CATEGORÍAS RÁPIDAS (Bicis / Accesorios / Indumentaria / Nutrición) */}
+          <section className="relative py-1 border-b border-gray-200/80">
+            <Container>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-lg font-semibold">Buscá por categoría</h3>
+              </div>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-4">
+                {[
+                  {
+                    key: 'bikes',
+                    label: 'Bicicletas',
+                    description: 'Solo bicicletas',
+                    image: '/design/Banners/1.webp',
+                    imageMobile: '/design/Banners-Mobile/1.webp',
+                    to: '/marketplace?bikes=1',
+                  },
+                  {
+                    key: 'acc',
+                    label: 'Accesorios',
+                    description: 'Componentes y upgrades',
+                    image: '/design/Banners/2.webp',
+                    imageMobile: '/design/Banners-Mobile/2.webp',
+                    to: '/marketplace?cat=Accesorios',
+                  },
+                  {
+                    key: 'app',
+                    label: 'Indumentaria',
+                    description: 'Ropa técnica y casual',
+                    image: '/design/Banners/3.webp',
+                    imageMobile: '/design/Banners-Mobile/3.webp',
+                    to: '/marketplace?cat=Indumentaria',
+                  },
+                  {
+                    key: 'nut',
+                    label: 'Nutrición',
+                    description: 'Energía e hidratación',
+                    image: '/design/Banners/4.webp',
+                    imageMobile: '/design/Banners-Mobile/4.webp',
+                    to: '/marketplace?cat=Nutrici%C3%B3n',
+                  },
+                ].map((card) => (
+                  <Link
+                    key={card.key}
+                    to={card.to}
+                    className="relative w-full overflow-hidden rounded-3xl border border-gray-200 bg-white transition hover:border-gray-300 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-mb-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-50"
+                  >
+                    <div className="relative aspect-square sm:aspect-[17/5]">
+                      <picture className="block h-full w-full">
+                        <source media="(max-width: 640px)" srcSet={card.imageMobile} />
+                        <img src={card.image} alt={card.label} className="h-full w-full object-cover" loading="lazy" decoding="async" />
+                      </picture>
+                      <div className="absolute inset-0 bg-gradient-to-t from-[#050c18]/85 via-transparent to-transparent" aria-hidden />
+                      <div className="absolute inset-0 flex items-end p-2 sm:p-4">
+                        <div className="space-y-1 text-left">
+                          <span className="text-sm font-semibold text-white sm:text-lg drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">{card.label}</span>
+                          <span className="hidden text-xs text-white/80 sm:block">{card.description}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </Container>
+          </section>
+          {/* MARCAS con logos clickeables */}
+          <section className="py-10" style={{ contentVisibility: 'auto' as any }}>
+            <Container>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold">Marcas destacadas</h3>
+                {brand && (
+                  <button
+                    className="inline-flex items-center gap-2 rounded-xl2 border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:border-gray-300 hover:bg-gray-50"
+                    onClick={clearBrand}
+                  >
+                    Limpiar marca
+                  </button>
                 )}
-                t="Publicá"
-                d="Elegí un plan y subí tu bici con fotos claras."
-              />
-              <Step
-                icon={(
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={1.8}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 8a2 2 0 0 0-2-2H7L3 9v9a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8Z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M7 8V5a2 2 0 0 1 2-2h8" />
-                  </svg>
-                )}
-                t="Contactá"
-                d="Respondé consultas por chat o WhatsApp."
-              />
-              <Step
-                icon={(
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={1.8}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="m5 13 4 4L19 7" />
-                  </svg>
-                )}
-                t="Vendé"
-                d="Coordiná entrega y cerrá la operación con confianza."
-              />
-            </div>
-          </div>
-        </Container>
-      </section>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-4">
+                {BRANDS.map(b => (
+                  <BrandLogo
+                    key={b.slug}
+                    brand={b}
+                    active={brand.toLowerCase() === b.name.toLowerCase()}
+                    onClick={() => handleBrandClick(b.name)}
+                  />
+                ))}
+              </div>
+            </Container>
+          </section>
+
+          {/* ¿CÓMO FUNCIONA? */}
+          <section className="section-soft py-10" style={{ contentVisibility: 'auto' as any }}>
+            <Container>
+              <div className="text-center mb-8">
+                <h2 className="text-2xl font-semibold">Cómo funciona</h2>
+                <p className="text-sm text-gray-600">Publicá en 4 pasos, sin vueltas.</p>
+              </div>
+              <div className="relative">
+                <div className="pointer-events-none absolute left-0 right-0 top-1/2 hidden h-px -translate-y-1/2 bg-gradient-to-r from-transparent via-[#14212e]/10 to-transparent md:block" />
+                <div className="grid gap-4 md:grid-cols-4 items-stretch">
+                  <Step
+                    icon={(
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5Zm0 2c-4 0-7 2-7 4v1h14v-1c0-2-3-4-7-4Z" />
+                      </svg>
+                    )}
+                    t="Registrate"
+                    d="Creá tu cuenta en minutos. Es gratis."
+                  />
+                  <Step
+                    icon={(
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M4 12h16M4 17h10" />
+                      </svg>
+                    )}
+                    t="Publicá"
+                    d="Elegí un plan y subí tu bici con fotos claras."
+                  />
+                  <Step
+                    icon={(
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 8a2 2 0 0 0-2-2H7L3 9v9a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8Z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M7 8V5a2 2 0 0 1 2-2h8" />
+                      </svg>
+                    )}
+                    t="Contactá"
+                    d="Respondé consultas por chat o WhatsApp."
+                  />
+                  <Step
+                    icon={(
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="m5 13 4 4L19 7" />
+                      </svg>
+                    )}
+                    t="Vendé"
+                    d="Coordiná entrega y cerrá la operación con confianza."
+                  />
+                </div>
+              </div>
+            </Container>
+          </section>
+        </>
+      ) : null}
     </div>
   )
 }

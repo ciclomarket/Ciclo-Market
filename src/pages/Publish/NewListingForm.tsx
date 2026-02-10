@@ -8,6 +8,7 @@ import { useAuth } from '../../context/AuthContext'
 import { getSupabaseClient, supabaseEnabled } from '../../services/supabase'
 import { fetchUserProfile, upsertUserProfile } from '../../services/users'
 import useUpload from '../../hooks/useUpload'
+import { parseMoneyInput } from '../../utils/money'
 
 const CONDITION_OPTIONS = ['Nuevo', 'Como nuevo', 'Usado'] as const
 
@@ -551,7 +552,7 @@ const buildExtras = (): string => {
     }
     setSubmitting(true)
     const supabase = getSupabaseClient()
-    const price = Number(priceInput)
+    const price = parseMoneyInput(priceInput, { allowDecimals: true }) || 0
     if (!brand.trim() || !model.trim()) { alert('Completá marca y modelo'); setOpenStep(2); setSubmitting(false); return }
     if (!price || price <= 0) { alert('Indicá un precio válido'); setOpenStep(5); setSubmitting(false); return }
     // Bicicletas: exigir transmisión y freno

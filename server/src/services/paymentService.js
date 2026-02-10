@@ -103,17 +103,6 @@ async function upsertPaymentRecord(supabase, payload) {
   return { id: inserted?.id || null, applied: Boolean(inserted?.applied), status: inserted?.status || null }
 }
 
-async function markPaymentApplied(supabase, paymentId) {
-  const providerRef = String(paymentId || '').trim()
-  if (!providerRef) return
-  const nowIso = new Date().toISOString()
-  await supabase
-    .from('payments')
-    .update({ applied: true, applied_at: nowIso, status: 'succeeded' })
-    .eq('provider', 'mercadopago')
-    .eq('provider_ref', providerRef)
-}
-
 async function markPaymentAppliedOnce(supabase, paymentId) {
   const providerRef = String(paymentId || '').trim()
   if (!providerRef) return false
@@ -229,6 +218,7 @@ async function processPayment(paymentIdRaw) {
       .from('listings')
       .update(listingUpdate)
       .eq('id', listingId)
+
     if (updErr) throw updErr
 
     const justApplied = await markPaymentAppliedOnce(supabase, paymentId)

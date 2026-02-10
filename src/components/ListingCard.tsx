@@ -4,14 +4,16 @@ import { Link } from 'react-router-dom'
 import { BadgeCheck } from 'lucide-react'
 import { Listing } from '../types'
 import { buildCardImageUrlSafe } from '../lib/supabaseImages'
-import { buildImageSource } from '../lib/imageUrl'
 import { useListingLike } from '../hooks/useServerLikes'
 import { useCurrency } from '../context/CurrencyContext'
 import { formatListingPrice } from '../utils/pricing'
 import { buildListingSlug } from '../utils/slug'
 import { hasPaidPlan } from '../utils/plans'
+import { forceTransformSupabasePublicUrl, inferImageFormat, shouldTranscodeToWebp } from '../utils/supabaseImage'
 
 type ListingCardVariant = 'grid' | 'list'
+
+type ListingCardImagePreset = 'default' | 'homeCard'
 
 export default function ListingCard({
   l,
@@ -19,12 +21,14 @@ export default function ListingCard({
   priority = false,
   likeCount,
   variant = 'grid',
+  imagePreset = 'default',
 }: {
   l: Listing
   storeLogoUrl?: string | null
   priority?: boolean
   likeCount?: number
   variant?: ListingCardVariant
+  imagePreset?: ListingCardImagePreset
 }) {
   const [imageLoaded, setImageLoaded] = useState(false)
   const { liked, count, toggle, canLike } = useListingLike(l.id, likeCount)
@@ -99,15 +103,56 @@ export default function ListingCard({
   const statusLabel = isSold ? 'Vendida' : isArchived ? 'Archivada' : isExpired ? 'Vencida' : null
   const imageStatusClass = isArchived || isExpired ? 'opacity-60 grayscale' : isSold ? 'opacity-85' : ''
   const primaryImage = typeof l.images?.[0] === 'string' ? l.images[0] : null
-  const media = useMemo(() => {
+  const publicImageSrc = primaryImage ? (buildCardImageUrlSafe(primaryImage) || '/no-image.webp') : null
+
+  const baseImageUrl = useMemo(() => {
     if (!primaryImage) return null
-    const sizes = '(max-width: 1279px) 50vw, 33vw'
-    const overrides = isLifestyle ? { resize: 'contain' as const, background: 'ffffff' } : undefined
-    return buildImageSource(primaryImage, { profile: 'card', sizes, overrides })
-  }, [primaryImage, isLifestyle])
+    if (/^https?:\/\//i.test(primaryImage)) return primaryImage
+    return publicImageSrc
+  }, [primaryImage, publicImageSrc])
+
+  const media = useMemo(() => {
+    if (!baseImageUrl) return null
+
+    const isList = variant === 'list'
+    const sizes = isList ? '112px' : '(max-width: 1279px) 50vw, 33vw'
+    const widths = isList ? [160, 240, 320] : (imagePreset === 'homeCard' ? [320, 400, 480, 640] : [360, 480, 640, 800])
+    const baseWidth = isList ? 240 : (imagePreset === 'homeCard' ? 400 : 480)
+
+    // UI: preferimos cards "llenas" (crop) para uniformidad visual.
+    const resize = isLifestyle ? 'contain' : 'cover'
+    const background = (resize === 'contain') ? 'ffffff' : undefined
+    // Importante: cuando usamos `resize=cover` sin `height`, Supabase puede devolver un crop no determinístico
+    // que luego vuelve a "recortarse" por CSS `object-cover`, dando sensación de "zoom".
+    // Fijamos `height` para que el crop server-side coincida con el aspect ratio del contenedor.
+    const heightRatio = isList ? 1 : (4 / 5) // list: aspect-square; grid mobile: aspect-[5/4] => h = w*(4/5)
+    const heightFor = (w: number) => (resize === 'cover' ? Math.max(1, Math.round(w * heightRatio)) : undefined)
+
+    // Evitar WebP forzado en PNG+contain (puede dar 400 en Supabase render).
+    const ext = inferImageFormat(baseImageUrl)
+    const avoidWebp = resize === 'contain' && ext === 'png'
+    const format = (!avoidWebp && shouldTranscodeToWebp(baseImageUrl)) ? 'webp' : undefined
+
+    const quality = imagePreset === 'homeCard' ? 70 : 70
+
+    const src = forceTransformSupabasePublicUrl(baseImageUrl, {
+      width: baseWidth,
+      height: heightFor(baseWidth),
+      resize,
+      background,
+      quality,
+      ...(format ? { format } : {}),
+    })
+
+    const srcSet = widths
+      .map((w) => `${forceTransformSupabasePublicUrl(baseImageUrl, { width: w, height: heightFor(w), resize, background, quality, ...(format ? { format } : {}) })} ${w}w`)
+      .join(', ')
+
+    return { src, srcSet, sizes }
+  }, [baseImageUrl, variant, imagePreset, isLifestyle])
+
   const imageSrcSet = media?.srcSet
   const imageSizes = media?.sizes
-  const publicImageSrc = primaryImage ? (buildCardImageUrlSafe(primaryImage) || '/no-image.webp') : null
   const preferredImageSrc = media?.src || publicImageSrc
   const [currentImageSrc, setCurrentImageSrc] = useState(preferredImageSrc)
   const hasImage = Boolean(primaryImage)

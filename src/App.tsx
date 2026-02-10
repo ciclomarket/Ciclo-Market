@@ -1,9 +1,9 @@
 import { useMemo, useEffect, Suspense, lazy } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import Header from './components/Header'
-import Footer from './components/Footer'
 const Newsletter = lazyWithRetry(() => import('./components/Newsletter'))
 const CookieConsent = lazyWithRetry(() => import('./components/CookieConsent'))
+const Footer = lazyWithRetry(() => import('./components/Footer'))
 import ErrorBoundary from './components/ErrorBoundary'
 import Home from './pages/Home'
 import { lazyWithRetry } from './utils/lazyWithRetry'
@@ -45,6 +45,7 @@ const BlogListPage = lazyWithRetry(() => import('./pages/Blog'))
 const BlogPostDetail = lazyWithRetry(() => import('./pages/Blog/PostDetail'))
 const BlogAdminPage = lazyWithRetry(() => import('./pages/Admin/Blog'))
 const ForStores = lazyWithRetry(() => import('./pages/ForStores'))
+const Tasacion = lazyWithRetry(() => import('./pages/Tasacion'))
 import { AuthProvider } from './context/AuthContext'
 import { CurrencyProvider } from './context/CurrencyContext'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -113,6 +114,29 @@ function resolveSeoForPath(pathname: string, search: string): Partial<SeoHeadPro
         'Entrá directo al marketplace, ofertas, tiendas oficiales y contenido destacado desde el link en bio de Ciclo Market.',
       image: '/og-preview.png',
       noIndex: true
+    }
+  }
+
+  if (normalized === '/tasacion') {
+    return {
+      title: 'Tasación de bicicletas usadas · Ciclo Market',
+      description:
+        'Estimá el precio de tu bicicleta usada según precio original, año, estado y marca. Basado en una curva de depreciación heurística.',
+      image: '/OG-Marketplace.png',
+      keywords: [
+        'tasación de bicicletas',
+        'precio de bicicleta usada',
+        'depreciación bicicleta',
+        'cuánto vale mi bici',
+      ],
+      jsonLd: {
+        '@context': 'https://schema.org',
+        '@type': 'WebPage',
+        name: 'Tasación de bicicletas usadas',
+        url: 'https://www.ciclomarket.ar/tasacion',
+        description:
+          'Herramienta de tasación para estimar el precio de bicicletas usadas con una curva de depreciación.'
+      }
     }
   }
 
@@ -479,6 +503,7 @@ export default function App() {
                       <Route path="/" element={<Home />} />
                       <Route path="/ig" element={<IgLinks />} />
                       <Route path="/links" element={<IgLinks />} />
+                      <Route path="/tasacion" element={<Tasacion />} />
 
                       {/* Marketplace (shop) */}
                       <Route path="/marketplace" element={<Marketplace />} />

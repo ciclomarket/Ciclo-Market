@@ -15,15 +15,21 @@
     <link rel="preconnect" href="https://ciclo-market.onrender.com" crossorigin>
     <link rel="dns-prefetch" href="https://ciclo-market.onrender.com">
     <!-- Load Google Fonts CSS without render-blocking -->
-    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=optional">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=optional" media="print" onload="this.media='all'">
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" media="print" onload="this.media='all'">
     <noscript>
-      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=optional">
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
     </noscript>
     <link rel="stylesheet" href="/src/index.css">
     <!-- Preload LCP hero (prefer WebP) -->
-    <link rel="preload" as="image" href="/bicicletas-home.webp" imagesizes="100vw" fetchpriority="high">
-    <link rel="preload" as="image" href="/bicicletas-home-card-small.jpg" imagesrcset="/bicicletas-home-card-small.jpg 360w, /bicicletas-home-card.jpg 720w, /bicicletas-home.jpg 1520w" imagesizes="100vw">
+    <link rel="preload" as="image" href="/bicicletas-home.webp" type="image/webp" imagesizes="100vw" fetchpriority="high">
+    <style>
+      /* Paint something instantly while SPA hydrates + hero image loads */
+      .hero-lcp-placeholder {
+        background-color: #14212E;
+        background-image: radial-gradient(circle at center, rgba(28,46,63,0.9), #14212E);
+      }
+    </style>
     <link rel="icon" type="image/png" href="/favicon.png" />
 
     <!-- OpenGraph (home, canonical www) -->

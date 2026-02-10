@@ -3,6 +3,7 @@ const crypto = require('crypto')
 const { getServerSupabaseClient } = require('../lib/supabaseClient')
 const { sendMail, isMailConfigured } = require('../lib/mail')
 const { resolveFrontendBaseUrl } = require('../lib/savedSearch')
+const { calculateBikePrice } = require('../utils/pricingAlgorithm')
 
 const router = express.Router()
 
@@ -86,6 +87,44 @@ async function isModerator(supabase, userId) {
 /* -------------------------------------------------------------------------- */
 /* Analytics events                                                           */
 /* -------------------------------------------------------------------------- */
+
+/* -------------------------------------------------------------------------- */
+/* Public: bike pricing estimate                                               */
+/* -------------------------------------------------------------------------- */
+
+function toNumberOrNull(value) {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : null
+}
+
+router.post('/api/pricing/estimate', (req, res) => {
+  try {
+    const body = req.body || {}
+    const originalPriceUsd = toNumberOrNull(body.originalPriceUsd)
+    const year = toNumberOrNull(body.year)
+    const condition = typeof body.condition === 'string' ? body.condition.trim() : ''
+    const brandTier = typeof body.brandTier === 'string' ? body.brandTier.trim() : ''
+
+    if (!originalPriceUsd || originalPriceUsd <= 0) {
+      return res.status(400).json({ ok: false, error: 'invalid_original_price' })
+    }
+    if (!year) {
+      return res.status(400).json({ ok: false, error: 'invalid_year' })
+    }
+    if (!condition) {
+      return res.status(400).json({ ok: false, error: 'invalid_condition' })
+    }
+    if (!brandTier) {
+      return res.status(400).json({ ok: false, error: 'invalid_brand_tier' })
+    }
+
+    const result = calculateBikePrice(originalPriceUsd, year, condition, brandTier)
+    return res.status(200).json({ ok: true, result })
+  } catch (err) {
+    const message = err?.message || String(err)
+    return res.status(400).json({ ok: false, error: 'estimate_failed', message })
+  }
+})
 
 router.post('/api/track', async (req, res) => {
   try {

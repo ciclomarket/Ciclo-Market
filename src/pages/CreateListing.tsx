@@ -11,6 +11,7 @@ import { useAuth } from '@/context/AuthContext'
 import { getSupabaseClient, supabaseEnabled } from '@/services/supabase'
 import { fetchUserProfile, upsertUserProfile } from '@/services/users'
 import useUpload from '@/hooks/useUpload'
+import { parseMoneyInput } from '@/utils/money'
 
 const CONDITION_OPTIONS = ['Nuevo', 'Como nuevo', 'Usado'] as const
 
@@ -410,7 +411,7 @@ export default function CreateListing() {
     }
 
     if (currentStep === 4) {
-      const price = Number(data.priceInput)
+      const price = parseMoneyInput(data.priceInput, { allowDecimals: true })
       if (!price || price <= 0) nextErrors.priceInput = 'Indicá un precio válido'
       if (!data.province.trim()) nextErrors.province = 'Seleccioná la provincia'
       if (!data.city.trim()) nextErrors.city = 'Seleccioná la ciudad'
@@ -661,7 +662,7 @@ export default function CreateListing() {
     setSubmitting(true)
     const supabase = getSupabaseClient()
 
-    const price = Number(formData.priceInput)
+    const price = parseMoneyInput(formData.priceInput, { allowDecimals: true }) || 0
     const title = `${formData.brand.trim()} ${formData.model.trim()}`.trim()
     const location = [formData.city, formData.province].filter(Boolean).join(', ')
     const categoryField = formData.mainCategory === 'Bicicletas' ? (formData.category || null) : formData.mainCategory

@@ -1379,8 +1379,9 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
       return filteredByStore
     }
     if (sortMode === 'relevance') {
+      // Importante: `Array.sort` requiere un comparador consistente; fijar `now` evita "shuffles" entre renders/paginación.
+      const now = Date.now()
       return sorted.sort((a, b) => {
-        const now = Date.now()
         const boostScore = (l: Listing) => {
           const rawBoost = typeof l.rankBoostUntil === 'number'
             ? l.rankBoostUntil
@@ -1403,11 +1404,6 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
         const sB = storeScore(b)
         if (sA !== sB) return sA - sB
 
-        // Dentro del mismo grupo, más likes primero (si no hay datos, 0)
-        const aLikes = likeCounts[a.id] || 0
-        const bLikes = likeCounts[b.id] || 0
-        if (bLikes !== aLikes) return bLikes - aLikes
-
         // Si ambos están destacados, desempatar por vencimiento del destaque (más lejano primero)
         if (rA === 2) {
           const aHex = a.highlightExpires ?? 0
@@ -1416,7 +1412,9 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
         }
 
         // Fallback general: más recientes primero
-        return (b.createdAt ?? 0) - (a.createdAt ?? 0)
+        const c = (b.createdAt ?? 0) - (a.createdAt ?? 0)
+        if (c !== 0) return c
+        return String(a.id).localeCompare(String(b.id))
       })
     }
     if (sortMode === 'newest') {
@@ -1432,7 +1430,7 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
       const pb = toSelected(b)
       return sortMode === 'asc' ? pa - pb : pb - pa
     })
-  }, [categoryFiltered, filters, sortMode, listingMetadata, effectiveDeal, storeLogos, likeCounts, serverMode, listings])
+  }, [categoryFiltered, filters, sortMode, listingMetadata, effectiveDeal, storeLogos, serverMode, listings])
 
   const visible = serverMode ? filtered : filtered.slice(0, count)
 
@@ -1543,7 +1541,6 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
 
   useEffect(() => {
     if (!sentinelRef.current) return
-    if (restoringRef.current) return
     const el = sentinelRef.current
     const io = new IntersectionObserver((entries) => {
       const entry = entries[0]
@@ -1644,7 +1641,7 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
     }, { rootMargin: '600px 0px' })
     io.observe(el)
     return () => io.disconnect()
-  }, [serverMode, serverTotal, listings.length, paramsKey, sortMode, fx])
+  }, [serverMode, serverTotal, listings.length, paramsKey, sortMode, fx, filtered.length])
 
   // Preload estratégico: primeras 2 imágenes visibles
   useEffect(() => {

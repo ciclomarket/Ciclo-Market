@@ -158,25 +158,37 @@ export default function ListingDetail() {
     const description = desc ? (desc.length > 160 ? `${desc.slice(0, 157)}…` : desc) : 'Bicicleta disponible en Ciclo Market.'
     // JSON-LD (Product + Breadcrumb) para rich snippets
     const canonicalUrl = absoluteUrl(canonicalPath, siteOrigin)
-    const imagesAbs = (listing.images || [])
+    const imagesAbs = (Array.isArray(listing.images) ? listing.images : [])
       .map((src) => absoluteUrl(src, siteOrigin))
       .filter((u): u is string => Boolean(u))
 
-    const isUnavailable = (listing.status === 'sold' || listing.status === 'expired' || listing.status === 'archived' || listing.status === 'paused')
-    const availability = isUnavailable ? 'https://schema.org/OutOfStock' : 'https://schema.org/InStock'
-    const priceCurrency = (listing.priceCurrency || 'ARS').toUpperCase()
-
-    // Inferir condición si está en la descripción/extras
-    const rawCond = (listing.extras || listing.description || '').toLowerCase()
-    const isUsed = rawCond.includes('usado') || rawCond.includes('poco uso') || rawCond.includes('uso')
-    const itemCondition = isUsed ? 'https://schema.org/UsedCondition' : 'https://schema.org/NewCondition'
+    // MundoBike/Ciclo Market: el catálogo es de usados, y queremos un schema robusto que no rompa si faltan campos.
+    const availability = 'https://schema.org/InStock'
+    const itemCondition = 'https://schema.org/UsedCondition'
+    const priceCurrency = (() => {
+      const raw = (
+        listing.priceCurrency ??
+        (listing as any).currency ??
+        (listing as any).price_currency ??
+        'ARS'
+      )
+        .toString()
+        .trim()
+        .toUpperCase()
+      if (raw === 'ARS' || raw === 'USD') return raw
+      if (raw === '$' || raw === 'AR$' || raw.includes('ARS')) return 'ARS'
+      if (raw.includes('US$') || raw.includes('USD')) return 'USD'
+      return 'ARS'
+    })()
+    const offerUrl =
+      typeof window !== 'undefined' && window.location?.href ? window.location.href : canonicalUrl
 
     const offers = {
       '@type': 'Offer',
       price: Number(listing.price || 0),
       priceCurrency,
       availability,
-      url: canonicalUrl,
+      url: offerUrl,
       itemCondition,
       seller: listing.sellerName
         ? { '@type': 'Organization', name: listing.sellerName }
