@@ -1532,7 +1532,7 @@ app.post('/api/listings/:id/upgrade', async (req, res) => {
 
     const { data: listing, error: listingError } = await supabase
       .from('listings')
-      .select('id,seller_id,plan,plan_code,seller_plan,expires_at,highlight_expires,rank_boost_until,granted_visible_photos,whatsapp_cap_granted,whatsapp_enabled,seller_whatsapp,contact_methods')
+      .select('id,seller_id,images,plan,plan_code,seller_plan,expires_at,highlight_expires,rank_boost_until,granted_visible_photos,whatsapp_cap_granted,whatsapp_enabled,whatsapp_user_disabled,seller_whatsapp,contact_methods')
       .eq('id', id)
       .maybeSingle()
     if (listingError || !listing) return res.status(404).json({ error: 'not_found' })
@@ -1612,6 +1612,8 @@ app.post('/api/listings/:id/upgrade', async (req, res) => {
     const nextWhatsappCap = true
     // Respect explicit off: if user disabled, do not force-enable on upgrade
     const nextWhatsappEnabled = listing.whatsapp_user_disabled ? listing.whatsapp_enabled : true
+    const imagesArr = Array.isArray(listing.images) ? listing.images.filter(Boolean) : []
+    const nextVisibleImagesCount = Math.min(imagesArr.length, targetCap)
 
     const { data: updatedListing, error: updateErr } = await supabase
       .from('listings')
@@ -1625,7 +1627,8 @@ app.post('/api/listings/:id/upgrade', async (req, res) => {
         highlight_expires: nextHighlightIso,
         rank_boost_until: nextRankBoostIso,
         granted_visible_photos: nextGrantedPhotos,
-        visible_images_count: targetCap,
+        plan_photo_limit: targetCap,
+        visible_images_count: nextVisibleImagesCount,
         whatsapp_cap_granted: nextWhatsappCap,
         whatsapp_enabled: nextWhatsappEnabled,
         status: 'active',

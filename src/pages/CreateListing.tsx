@@ -245,7 +245,7 @@ function getExtra(map: Record<string, string>, key: string) {
 export default function CreateListing() {
   const [sp] = useSearchParams()
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, isModerator } = useAuth()
   const { uploadFiles, uploading, progress } = useUpload()
 
   const editId = useMemo(() => {
@@ -279,6 +279,7 @@ export default function CreateListing() {
   const [errors, setErrors] = useState<Errors>({})
   const [profileFullName, setProfileFullName] = useState('')
   const [profileEmail, setProfileEmail] = useState('')
+  const [editSellerId, setEditSellerId] = useState<string | null>(null)
 
   const INITIAL_STATE: FormData = useMemo(
     () => ({
@@ -623,11 +624,12 @@ export default function CreateListing() {
           alert('No se pudo cargar la publicación para editar.')
           return
         }
-        if (row.seller_id && row.seller_id !== user.id) {
+        if (row.seller_id && row.seller_id !== user.id && !isModerator) {
           alert('No tenés permisos para editar esta publicación.')
           navigate(`/listing/${encodeURIComponent(editId)}`)
           return
         }
+        setEditSellerId(String(row.seller_id || '') || null)
 
         const extrasMap = parseExtrasMap(row.extras)
         const inferredBrake = getExtra(extrasMap, 'Freno') || getExtra(extrasMap, 'Tipo de freno')
@@ -724,7 +726,7 @@ export default function CreateListing() {
     }
     void loadExisting()
     return () => { active = false }
-  }, [isEdit, editId, user?.id])
+  }, [isEdit, editId, user?.id, isModerator])
 
   // Auto-submit after auth intent
   useEffect(() => {
@@ -828,7 +830,10 @@ export default function CreateListing() {
     }
 
     try {
-      await upsertUserProfile({ id: user.id, province: formData.province, city: formData.city, whatsapp: formData.whatsApp })
+      const shouldUpsertProfile = !isEdit || !editId || editSellerId === user.id
+      if (shouldUpsertProfile) {
+        await upsertUserProfile({ id: user.id, province: formData.province, city: formData.city, whatsapp: formData.whatsApp })
+      }
     } catch { /* noop */ }
 
     const slug = (data as any)?.slug || (data as any)?.id

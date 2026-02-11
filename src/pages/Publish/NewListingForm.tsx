@@ -79,7 +79,7 @@ const StepHeader = ({ step, title, isOpen, isCompleted, onClick }: { step: numbe
 export default function NewListingForm() {
   const [sp] = useSearchParams()
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, isModerator } = useAuth()
   const editId = useMemo(() => {
     const id = (sp.get('id') || '').trim()
     return id || null
@@ -442,7 +442,7 @@ const buildExtras = (): string => {
 	          alert('No se pudo cargar la publicación para editar.')
 	          return
 	        }
-	        if (row.seller_id && row.seller_id !== user.id) {
+	        if (row.seller_id && row.seller_id !== user.id && !isModerator) {
 	          alert('No tenés permisos para editar esta publicación.')
 	          navigate(`/listing/${encodeURIComponent(editId)}`)
 	          return
@@ -515,7 +515,7 @@ const buildExtras = (): string => {
 	    }
 	    void loadExisting()
 	    return () => { active = false }
-	  }, [isEdit, editId, user?.id, mainCategory])
+	  }, [isEdit, editId, user?.id, mainCategory, isModerator])
 
 	  const submit = async () => {
 	    if (submitting) return

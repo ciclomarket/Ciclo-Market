@@ -646,7 +646,7 @@ async function tryClientModeratorUpgrade({
   try {
     const { data: listing, error } = await supabase
       .from('listings')
-      .select('id,seller_id,plan,plan_code,seller_plan,seller_whatsapp,contact_methods,expires_at,highlight_expires,rank_boost_until,granted_visible_photos,whatsapp_cap_granted,whatsapp_enabled,whatsapp_user_disabled')
+      .select('id,seller_id,images,plan,plan_code,seller_plan,seller_whatsapp,contact_methods,expires_at,highlight_expires,rank_boost_until,granted_visible_photos,whatsapp_cap_granted,whatsapp_enabled,whatsapp_user_disabled,plan_photo_limit,visible_images_count')
       .eq('id', id)
       .maybeSingle()
 
@@ -702,6 +702,9 @@ async function tryClientModeratorUpgrade({
     const nextGrantedPhotos = Math.max(Number((listing as any).granted_visible_photos || 4), targetCap)
     const nextWhatsappCap = true
     const nextWhatsappEnabled = (listing as any).whatsapp_user_disabled ? Boolean((listing as any).whatsapp_enabled) : true
+    const imagesArr = Array.isArray((listing as any).images) ? (listing as any).images.filter(Boolean) : []
+    const nextVisibleImagesCount = Math.min(imagesArr.length, targetCap)
+    const nextPlanPhotoLimit = Math.max(Number((listing as any).plan_photo_limit || 4), targetCap)
 
     const { data: updated, error: updateErr } = await supabase
       .from('listings')
@@ -715,7 +718,8 @@ async function tryClientModeratorUpgrade({
         highlight_expires: nextHighlightIso,
         rank_boost_until: nextRankBoostIso,
         granted_visible_photos: nextGrantedPhotos,
-        visible_images_count: targetCap,
+        plan_photo_limit: nextPlanPhotoLimit,
+        visible_images_count: nextVisibleImagesCount,
         whatsapp_cap_granted: nextWhatsappCap,
         whatsapp_enabled: nextWhatsappEnabled,
         status: 'active'
