@@ -585,7 +585,7 @@ const buildExtras = (): string => {
 	      mainCategory === 'Accesorios' ? accessorySubcat : (mainCategory === 'Indumentaria' ? apparelSubcat : nutritionSubcat)
 	    )
 	    const extrasText = buildExtras()
-      const imagesLimit = 4
+      const imagesLimit = 12
       const imagesToSave = images.length ? images.slice(0, imagesLimit) : []
 
 		    const basePayload: any = {

@@ -1,3 +1,4 @@
+/* eslint-disable react/prop-types */
 import { Label } from '@/components/ui/label';
 import ImageUploader from '@/components/listing/ImageUploader';
 import { Camera, CheckCircle2 } from 'lucide-react';
@@ -11,6 +12,11 @@ const photoTips = [
 ];
 
 export default function StepPhotos({ data, onChange, errors, maxPhotos = 12, uploading, progress, onAddFiles }) {
+  const visibleCap = (() => {
+    const raw = Number(data?.grantedVisiblePhotos || 4)
+    if (!Number.isFinite(raw) || raw <= 0) return 4
+    return Math.max(1, Math.min(12, raw))
+  })()
   return (
     <div className="space-y-8">
       <div>
@@ -27,7 +33,7 @@ export default function StepPhotos({ data, onChange, errors, maxPhotos = 12, upl
         />
         {errors?.images && <p className="text-sm text-red-500 mt-2">{errors.images}</p>}
         <p className="mt-3 text-xs text-slate-500">
-          Tu plan actual mostrará las primeras <b>4</b> fotos. Pasate a Premium para mostrar todas.
+          Tu plan actual mostrará las primeras <b>{visibleCap}</b> fotos. Podés subir hasta {maxPhotos} y al mejorar el plan se habilitan automáticamente.
         </p>
         {uploading && (
           <p className="mt-2 text-xs text-slate-500">

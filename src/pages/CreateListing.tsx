@@ -778,8 +778,7 @@ export default function CreateListing() {
 
     const extrasText = buildExtras()
 
-    const imagesLimit = Math.max(1, Math.min(12, Number(formData.grantedVisiblePhotos || 4)))
-    const imagesToSave = formData.images.length ? formData.images.slice(0, imagesLimit) : []
+    const imagesToSave = formData.images.length ? formData.images.slice(0, 12) : []
 
     const payload: any = {
       title,
@@ -873,7 +872,7 @@ export default function CreateListing() {
           data={formData}
           onChange={updateField}
           errors={errors}
-          maxPhotos={Math.max(1, Math.min(12, Number(formData.grantedVisiblePhotos || 4)))}
+          maxPhotos={12}
           uploading={uploading}
           progress={progress}
           onAddFiles={handleAddFiles}

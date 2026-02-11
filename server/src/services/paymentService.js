@@ -221,7 +221,8 @@ async function processPayment(paymentIdRaw) {
       return { ok: false, error: 'missing_metadata' }
     }
 
-    const targetCap = planCode === 'pro' ? 12 : planCode === 'premium' ? 8 : 6
+    // Plans: PREMIUM (8), PRO (12). Legacy "basic" is treated as PREMIUM for backwards compatibility.
+    const targetCap = planCode === 'pro' ? 12 : 8
     const listingDays = 60
     const expiresAt = new Date(approvedBaseTs + listingDays * 24 * 60 * 60 * 1000).toISOString()
     const rankBoostUntil = (planCode === 'premium' || planCode === 'pro')
