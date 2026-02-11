@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import Container from '../../components/Container'
 import Button from '../../components/Button'
 import { BIKE_CATEGORIES, FRAME_SIZES, WHEEL_SIZE_OPTIONS } from '../../constants/catalog'
-import { PROVINCES } from '../../constants/locations'
+import { OTHER_CITY_OPTION, PROVINCES } from '../../constants/locations'
 import { useAuth } from '../../context/AuthContext'
 import { getSupabaseClient, supabaseEnabled } from '../../services/supabase'
 import { fetchUserProfile, upsertUserProfile } from '../../services/users'
@@ -124,6 +124,7 @@ export default function NewListingForm() {
   const [priceInput, setPriceInput] = useState('')
   const [province, setProvince] = useState('')
   const [city, setCity] = useState('')
+  const [cityCustom, setCityCustom] = useState('')
   const [whatsApp, setWhatsApp] = useState('')
   const [waCountry, setWaCountry] = useState('+54')
   const [waLocal, setWaLocal] = useState('')
@@ -246,6 +247,7 @@ export default function NewListingForm() {
             setPriceInput(draft.priceInput || '')
             setProvince(draft.province || '')
             setCity(draft.city || '')
+            setCityCustom(draft.cityCustom || '')
             setWaCountry(draft.waCountry || '+54')
             setWaLocal(draft.waLocal || '')
             setWhatsApp(draft.whatsApp || '')
@@ -534,6 +536,7 @@ const buildExtras = (): string => {
           priceInput,
           priceCurrency,
           city,
+          cityCustom,
           province,
           description,
           material,
@@ -577,9 +580,13 @@ const buildExtras = (): string => {
     if (mainCategory === 'Bicicletas' && (!drivetrain && !drivetrainOther || !brakeType)) {
       alert('Completá grupo de transmisión y tipo de freno'); setOpenStep(2); setSubmitting(false); return
     }
+    if (!province.trim() || !(city === OTHER_CITY_OPTION ? cityCustom.trim() : city.trim())) {
+      alert('Completá provincia y ciudad'); setOpenStep(6); setSubmitting(false); return
+    }
 
 	    const title = `${brand.trim()} ${model.trim()}`.trim()
-	    const location = [city, province].filter(Boolean).join(', ')
+      const effectiveCity = (city === OTHER_CITY_OPTION ? cityCustom : city).trim()
+	    const location = [effectiveCity, province].filter(Boolean).join(', ')
 	    const categoryField = mainCategory === 'Bicicletas' ? (category || null) : mainCategory
 	    const subcategoryField = mainCategory === 'Bicicletas' ? null : (
 	      mainCategory === 'Accesorios' ? accessorySubcat : (mainCategory === 'Indumentaria' ? apparelSubcat : nutritionSubcat)
@@ -1137,7 +1144,7 @@ const buildExtras = (): string => {
             )}
 
             {/* Step 6: Contacto */}
-            <StepHeader step={6} title="Contacto" isOpen={openStep === 6} isCompleted={!!province && !!city} onClick={() => setOpenStep(6)} />
+            <StepHeader step={6} title="Contacto" isOpen={openStep === 6} isCompleted={!!province && !!(city === OTHER_CITY_OPTION ? cityCustom : city)} onClick={() => setOpenStep(6)} />
             {openStep === 6 && (
               <div className="p-6 animate-in fade-in slide-in-from-top-2 duration-200 space-y-4">
                 <div className="grid grid-cols-2 gap-4">
@@ -1145,11 +1152,27 @@ const buildExtras = (): string => {
                     <option value="">Provincia</option>
                     {PROVINCES.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
                   </select>
-                  <select className="h-12 px-4 bg-white border border-gray-300 rounded-lg" value={city} onChange={e => setCity(e.target.value)}>
+                  <select
+                    className="h-12 px-4 bg-white border border-gray-300 rounded-lg"
+                    value={city}
+                    onChange={e => {
+                      const v = e.target.value
+                      setCity(v)
+                      if (v !== OTHER_CITY_OPTION) setCityCustom('')
+                    }}
+                  >
                     <option value="">Ciudad</option>
                     {PROVINCES.find(p => p.name === province)?.cities.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
+                {city === OTHER_CITY_OPTION && (
+                  <input
+                    className="h-12 px-4 bg-white border border-gray-300 rounded-lg"
+                    placeholder="Escribí tu ciudad"
+                    value={cityCustom}
+                    onChange={(e) => setCityCustom(e.target.value)}
+                  />
+                )}
                 {/* WhatsApp contact */}
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">WhatsApp</label>

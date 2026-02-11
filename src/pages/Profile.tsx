@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import Container from '../components/Container'
 import ListingCard from '../components/ListingCard'
 import Button from '../components/Button'
+import ReviewModal from '../components/ReviewModal'
 import { fetchUserProfile, type UserProfileRecord } from '../services/users'
 import { fetchSellerReviews, canUserReviewSeller, submitReview, type ReviewRecord } from '../services/reviews'
 import { useToast } from '../context/ToastContext'
@@ -116,6 +117,13 @@ export default function Profile() {
   const { user, isModerator } = useAuth()
   const { show: showToast } = useToast()
   const isMobile = useIsMobile()
+  const reviewParam = String(searchParams.get('review') || '').trim().toLowerCase()
+  const wantsReview = reviewParam === '1' || reviewParam === 'true'
+  const ratingFromUrl = useMemo(() => {
+    const raw = Number.parseInt(String(searchParams.get('rating') || ''), 10)
+    if (!Number.isFinite(raw)) return 0
+    return Math.min(Math.max(raw, 1), 5)
+  }, [searchParams])
 
   const [activeTab, setActiveTab] = useState<SellerTab>('Perfil')
   const [mobileActiveTab, setMobileActiveTab] = useState<SellerTab | null>(null)
@@ -131,6 +139,7 @@ export default function Profile() {
   const [reviewModalOpen, setReviewModalOpen] = useState(false)
   const [reviewSubmitting, setReviewSubmitting] = useState(false)
   const [reviewRating, setReviewRating] = useState(0)
+  const [reviewIsVerifiedSale, setReviewIsVerifiedSale] = useState(false)
   const [reviewTags, setReviewTags] = useState<string[]>([])
   const [reviewComment, setReviewComment] = useState('')
   // Moderador: créditos e info ampliada
@@ -264,21 +273,30 @@ export default function Profile() {
 
   useEffect(() => {
     if (!sellerId) return
-    const wantsReview = searchParams.get('review') === '1'
     if (!wantsReview) return
     handleSelectTab('Reseñas')
+    if (ratingFromUrl > 0 && reviewRating <= 0) {
+      setReviewRating(ratingFromUrl)
+    }
     const t = setTimeout(() => {
       if (canReview?.allowed) setReviewModalOpen(true)
     }, 100)
     return () => clearTimeout(t)
-  }, [sellerId, searchParams, canReview?.allowed, handleSelectTab])
+  }, [sellerId, wantsReview, canReview?.allowed, handleSelectTab, ratingFromUrl, reviewRating])
 
   useEffect(() => {
     if (!reviewModalOpen) return
-    if (searchParams.has('review')) {
-      searchParams.delete('review')
-      setSearchParams(searchParams, { replace: true })
+    const next = new URLSearchParams(searchParams)
+    let changed = false
+    if (next.has('review')) {
+      next.delete('review')
+      changed = true
     }
+    if (next.has('rating')) {
+      next.delete('rating')
+      changed = true
+    }
+    if (changed) setSearchParams(next, { replace: true })
   }, [reviewModalOpen, searchParams, setSearchParams])
 
   const displayName = profile?.full_name || listings[0]?.sellerName || 'Vendedor Ciclo Market'
@@ -527,6 +545,19 @@ export default function Profile() {
                 </button>
               )}
             </div>
+            {wantsReview && !user?.id && (
+              <div className="rounded-2xl border border-[#14212e]/10 bg-[#f2f6fb] p-4 text-sm text-[#14212e]/80">
+                Para dejar una reseña tenés que iniciar sesión.
+                <div className="mt-3">
+                  <Link
+                    to={`/login?redirect=${encodeURIComponent(`/vendedor/${sellerId}?review=true${ratingFromUrl ? `&rating=${ratingFromUrl}` : ''}`)}`}
+                    className="inline-flex items-center justify-center rounded-full bg-[#14212e] px-4 py-2 text-xs font-semibold text-white hover:bg-[#1b2f3f]"
+                  >
+                    Iniciar sesión
+                  </Link>
+                </div>
+              </div>
+            )}
             {canReview && !canReview.allowed && (
               <div className="rounded-2xl border border-[#14212e]/10 bg-[#f2f6fb] p-3 text-xs text-[#14212e]/70">
                 {canReview.reason || 'Aún no podés escribir una reseña.'}
@@ -645,17 +676,13 @@ export default function Profile() {
       default:
         return null
     }
-  }, [avatarUrl, displayName, locationLabel, lastUpdatedLabel, profile, listings, activeListings.length, totalListings, reviewsSummary, reviews, canReview])
+  }, [avatarUrl, displayName, locationLabel, lastUpdatedLabel, profile, listings, activeListings.length, totalListings, reviewsSummary, reviews, canReview, wantsReview, user?.id, sellerId, ratingFromUrl, isModerator, modAvailableCredits, modCreditHistory])
 
   if (loading) {
     return (
-      <div className="relative isolate overflow-hidden min-h-[calc(100vh-120px)] bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] py-10">
-        <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
-          <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
-          <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
-        </div>
+      <div className="min-h-[calc(100vh-120px)] bg-gray-50 py-10">
         <Container>
-          <div className="rounded-[28px] border border-white/10 bg-white/5 p-10 text-center text-white/80">
+          <div className="rounded-[28px] border border-gray-200 bg-white p-10 text-center text-gray-600 shadow-sm">
             Cargando perfil del vendedor…
           </div>
         </Container>
@@ -665,13 +692,9 @@ export default function Profile() {
 
   if (error) {
     return (
-      <div className="relative isolate overflow-hidden min-h-[calc(100vh-120px)] bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] py-10">
-        <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
-          <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
-          <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
-        </div>
+      <div className="min-h-[calc(100vh-120px)] bg-gray-50 py-10">
         <Container>
-          <div className="rounded-[28px] border border-[#ff6b6b]/40 bg-[#ff6b6b]/10 p-10 text-center text-[#ff6b6b]">
+          <div className="rounded-[28px] border border-red-200 bg-red-50 p-10 text-center text-red-700">
             {error}
           </div>
         </Container>
@@ -691,35 +714,31 @@ export default function Profile() {
 
     return (
       <>
-        <div className="relative isolate overflow-hidden min-h-[calc(100vh-96px)] bg-gradient-to-b from-[#0f1729] via-[#101b2d] to-[#0f1729] py-6 text-white">
-          <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
-            <div className="absolute -top-16 -left-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.25),_transparent_60%)] blur-2xl" />
-            <div className="absolute -bottom-16 -right-10 h-64 w-64 rounded-full bg-[radial-gradient(circle,_rgba(14,165,233,0.20),_transparent_60%)] blur-2xl" />
-          </div>
+        <div className="min-h-[calc(100vh-96px)] bg-gray-50 py-6 text-gray-900">
           <Container>
             <div className="space-y-6">
-              <header className="rounded-3xl border border-white/15 bg-white/10 p-5 shadow-[0_18px_40px_rgba(6,12,24,0.35)]">
-                <p className="text-[11px] uppercase tracking-[0.35em] text-white/60">Perfil del vendedor</p>
+              <header className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
+                <p className="text-[11px] uppercase tracking-[0.35em] text-gray-500">Perfil del vendedor</p>
                 <h1 className="mt-2 text-2xl font-semibold">
                   <span className="inline-flex items-center gap-2">
-                    <span className="inline-flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-white/20 bg-white/10 align-middle">
+                    <span className="inline-flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-gray-200 bg-gray-50 align-middle">
                       {avatarUrl ? (
                         <img src={avatarUrl} alt={displayNameAbbrev} className="h-full w-full object-cover" />
                       ) : (
-                        <span className="text-sm text-white/80">{displayNameAbbrev.charAt(0)}</span>
+                        <span className="text-sm text-gray-600">{displayNameAbbrev.charAt(0)}</span>
                       )}
                     </span>
                     <span>{displayNameAbbrev}</span>
                   </span>
                 </h1>
-                <p className="mt-1 text-sm text-white/70">{locationLabel}</p>
+                <p className="mt-1 text-sm text-gray-600">{locationLabel}</p>
                 <div className="mt-4 flex flex-wrap gap-2">
                   {websiteLink && (
                     <a
                       href={websiteLink}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 rounded-full border border-white/30 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
+                      className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
                     >
                       Sitio web
                     </a>
@@ -736,7 +755,7 @@ export default function Profile() {
                     <button
                       type="button"
                       onClick={() => setMobileActiveTab(null)}
-                      className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/20 text-white transition hover:border-white/40"
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 text-gray-700 transition hover:bg-gray-50"
                       aria-label="Volver al menú"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5" stroke="currentColor" fill="none" strokeWidth={1.6}>
@@ -744,11 +763,11 @@ export default function Profile() {
                       </svg>
                     </button>
                     <div>
-                      <p className="text-xs uppercase tracking-[0.3em] text-white/50">Sección</p>
+                      <p className="text-xs uppercase tracking-[0.3em] text-gray-500">Sección</p>
                       <h2 className="text-lg font-semibold">{activeMetadata?.title ?? mobileTab}</h2>
                     </div>
                   </div>
-                  <div className="rounded-3xl border border-white/15 bg-white px-3 py-3 text-[#14212e] shadow-[0_18px_40px_rgba(6,12,24,0.25)]">
+                  <div className="rounded-3xl border border-gray-200 bg-white px-3 py-3 text-[#14212e] shadow-sm">
                     {renderSection(mobileTab)}
                   </div>
                 </div>
@@ -763,15 +782,15 @@ export default function Profile() {
                           key={tab}
                           type="button"
                           onClick={() => handleSelectTab(tab)}
-                          className="flex items-center justify-between gap-3 rounded-3xl border border-white/15 bg-white/10 p-4 text-left shadow-[0_18px_40px_rgba(6,12,24,0.25)] transition hover:bg-white/15"
+                          className="flex items-center justify-between gap-3 rounded-3xl border border-gray-200 bg-white p-4 text-left shadow-sm transition hover:bg-gray-50"
                         >
                           <div className="flex w-full items-center gap-3">
-                            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/20 text-white">
+                            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gray-50 text-gray-700">
                               <SellerTabIcon tab={tab} />
                             </span>
                             <div className="flex flex-1 flex-col">
-                              <p className="text-base font-semibold text-white">{meta.title}</p>
-                              <p className="text-xs text-white/70">{meta.description}</p>
+                              <p className="text-base font-semibold text-gray-900">{meta.title}</p>
+                              <p className="text-xs text-gray-600">{meta.description}</p>
                             </div>
                             {badge > 0 && (
                               <span className="inline-flex min-w-[26px] shrink-0 items-center justify-center rounded-full bg-[#ff6b6b] px-2 py-0.5 text-[11px] font-semibold text-white">
@@ -779,7 +798,7 @@ export default function Profile() {
                               </span>
                             )}
                           </div>
-                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5 text-white/50" stroke="currentColor" fill="none" strokeWidth={1.5}>
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5 text-gray-400" stroke="currentColor" fill="none" strokeWidth={1.5}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="m9 5 7 7-7 7" />
                           </svg>
                         </button>
@@ -797,6 +816,8 @@ export default function Profile() {
             onClose={() => setReviewModalOpen(false)}
             rating={reviewRating}
             setRating={setReviewRating}
+            isVerifiedSale={reviewIsVerifiedSale}
+            setIsVerifiedSale={setReviewIsVerifiedSale}
             tags={reviewTags}
             setTags={setReviewTags}
             comment={reviewComment}
@@ -806,10 +827,11 @@ export default function Profile() {
               if (!sellerId || !user?.id) return
               try {
                 setReviewSubmitting(true)
-                await submitReview({ sellerId, buyerId: user.id, rating: reviewRating, tags: reviewTags, comment: reviewComment })
+                await submitReview({ sellerId, buyerId: user.id, rating: reviewRating, isVerifiedSale: reviewIsVerifiedSale, tags: reviewTags, comment: reviewComment })
                 showToast('Gracias por tu reseña')
                 setReviewModalOpen(false)
                 setReviewRating(0)
+                setReviewIsVerifiedSale(false)
                 setReviewTags([])
                 setReviewComment('')
                 const data = await fetchSellerReviews(sellerId)
@@ -846,15 +868,15 @@ export default function Profile() {
 
   return (
     <>
-      <div className="min-h-[calc(100vh-120px)] bg-[#101c29] py-10">
+      <div className="min-h-[calc(100vh-120px)] bg-gray-50 py-10">
         <Container>
-          <div className="overflow-visible rounded-[28px] border border-white/10 bg-white/5 backdrop-blur-xl shadow-[0_35px_80px_rgba(12,20,28,0.45)]">
-            <header className="border-b border-white/10 bg-[#14212e]/90 px-6 py-6 text-white">
-              <h1 className="text-xl font-semibold">Perfil del vendedor</h1>
+          <div className="overflow-visible rounded-[28px] border border-gray-200 bg-white shadow-sm">
+            <header className="border-b border-gray-200 bg-white px-6 py-6">
+              <h1 className="text-xl font-semibold text-gray-900">Perfil del vendedor</h1>
             </header>
 
             <div className="grid gap-6 p-6 lg:grid-cols-[260px_1fr]">
-              <nav className="hidden rounded-3xl border border-white/10 bg-white/[0.08] p-3 text-sm text-white/80 md:block">
+              <nav className="hidden rounded-3xl border border-gray-200 bg-white p-3 text-sm text-gray-700 md:block">
                 <ul className="grid gap-1">
                   {TABS.map((tab) => (
                     <li key={tab}>
@@ -862,7 +884,7 @@ export default function Profile() {
                         type="button"
                         onClick={() => handleSelectTab(tab)}
                         className={`w-full rounded-2xl px-4 py-3 text-left transition ${
-                          activeTab === tab ? 'bg-white text-[#14212e] shadow-lg' : 'hover:bg-white/10'
+                          activeTab === tab ? 'bg-blue-600 text-white shadow-sm' : 'hover:bg-gray-50'
                         }`}
                       >
                         {tab}
@@ -872,16 +894,16 @@ export default function Profile() {
                 </ul>
               </nav>
 
-              <section className="rounded-3xl border border-white/10 bg-white px-7 py-6 md:p-6 shadow-[0_25px_60px_rgba(12,20,28,0.25)]">
+              <section className="rounded-3xl border border-gray-200 bg-white px-7 py-6 md:p-6 shadow-sm">
                 {renderSection(activeTab)}
               </section>
             </div>
           </div>
 
-          <div className="mt-8 flex flex-wrap items-center justify_between gap-3 text-xs text-white/60">
-            <span>¿Sos el vendedor? <Link to="/dashboard" className="underline text-white">Administrá tu perfil desde el panel</Link>.</span>
+          <div className="mt-8 flex flex-wrap items-center justify-between gap-3 text-xs text-gray-600">
+            <span>¿Sos el vendedor? <Link to="/dashboard" className="underline text-gray-700">Administrá tu perfil desde el panel</Link>.</span>
             <span>
-              <Link to="/marketplace" className="underline text-white">
+              <Link to="/marketplace" className="underline text-gray-700">
                 Volver al marketplace
               </Link>
             </span>
@@ -894,6 +916,8 @@ export default function Profile() {
           onClose={() => setReviewModalOpen(false)}
           rating={reviewRating}
           setRating={setReviewRating}
+          isVerifiedSale={reviewIsVerifiedSale}
+          setIsVerifiedSale={setReviewIsVerifiedSale}
           tags={reviewTags}
           setTags={setReviewTags}
           comment={reviewComment}
@@ -903,10 +927,11 @@ export default function Profile() {
             if (!sellerId || !user?.id) return
             try {
               setReviewSubmitting(true)
-              await submitReview({ sellerId, buyerId: user.id, rating: reviewRating, tags: reviewTags, comment: reviewComment })
+              await submitReview({ sellerId, buyerId: user.id, rating: reviewRating, isVerifiedSale: reviewIsVerifiedSale, tags: reviewTags, comment: reviewComment })
               showToast('Gracias por tu reseña')
               setReviewModalOpen(false)
               setReviewRating(0)
+              setReviewIsVerifiedSale(false)
               setReviewTags([])
               setReviewComment('')
               const data = await fetchSellerReviews(sellerId)
@@ -966,93 +991,6 @@ function StarRating({ value }: { value: number }) {
         )
       })}
     </span>
-  )
-}
-
-function ReviewModal({ onClose, rating, setRating, tags, setTags, comment, setComment, loading, onSubmit }: {
-  onClose: () => void
-  rating: number
-  setRating: (v: number) => void
-  tags: string[]
-  setTags: (v: string[]) => void
-  comment: string
-  setComment: (v: string) => void
-  loading: boolean
-  onSubmit: () => Promise<void> | void
-}) {
-  const OPTIONS = [
-    { id: 'atencion', label: 'Buena atención' },
-    { id: 'respetuoso', label: 'Respetuoso' },
-    { id: 'buen_vendedor', label: 'Buen vendedor' },
-    { id: 'compre', label: 'Concreté compra' },
-    { id: 'puntual', label: 'Puntual' },
-    { id: 'buena_comunicacion', label: 'Buena comunicación' },
-    { id: 'recomendado', label: 'Recomendado' },
-  ]
-  const toggle = (id: string) => {
-    setTags(tags.includes(id) ? tags.filter((t) => t !== id) : [...tags, id])
-  }
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
-      <div className="w-full max-w-lg overflow-hidden rounded-3xl border border-[#14212e]/10 bg-white p-6 shadow-[0_25px_80px_rgba(12,20,28,0.3)]">
-        <div className="flex items-start justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-[#14212e]">Escribir reseña</h2>
-            <p className="text-sm text-[#14212e]/70">Contanos cómo fue tu interacción con el vendedor.</p>
-          </div>
-          <button type="button" onClick={onClose} aria-label="Cerrar" className="rounded-full p-1 text-[#14212e]/60 hover:bg-[#14212e]/10">✕</button>
-        </div>
-        <div className="mt-4 space-y-3">
-          <div>
-            <p className="text-sm font-medium text-[#14212e]">Calificación</p>
-            <div className="mt-2 flex items-center gap-2">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <button key={i} type="button" onClick={() => setRating(i + 1)} aria-label={`Calificar ${i + 1}`} className="transition-transform hover:scale-110">
-                  <svg viewBox="0 0 24 24" className={`h-8 w-8 ${i < rating ? 'text-amber-400' : 'text-[#14212e]/20'}`} fill="currentColor">
-                    <path d="M12 17.3 6.5 20.2l1-5.8L3 10.2l5.8-.9L12 4l3.2 5.3 5.8.9-4.5 4.2 1 5.8Z" />
-                  </svg>
-                </button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <p className="text-sm font-medium text-[#14212e]">Etiquetas</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {OPTIONS.map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  onClick={() => toggle(opt.id)}
-                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                    tags.includes(opt.id)
-                      ? 'border-[#14212e] bg-[#14212e]/10 text-[#14212e]'
-                      : 'border-[#14212e]/20 text-[#14212e]/80 hover:bg-[#14212e]/5'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <p className="text-sm font-medium text-[#14212e]">Comentario (opcional)</p>
-            <textarea
-              className="textarea mt-2"
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              placeholder="Dejá detalles útiles para otros compradores"
-              rows={4}
-            />
-          </div>
-          <div className="flex items-center justify-end gap-2">
-            <Button variant="ghost" onClick={onClose} disabled={loading}>Cancelar</Button>
-            <Button onClick={() => void onSubmit()} disabled={loading || rating < 1} className="bg-[#14212e] text-white hover:bg-[#1b2f3f]">
-              {loading ? 'Enviando…' : 'Enviar reseña'}
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
   )
 }
 

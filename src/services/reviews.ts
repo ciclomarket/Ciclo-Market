@@ -1,4 +1,4 @@
-import { supabaseEnabled } from './supabase'
+import { getSupabaseClient, supabaseEnabled } from './supabase'
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').trim()
 
@@ -8,6 +8,7 @@ export type ReviewRecord = {
   buyer_id: string
   listing_id?: string | null
   rating: number // 1-5
+  is_verified_sale?: boolean | null
   tags?: string[] | null // ['atencion','respetuoso','buen_vendedor','compro']
   comment?: string | null
   created_at: string
@@ -73,11 +74,18 @@ export async function canUserReviewSeller(buyerId: string, sellerId: string): Pr
   }
 }
 
-export async function submitReview(payload: { sellerId: string; buyerId: string; listingId?: string | null; rating: number; tags?: string[]; comment?: string }) {
+export async function submitReview(payload: { sellerId: string; buyerId: string; listingId?: string | null; rating: number; isVerifiedSale?: boolean; tags?: string[]; comment?: string }) {
   const endpoint = API_BASE ? `${API_BASE}/api/reviews/submit` : '/api/reviews/submit'
+  let token: string | null = null
+  try {
+    const supabase = getSupabaseClient()
+    const { data } = await supabase.auth.getSession()
+    token = data.session?.access_token || null
+  } catch { /* noop */ }
+  if (!token) throw new Error('not_authenticated')
   const res = await fetch(endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify(payload),
   })
   if (!res.ok) {

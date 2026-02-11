@@ -57,25 +57,37 @@ async function fetchProfiles(supabase, ids) {
 async function sendEmailsForReminders(supabase, reminders) {
   if (!reminders.length) return 0
   const buyerIds = [...new Set(reminders.map((r) => r.buyer_id).filter(Boolean))]
-  const profiles = await fetchProfiles(supabase, buyerIds)
+  const sellerIds = [...new Set(reminders.map((r) => r.seller_id).filter(Boolean))]
+  const profiles = await fetchProfiles(supabase, [...new Set([...buyerIds, ...sellerIds])])
   const baseFront = (process.env.FRONTEND_URL || '').split(',')[0]?.trim() || ''
   const sentIds = []
   for (const r of reminders) {
-    const profile = profiles.get(r.buyer_id)
-    const to = profile?.email
+    const buyer = profiles.get(r.buyer_id)
+    const seller = profiles.get(r.seller_id)
+    const to = buyer?.email
     if (!to) continue
-    const cta = baseFront ? `${baseFront}/vendedor/${r.seller_id}?review=1` : null
+    const sellerName = String(seller?.full_name || '').trim() || 'este vendedor'
+    const vendorUrl = baseFront ? `${baseFront}/vendedor/${r.seller_id}` : null
+    const starLinks = baseFront
+      ? Array.from({ length: 5 }).map((_, idx) => {
+        const rating = idx + 1
+        const href = `${baseFront}/vendedor/${r.seller_id}?review=true&rating=${rating}`
+        return `<a href="${href}" style="display:inline-block;font-size:34px;line-height:1;color:#f59e0b;text-decoration:none;padding:0 4px;" title="${rating} de 5">★</a>`
+      }).join('')
+      : ''
     const mailOptions = {
       from: process.env.SMTP_FROM || `Ciclo Market <${process.env.SMTP_USER}>`,
       to,
-      subject: 'Ya podés dejar una reseña',
+      subject: `¿Qué tal tu experiencia con ${sellerName}?`,
       html: `
         <div style="font-family:Arial,sans-serif;line-height:1.6;color:#14212e;">
-          <h2>Dejá tu reseña</h2>
-          <p>Hola ${profile.full_name || 'ciclista'},</p>
-          <p>Ya podés dejar una reseña sobre tu experiencia con este vendedor.</p>
-          ${cta ? `<div style="margin:16px 0;"><a href="${cta}" style="display:inline-block;padding:10px 16px;background:#14212e;color:#fff;text-decoration:none;border-radius:8px;">Escribir reseña</a></div>` : ''}
-          <p>Gracias por ayudar a la comunidad Ciclo Market.</p>
+          <h2 style="margin:0 0 10px 0;">Dejá tu reseña</h2>
+          <p style="margin:0 0 10px 0;">Hola ${buyer?.full_name || 'ciclista'},</p>
+          <p style="margin:0 0 12px 0;">¿Qué tal tu experiencia con <strong>${sellerName}</strong>?</p>
+          ${vendorUrl ? `<p style="margin:0 0 10px 0;font-size:13px;color:#334155;">Seleccioná una calificación:</p>` : ''}
+          ${vendorUrl ? `<div style="margin:6px 0 16px 0;">${starLinks}</div>` : ''}
+          ${vendorUrl ? `<div style="margin:0 0 18px 0;"><a href="${vendorUrl}" style="display:inline-block;padding:10px 16px;background:#14212e;color:#fff;text-decoration:none;border-radius:10px;font-weight:700;">Ver perfil del vendedor</a></div>` : ''}
+          <p style="margin:0;color:#475569;font-size:13px;">Gracias por ayudar a la comunidad Ciclo Market.</p>
         </div>
       `,
     }

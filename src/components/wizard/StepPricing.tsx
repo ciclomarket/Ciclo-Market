@@ -1,3 +1,4 @@
+/* eslint-disable react/prop-types */
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -9,6 +10,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import { OTHER_CITY_OPTION } from '@/constants/locations';
 
 const CURRENCY_META = {
   USD: { label: 'USD', symbol: 'US$' },
@@ -25,6 +27,17 @@ export default function StepPricing({ data, onChange, errors, provinces = [], cu
   const cityOptions =
     (provinces.find((p) => (typeof p === 'string' ? p === data.province : p.name === data.province)) as any)
       ?.cities ?? [];
+  const cityOptionsNoOther = Array.isArray(cityOptions) ? cityOptions.filter((c) => c && c !== OTHER_CITY_OPTION) : [];
+  const cityHasOther = Array.isArray(cityOptions) && cityOptions.includes(OTHER_CITY_OPTION);
+  const inferredCustomCity = Boolean(
+    data.city &&
+      Array.isArray(cityOptionsNoOther) &&
+      cityOptionsNoOther.length > 0 &&
+      !cityOptionsNoOther.includes(data.city)
+  );
+  const isCustomCity = data.cityMode === 'custom' || inferredCustomCity;
+  const customCityValue = (data.cityCustom || (isCustomCity ? data.city : '') || '').toString();
+  const citySelectValue = isCustomCity ? '__other__' : (data.city || '');
 
   return (
     <div className="space-y-8">
@@ -104,17 +117,33 @@ export default function StepPricing({ data, onChange, errors, provinces = [], cu
 
           <div className="space-y-2">
             <Label className="text-sm text-slate-600">Ciudad</Label>
-            {Array.isArray(cityOptions) && cityOptions.length > 0 ? (
-              <Select value={data.city || ''} onValueChange={(v) => updateField('city', v)}>
+            {Array.isArray(cityOptionsNoOther) && cityOptionsNoOther.length > 0 ? (
+              <Select
+                value={citySelectValue}
+                onValueChange={(v) => {
+                  if (v === '__other__') {
+                    updateField('cityMode', 'custom');
+                    updateField('city', '');
+                    if (!data.cityCustom) updateField('cityCustom', '');
+                    return;
+                  }
+                  updateField('cityMode', 'preset');
+                  updateField('cityCustom', '');
+                  updateField('city', v);
+                }}
+              >
                 <SelectTrigger className={cn("h-12", errors?.city && "border-red-500")}>
                   <SelectValue placeholder="Seleccioná la ciudad" />
                 </SelectTrigger>
                 <SelectContent>
-                  {cityOptions.map((c: string) => (
+                  {cityOptionsNoOther.map((c: string) => (
                     <SelectItem key={c} value={c}>
                       {c}
                     </SelectItem>
                   ))}
+                  {cityHasOther ? (
+                    <SelectItem value="__other__">{OTHER_CITY_OPTION}</SelectItem>
+                  ) : null}
                 </SelectContent>
               </Select>
             ) : (
@@ -123,6 +152,17 @@ export default function StepPricing({ data, onChange, errors, provinces = [], cu
                 value={data.city || ''}
                 onChange={(e) => updateField('city', e.target.value)}
                 className={cn("h-12", errors?.city && "border-red-500")}
+              />
+            )}
+            {isCustomCity && (
+              <Input
+                className={cn("h-12 mt-2", errors?.city && "border-red-500")}
+                placeholder="Escribí tu ciudad"
+                value={customCityValue}
+                onChange={(e) => {
+                  updateField('cityMode', 'custom');
+                  updateField('cityCustom', e.target.value);
+                }}
               />
             )}
             {errors?.city && <p className="text-sm text-red-500">{errors.city}</p>}

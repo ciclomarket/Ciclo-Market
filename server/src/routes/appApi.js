@@ -284,6 +284,7 @@ router.get('/api/reviews/:sellerId', async (req, res) => {
       buyer_id: review.buyer_id,
       listing_id: review.listing_id,
       rating: Number(review.rating || 0),
+      is_verified_sale: Boolean(review.is_verified_sale),
       tags: Array.isArray(review.tags) ? review.tags : [],
       comment: review.comment || null,
       buyer_name: review.buyer_name || review['buyer_name'] || null,
@@ -331,6 +332,26 @@ router.get('/api/reviews/can-review', async (req, res) => {
       return res.json({ allowed: false, reason: 'already_reviewed' })
     }
 
+    // If a reminder was issued for this buyer/seller, allow review even if we can't find a contact event.
+    // (Best-effort: some environments might not have the table.)
+    try {
+      const nowIso = new Date().toISOString()
+      const { data: reminder, error: reminderErr } = await supabase
+        .from('review_reminders')
+        .select('id')
+        .eq('seller_id', sellerId)
+        .eq('buyer_id', buyerId)
+        .lte('ready_at', nowIso)
+        .limit(1)
+        .maybeSingle()
+      if (!reminderErr && reminder?.id) return res.json({ allowed: true })
+    } catch (err) {
+      const msg = String(err?.message || '')
+      if (!/does not exist/i.test(msg) && !/42P01/i.test(msg)) {
+        console.warn('[api] can-review reminder lookup failed (non-fatal)', msg || err)
+      }
+    }
+
     const { data: contact } = await supabase
       .from('contact_events')
       .select('id')
@@ -350,19 +371,33 @@ router.get('/api/reviews/can-review', async (req, res) => {
 
 router.post('/api/reviews/submit', async (req, res) => {
   try {
-    const { sellerId, buyerId, listingId, rating, tags, comment } = req.body || {}
+    const { sellerId, buyerId, listingId, rating, tags, comment, isVerifiedSale, is_verified_sale } = req.body || {}
     if (!sellerId || !buyerId || !Number.isFinite(Number(rating))) {
       return res.status(400).json({ ok: false, error: 'missing_fields' })
     }
+    if (String(sellerId) === String(buyerId)) {
+      return res.status(400).json({ ok: false, error: 'self_review' })
+    }
     const normalizedRating = Math.min(Math.max(Number(rating), 1), 5)
+    let normalizedIsVerifiedSale = false
+    if (typeof isVerifiedSale === 'boolean') normalizedIsVerifiedSale = isVerifiedSale
+    else if (typeof is_verified_sale === 'boolean') normalizedIsVerifiedSale = is_verified_sale
     const supabase = getSupabaseOrFail(res)
     if (!supabase) return
+
+    // Require auth and bind buyerId to the authenticated user (prevents spoofing).
+    const authUser = await getAuthUser(req, supabase)
+    if (!authUser?.id) return res.status(401).json({ ok: false, error: 'unauthorized' })
+    if (String(authUser.id) !== String(buyerId)) {
+      return res.status(403).json({ ok: false, error: 'not_allowed' })
+    }
 
     const insertPayload = {
       seller_id: sellerId,
       buyer_id: buyerId,
       listing_id: listingId || null,
       rating: normalizedRating,
+      is_verified_sale: normalizedIsVerifiedSale,
       tags: Array.isArray(tags) ? tags : [],
       comment: comment ? String(comment).trim() : null,
       status: 'published',
@@ -390,6 +425,44 @@ router.post('/api/reviews/submit', async (req, res) => {
         return res.status(500).json({ ok: false, error: 'update_failed' })
       }
       return res.json({ ok: true, review: data })
+    }
+
+    // Enforce eligibility (contact event OR reminder) for first-time reviews.
+    const allowByContact = async () => {
+      const { data: contact } = await supabase
+        .from('contact_events')
+        .select('id')
+        .eq('seller_id', String(sellerId))
+        .eq('buyer_id', String(buyerId))
+        .limit(1)
+        .maybeSingle()
+      return Boolean(contact?.id)
+    }
+    const allowByReminder = async () => {
+      try {
+        const nowIso = new Date().toISOString()
+        const { data: reminder, error: reminderErr } = await supabase
+          .from('review_reminders')
+          .select('id')
+          .eq('seller_id', String(sellerId))
+          .eq('buyer_id', String(buyerId))
+          .lte('ready_at', nowIso)
+          .limit(1)
+          .maybeSingle()
+        if (reminderErr) return false
+        return Boolean(reminder?.id)
+      } catch (err) {
+        const msg = String(err?.message || '')
+        if (!/does not exist/i.test(msg) && !/42P01/i.test(msg)) {
+          console.warn('[api] review reminder lookup failed (non-fatal)', msg || err)
+        }
+        return false
+      }
+    }
+
+    const allowed = (await allowByContact()) || (await allowByReminder())
+    if (!allowed) {
+      return res.status(403).json({ ok: false, error: 'not_allowed' })
     }
 
     const { data, error } = await supabase

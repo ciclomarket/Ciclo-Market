@@ -128,6 +128,8 @@ type FormData = {
   priceInput: string
   province: string
   city: string
+  cityMode: 'preset' | 'custom'
+  cityCustom: string
   whatsApp: string
   waCountry: '+54' | '+55' | '+56' | '+595'
   waLocal: string
@@ -185,6 +187,8 @@ const DRAFT_FIELDS: Array<keyof FormData> = [
   'priceInput',
   'province',
   'city',
+  'cityMode',
+  'cityCustom',
   'whatsApp',
   'waCountry',
   'waLocal',
@@ -318,6 +322,8 @@ export default function CreateListing() {
       priceInput: '',
       province: '',
       city: '',
+      cityMode: 'preset',
+      cityCustom: '',
       whatsApp: '',
       waCountry: '+54',
       waLocal: '',
@@ -340,6 +346,19 @@ export default function CreateListing() {
   )
 
   const [formData, setFormData] = useState<FormData>(INITIAL_STATE)
+
+  // Normalize legacy placeholder "Otra ciudad" into custom city input if it slips in.
+  useEffect(() => {
+    const cityNorm = (formData.city || '').trim().toLowerCase()
+    if (cityNorm !== 'otra ciudad') return
+    if (formData.cityMode === 'custom') return
+    setFormData((prev) => ({
+      ...prev,
+      city: '',
+      cityMode: 'custom',
+      cityCustom: prev.cityCustom || '',
+    }))
+  }, [formData.city, formData.cityMode, formData.cityCustom])
 
   const persistDraft = useMemo(
     () => (data: DraftPayload) => {
@@ -444,11 +463,12 @@ export default function CreateListing() {
       if (data.images.length === 0) nextErrors.images = 'Subí al menos una foto'
     }
 
-    if (currentStep === 4) {
+  if (currentStep === 4) {
       const price = parseMoneyInput(data.priceInput, { allowDecimals: true })
       if (!price || price <= 0) nextErrors.priceInput = 'Indicá un precio válido'
       if (!data.province.trim()) nextErrors.province = 'Seleccioná la provincia'
-      if (!data.city.trim()) nextErrors.city = 'Seleccioná la ciudad'
+      const effectiveCity = (data.cityMode === 'custom' ? data.cityCustom : data.city).trim()
+      if (!effectiveCity) nextErrors.city = 'Indicá la ciudad'
     }
 
     return nextErrors
@@ -767,7 +787,8 @@ export default function CreateListing() {
 
     const price = parseMoneyInput(formData.priceInput, { allowDecimals: true }) || 0
     const title = `${formData.brand.trim()} ${formData.model.trim()}`.trim()
-    const location = [formData.city, formData.province].filter(Boolean).join(', ')
+    const effectiveCity = (formData.cityMode === 'custom' ? formData.cityCustom : formData.city).trim()
+    const location = [effectiveCity, formData.province].filter(Boolean).join(', ')
     const categoryField = formData.mainCategory === 'Bicicletas' ? (formData.category || null) : formData.mainCategory
     const subcategoryField =
       formData.mainCategory === 'Bicicletas'

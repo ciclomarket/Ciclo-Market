@@ -41,12 +41,26 @@ export default function ListingCard({
   const highlighted = hasPaidPlan(l.sellerPlan ?? (l.plan as any), l.sellerPlanExpires)
   const discountPct = hasOffer ? Math.round((1 - l.price / (l.originalPrice as number)) * 100) : null
   const isLifestyle = l.category === 'Indumentaria' || l.category === 'Nutrición'
-  const city = l.location?.split(',')[0]?.trim() || null
-  const cityDisplay = (() => {
-    if (!city) return null
-    const norm = city.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
-    if (norm.includes('ciudad autonoma de buenos aires') || norm === 'caba' || norm.includes('capital federal')) return 'CABA'
-    return city
+  const locationDisplay = (() => {
+    const raw = (l.location || '').toString().trim()
+    if (!raw) return null
+    const parts = raw.split(',').map((p) => p.trim()).filter(Boolean)
+    const city = parts[0] || ''
+    const province = parts.slice(1).join(', ')
+    const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+    const cityNorm = norm(city)
+    const provNorm = norm(province)
+    if (cityNorm === 'otra ciudad') return province || null
+    const cityOut = (() => {
+      if (!city) return null
+      if (cityNorm.includes('ciudad autonoma de buenos aires') || cityNorm === 'caba' || cityNorm.includes('capital federal')) return 'CABA'
+      return city
+    })()
+    if (cityOut === 'CABA') return 'CABA'
+    if (!province) return cityOut
+    if (provNorm && provNorm === cityNorm) return cityOut
+    // UX: mostrar "Provincia, Ciudad"
+    return [province, cityOut].filter(Boolean).join(', ')
   })()
   const extrasTokens = (l.extras ?? '').split('•').map((part) => part.trim()).filter(Boolean)
   const getExtraValue = (label: string) => {
@@ -60,7 +74,7 @@ export default function ListingCard({
   const drivetrainFromExtras = getExtraValue('Grupo') || getExtraValue('Transmisión') || getExtraValue('Transmision') || null
   const drivetrainValue = (l.drivetrain?.trim() || l.drivetrainDetail?.trim() || drivetrainFromExtras || '') || null
   const yearValue = typeof l.year === 'number' && l.year > 1900 ? String(l.year) : null
-  let metaDisplay = [sizeValue || null, drivetrainValue || null, cityDisplay || null].filter(Boolean) as string[]
+  let metaDisplay = [sizeValue || null, drivetrainValue || null, locationDisplay || null].filter(Boolean) as string[]
   if (l.category === 'Accesorios') {
     const bikeType = getExtraValue('Uso') || getExtraValue('Tipo') || null
     const condFromExtras = getExtraValue('Condición') || getExtraValue('Condicion') || null
@@ -70,10 +84,10 @@ export default function ListingCard({
       return m && m[1] ? m[1].trim() : null
     })()
     const condition = condFromExtras || condFromDesc || null
-    metaDisplay = [bikeType, condition, cityDisplay || null].filter(Boolean) as string[]
+    metaDisplay = [bikeType, condition, locationDisplay || null].filter(Boolean) as string[]
   } else if (l.category === 'Nutrición') {
     const typeValue = getExtraValue('Tipo') || l.subcategory || null
-    metaDisplay = [typeValue ? `Tipo: ${typeValue}` : null, cityDisplay || null].filter(Boolean) as string[]
+    metaDisplay = [typeValue ? `Tipo: ${typeValue}` : null, locationDisplay || null].filter(Boolean) as string[]
   } else if (l.category === 'Indumentaria') {
     const genderRaw = getExtraValue('Género') || getExtraValue('Genero') || getExtraValue('Fit') || null
     const gender = (() => {
@@ -94,7 +108,7 @@ export default function ListingCard({
       return m && m[1] ? m[1] : null
     })()
     const condition = (condFromExtras || condFromDesc || '').trim() || null
-    metaDisplay = [gender, mergedSize, condition, cityDisplay || null].filter(Boolean) as string[]
+    metaDisplay = [gender, mergedSize, condition, locationDisplay || null].filter(Boolean) as string[]
   }
   const now = Date.now()
   const isExpired = l.status === 'expired' || (typeof l.expiresAt === 'number' && l.expiresAt > 0 && l.expiresAt < now)
