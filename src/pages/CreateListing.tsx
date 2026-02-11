@@ -110,6 +110,17 @@ type FormData = {
   drivetrain: string
   drivetrainOther: string
   brakeType: string
+  showBikeExtras: boolean
+  seatInfo: string
+  forkInfo: string
+  handlebarInfo: string
+  stemInfo: string
+  cranksetInfo: string
+  powerMeterInfo: string
+  wheelsInfo: string
+  tiresInfo: string
+  pedalsInfo: string
+  chainInfo: string
   description: string
   extras: string
   images: string[]
@@ -156,6 +167,17 @@ const DRAFT_FIELDS: Array<keyof FormData> = [
   'drivetrain',
   'drivetrainOther',
   'brakeType',
+  'showBikeExtras',
+  'seatInfo',
+  'forkInfo',
+  'handlebarInfo',
+  'stemInfo',
+  'cranksetInfo',
+  'powerMeterInfo',
+  'wheelsInfo',
+  'tiresInfo',
+  'pedalsInfo',
+  'chainInfo',
   'description',
   'extras',
   'images',
@@ -277,6 +299,17 @@ export default function CreateListing() {
       drivetrain: '',
       drivetrainOther: '',
       brakeType: '',
+      showBikeExtras: false,
+      seatInfo: '',
+      forkInfo: '',
+      handlebarInfo: '',
+      stemInfo: '',
+      cranksetInfo: '',
+      powerMeterInfo: '',
+      wheelsInfo: '',
+      tiresInfo: '',
+      pedalsInfo: '',
+      chainInfo: '',
       description: '',
       extras: '',
       images: [],
@@ -437,42 +470,75 @@ export default function CreateListing() {
 
   const buildExtras = (): string => {
     const parts: string[] = []
-    if (formData.mainCategory === 'Bicicletas') {
-      if (formData.frameSize) parts.push(`Talle: ${formData.frameSize}`)
-      if (formData.year) parts.push(`Año: ${formData.year}`)
-      if (formData.drivetrain || formData.drivetrainOther) parts.push(`Grupo: ${formData.drivetrain || formData.drivetrainOther}`)
-      if (formData.brakeType) parts.push(`Freno: ${formData.brakeType}`)
-      if (formData.wheelSize) parts.push(`Rodado: ${formData.wheelSize}`)
-      if (formData.condition) parts.push(`Condición: ${formData.condition}`)
-    } else if (formData.mainCategory === 'Accesorios') {
-      if (formData.accessorySubcat) parts.push(`Tipo: ${formData.accessorySubcat}`)
-      if (formData.accUseType) parts.push(`Uso: ${formData.accUseType}`)
-      if (formData.material) parts.push(`Material: ${formData.material}`)
-      if (formData.brakeType) parts.push(`Freno: ${formData.brakeType}`)
-      if (formData.wheelSize) parts.push(`Rodado: ${formData.wheelSize}`)
-      if (formData.accCompatibility) parts.push(`Compatibilidad: ${formData.accCompatibility}`)
-      if (formData.accWeight) parts.push(`Peso: ${formData.accWeight}`)
-      if (formData.groupComplete) parts.push(`Contenido: ${formData.groupComplete}`)
-      if (formData.groupMode) parts.push(`Modo: ${formData.groupMode}`)
-      if (formData.drivetrain && formData.groupComplete === 'Completo') parts.push(`Grupo: ${formData.drivetrain}`)
-      if (formData.condition) parts.push(`Condición: ${formData.condition}`)
-    } else if (formData.mainCategory === 'Indumentaria') {
-      if (formData.apparelSubcat) parts.push(`Tipo: ${formData.apparelSubcat}`)
-      if (formData.apparelGender) parts.push(`Género: ${formData.apparelGender}`)
-      if (formData.apparelSize) parts.push(`Talle: ${formData.apparelSize}`)
-      if (formData.apparelColor) parts.push(`Color: ${formData.apparelColor}`)
-      if (formData.accUseType) parts.push(`Uso: ${formData.accUseType}`)
-      if (formData.material) parts.push(`Material: ${formData.material}`)
-      if (formData.condition) parts.push(`Condición: ${formData.condition}`)
-    } else if (formData.mainCategory === 'Nutrición') {
-      if (formData.nutritionSubcat) parts.push(`Tipo: ${formData.nutritionSubcat}`)
-      if (formData.nutriCHO) parts.push(`CHO: ${formData.nutriCHO} g`)
-      if (formData.nutriSodium) parts.push(`Sodio: ${formData.nutriSodium} mg`)
-      if (formData.nutriServings) parts.push(`Porciones: ${formData.nutriServings}`)
-      if (formData.nutriNetWeight) parts.push(`Peso: ${formData.nutriNetWeight}`)
-      if (formData.nutriExpire) parts.push(`Vence: ${formData.nutriExpire}`)
-      if (formData.condition) parts.push(`Condición: ${formData.condition}`)
+    const pushKV = (label: string, value: string) => {
+      const v = String(value || '').trim()
+      if (!v) return
+      parts.push(`${label}: ${v}`)
     }
+
+    if (formData.mainCategory === 'Bicicletas') {
+      pushKV('Talle', formData.frameSize)
+      pushKV('Año', formData.year)
+      pushKV('Grupo', formData.drivetrain || formData.drivetrainOther)
+      pushKV('Freno', formData.brakeType)
+      pushKV('Rodado', formData.wheelSize)
+      pushKV('Condición', formData.condition)
+
+      const hasUpgrades =
+        Boolean(formData.seatInfo?.trim()) ||
+        Boolean(formData.forkInfo?.trim()) ||
+        Boolean(formData.handlebarInfo?.trim()) ||
+        Boolean(formData.stemInfo?.trim()) ||
+        Boolean(formData.cranksetInfo?.trim()) ||
+        Boolean(formData.powerMeterInfo?.trim()) ||
+        Boolean(formData.wheelsInfo?.trim()) ||
+        Boolean(formData.tiresInfo?.trim()) ||
+        Boolean(formData.pedalsInfo?.trim()) ||
+        Boolean(formData.chainInfo?.trim())
+
+      if (formData.showBikeExtras || hasUpgrades) {
+        pushKV('Asiento', formData.seatInfo)
+        pushKV('Horquilla', formData.forkInfo)
+        pushKV('Manillar', formData.handlebarInfo)
+        pushKV('Potencia', formData.stemInfo)
+        pushKV('Palancas', formData.cranksetInfo)
+        pushKV('Potenciómetro', formData.powerMeterInfo)
+        pushKV('Ruedas', formData.wheelsInfo)
+        pushKV('Cubiertas', formData.tiresInfo)
+        pushKV('Pedales', formData.pedalsInfo)
+        pushKV('Cadena', formData.chainInfo)
+      }
+    } else if (formData.mainCategory === 'Accesorios') {
+      pushKV('Tipo', formData.accessorySubcat)
+      pushKV('Uso', formData.accUseType)
+      pushKV('Material', formData.material)
+      pushKV('Freno', formData.brakeType)
+      pushKV('Rodado', formData.wheelSize)
+      pushKV('Compatibilidad', formData.accCompatibility)
+      pushKV('Peso', formData.accWeight)
+      pushKV('Contenido', formData.groupComplete)
+      pushKV('Modo', formData.groupMode)
+      if (formData.groupComplete === 'Completo') pushKV('Grupo', formData.drivetrain)
+      pushKV('Condición', formData.condition)
+    } else if (formData.mainCategory === 'Indumentaria') {
+      pushKV('Tipo', formData.apparelSubcat)
+      pushKV('Género', formData.apparelGender)
+      pushKV('Talle', formData.apparelSize)
+      pushKV('Color', formData.apparelColor)
+      pushKV('Uso', formData.accUseType)
+      pushKV('Material', formData.material)
+      pushKV('Condición', formData.condition)
+    } else if (formData.mainCategory === 'Nutrición') {
+      pushKV('Tipo', formData.nutritionSubcat)
+      pushKV('CHO', formData.nutriCHO ? `${formData.nutriCHO} g` : '')
+      pushKV('Sodio', formData.nutriSodium ? `${formData.nutriSodium} mg` : '')
+      pushKV('Porciones', formData.nutriServings)
+      pushKV('Peso', formData.nutriNetWeight)
+      pushKV('Vence', formData.nutriExpire)
+      pushKV('Condición', formData.condition)
+    }
+
+    pushKV('Agregados', formData.extras)
     return parts.filter(Boolean).join(' • ')
   }
 
@@ -566,6 +632,29 @@ export default function CreateListing() {
         const extrasMap = parseExtrasMap(row.extras)
         const inferredBrake = getExtra(extrasMap, 'Freno') || getExtra(extrasMap, 'Tipo de freno')
         const inferredCondition = getExtra(extrasMap, 'Condición') || getExtra(extrasMap, 'Condicion')
+        const inferredSeat = getExtra(extrasMap, 'Asiento') || getExtra(extrasMap, 'Sillín') || getExtra(extrasMap, 'Sillin')
+        const inferredFork = getExtra(extrasMap, 'Horquilla')
+        const inferredHandlebar = getExtra(extrasMap, 'Manillar')
+        const inferredStem = getExtra(extrasMap, 'Potencia') || getExtra(extrasMap, 'Stem')
+        const inferredCrank = getExtra(extrasMap, 'Palancas') || getExtra(extrasMap, 'Bielas')
+        const inferredPowerMeter = getExtra(extrasMap, 'Potenciómetro') || getExtra(extrasMap, 'Potenciometro') || getExtra(extrasMap, 'Power meter')
+        const inferredWheels = getExtra(extrasMap, 'Ruedas')
+        const inferredTires = getExtra(extrasMap, 'Cubiertas') || getExtra(extrasMap, 'Cubierta') || getExtra(extrasMap, 'Neumáticos') || getExtra(extrasMap, 'Neumaticos')
+        const inferredPedals = getExtra(extrasMap, 'Pedales')
+        const inferredChain = getExtra(extrasMap, 'Cadena')
+        const inferredAddons = getExtra(extrasMap, 'Agregados') || getExtra(extrasMap, 'Extras')
+        const inferredShowBikeExtras = Boolean(
+          inferredSeat ||
+            inferredFork ||
+            inferredHandlebar ||
+            inferredStem ||
+            inferredCrank ||
+            inferredPowerMeter ||
+            inferredWheels ||
+            inferredTires ||
+            inferredPedals ||
+            inferredChain
+        )
 
         const drivetrainVal = String(row.drivetrain || '')
         const drivetrainDetailVal = String(row.drivetrain_detail || '')
@@ -611,11 +700,23 @@ export default function CreateListing() {
           drivetrainOther: resolvedDrivetrain.drivetrainOther,
           brakeType: String(inferredBrake || ''),
           condition: String(inferredCondition || '') as any,
+          showBikeExtras: inferredShowBikeExtras,
+          seatInfo: String(inferredSeat || ''),
+          forkInfo: String(inferredFork || ''),
+          handlebarInfo: String(inferredHandlebar || ''),
+          stemInfo: String(inferredStem || ''),
+          cranksetInfo: String(inferredCrank || ''),
+          powerMeterInfo: String(inferredPowerMeter || ''),
+          wheelsInfo: String(inferredWheels || ''),
+          tiresInfo: String(inferredTires || ''),
+          pedalsInfo: String(inferredPedals || ''),
+          chainInfo: String(inferredChain || ''),
           images: imagesArr.slice(0, 12),
           priceCurrency: (row.price_currency || 'USD') as Currency,
           priceInput: row.price != null ? String(row.price) : '',
           city: city || prev.city,
           province: province || prev.province,
+          extras: String(inferredAddons || ''),
         }))
       } catch {
         alert('No se pudo cargar la publicación para editar.')

@@ -362,47 +362,65 @@ export default function NewListingForm() {
 
 const buildExtras = (): string => {
     const parts: string[] = []
-	    if (mainCategory === 'Bicicletas') {
-	      if (frameSize) parts.push(`Talle: ${frameSize}`)
-	      if (year) parts.push(`Año: ${year}`)
-	      if (drivetrain || drivetrainOther) parts.push(`Grupo: ${drivetrain || drivetrainOther}`)
-	      if (brakeType) parts.push(`Freno: ${brakeType}`)
-	      if (wheelSize) parts.push(`Rodado: ${wheelSize}`)
-	      if (bikeCondition) parts.push(`Condición: ${bikeCondition}`)
-	      if (fixieRatio) parts.push(`Relación: ${fixieRatio}`)
-	      if (ebikeMotor) parts.push(`Motor: ${ebikeMotor}`)
-	      if (ebikeBattery) parts.push(`Carga: ${ebikeBattery}`)
-	      if (seatInfo) parts.push(`Asiento: ${seatInfo}`)
-	      if (handlebarInfo) parts.push(`Manillar: ${handlebarInfo}`)
-	      if (pedalsInfo) parts.push(`Pedales: ${pedalsInfo}`)
-	      if (chainInfo) parts.push(`Cadena: ${chainInfo}`)
-	      if (forkInfo) parts.push(`Horquilla: ${forkInfo}`)
-    } else if (mainCategory === 'Accesorios') {
-      if (accessorySubcat) parts.push(`Tipo: ${accessorySubcat}`)
-      if (accUseType) parts.push(`Uso: ${accUseType}`)
-      if (material) parts.push(`Material: ${material}`)
-      if (brakeType) parts.push(`Freno: ${brakeType}`)
-      if (wheelSize) parts.push(`Rodado: ${wheelSize}`)
-      if (accCompatibility) parts.push(`Compatibilidad: ${accCompatibility}`)
-      if (accWeight) parts.push(`Peso: ${accWeight}`)
-      if (groupComplete) parts.push(`Contenido: ${groupComplete}`)
-      if (groupMode) parts.push(`Modo: ${groupMode}`)
-      if (drivetrain && groupComplete === 'Completo') parts.push(`Grupo: ${drivetrain}`)
-    } else if (mainCategory === 'Indumentaria') {
-      if (apparelSubcat) parts.push(`Tipo: ${apparelSubcat}`)
-      if (apparelGender) parts.push(`Género: ${apparelGender}`)
-      if (apparelSize) parts.push(`Talle: ${apparelSize}`)
-      if (apparelColor) parts.push(`Color: ${apparelColor}`)
-      if (accUseType) parts.push(`Uso: ${accUseType}`)
-      if (material) parts.push(`Material: ${material}`)
-    } else if (mainCategory === 'Nutrición') {
-      if (nutritionSubcat) parts.push(`Tipo: ${nutritionSubcat}`)
-      if (nutriCHO) parts.push(`CHO: ${nutriCHO} g`)
-      if (nutriSodium) parts.push(`Sodio: ${nutriSodium} mg`)
-      if (nutriServings) parts.push(`Porciones: ${nutriServings}`)
-      if (nutriNetWeight) parts.push(`Peso: ${nutriNetWeight}`)
-      if (nutriExpire) parts.push(`Vence: ${nutriExpire}`)
+    const pushKV = (label: string, value: any) => {
+      const v = String(value || '').trim()
+      if (!v) return
+      parts.push(`${label}: ${v}`)
     }
+
+	    if (mainCategory === 'Bicicletas') {
+	      pushKV('Talle', frameSize)
+	      pushKV('Año', year)
+	      pushKV('Grupo', drivetrain || drivetrainOther)
+	      pushKV('Freno', brakeType)
+	      pushKV('Rodado', wheelSize)
+	      pushKV('Condición', bikeCondition)
+	      pushKV('Relación', fixieRatio)
+	      pushKV('Motor', ebikeMotor)
+	      pushKV('Carga', ebikeBattery)
+
+        const hasUpgrades =
+          Boolean(seatInfo?.trim()) ||
+          Boolean(handlebarInfo?.trim()) ||
+          Boolean(pedalsInfo?.trim()) ||
+          Boolean(chainInfo?.trim()) ||
+          Boolean(forkInfo?.trim())
+
+        if (showBikeExtras || hasUpgrades) {
+	        pushKV('Asiento', seatInfo)
+	        pushKV('Manillar', handlebarInfo)
+	        pushKV('Pedales', pedalsInfo)
+	        pushKV('Cadena', chainInfo)
+	        pushKV('Horquilla', forkInfo)
+        }
+    } else if (mainCategory === 'Accesorios') {
+      pushKV('Tipo', accessorySubcat)
+      pushKV('Uso', accUseType)
+      pushKV('Material', material)
+      pushKV('Freno', brakeType)
+      pushKV('Rodado', wheelSize)
+      pushKV('Compatibilidad', accCompatibility)
+      pushKV('Peso', accWeight)
+      pushKV('Contenido', groupComplete)
+      pushKV('Modo', groupMode)
+      if (groupComplete === 'Completo') pushKV('Grupo', drivetrain)
+    } else if (mainCategory === 'Indumentaria') {
+      pushKV('Tipo', apparelSubcat)
+      pushKV('Género', apparelGender)
+      pushKV('Talle', apparelSize)
+      pushKV('Color', apparelColor)
+      pushKV('Uso', accUseType)
+      pushKV('Material', material)
+    } else if (mainCategory === 'Nutrición') {
+      pushKV('Tipo', nutritionSubcat)
+      pushKV('CHO', nutriCHO ? `${nutriCHO} g` : '')
+      pushKV('Sodio', nutriSodium ? `${nutriSodium} mg` : '')
+      pushKV('Porciones', nutriServings)
+      pushKV('Peso', nutriNetWeight)
+      pushKV('Vence', nutriExpire)
+    }
+
+    pushKV('Agregados', extras)
 	    return parts.filter(Boolean).join(' • ')
 	  }
 

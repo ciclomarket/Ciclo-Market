@@ -8,6 +8,13 @@ type SpecItem = {
   onEdit?: () => void
 }
 
+const normalizeKey = (s: string) =>
+  (s || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+
 const parseExtrasMap = (extras?: string | null) => {
   const out: Record<string, string> = {}
   if (!extras) return out
@@ -23,12 +30,49 @@ const parseExtrasMap = (extras?: string | null) => {
 }
 
 const getExtra = (map: Record<string, string>, key: string) => {
-  const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
-  const keyNorm = norm(key)
+  const keyNorm = normalizeKey(key)
   for (const k of Object.keys(map)) {
-    if (norm(k) === keyNorm) return map[k]
+    if (normalizeKey(k) === keyNorm) return map[k]
   }
   return ''
+}
+
+const HIDDEN_EXTRAS_KEYS_BASE = new Set(
+  [
+    'Talle',
+    'Talles',
+    'Año',
+    'Ano',
+    'Grupo',
+    'Rodado',
+    'Freno',
+    'Tipo de freno',
+    'Condición',
+    'Condicion',
+    'Material',
+    'Tipo de transmisión',
+    'Tipo de transmision',
+    'Transmisión',
+    'Transmision',
+    'Batería',
+    'Bateria',
+  ].map(normalizeKey)
+)
+
+const getVisibleExtrasText = (extras: string | null | undefined, hiddenKeys: Set<string>) => {
+  const parts = String(extras || '')
+    .split('•')
+    .map((p) => p.trim())
+    .filter(Boolean)
+
+  const visible = parts.filter((p) => {
+    const idx = p.indexOf(':')
+    if (idx === -1) return true
+    const k = p.slice(0, idx).trim()
+    return !hiddenKeys.has(normalizeKey(k))
+  })
+
+  return visible.join(' • ').trim()
 }
 
 function SpecCell({ label, value, colSpan = 1, onEdit }: Omit<SpecItem, 'key'>) {
@@ -82,6 +126,7 @@ export default function ListingSpecs({
 }: Props) {
   const extrasMap = parseExtrasMap(listing.extras)
   const items: SpecItem[] = []
+  const isBike = listing.category !== 'Accesorios' && listing.category !== 'Indumentaria' && listing.category !== 'Nutrición'
 
   const add = (item: SpecItem) => {
     items.push(item)
@@ -150,7 +195,51 @@ export default function ListingSpecs({
     if (listing.category === 'Fixie' && specFixieRatio) add({ key: 'ratio', label: 'Relación', value: specFixieRatio })
     if (listing.category === 'E-Bike' && specMotor) add({ key: 'motor', label: 'Motor', value: specMotor })
     if (listing.category === 'E-Bike' && specCharge) add({ key: 'charge', label: 'Batería / Carga', value: specCharge })
-    if (listing.extras) add({ key: 'extras', label: 'Extras', value: listing.extras, colSpan: 3, onEdit: isModerator && onEditField ? () => onEditField('extras', listing.extras, 'textarea') : undefined })
+
+    const upgradeItems: Array<{ key: string; label: string; value: string }> = []
+    if (isBike) {
+      const seat = getExtra(extrasMap, 'Asiento') || getExtra(extrasMap, 'Sillín') || getExtra(extrasMap, 'Sillin')
+      const handlebar = getExtra(extrasMap, 'Manillar')
+      const stem = getExtra(extrasMap, 'Potencia') || getExtra(extrasMap, 'Stem')
+      const crank = getExtra(extrasMap, 'Palancas') || getExtra(extrasMap, 'Bielas')
+      const power = getExtra(extrasMap, 'Potenciómetro') || getExtra(extrasMap, 'Potenciometro') || getExtra(extrasMap, 'Power meter')
+      const wheels = getExtra(extrasMap, 'Ruedas')
+      const tires = getExtra(extrasMap, 'Cubiertas') || getExtra(extrasMap, 'Cubierta') || getExtra(extrasMap, 'Neumáticos') || getExtra(extrasMap, 'Neumaticos')
+      const pedals = getExtra(extrasMap, 'Pedales')
+      const chain = getExtra(extrasMap, 'Cadena')
+      const forkUpgrade = getExtra(extrasMap, 'Horquilla')
+
+      if (seat) upgradeItems.push({ key: 'seat', label: 'Asiento', value: seat })
+      if (handlebar) upgradeItems.push({ key: 'handlebar', label: 'Manillar', value: handlebar })
+      if (stem) upgradeItems.push({ key: 'stem', label: 'Potencia', value: stem })
+      if (crank) upgradeItems.push({ key: 'crank', label: 'Palancas', value: crank })
+      if (power) upgradeItems.push({ key: 'powermeter', label: 'Potenciómetro', value: power })
+      if (wheels && !listing.wheelset) upgradeItems.push({ key: 'wheels', label: 'Ruedas', value: wheels })
+      if (tires) upgradeItems.push({ key: 'tires', label: 'Cubiertas', value: tires })
+      if (pedals) upgradeItems.push({ key: 'pedals', label: 'Pedales', value: pedals })
+      if (chain) upgradeItems.push({ key: 'chain', label: 'Cadena', value: chain })
+      if (forkUpgrade && !(listing.category === 'MTB' && specFork)) upgradeItems.push({ key: 'forkUpg', label: 'Horquilla', value: forkUpgrade })
+    }
+
+    for (const it of upgradeItems) add({ key: it.key, label: it.label, value: it.value })
+
+    const hidden = new Set(HIDDEN_EXTRAS_KEYS_BASE)
+    if (listing.category === 'MTB' && specFork) hidden.add(normalizeKey('Horquilla'))
+    if (listing.category === 'Fixie' && specFixieRatio) hidden.add(normalizeKey('Relación'))
+    if (listing.category === 'E-Bike' && specMotor) hidden.add(normalizeKey('Motor'))
+    if (listing.category === 'E-Bike' && specCharge) hidden.add(normalizeKey('Carga'))
+    for (const it of upgradeItems) hidden.add(normalizeKey(it.label))
+
+    const visibleExtrasText = getVisibleExtrasText(listing.extras, hidden)
+    if (visibleExtrasText) {
+      add({
+        key: 'extras',
+        label: 'Extras',
+        value: visibleExtrasText,
+        colSpan: 3,
+        onEdit: isModerator && onEditField ? () => onEditField('extras', listing.extras, 'textarea') : undefined,
+      })
+    }
   }
 
   return (
@@ -161,4 +250,3 @@ export default function ListingSpecs({
     </div>
   )
 }
-

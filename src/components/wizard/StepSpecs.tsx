@@ -1,3 +1,4 @@
+/* eslint-disable react/prop-types */
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -453,6 +454,72 @@ export default function StepSpecs({ data, onChange, frameSizes = [], wheelSizeOp
         </>
       )}
 
+      {/* Bike extras (upgrades) */}
+      {isBike && (
+        <div className="rounded-2xl border border-gray-200 bg-white p-4 md:p-6">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <Label className="text-base font-medium">Extras (Upgrades) (opcional)</Label>
+              <p className="text-sm text-gray-500">
+                Si cambiaste componentes (asiento, horquilla, ruedas, etc.), cargalo acá. Todo es opcional.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="inline-flex h-10 items-center justify-center rounded-full border border-gray-200 bg-white px-4 text-sm font-semibold text-gray-900 hover:bg-gray-50"
+              onClick={() => updateField('showBikeExtras', !data.showBikeExtras)}
+            >
+              {data.showBikeExtras ? 'Ocultar extras' : 'Añadir extras'}
+            </button>
+          </div>
+
+          {data.showBikeExtras ? (
+            <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Asiento</Label>
+                <Input className="h-12" value={data.seatInfo || ''} onChange={(e) => updateField('seatInfo', e.target.value)} placeholder="Ej: Prologo Scratch M5" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Horquilla</Label>
+                <Input className="h-12" value={data.forkInfo || ''} onChange={(e) => updateField('forkInfo', e.target.value)} placeholder="Ej: Fox 34 Performance" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Manillar</Label>
+                <Input className="h-12" value={data.handlebarInfo || ''} onChange={(e) => updateField('handlebarInfo', e.target.value)} placeholder="Ej: Zipp Service Course" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Potencia</Label>
+                <Input className="h-12" value={data.stemInfo || ''} onChange={(e) => updateField('stemInfo', e.target.value)} placeholder="Ej: 100mm" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Palancas / Bielas</Label>
+                <Input className="h-12" value={data.cranksetInfo || ''} onChange={(e) => updateField('cranksetInfo', e.target.value)} placeholder="Ej: Shimano 105 172.5mm" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Potenciómetro</Label>
+                <Input className="h-12" value={data.powerMeterInfo || ''} onChange={(e) => updateField('powerMeterInfo', e.target.value)} placeholder="Ej: Favero Assioma, Stages" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Ruedas</Label>
+                <Input className="h-12" value={data.wheelsInfo || ''} onChange={(e) => updateField('wheelsInfo', e.target.value)} placeholder="Ej: Zipp 303S" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Cubiertas</Label>
+                <Input className="h-12" value={data.tiresInfo || ''} onChange={(e) => updateField('tiresInfo', e.target.value)} placeholder="Ej: GP5000 28c" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Pedales</Label>
+                <Input className="h-12" value={data.pedalsInfo || ''} onChange={(e) => updateField('pedalsInfo', e.target.value)} placeholder="Ej: Look Keo" />
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label className="text-sm font-medium">Cadena</Label>
+                <Input className="h-12" value={data.chainInfo || ''} onChange={(e) => updateField('chainInfo', e.target.value)} placeholder="Ej: KMC X11" />
+              </div>
+            </div>
+          ) : null}
+        </div>
+      )}
+
       {/* Accessories */}
       {isAccessory && (
         <div className="space-y-6">
@@ -655,15 +722,17 @@ export default function StepSpecs({ data, onChange, frameSizes = [], wheelSizeOp
         />
       </div>
 
-      <div className="space-y-2">
-        <Label className="text-base font-medium">Extras / Agregados (opcional)</Label>
-        <Textarea
-          placeholder="Upgrades, mantenimiento, accesorios incluidos…"
-          value={data.extras || ''}
-          onChange={(e) => updateField('extras', e.target.value)}
-          className="min-h-[100px] resize-none"
-        />
-      </div>
+      {!isBike ? (
+        <div className="space-y-2">
+          <Label className="text-base font-medium">Extras / Agregados (opcional)</Label>
+          <Textarea
+            placeholder="Accesorios incluidos, mantenimiento, detalles extra…"
+            value={data.extras || ''}
+            onChange={(e) => updateField('extras', e.target.value)}
+            className="min-h-[100px] resize-none"
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

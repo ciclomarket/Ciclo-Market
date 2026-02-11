@@ -863,7 +863,7 @@ export default function ListingDetail() {
     const whatsappEnabled = Boolean(waLink) && (listing.whatsappEnabled ?? true) && !(listing as any).whatsapp_user_disabled && !listing.whatsappUserDisabled
     const tier = listing.planTier ?? listing.planStatus
     const hasPaidListingTier = tier === 'PREMIUM' || tier === 'PRO'
-    const waAllowed = Boolean(waPublicFlag ?? ((hasPaidListingTier || hadBasicOrPremium || isStoreLocal) && whatsappEnabled))
+    const waAllowed = Boolean(waPublicFlag === true || ((hasPaidListingTier || hadBasicOrPremium || isStoreLocal) && whatsappEnabled))
     const canShowWhatsapp = Boolean(waLink && !listingUnavailable && waAllowed)
 
     if (!canShowWhatsapp && !emailRecipient) return null

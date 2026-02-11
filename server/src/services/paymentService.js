@@ -14,6 +14,28 @@ const mpClient = (() => {
 
 const inFlightPayments = new Set()
 
+const PHONE_REGEX = /\d+/g
+function normalizeWhatsappForStorage(raw) {
+  if (!raw) return null
+  const digits = String(raw).match(PHONE_REGEX)
+  if (!digits) return null
+  let normalized = digits.join('')
+  normalized = normalized.replace(/^00+/, '')
+  normalized = normalized.replace(/^0+/, '')
+  if (!normalized) return null
+  if (!normalized.startsWith('54')) normalized = `54${normalized}`
+  return normalized
+}
+
+function ensureWhatsappInContactMethods(methods) {
+  const base = Array.isArray(methods) ? methods.filter(Boolean).map((m) => String(m)) : ['email', 'chat']
+  const set = new Set(base)
+  if (!set.has('email')) set.add('email')
+  if (!set.has('chat')) set.add('chat')
+  set.add('whatsapp')
+  return Array.from(set)
+}
+
 function normalizePlanCode(value) {
   const v = String(value || '').trim().toLowerCase()
   if (v === 'basic' || v === 'premium' || v === 'pro') return v
@@ -166,7 +188,7 @@ async function processPayment(paymentIdRaw) {
       .eq('provider_ref', paymentId)
       .maybeSingle()
     if (existingErr) console.warn('[payments] idempotency lookup failed', existingErr?.message || existingErr)
-    if (existing?.id && existing.applied) return { ok: true, status: 'already_applied' }
+    const alreadyApplied = Boolean(existing?.id && existing.applied)
 
     const paymentClient = new Payment(mpClient)
     const mpPayment = await paymentClient.get({ id: paymentId })
@@ -199,18 +221,70 @@ async function processPayment(paymentIdRaw) {
       return { ok: false, error: 'missing_metadata' }
     }
 
-    const listingDays = planCode === 'basic' ? 30 : 60
+    const targetCap = planCode === 'pro' ? 12 : planCode === 'premium' ? 8 : 6
+    const listingDays = 60
     const expiresAt = new Date(approvedBaseTs + listingDays * 24 * 60 * 60 * 1000).toISOString()
     const rankBoostUntil = (planCode === 'premium' || planCode === 'pro')
       ? new Date(approvedBaseTs + 90 * 24 * 60 * 60 * 1000).toISOString()
       : null
+
+    const { data: listingRow, error: listingErr } = await supabase
+      .from('listings')
+      .select('id,seller_id,images,granted_visible_photos,plan_photo_limit,whatsapp_user_disabled,whatsapp_enabled,contact_methods,seller_whatsapp')
+      .eq('id', listingId)
+      .maybeSingle()
+    if (listingErr || !listingRow) throw (listingErr || new Error('listing_not_found'))
+
+    const currentGranted = Number(listingRow.granted_visible_photos || 4)
+    const nextGrantedPhotos = Math.max(currentGranted, targetCap)
+    const currentPlanPhotoLimit = Number(listingRow.plan_photo_limit || 4)
+    const nextPlanPhotoLimit = Math.max(currentPlanPhotoLimit, targetCap)
+    const imagesArr = Array.isArray(listingRow.images) ? listingRow.images : []
+    const nextVisibleCount = Math.min(imagesArr.length, nextPlanPhotoLimit)
+
+    let sellerWhatsapp = normalizeWhatsappForStorage(listingRow.seller_whatsapp || '')
+    if (!sellerWhatsapp && listingRow.seller_id) {
+      try {
+        const { data: profile, error: prErr } = await supabase
+          .from('users')
+          .select('whatsapp_number,store_phone')
+          .eq('id', listingRow.seller_id)
+          .maybeSingle()
+        if (prErr) throw prErr
+        const fallback = profile?.whatsapp_number || profile?.store_phone || ''
+        sellerWhatsapp = normalizeWhatsappForStorage(fallback)
+      } catch (err) {
+        console.warn('[payments] whatsapp lookup failed (non-fatal)', err?.message || err)
+      }
+    }
+
+    const nextWhatsappEnabled = listingRow.whatsapp_user_disabled ? Boolean(listingRow.whatsapp_enabled) : true
+    const nextContactMethods = ensureWhatsappInContactMethods(listingRow.contact_methods)
+
+    console.info('[payments] applying plan to listing', {
+      paymentId,
+      listingId,
+      planCode,
+      targetCap,
+      nextGrantedPhotos,
+      nextPlanPhotoLimit,
+      nextWhatsappEnabled,
+      hasSellerWhatsapp: Boolean(sellerWhatsapp),
+      alreadyApplied,
+    })
 
     const listingUpdate = {
       plan: planCode,
       plan_code: planCode,
       status: 'active',
       expires_at: expiresAt,
-      whatsapp_enabled: true,
+      plan_photo_limit: nextPlanPhotoLimit,
+      granted_visible_photos: nextGrantedPhotos,
+      visible_images_count: nextVisibleCount,
+      whatsapp_cap_granted: true,
+      whatsapp_enabled: nextWhatsappEnabled,
+      contact_methods: nextContactMethods,
+      ...(sellerWhatsapp ? { seller_whatsapp: sellerWhatsapp } : {}),
       ...(rankBoostUntil ? { rank_boost_until: rankBoostUntil } : {}),
     }
 
@@ -221,23 +295,25 @@ async function processPayment(paymentIdRaw) {
 
     if (updErr) throw updErr
 
-    const justApplied = await markPaymentAppliedOnce(supabase, paymentId)
-    if (!justApplied) return { ok: true, status: 'already_applied' }
+    if (!alreadyApplied) {
+      const justApplied = await markPaymentAppliedOnce(supabase, paymentId)
+      if (!justApplied) return { ok: true, status: 'already_applied' }
 
-    try {
-      await sendPaymentSuccessEmail({
-        supabase,
-        userId,
-        planCode,
-        listingId,
-        amount: extracted.amount,
-        currency: extracted.currency,
-      })
-    } catch (err) {
-      console.warn('[payments] success email failed (non-fatal)', err?.message || err)
+      try {
+        await sendPaymentSuccessEmail({
+          supabase,
+          userId,
+          planCode,
+          listingId,
+          amount: extracted.amount,
+          currency: extracted.currency,
+        })
+      } catch (err) {
+        console.warn('[payments] success email failed (non-fatal)', err?.message || err)
+      }
     }
 
-    return { ok: true, status: 'applied' }
+    return { ok: true, status: alreadyApplied ? 'reconciled' : 'applied' }
   } catch (err) {
     console.error('[payments] processPayment failed', { paymentId, error: err?.message || err })
     return { ok: false, error: 'unexpected_error' }
