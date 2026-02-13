@@ -10,6 +10,7 @@
     "extend-expired:once": "node ./src/jobs/extendExpired90d.js",
     "extend-expired:dry": "DRY_RUN=true node ./src/jobs/extendExpired90d.js",
     "campaign:free2paid:test": "node ./scripts/sendFreeToPaidTest.js",
+    "campaign:trustblast": "node ./scripts/campaigns/sendTrustLevelBlast.js",
     "send-upsell-emails": "node ./scripts/campaigns/sendWhatsappUpsellBlast.js"
   },
   "dependencies": {

@@ -68,6 +68,11 @@ function isPaidPlan(plan) {
   return canonical === 'premium' || canonical === 'pro'
 }
 
+function isFreeOrUnknownPlan(plan) {
+  const canonical = normalizePlan(plan)
+  return canonical === 'free' || canonical === null
+}
+
 function computeTrustScore({ identityVerified, paidPlan, profileComplete, activity, isStore }) {
   // Matches the frontend's CicloTrust component logic.
   // Stores (official shops) always get maximum trust.
@@ -568,6 +573,7 @@ function parseArgs(argv) {
   const live = args.has('--live')
   const debug = args.has('--debug')
   const force = args.has('--force')
+  const onlyFree = args.has('--only-free') || args.has('--only-free-plan')
   const includeStores = args.has('--include-stores')
   const cooldownIndex = argv.findIndex((a) => a === '--cooldown-days')
   const cooldownDays = cooldownIndex >= 0 ? Number(argv[cooldownIndex + 1]) : null
@@ -588,6 +594,7 @@ function parseArgs(argv) {
     live,
     debug,
     force,
+    onlyFree,
     includeStores,
     cooldownDays: Number.isFinite(cooldownDays) && cooldownDays > 0 ? cooldownDays : (Number(process.env.TRUST_BLAST_COOLDOWN_DAYS) || 90),
     lookbackDays: Number.isFinite(lookbackDays) && lookbackDays > 0 ? lookbackDays : (Number(process.env.TRUST_BLAST_LOOKBACK_DAYS) || null),
@@ -600,7 +607,7 @@ function parseArgs(argv) {
 }
 
 async function main() {
-  const { live, debug, force, includeStores, cooldownDays, lookbackDays, delayMs, limit, testTo, onlyEmail, onlySellerId } = parseArgs(process.argv.slice(2))
+  const { live, debug, force, onlyFree, includeStores, cooldownDays, lookbackDays, delayMs, limit, testTo, onlyEmail, onlySellerId } = parseArgs(process.argv.slice(2))
   const dryRun = !live
 
   if (live && !isMailConfigured()) {
@@ -727,6 +734,12 @@ async function main() {
 
     const planCandidate = user.plan || user.plan_code || hero?.seller_plan || hero?.plan_code || hero?.plan
     const paidPlan = isPaidPlan(planCandidate)
+    if (onlyFree && !isFreeOrUnknownPlan(planCandidate)) {
+      console.log(
+        `[${processed}/${sellerIds.length}] Saltando a ${userName} (plan no-free: ${normalizePlan(planCandidate) || 'unknown'}) - Bici: ${hero?.title || '—'}`
+      )
+      continue
+    }
     const identityVerified = resolveIdentityVerified(user)
     const socialsAreKnown = socialsKnown(user)
     const hasSocials = resolveHasSocials(user)
