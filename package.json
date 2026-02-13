@@ -18,10 +18,13 @@
     "typecheck": "tsc --noEmit",
     "server": "node server/src/index.js",
     "review-reminder:once": "node -e \"require('./server/src/jobs/reviewReminder').runReviewReminderOnce(Number(process.env.REVIEW_REMINDER_BATCH_LIMIT)||50).then(()=>process.exit(0)).catch((e)=>{console.error(e);process.exit(1)})\"",
+    "review-reminder:test-email": "node server/scripts/sendTestReviewEmail.js",
     "optimize:images": "node scripts/optimize-public-images.mjs",
     "supabase:image-matrix": "node scripts/supabase-image-matrix.mjs",
     "saved-search:digest:once": "node -e \"require('./server/src/jobs/savedSearchDigest').runSavedSearchDigestOnce().then((n)=>{console.log('[digest] sent',n);process.exit(0)}).catch((e)=>{console.error(e);process.exit(1)})\"",
-    "campaign:trustblast": "node server/scripts/campaigns/sendTrustLevelBlast.js"
+    "campaign:trustblast": "node server/scripts/campaigns/sendTrustLevelBlast.js",
+    "campaign:upsell-whatsapp": "node server/scripts/campaigns/sendWhatsappUpsellBlast.js",
+    "send-upsell-emails": "node server/scripts/campaigns/sendWhatsappUpsellBlast.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.75.0",

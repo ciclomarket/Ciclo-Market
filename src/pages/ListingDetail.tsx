@@ -860,7 +860,8 @@ export default function ListingDetail() {
     const emailRecipient = sellerAuthEmail || sellerProfile?.email || listing.sellerEmail || null
     const isStoreLocal = Boolean(sellerProfile?.store_enabled)
     const waPublicFlag = (listing as any).waPublic ?? (listing as any).wa_public
-    const whatsappEnabled = Boolean(waLink) && (listing.whatsappEnabled ?? true) && !(listing as any).whatsapp_user_disabled && !listing.whatsappUserDisabled
+    const waUserDisabled = Boolean((listing as any).whatsapp_user_disabled || listing.whatsappUserDisabled)
+    const whatsappEnabled = Boolean(waLink) && !waUserDisabled && (isStoreLocal ? true : (listing.whatsappEnabled ?? true))
     const tier = listing.planTier ?? listing.planStatus
     const hasPaidListingTier = tier === 'PREMIUM' || tier === 'PRO'
     const waAllowed = Boolean(waPublicFlag === true || ((hasPaidListingTier || hadBasicOrPremium || isStoreLocal) && whatsappEnabled))

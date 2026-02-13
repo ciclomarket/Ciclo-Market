@@ -204,6 +204,16 @@ export default function NewListingForm() {
       }
     }
   ), [draftKey, sessionDraftKey])
+
+  const clearDraft = useMemo(() => (
+    () => {
+      try {
+        window.localStorage.removeItem(draftKey)
+        window.sessionStorage.removeItem(sessionDraftKey)
+        window.sessionStorage.removeItem('cm_publish_pending')
+      } catch { /* noop */ }
+    }
+  ), [draftKey, sessionDraftKey])
   const removeImageAt = (idx: number) => setImages(prev => prev.filter((_, i) => i !== idx))
   const makePrimaryAt = (idx: number) => setImages(prev => {
     if (idx <= 0 || idx >= prev.length) return prev
@@ -628,8 +638,8 @@ const buildExtras = (): string => {
 		          plan_price: 0,
 		          plan_photo_limit: 4,
 		        }]).select('id, slug').maybeSingle()
-		    if (error) {
-		      console.warn('[publish] insert error', error)
+    if (error) {
+      console.warn('[publish] insert error', error)
 	      alert(`Error al ${isEdit ? 'guardar' : 'publicar'}: ${error.message}`)
 	      setSubmitting(false)
 	      return
@@ -638,6 +648,8 @@ const buildExtras = (): string => {
     try {
       await upsertUserProfile({ id: user.id, province, city, whatsapp: whatsApp })
     } catch { /* noop */ }
+
+    if (!isEdit) clearDraft()
 	    // Redirigir al detalle de la publicación y mostrar modal de upgrade
 	    const slug = data?.slug || data?.id
 	    if (slug) {

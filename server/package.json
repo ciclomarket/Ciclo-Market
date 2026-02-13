@@ -9,7 +9,8 @@
     "review-reminder:once": "node -e \"require('./src/jobs/reviewReminder').runReviewReminderOnce(Number(process.env.REVIEW_REMINDER_BATCH_LIMIT)||50).then(()=>process.exit(0)).catch((e)=>{console.error(e);process.exit(1)})\"",
     "extend-expired:once": "node ./src/jobs/extendExpired90d.js",
     "extend-expired:dry": "DRY_RUN=true node ./src/jobs/extendExpired90d.js",
-    "campaign:free2paid:test": "node ./scripts/sendFreeToPaidTest.js"
+    "campaign:free2paid:test": "node ./scripts/sendFreeToPaidTest.js",
+    "send-upsell-emails": "node ./scripts/campaigns/sendWhatsappUpsellBlast.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.74.0",

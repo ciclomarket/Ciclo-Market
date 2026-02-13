@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import WizardSteps from '@/components/wizard/WizardSteps'
 import StepBasicInfo from '@/components/wizard/StepBasicInfo'
@@ -251,6 +251,8 @@ export default function CreateListing() {
   const navigate = useNavigate()
   const { user, isModerator } = useAuth()
   const { uploadFiles, uploading, progress } = useUpload()
+  const topRef = useRef<HTMLDivElement | null>(null)
+  const didMountRef = useRef(false)
 
   const editId = useMemo(() => {
     const id = (sp.get('id') || '').trim()
@@ -346,6 +348,24 @@ export default function CreateListing() {
   )
 
   const [formData, setFormData] = useState<FormData>(INITIAL_STATE)
+
+  const scrollToTop = () => {
+    try {
+      topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    } catch { /* noop */ }
+    try {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    } catch { /* noop */ }
+  }
+
+  useEffect(() => {
+    if (!didMountRef.current) {
+      didMountRef.current = true
+      return
+    }
+    requestAnimationFrame(scrollToTop)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step])
 
   // Normalize legacy placeholder "Otra ciudad" into custom city input if it slips in.
   useEffect(() => {
@@ -857,6 +877,14 @@ export default function CreateListing() {
       }
     } catch { /* noop */ }
 
+    if (!isEdit) {
+      try {
+        window.localStorage.removeItem(draftKey)
+        window.sessionStorage.removeItem(sessionDraftKey)
+        window.sessionStorage.removeItem('cm_publish_pending')
+      } catch { /* noop */ }
+    }
+
     const slug = (data as any)?.slug || (data as any)?.id
     if (slug) {
       navigate(isEdit ? `/listing/${slug}` : `/listing/${slug}?post_publish=1`)
@@ -920,6 +948,7 @@ export default function CreateListing() {
 
   return (
     <main className="bg-gray-50">
+      <div ref={topRef} />
       <div className="max-w-4xl mx-auto px-4 py-12">
         <h1 className="text-3xl font-bold mb-2 text-center text-mb-ink">
           {headerTitle} {subTitle}

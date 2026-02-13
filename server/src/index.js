@@ -493,6 +493,176 @@ app.post('/api/checkout', async (req, res) => {
   }
 })
 
+// Email → Mercado Pago direct checkout (WhatsApp upsell).
+// Uses a signed token to avoid tampering (no auth required).
+app.get('/api/checkout/upsell-whatsapp', async (req, res) => {
+  try {
+    if (!mpClient) return res.status(503).send('Pagos no disponibles.')
+
+    const sellerId = String(req.query.sid || '').trim()
+    const listingId = String(req.query.lid || '').trim()
+    const planCode = String(req.query.plan || 'premium').trim().toLowerCase()
+    const expRaw = String(req.query.exp || '').trim()
+    const token = String(req.query.t || '').trim()
+
+    if (!sellerId || !listingId || !token || !expRaw) {
+      return res.status(400).send('Solicitud inválida.')
+    }
+
+    const expMs = Number(expRaw)
+    if (!Number.isFinite(expMs) || expMs <= Date.now() - 30_000) {
+      return res.status(401).send('Link vencido.')
+    }
+
+    const allowedPlans = new Set(['premium', 'basic', 'pro'])
+    if (!allowedPlans.has(planCode)) {
+      return res.status(400).send('Plan inválido.')
+    }
+
+    const secret = String(process.env.UPSELL_WHATSAPP_LINK_SECRET || process.env.CRON_SECRET || '').trim()
+    if (!secret) return res.status(500).send('Servicio no configurado.')
+
+    const signedPayload = `${sellerId}.${listingId}.${planCode}.${expMs}`
+    const expected = crypto.createHmac('sha256', secret).update(signedPayload).digest('base64url')
+    if (expected !== token) return res.status(401).send('Token inválido.')
+
+    const supabase = getServerSupabaseClient()
+
+    // Validate listing ownership before creating a payment preference.
+    const { data: listing, error: listingErr } = await supabase
+      .from('listings')
+      .select('id,seller_id,slug,title')
+      .eq('id', listingId)
+      .maybeSingle()
+    if (listingErr) throw listingErr
+    if (!listing?.id) return res.status(404).send('Publicación no encontrada.')
+    if (String(listing.seller_id) !== sellerId) return res.status(403).send('No autorizado.')
+
+    const { data: userRow } = await supabase
+      .from('users')
+      .select('id,email,full_name')
+      .eq('id', sellerId)
+      .maybeSingle()
+
+    function priceFromAvailablePlans(code) {
+      const raw = process.env.AVAILABLE_PLANS
+      if (!raw) return null
+      try {
+        const normalized = (() => {
+          const trimmed = String(raw).trim()
+          const unquoted =
+            (trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))
+              ? trimmed.slice(1, -1)
+              : trimmed
+          // Support dotenv-style "\n" literals (common when env value is copy-pasted).
+          return unquoted.replace(/\\n/g, '\n')
+        })()
+        const parsed = JSON.parse(normalized)
+        const arr = Array.isArray(parsed) ? parsed : []
+        const match = arr.find((p) => String(p?.code || p?.id || '').trim().toLowerCase() === code)
+        const price = match?.price
+        if (typeof price === 'number' && Number.isFinite(price) && price > 0) return price
+        return null
+      } catch {
+        return null
+      }
+    }
+
+    async function fetchPlanPrice(code) {
+      // Prefer DB (plans table), then AVAILABLE_PLANS env, then hard fallback.
+      try {
+        const { data } = await supabase
+          .from('plans')
+          .select('code,price')
+          .eq('code', code)
+          .maybeSingle()
+        if (data && typeof data.price === 'number' && data.price > 0) return Number(data.price)
+      } catch {}
+
+      const envPrice = priceFromAvailablePlans(code)
+      if (typeof envPrice === 'number' && Number.isFinite(envPrice) && envPrice > 0) return envPrice
+
+      // Hard fallback (last resort)
+      if (code === 'basic') return 9000
+      if (code === 'premium') return 13000
+      if (code === 'pro') return 16000
+      return 0
+    }
+
+    const amount = await fetchPlanPrice(planCode)
+    if (!Number.isFinite(amount) || amount <= 0) return res.status(500).send('Precio no configurado.')
+
+    const currency = 'ARS'
+    const planName = planCode === 'premium' ? 'Plan Premium' : planCode === 'pro' ? 'Plan Pro' : 'Plan Básico'
+
+    const metadata = {
+      userId: sellerId,
+      planCode,
+      planId: planCode,
+      listingId,
+      listingSlug: listing?.slug || undefined,
+      campaign: 'upsell_whatsapp_contacts_v1',
+    }
+
+    const checkoutRef = typeof crypto.randomUUID === 'function'
+      ? `mb_${crypto.randomUUID()}`
+      : `mb_${Date.now()}_${Math.random().toString(16).slice(2)}`
+    metadata.checkoutRef = checkoutRef
+
+    const cleanBase = resolveFrontendBaseUrl().replace(/\/$/, '')
+    const backUrls = {
+      success: `${cleanBase}/checkout/success`,
+      failure: `${cleanBase}/checkout/failure`,
+      pending: `${cleanBase}/checkout/pending`,
+    }
+
+    const itemCategoryId = String(process.env.MERCADOPAGO_ITEM_CATEGORY_ID || 'services').trim()
+    const itemId = `plan_${planCode}`
+    const itemDescription = `Compra: ${planName} (WhatsApp)`
+
+    const pref = new Preference(mpClient)
+    const publicBase = (process.env.PUBLIC_BASE_URL || '').toString().replace(/\/$/, '')
+    const notificationUrl = publicBase ? `${publicBase}/api/mp/webhook` : undefined
+
+    const mp = await pref.create({
+      body: {
+        external_reference: checkoutRef,
+        items: [
+          {
+            id: itemId,
+            title: planName,
+            description: itemDescription,
+            ...(itemCategoryId ? { category_id: itemCategoryId } : {}),
+            quantity: 1,
+            unit_price: amount,
+            currency_id: currency,
+          },
+        ],
+        payer: { email: userRow?.email || undefined },
+        metadata,
+        back_urls: backUrls,
+        ...(notificationUrl ? { notification_url: notificationUrl } : {}),
+        auto_return: 'approved',
+        statement_descriptor: 'CICLO MARKET',
+      },
+    })
+
+    const initPoint = mp?.init_point || mp?.sandbox_init_point || null
+    if (!initPoint) return res.status(500).send('No pudimos iniciar el checkout.')
+
+    try {
+      await recordPaymentIntent({ userId: sellerId, listingId, amount, currency, status: 'pending', providerRef: checkoutRef })
+    } catch (e) {
+      console.warn('[checkout:upsell-whatsapp] recordPayment pending failed', e?.message || e)
+    }
+
+    return res.redirect(302, initPoint)
+  } catch (err) {
+    console.error('[checkout:upsell-whatsapp] failed', err?.message || err)
+    return res.status(500).send('No pudimos procesar el link.')
+  }
+})
+
 /* ----------------------------- Utils OG ----------------------------------- */
 function isBot(req) {
   const ua = String(req.headers['user-agent'] || '').toLowerCase()

@@ -19,23 +19,39 @@ export default function ImageUploader({ images, onChange, max = 10, onAddFiles }
     return 'grid-cols-3 sm:grid-cols-4'
   }, [images.length])
 
+  const makeCoverAt = (idx: number) => {
+    if (idx <= 0 || idx >= images.length) return
+    const next = images.slice()
+    const [picked] = next.splice(idx, 1)
+    next.unshift(picked)
+    onChange(next)
+  }
+
   return (
     <div className="space-y-4">
       <div className={cn('grid gap-3', gridCols)}>
-        {images.map((src) => (
-          <div key={src} className="group relative aspect-square overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+        {images.map((src, idx) => (
+          <div key={`${src}-${idx}`} className="group relative aspect-square overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
             <img src={src} alt="Foto" className="h-full w-full object-cover" />
             <button
               type="button"
-              className="absolute right-2 top-2 rounded-lg bg-white/90 px-2 py-1 text-xs font-medium text-slate-700 opacity-0 shadow-sm transition group-hover:opacity-100"
+              className="absolute right-2 top-2 rounded-lg bg-white/90 px-2 py-1 text-xs font-medium text-slate-700 opacity-100 shadow-sm transition sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
               onClick={() => onChange(images.filter((i) => i !== src))}
             >
               Quitar
             </button>
-            {images[0] === src && (
+            {idx === 0 ? (
               <span className="absolute left-2 top-2 rounded-lg bg-slate-900/90 px-2 py-1 text-xs font-semibold text-white">
                 Portada
               </span>
+            ) : (
+              <button
+                type="button"
+                className="absolute left-2 bottom-2 rounded-lg bg-white/90 px-2 py-1 text-xs font-semibold text-slate-800 opacity-100 shadow-sm transition sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+                onClick={() => makeCoverAt(idx)}
+              >
+                Hacer portada
+              </button>
             )}
           </div>
         ))}

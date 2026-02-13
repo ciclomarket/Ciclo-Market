@@ -57,6 +57,7 @@ export default function BlogEditor({ authorId, initialPost, onCancel, onSaved }:
   const isEditing = Boolean(initialPost)
   const { show: showToast } = useToast()
   const draftStorageKey = useMemo(() => `ciclomarket:blogDraft:${authorId}`, [authorId])
+  const draftRestoredKey = useMemo(() => `ciclomarket:blogDraftRestored:${authorId}`, [authorId])
   const [form, setForm] = useState<FormState>(() => {
     if (!initialPost) return DEFAULT_FORM
     return {
@@ -102,12 +103,21 @@ export default function BlogEditor({ authorId, initialPost, onCancel, onSaved }:
       if (typeof draft.title !== 'string' || typeof draft.htmlContent !== 'string') return
       setForm(draft)
       setSlugManuallyEdited(Boolean(parsed.slugManuallyEdited))
-      showToast('Borrador restaurado')
+      try {
+        const signature = raw
+        const last = window.sessionStorage.getItem(draftRestoredKey)
+        if (last !== signature) {
+          showToast('Borrador restaurado')
+          window.sessionStorage.setItem(draftRestoredKey, signature)
+        }
+      } catch {
+        showToast('Borrador restaurado')
+      }
     } catch {
       // ignore storage/JSON errors
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftStorageKey, isEditing])
+  }, [draftStorageKey, draftRestoredKey, isEditing])
 
   useEffect(() => {
     if (isEditing) return
@@ -203,14 +213,19 @@ export default function BlogEditor({ authorId, initialPost, onCancel, onSaved }:
     if (!files || files.length === 0) return
     try {
       const urls = await uploadFiles(Array.from(files))
-      if (urls.length > 0) {
-        const file = files[0]
-        const alt = file.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ').trim()
-        const snippet = `\n<figure class=\"blog-image\"><img src=\"${urls[0]}\" alt=\"${alt}\" loading=\"lazy\" /></figure>\n`
-        insertHtmlAtCursor(snippet)
-        showToast('Imagen insertada en el contenido')
-      }
-    } catch (err) {
+	      if (urls.length > 0) {
+	        const file = files[0]
+	        const alt = file.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ').trim()
+	        const safeAlt = alt
+	          .replace(/&/g, '&amp;')
+	          .replace(/</g, '&lt;')
+	          .replace(/>/g, '&gt;')
+	          .replace(/"/g, '&quot;')
+	        const snippet = `\n<figure class="blog-image"><img src="${urls[0]}" alt="${safeAlt}" loading="lazy" /></figure>\n`
+	        insertHtmlAtCursor(snippet)
+	        showToast('Imagen insertada en el contenido')
+	      }
+	    } catch (err) {
       console.error('[blog] inline image upload error', err)
       showToast('No se pudo subir la imagen. Intentá de nuevo.', { variant: 'error' })
     } finally {

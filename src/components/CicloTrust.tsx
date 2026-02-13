@@ -13,6 +13,7 @@ const segmentColor = (idx: number) => {
 }
 
 export default function CicloTrust({ profile, paidPlanActive, publishedCount = 0 }: Props) {
+  const isStore = Boolean(profile?.store_enabled)
   const identityVerified = Boolean(profile?.verified)
   const profileComplete = Boolean(
     (profile?.instagram_handle && profile.instagram_handle.trim()) ||
@@ -22,17 +23,31 @@ export default function CicloTrust({ profile, paidPlanActive, publishedCount = 0
   const activity = publishedCount > 0
   const premium = paidPlanActive
 
-  const score =
+  const computedScore =
     (identityVerified ? 2 : 0) +
     (premium ? 1.5 : 0) +
     (profileComplete ? 1 : 0) +
     (activity ? 0.5 : 0)
 
   const positives: string[] = []
-  if (identityVerified) positives.push('Identidad Verificada')
-  if (profileComplete) positives.push('Perfil Completo (Redes vinculadas)')
-  if (activity) positives.push('Usuario con publicaciones')
-  if (premium) positives.push('Miembro Premium')
+  if (isStore) {
+    const hasStoreContacts = Boolean(
+      (profile?.store_phone && profile.store_phone.trim()) ||
+        (profile?.store_website && profile.store_website.trim()) ||
+        (profile?.store_instagram && profile.store_instagram.trim()) ||
+        (profile?.store_facebook && profile.store_facebook.trim())
+    )
+    positives.push('Tienda oficial verificada')
+    positives.push('Atención profesional desde una bicicletería')
+    if (hasStoreContacts) positives.push('Datos de contacto visibles')
+  } else {
+    if (identityVerified) positives.push('Identidad Verificada')
+    if (profileComplete) positives.push('Perfil Completo (Redes vinculadas)')
+    if (activity) positives.push('Usuario con publicaciones')
+    if (premium) positives.push('Miembro Premium')
+  }
+
+  const score = isStore ? 5 : computedScore
 
   const filled = (idx: number) => score >= idx - 0.5
 
@@ -73,4 +88,3 @@ export default function CicloTrust({ profile, paidPlanActive, publishedCount = 0
     </div>
   )
 }
-

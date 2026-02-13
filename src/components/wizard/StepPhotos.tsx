@@ -22,7 +22,7 @@ export default function StepPhotos({ data, onChange, errors, maxPhotos = 12, upl
       <div>
         <Label className="text-base font-medium">Fotos de la bicicleta *</Label>
         <p className="text-sm text-slate-500 mt-1 mb-4">
-          Subí hasta {maxPhotos} fotos. La primera será la imagen de portada.
+          Subí hasta {maxPhotos} fotos. Elegí cuál será la portada (podés cambiarla cuando quieras).
         </p>
         
         <ImageUploader

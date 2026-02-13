@@ -68,8 +68,10 @@ function isPaidPlan(plan) {
   return canonical === 'premium' || canonical === 'pro'
 }
 
-function computeTrustScore({ identityVerified, paidPlan, profileComplete, activity }) {
+function computeTrustScore({ identityVerified, paidPlan, profileComplete, activity, isStore }) {
   // Matches the frontend's CicloTrust component logic.
+  // Stores (official shops) always get maximum trust.
+  if (isStore) return 5
   let score = 0
   if (identityVerified) score += 2
   if (paidPlan) score += 1.5
@@ -749,7 +751,7 @@ async function main() {
       })
     }
 
-    const trustScore = computeTrustScore({ identityVerified, paidPlan, profileComplete, activity })
+    const trustScore = computeTrustScore({ identityVerified, paidPlan, profileComplete, activity, isStore: isOfficialStore })
     if (trustScore >= 4.5 && !testTo) {
       skippedPerfect += 1
       console.log(
