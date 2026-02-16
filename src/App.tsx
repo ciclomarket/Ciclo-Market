@@ -25,6 +25,7 @@ const OfficialStore = lazyWithRetry(() => import('./pages/OfficialStore'))
 const Store = lazyWithRetry(() => import('./pages/Store'))
 const Tiendas = lazyWithRetry(() => import('./pages/Tiendas'))
 const StoresLanding = lazyWithRetry(() => import('./pages/StoresLanding'))
+const StoresGuide = lazyWithRetry(() => import('./pages/Guides/StoresGuide'))
 const FAQ = lazyWithRetry(() => import('./pages/FAQ'))
 const Terms = lazyWithRetry(() => import('./pages/Terms'))
 const Privacy = lazyWithRetry(() => import('./pages/Privacy'))
@@ -532,6 +533,8 @@ export default function App() {
 
 	                      {/* Vender (B2B) */}
 	                      <Route path="/vender/tiendas" element={<ForStores />} />
+	                      <Route path="/vender/tiendas/guia" element={<StoresGuide />} />
+	                      <Route path="/guia/tiendas" element={<StoresGuide />} />
 	                      {/* Alias legado */}
 	                      <Route path="/publish" element={<Navigate to="/publicar" replace />} />
 	                      <Route path="/publish/new" element={<Navigate to="/publicar" replace />} />

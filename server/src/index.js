@@ -663,6 +663,175 @@ app.get('/api/checkout/upsell-whatsapp', async (req, res) => {
   }
 })
 
+// Email → Mercado Pago direct checkout (Carnaval discount).
+// Uses a signed token to avoid tampering (no auth required).
+app.get('/api/checkout/carnaval', async (req, res) => {
+  try {
+    if (!mpClient) return res.status(503).send('Pagos no disponibles.')
+
+    const sellerId = String(req.query.sid || '').trim()
+    const listingId = String(req.query.lid || '').trim()
+    const planCode = String(req.query.plan || '').trim().toLowerCase()
+    const expRaw = String(req.query.exp || '').trim()
+    const token = String(req.query.t || '').trim()
+
+    if (!sellerId || !listingId || !token || !expRaw || !planCode) {
+      return res.status(400).send('Solicitud inválida.')
+    }
+
+    const expMs = Number(expRaw)
+    if (!Number.isFinite(expMs) || expMs <= Date.now() - 30_000) {
+      return res.status(401).send('Link vencido.')
+    }
+
+    const discounts = { premium: 0.4, pro: 0.5 }
+    const discount = (discounts && Object.prototype.hasOwnProperty.call(discounts, planCode)) ? discounts[planCode] : null
+    if (typeof discount !== 'number') return res.status(400).send('Plan inválido.')
+
+    const secret = String(process.env.CRON_SECRET || '').trim()
+    if (!secret) return res.status(500).send('Servicio no configurado.')
+
+    const signedPayload = `${sellerId}.${listingId}.${planCode}.${expMs}`
+    const expected = crypto.createHmac('sha256', secret).update(signedPayload).digest('base64url')
+    if (expected !== token) return res.status(401).send('Token inválido.')
+
+    const supabase = getServerSupabaseClient()
+
+    const { data: listing, error: listingErr } = await supabase
+      .from('listings')
+      .select('id,seller_id,slug,title')
+      .eq('id', listingId)
+      .maybeSingle()
+    if (listingErr) throw listingErr
+    if (!listing?.id) return res.status(404).send('Publicación no encontrada.')
+    if (String(listing.seller_id) !== sellerId) return res.status(403).send('No autorizado.')
+
+    const { data: userRow } = await supabase
+      .from('users')
+      .select('id,email,full_name')
+      .eq('id', sellerId)
+      .maybeSingle()
+
+    function parseAvailablePlans() {
+      const raw = process.env.AVAILABLE_PLANS
+      if (!raw) return []
+      try {
+        const trimmed = String(raw).trim()
+        const unquoted =
+          (trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))
+            ? trimmed.slice(1, -1)
+            : trimmed
+        const normalized = unquoted.replace(/\\n/g, '\n')
+        const parsed = JSON.parse(normalized)
+        return Array.isArray(parsed) ? parsed : []
+      } catch {
+        return []
+      }
+    }
+
+    async function fetchPlanData(code) {
+      // Prefer DB, then AVAILABLE_PLANS.
+      try {
+        const { data } = await supabase
+          .from('plans')
+          .select('code,price,currency')
+          .eq('code', code)
+          .maybeSingle()
+        if (data && typeof data.price === 'number' && data.price > 0) {
+          return { price: Number(data.price), currency: String(data.currency || 'ARS') }
+        }
+      } catch {}
+
+      const envPlans = parseAvailablePlans()
+      const match = envPlans.find((p) => String(p?.code || p?.id || '').trim().toLowerCase() === code)
+      const price = match?.price
+      if (typeof price === 'number' && Number.isFinite(price) && price > 0) {
+        return { price: Number(price), currency: String(match?.currency || 'ARS') }
+      }
+
+      return null
+    }
+
+    const planData = await fetchPlanData(planCode)
+    if (!planData) return res.status(500).send('Precio no configurado.')
+
+    const baseAmount = Number(planData.price)
+    const discountedAmount = Math.max(1, Math.round(baseAmount * (1 - discount)))
+    const currency = String(planData.currency || 'ARS')
+
+    const planName = planCode === 'pro' ? 'Plan Pro' : 'Plan Premium'
+    const campaign = 'carnaval_upsell_2026'
+
+    const metadata = {
+      userId: sellerId,
+      planCode,
+      planId: planCode,
+      listingId,
+      listingSlug: listing?.slug || undefined,
+      campaign,
+      discountPct: Math.round(discount * 100),
+      baseAmount,
+    }
+
+    const checkoutRef = typeof crypto.randomUUID === 'function'
+      ? `mb_${crypto.randomUUID()}`
+      : `mb_${Date.now()}_${Math.random().toString(16).slice(2)}`
+    metadata.checkoutRef = checkoutRef
+
+    const cleanBase = resolveFrontendBaseUrl().replace(/\/$/, '')
+    const backUrls = {
+      success: `${cleanBase}/checkout/success`,
+      failure: `${cleanBase}/checkout/failure`,
+      pending: `${cleanBase}/checkout/pending`,
+    }
+
+    const itemCategoryId = String(process.env.MERCADOPAGO_ITEM_CATEGORY_ID || 'services').trim()
+    const itemId = `plan_${planCode}_${campaign}`
+    const itemDescription = `CARNAVAL: ${planName} (-${Math.round(discount * 100)}%)`
+
+    const pref = new Preference(mpClient)
+    const publicBase = (process.env.PUBLIC_BASE_URL || '').toString().replace(/\/$/, '')
+    const notificationUrl = publicBase ? `${publicBase}/api/mp/webhook` : undefined
+
+    const mp = await pref.create({
+      body: {
+        external_reference: checkoutRef,
+        items: [
+          {
+            id: itemId,
+            title: planName,
+            description: itemDescription,
+            ...(itemCategoryId ? { category_id: itemCategoryId } : {}),
+            quantity: 1,
+            unit_price: discountedAmount,
+            currency_id: currency,
+          },
+        ],
+        payer: { email: userRow?.email || undefined },
+        metadata,
+        back_urls: backUrls,
+        ...(notificationUrl ? { notification_url: notificationUrl } : {}),
+        auto_return: 'approved',
+        statement_descriptor: 'CICLO MARKET',
+      },
+    })
+
+    const initPoint = mp?.init_point || mp?.sandbox_init_point || null
+    if (!initPoint) return res.status(500).send('No pudimos iniciar el checkout.')
+
+    try {
+      await recordPaymentIntent({ userId: sellerId, listingId, amount: discountedAmount, currency, status: 'pending', providerRef: checkoutRef })
+    } catch (e) {
+      console.warn('[checkout:carnaval] recordPayment pending failed', e?.message || e)
+    }
+
+    return res.redirect(302, initPoint)
+  } catch (err) {
+    console.error('[checkout:carnaval] failed', err?.message || err)
+    return res.status(500).send('No pudimos procesar el link.')
+  }
+})
+
 /* ----------------------------- Utils OG ----------------------------------- */
 function isBot(req) {
   const ua = String(req.headers['user-agent'] || '').toLowerCase()

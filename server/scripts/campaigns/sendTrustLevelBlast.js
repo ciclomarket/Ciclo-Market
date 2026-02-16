@@ -485,16 +485,31 @@ async function fetchRecentSendsSetBySeller(supabase, scenarioCode, sellerIds, co
   const chunks = chunkArray(sellerIds.map(String), 500)
   for (const chunk of chunks) {
     try {
-      const { data, error } = await supabase
+      const queryWith = async (tsColumn) => supabase
         .from('marketing_automations')
         .select('seller_id')
         .eq('scenario', scenarioCode)
-        .gte('sent_at', sinceIso)
+        .gte(tsColumn, sinceIso)
         .in('seller_id', chunk)
+
+      let data = null
+      let error = null
+
+      // Prefer `sent_at` (newer schema), fallback to `created_at` (older schema).
+      ;({ data, error } = await queryWith('sent_at'))
+      if (error) {
+        const msg = String(error?.message || '')
+        const missingSentAt = /sent_at/i.test(msg) && (/does not exist/i.test(msg) || /column/i.test(msg))
+        if (missingSentAt) {
+          ;({ data, error } = await queryWith('created_at'))
+        }
+      }
+
       if (error) {
         console.warn('[trustBlast] no se pudo consultar marketing_automations (no dedupe)', error)
         return new Set()
       }
+
       for (const row of data || []) {
         if (!row?.seller_id) continue
         sent.add(String(row.seller_id))
@@ -509,16 +524,30 @@ async function fetchRecentSendsSetBySeller(supabase, scenarioCode, sellerIds, co
 
 async function recordSend(supabase, scenarioCode, listingId, sellerId, email) {
   try {
-    const payload = {
+    const basePayload = {
       scenario: scenarioCode,
       listing_id: listingId ?? null,
       seller_id: sellerId ?? null,
       email_to: email ?? null,
     }
-    const { error } = await supabase.from('marketing_automations').insert(payload)
-    if (error) console.warn('[trustBlast] recordSend failed', error, payload)
+    const withSentAt = { ...basePayload, sent_at: new Date().toISOString() }
+
+    let { error } = await supabase.from('marketing_automations').insert(withSentAt)
+    if (error) {
+      const msg = String(error?.message || '')
+      const sentAtMissing = /sent_at/i.test(msg) && (/does not exist/i.test(msg) || /column/i.test(msg))
+      if (sentAtMissing) {
+        ;({ error } = await supabase.from('marketing_automations').insert(basePayload))
+      }
+    }
+    if (error) {
+      console.warn('[trustBlast] recordSend failed', error, basePayload)
+      return false
+    }
+    return true
   } catch (err) {
     console.warn('[trustBlast] recordSend threw', err?.message || err)
+    return false
   }
 }
 
@@ -835,7 +864,13 @@ async function main() {
 
     try {
       await sendMail({ to: targetTo, subject, html, text })
-      if (!testTo) await recordSend(supabase, CAMPAIGN_CODE, hero?.id ?? null, sellerId, emailRaw)
+      if (!testTo) {
+        const logged = await recordSend(supabase, CAMPAIGN_CODE, hero?.id ?? null, sellerId, emailRaw)
+        if (!logged) {
+          console.error('[trustBlast] FATAL: se envió el mail pero no se pudo registrar en marketing_automations; abortando para evitar reenvíos.')
+          process.exit(1)
+        }
+      }
       sent += 1
       console.log(`${prefix} ✅ (${targetTo}${testTo ? `, original: ${emailRaw}` : ''})`)
     } catch (e) {

@@ -1,0 +1,36 @@
+<svg width="1200" height="720" viewBox="0 0 1200 720" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg4" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#f8fafc"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="1200" height="720" rx="26" fill="#0b1220"/>
+  <rect x="70" y="70" width="1060" height="580" rx="22" fill="url(#bg4)" stroke="#e5e7eb"/>
+  <rect x="70" y="70" width="1060" height="64" rx="22" fill="#14212e"/>
+  <text x="110" y="110" fill="#e5e7eb" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="800">Dashboard · Publicaciones</text>
+
+  <rect x="110" y="165" width="980" height="90" rx="18" fill="#ffffff" stroke="#e2e8f0"/>
+  <rect x="140" y="185" width="120" height="50" rx="14" fill="#f1f5f9" stroke="#e2e8f0"/>
+  <text x="200" y="216" fill="#94a3b8" font-family="Inter, Arial, sans-serif" font-size="12" text-anchor="middle">foto</text>
+  <text x="280" y="206" fill="#0f172a" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="900">Specialized Tarmac SL7</text>
+  <text x="280" y="232" fill="#475569" font-family="Inter, Arial, sans-serif" font-size="13">$ 9.000.000</text>
+  <rect x="820" y="186" width="120" height="50" rx="14" fill="#2563eb"/>
+  <text x="880" y="216" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="900" text-anchor="middle">Editar</text>
+  <rect x="950" y="186" width="120" height="50" rx="14" fill="#0b1220"/>
+  <text x="1010" y="216" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="900" text-anchor="middle">Pausar</text>
+
+  <rect x="110" y="270" width="980" height="90" rx="18" fill="#ffffff" stroke="#e2e8f0"/>
+  <rect x="140" y="290" width="120" height="50" rx="14" fill="#f1f5f9" stroke="#e2e8f0"/>
+  <text x="200" y="321" fill="#94a3b8" font-family="Inter, Arial, sans-serif" font-size="12" text-anchor="middle">foto</text>
+  <text x="280" y="311" fill="#0f172a" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="900">Trek Émonda</text>
+  <text x="280" y="337" fill="#475569" font-family="Inter, Arial, sans-serif" font-size="13">$ 2.500.000</text>
+  <rect x="820" y="291" width="120" height="50" rx="14" fill="#10b981"/>
+  <text x="880" y="321" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="900" text-anchor="middle">Vendida</text>
+  <rect x="950" y="291" width="120" height="50" rx="14" fill="#7c3aed"/>
+  <text x="1010" y="321" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="900" text-anchor="middle">Precio</text>
+
+  <text x="110" y="420" fill="#0f172a" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="900">Acciones rápidas</text>
+  <text x="110" y="450" fill="#475569" font-family="Inter, Arial, sans-serif" font-size="14">Editar · Pausar · Marcar vendida · Ajustar precio</text>
+</svg>
+

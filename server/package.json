@@ -11,7 +11,8 @@
     "extend-expired:dry": "DRY_RUN=true node ./src/jobs/extendExpired90d.js",
     "campaign:free2paid:test": "node ./scripts/sendFreeToPaidTest.js",
     "campaign:trustblast": "node ./scripts/campaigns/sendTrustLevelBlast.js",
-    "send-upsell-emails": "node ./scripts/campaigns/sendWhatsappUpsellBlast.js"
+    "send-upsell-emails": "node ./scripts/campaigns/sendWhatsappUpsellBlast.js",
+    "campaign:carnaval": "node ./scripts/campaigns/sendCarnavalDiscountBlast.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.74.0",
