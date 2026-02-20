@@ -294,6 +294,10 @@ function buildEmailHtml({ baseFront, userName, listing, premiumUrl, proUrl, prem
   const premiumNowLabel = premiumDiscounted ? formatMoney(premiumDiscounted, 'ARS') : null
   const proBaseLabel = proBase ? formatMoney(proBase, 'ARS') : null
   const proNowLabel = proDiscounted ? formatMoney(proDiscounted, 'ARS') : null
+  const premiumSavings = premiumBase && premiumDiscounted ? Math.max(0, premiumBase - premiumDiscounted) : 0
+  const proSavings = proBase && proDiscounted ? Math.max(0, proBase - proDiscounted) : 0
+  const premiumSavingsLabel = premiumSavings ? formatMoney(premiumSavings, 'ARS') : null
+  const proSavingsLabel = proSavings ? formatMoney(proSavings, 'ARS') : null
 
   const listingCardHtml = (() => {
     try {
@@ -310,9 +314,9 @@ function buildEmailHtml({ baseFront, userName, listing, premiumUrl, proUrl, prem
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>CARNAVAL · Descuento exclusivo</title>
   </head>
-  <body style="margin:0;padding:0;background:#f3f4f6;font-family:Inter,Helvetica,Arial,sans-serif;color:#0f172a;">
+  <body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Helvetica,Arial,sans-serif;color:#0f172a;">
     <span style="display:none!important;visibility:hidden;opacity:0;color:transparent;height:0;width:0;overflow:hidden;mso-hide:all">
-      CARNAVAL: Premium -40% / Pro -50% para activar WhatsApp y vender más rápido.
+      Activá WhatsApp y respondé más rápido. Descuento CARNAVAL aplicado directo a tu publicación.
     </span>
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f3f4f6;padding:26px 0;">
       <tr>
@@ -332,17 +336,18 @@ function buildEmailHtml({ baseFront, userName, listing, premiumUrl, proUrl, prem
                         Promo CARNAVAL
                       </div>
                       <div style="margin-top:10px;font-size:18px;line-height:1.3;font-weight:900;color:#ffffff;">
-                        ${safeName}, estás dejando dinero sobre la mesa.
+                        ${safeName}, te están escribiendo por email por tu publicación.
                       </div>
                       <div style="margin-top:8px;font-size:13px;line-height:1.6;color:#cbd5e1;">
-                        El contacto por email es lento y poco práctico. Los compradores prefieren la inmediatez de WhatsApp y suelen elegir publicaciones con contacto directo.
+                        Y eso baja la conversión: el email es lento y poco práctico. Los compradores prefieren la inmediatez de WhatsApp y suelen elegir publicaciones con contacto directo.
                       </div>
                     </td>
                   </tr>
                   <tr>
                     <td style="padding:18px 24px 10px;">
                       <div style="font-size:14px;line-height:1.7;color:#334155;">
-                        Activá un plan con descuento para <strong>mejorar visibilidad</strong> y habilitar <strong>WhatsApp</strong> en tu publicación.
+                        Activá un plan con descuento para <strong>mejorar visibilidad</strong> y habilitar <strong>WhatsApp</strong>.
+                        Los botones te llevan <strong>directo a Mercado Pago</strong> y el upgrade se aplica automáticamente a <strong>esta</strong> publicación.
                       </div>
                     </td>
                   </tr>
@@ -360,19 +365,21 @@ function buildEmailHtml({ baseFront, userName, listing, premiumUrl, proUrl, prem
                               <tr>
                                 <td style="padding:14px 14px;background:#ffffff;">
                                   <div style="font-size:12px;font-weight:900;color:#2563eb;text-transform:uppercase;letter-spacing:0.08em;">
-                                    Premium <span style="color:#16a34a;">-40%</span>
+                                    Premium <span style="color:#16a34a;">-40%</span> <span style="color:#0f172a;">· Recomendado</span>
                                   </div>
                                   <div style="margin-top:8px;font-size:12px;color:#64748b;">
                                     ${premiumBaseLabel ? `<span style="text-decoration:line-through;">${escapeHtml(premiumBaseLabel)}</span> ` : ''}${premiumNowLabel ? `<span style="font-weight:900;color:#0f172a;">${escapeHtml(premiumNowLabel)}</span>` : ''}
                                   </div>
+                                  ${premiumSavingsLabel ? `<div style="margin-top:6px;font-size:12px;color:#16a34a;font-weight:900;">Ahorrás ${escapeHtml(premiumSavingsLabel)}</div>` : ''}
                                   <div style="margin-top:8px;font-size:13px;color:#334155;line-height:1.55;">
                                     Más visibilidad + WhatsApp para responder rápido y cerrar ventas.
                                   </div>
                                   <div style="margin-top:12px;">
                                     <a href="${escapeHtml(premiumUrl)}"
                                       style="display:block;background:linear-gradient(135deg,#2563eb,#4f46e5);color:#ffffff;text-decoration:none;padding:12px 14px;border-radius:12px;font-weight:900;font-size:13px;text-align:center;">
-                                      Activar Premium con -40%
+                                      Pagar con Mercado Pago
                                     </a>
+                                    <div style="margin-top:8px;font-size:11px;color:#94a3b8;text-align:center;">Se aplica a esta publicación</div>
                                   </div>
                                 </td>
                               </tr>
@@ -388,14 +395,16 @@ function buildEmailHtml({ baseFront, userName, listing, premiumUrl, proUrl, prem
                                   <div style="margin-top:8px;font-size:12px;color:#64748b;">
                                     ${proBaseLabel ? `<span style="text-decoration:line-through;">${escapeHtml(proBaseLabel)}</span> ` : ''}${proNowLabel ? `<span style="font-weight:900;color:#0f172a;">${escapeHtml(proNowLabel)}</span>` : ''}
                                   </div>
+                                  ${proSavingsLabel ? `<div style="margin-top:6px;font-size:12px;color:#16a34a;font-weight:900;">Ahorrás ${escapeHtml(proSavingsLabel)}</div>` : ''}
                                   <div style="margin-top:8px;font-size:13px;color:#334155;line-height:1.55;">
                                     Máxima exposición y mejor posicionamiento para acelerar la venta.
                                   </div>
                                   <div style="margin-top:12px;">
                                     <a href="${escapeHtml(proUrl)}"
                                       style="display:block;background:linear-gradient(135deg,#7c3aed,#ec4899);color:#ffffff;text-decoration:none;padding:12px 14px;border-radius:12px;font-weight:900;font-size:13px;text-align:center;">
-                                      Activar Pro con -50%
+                                      Pagar con Mercado Pago
                                     </a>
+                                    <div style="margin-top:8px;font-size:11px;color:#94a3b8;text-align:center;">Se aplica a esta publicación</div>
                                   </div>
                                 </td>
                               </tr>
@@ -407,6 +416,24 @@ function buildEmailHtml({ baseFront, userName, listing, premiumUrl, proUrl, prem
                             <a href="${safeListingUrl}" style="color:#334155;text-decoration:underline;font-size:12px;">
                               Ver tu publicación
                             </a>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:0 24px 20px;">
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border:1px solid #e2e8f0;border-radius:16px;background:#f8fafc;">
+                        <tr>
+                          <td style="padding:14px 16px;">
+                            <div style="font-size:12px;font-weight:900;color:#0f172a;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;">
+                              Qué ganás al activar ahora
+                            </div>
+                            <div style="font-size:13px;line-height:1.7;color:#334155;">
+                              • Más contactos por WhatsApp (respuesta inmediata)<br/>
+                              • Mejor posicionamiento y visibilidad de tu publicación<br/>
+                              • Pago seguro con Mercado Pago
+                            </div>
                           </td>
                         </tr>
                       </table>
@@ -434,13 +461,13 @@ function buildEmailText({ baseFront, userName, listingTitle, premiumUrl, proUrl 
   const cleanBase = (baseFront || 'https://www.ciclomarket.ar').replace(/\/$/, '')
   const who = userName || 'Hola'
   return [
-    `${who}, estás dejando dinero sobre la mesa.`,
-    'CARNAVAL: Premium -40% / Pro -50%',
-    'El contacto por email es lento y poco práctico. Los compradores prefieren la inmediatez de WhatsApp.',
+    `${who}, te están escribiendo por email por tu publicación.`,
+    'Eso baja la conversión: el email es lento y poco práctico. Los compradores prefieren la inmediatez de WhatsApp.',
+    'Promo CARNAVAL: Premium -40% / Pro -50% (pago directo con Mercado Pago, se aplica automáticamente a esta publicación).',
     '',
     listingTitle ? `Tu publicación: ${listingTitle}` : null,
-    premiumUrl ? `Activar Premium -40% (Mercado Pago): ${premiumUrl}` : null,
-    proUrl ? `Activar Pro -50% (Mercado Pago): ${proUrl}` : null,
+    premiumUrl ? `Premium -40% (Mercado Pago): ${premiumUrl}` : null,
+    proUrl ? `Pro -50% (Mercado Pago): ${proUrl}` : null,
     '',
     cleanBase,
   ]
@@ -641,7 +668,7 @@ async function main() {
       process.exit(1)
     }
 
-    const subjectBase = '🎭 CARNAVAL: -40% Premium / -50% Pro para activar WhatsApp y vender más rápido'
+    const subjectBase = 'Activá WhatsApp en tu publicación (Promo CARNAVAL -40%/-50%)'
     const subject = testTo ? `[TEST] ${subjectBase}` : subjectBase
     const targetTo = testTo || emailRaw
     const prefix = `[${processed}/${sellerIds.length}] Enviando CARNAVAL a ${userName} - "${listing?.title || 'Publicación'}"`
@@ -714,4 +741,3 @@ if (require.main === module) {
 }
 
 module.exports = { main, buildEmailHtml, buildEmailText }
-

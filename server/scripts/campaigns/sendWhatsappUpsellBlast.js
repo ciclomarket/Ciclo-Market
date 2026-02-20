@@ -70,6 +70,37 @@ function signUpsellLink({ sellerId, listingId, planCode, expMs }) {
   return crypto.createHmac('sha256', secret).update(payload).digest('base64url')
 }
 
+function normalizePlan(value) {
+  if (!value) return null
+  const normalized = String(value)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .trim()
+  if (!normalized) return null
+  if (normalized === 'free' || normalized === 'gratis') return 'free'
+  if (normalized === 'premium') return 'premium'
+  if (normalized === 'pro' || normalized === 'profesional' || normalized === 'professional') return 'pro'
+  if (normalized === 'basic' || normalized === 'basica' || normalized === 'destacada' || normalized === 'featured') return 'basic'
+  return normalized
+}
+
+function isFreePlanCandidate(listing) {
+  const values = [listing?.plan, listing?.plan_code, listing?.seller_plan]
+  return values.some((v) => normalizePlan(v) === 'free')
+}
+
+function listingWithinDays(listing, days) {
+  if (!days) return true
+  const n = Number(days)
+  if (!Number.isFinite(n) || n <= 0) return true
+  const raw = listing?.created_at
+  if (!raw) return false
+  const ts = Date.parse(String(raw))
+  if (Number.isNaN(ts)) return false
+  return ts >= Date.now() - n * 24 * 60 * 60 * 1000
+}
+
 function isUuid(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ''))
 }
@@ -85,10 +116,13 @@ function parseArgs(argv) {
   const live = args.has('--live')
   const debug = args.has('--debug')
   const force = args.has('--force')
+  const onlyFree = args.has('--only-free') || args.has('--only-free-plan')
   const cooldownIndex = argv.findIndex((a) => a === '--cooldown-days')
   const cooldownDays = cooldownIndex >= 0 ? Number(argv[cooldownIndex + 1]) : null
   const lookbackIndex = argv.findIndex((a) => a === '--lookback-days')
   const lookbackDays = lookbackIndex >= 0 ? Number(argv[lookbackIndex + 1]) : null
+  const listingLookbackIndex = argv.findIndex((a) => a === '--listing-lookback-days')
+  const listingLookbackDays = listingLookbackIndex >= 0 ? Number(argv[listingLookbackIndex + 1]) : null
   const delayIndex = argv.findIndex((a) => a === '--delay')
   const delayMs = delayIndex >= 0 ? Number(argv[delayIndex + 1]) : null
   const limitIndex = argv.findIndex((a) => a === '--limit')
@@ -104,12 +138,14 @@ function parseArgs(argv) {
     live,
     debug,
     force,
+    onlyFree,
     cooldownDays: Number.isFinite(cooldownDays) && cooldownDays > 0
       ? cooldownDays
       : (Number(process.env.WHATSAPP_UPSELL_COOLDOWN_DAYS) || 90),
     lookbackDays: Number.isFinite(lookbackDays) && lookbackDays > 0
       ? lookbackDays
       : (Number(process.env.WHATSAPP_UPSELL_LOOKBACK_DAYS) || 30),
+    listingLookbackDays: Number.isFinite(listingLookbackDays) && listingLookbackDays > 0 ? listingLookbackDays : null,
     delayMs: Number.isFinite(delayMs) && delayMs >= 0 ? delayMs : (Number(process.env.CAMPAIGN_DELAY_MS) || 500),
     limit: Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : null,
     testTo: testTo || null,
@@ -197,12 +233,14 @@ async function fetchListingsByIds(supabase, listingIds) {
   if (!listingIds.length) return new Map()
 
   const selectAttempts = [
-    'id,seller_id,slug,title,price,price_currency,images,location,seller_location,whatsapp_enabled,whatsapp_user_disabled,status,created_at',
-    'id,seller_id,slug,title,price,price_currency,images,location,seller_location,whatsapp_enabled,status,created_at',
-    'id,seller_id,slug,title,price,price_currency,images,whatsapp_enabled,status',
-    'id,seller_id,slug,title,price,price_currency,images,status',
-    'id,seller_id,slug,title,price,price_currency,images',
-    'id,seller_id,slug,title,price,images',
+    'id,seller_id,slug,title,price,price_currency,images,location,seller_location,whatsapp_enabled,whatsapp_user_disabled,plan,plan_code,seller_plan,status,created_at',
+    'id,seller_id,slug,title,price,price_currency,images,location,seller_location,whatsapp_enabled,whatsapp_user_disabled,plan,plan_code,seller_plan,status,created_at',
+    'id,seller_id,slug,title,price,price_currency,images,whatsapp_enabled,plan,plan_code,seller_plan,status,created_at',
+    'id,seller_id,slug,title,price,price_currency,images,plan,plan_code,seller_plan,status,created_at',
+    'id,seller_id,slug,title,price,price_currency,images,plan,plan_code,seller_plan,status',
+    'id,seller_id,slug,title,price,price_currency,images,plan,plan_code,seller_plan',
+    'id,seller_id,slug,title,price,images,plan,plan_code',
+    'id,seller_id,slug,title,plan,plan_code',
     'id,seller_id,slug,title',
     'id,seller_id',
   ]
@@ -370,11 +408,17 @@ async function recordSend(supabase, scenarioCode, listingId, sellerId, email) {
       listing_id: listingId ?? null,
       seller_id: sellerId ?? null,
       email_to: email ?? null,
+      sent_at: new Date().toISOString(),
     }
     const { error } = await supabase.from('marketing_automations').insert(payload)
-    if (error) console.warn('[upsellWhatsapp] recordSend failed', error, payload)
+    if (error) {
+      console.warn('[upsellWhatsapp] recordSend failed', error, payload)
+      return false
+    }
+    return true
   } catch (err) {
     console.warn('[upsellWhatsapp] recordSend threw', err?.message || err)
+    return false
   }
 }
 
@@ -636,7 +680,7 @@ function listingNeedsWhatsapp(listing) {
 }
 
 async function main() {
-  const { live, debug, force, cooldownDays, lookbackDays, delayMs, limit, testTo, onlyEmail, onlySellerId } = parseArgs(
+  const { live, debug, force, onlyFree, cooldownDays, lookbackDays, listingLookbackDays, delayMs, limit, testTo, onlyEmail, onlySellerId } = parseArgs(
     process.argv.slice(2),
   )
   const dryRun = !live
@@ -733,6 +777,8 @@ async function main() {
       if (!listing) continue
       if (!listingIsActive(listing)) continue
       if (!listingNeedsWhatsapp(listing)) continue
+      if (listingLookbackDays && !listingWithinDays(listing, listingLookbackDays)) continue
+      if (onlyFree && !isFreePlanCandidate(listing)) continue
       const candidate = { listingId, count: stats.count || 0, lastAt: stats.lastAt || '' }
       if (!best) best = candidate
       else if (candidate.count > best.count) best = candidate
@@ -749,6 +795,8 @@ async function main() {
     for (const sellerId of missingHero) {
       const listing = bestListingBySeller.get(sellerId)
       if (listing?.id) {
+        if (listingLookbackDays && !listingWithinDays(listing, listingLookbackDays)) continue
+        if (onlyFree && !isFreePlanCandidate(listing)) continue
         // Reuse the same shape as the primary flow.
         heroListingBySeller.set(sellerId, { listingId: String(listing.id), count: emailEventsBySeller.get(sellerId)?.count || 0, lastAt: emailEventsBySeller.get(sellerId)?.lastAt || '' })
         listingsMap.set(String(listing.id), listing)
@@ -871,7 +919,13 @@ async function main() {
 
     try {
       await sendMail({ to: targetTo, subject, html, text })
-      if (!testTo) await recordSend(supabase, SCENARIO_CODE, listing?.id ?? null, sellerId, emailRaw)
+      if (!testTo) {
+        const logged = await recordSend(supabase, SCENARIO_CODE, listing?.id ?? null, sellerId, emailRaw)
+        if (!logged) {
+          console.error('[upsellWhatsapp] FATAL: se envió el mail pero no se pudo registrar en marketing_automations; abortando para evitar reenvíos.')
+          process.exit(1)
+        }
+      }
       sent += 1
       console.log(`${prefix} ✅ (${targetTo}${testTo ? `, original: ${emailRaw}` : ''})`)
     } catch (e) {
