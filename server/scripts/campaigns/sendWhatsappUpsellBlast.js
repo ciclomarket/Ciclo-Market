@@ -294,14 +294,15 @@ async function fetchActiveListingsForSellers(supabase, sellerIds) {
   if (!sellerIds.length) return new Map()
 
   const selectAttempts = [
-    'id,seller_id,slug,title,price,price_currency,images,location,seller_location,whatsapp_enabled,whatsapp_user_disabled,status,created_at',
-    'id,seller_id,slug,title,price,price_currency,images,whatsapp_enabled,whatsapp_user_disabled,status,created_at',
-    'id,seller_id,slug,title,price,price_currency,images,whatsapp_enabled,status,created_at',
-    'id,seller_id,slug,title,price,price_currency,images,status,created_at',
-    'id,seller_id,slug,title,price,price_currency,images,status',
-    'id,seller_id,slug,title,price,images,status',
-    'id,seller_id,slug,title,price,status',
-    'id,seller_id,slug,title,status',
+    'id,seller_id,slug,title,price,price_currency,images,location,seller_location,whatsapp_enabled,whatsapp_user_disabled,plan,plan_code,seller_plan,status,created_at',
+    'id,seller_id,slug,title,price,price_currency,images,whatsapp_enabled,whatsapp_user_disabled,plan,plan_code,seller_plan,status,created_at',
+    'id,seller_id,slug,title,price,price_currency,images,whatsapp_enabled,plan,plan_code,seller_plan,status,created_at',
+    'id,seller_id,slug,title,price,price_currency,images,plan,plan_code,seller_plan,status,created_at',
+    'id,seller_id,slug,title,price,price_currency,images,plan,plan_code,seller_plan,status',
+    'id,seller_id,slug,title,price,price_currency,images,plan,plan_code,seller_plan',
+    'id,seller_id,slug,title,price,images,plan,plan_code',
+    'id,seller_id,slug,title,plan,plan_code',
+    'id,seller_id,slug,title,status,created_at',
     'id,seller_id,slug,title',
     'id,seller_id',
   ]

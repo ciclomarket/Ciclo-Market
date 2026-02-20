@@ -12,6 +12,7 @@
     "campaign:free2paid:test": "node ./scripts/sendFreeToPaidTest.js",
     "campaign:trustblast": "node ./scripts/campaigns/sendTrustLevelBlast.js",
     "send-upsell-emails": "node ./scripts/campaigns/sendWhatsappUpsellBlast.js",
+    "campaign:free-recent-whatsapp": "node ./scripts/campaigns/sendFreeRecentWhatsappUpsell.js",
     "campaign:carnaval": "node ./scripts/campaigns/sendCarnavalDiscountBlast.js"
   },
   "dependencies": {
