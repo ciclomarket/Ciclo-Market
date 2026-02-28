@@ -4,6 +4,7 @@
  */
 
 const { Router } = require('express')
+const { getServerSupabaseClient } = require('../lib/supabaseClient')
 const router = Router()
 
 // ============================================================================
@@ -14,7 +15,7 @@ const router = Router()
 router.get('/api/admin/kanban/cards', async (req, res) => {
   try {
     const { stage, priority, seller_id } = req.query
-    const { supabase } = req.app.locals
+    const supabase = getServerSupabaseClient()
 
     let query = supabase
       .from('kanban_cards')
@@ -39,7 +40,7 @@ router.get('/api/admin/kanban/cards', async (req, res) => {
 // Create new kanban card
 router.post('/api/admin/kanban/cards', async (req, res) => {
   try {
-    const { supabase } = req.app.locals
+    const supabase = getServerSupabaseClient()
     const card = req.body
 
     const { data, error } = await supabase
@@ -65,7 +66,7 @@ router.post('/api/admin/kanban/cards/:id/move', async (req, res) => {
   try {
     const { id } = req.params
     const { to_stage, notes } = req.body
-    const { supabase } = req.app.locals
+    const supabase = getServerSupabaseClient()
     const adminUserId = req.session?.adminUser?.id
 
     // Get current card
@@ -112,7 +113,7 @@ router.patch('/api/admin/kanban/cards/:id', async (req, res) => {
   try {
     const { id } = req.params
     const updates = req.body
-    const { supabase } = req.app.locals
+    const supabase = getServerSupabaseClient()
 
     const { data, error } = await supabase
       .from('kanban_cards')
@@ -133,7 +134,7 @@ router.patch('/api/admin/kanban/cards/:id', async (req, res) => {
 router.delete('/api/admin/kanban/cards/:id', async (req, res) => {
   try {
     const { id } = req.params
-    const { supabase } = req.app.locals
+    const supabase = getServerSupabaseClient()
 
     const { error } = await supabase
       .from('kanban_cards')
@@ -151,7 +152,7 @@ router.delete('/api/admin/kanban/cards/:id', async (req, res) => {
 // Get kanban metrics
 router.get('/api/admin/kanban/metrics', async (req, res) => {
   try {
-    const { supabase } = req.app.locals
+    const supabase = getServerSupabaseClient()
 
     const { data: byStage, error } = await supabase
       .rpc('get_kanban_metrics')
@@ -177,7 +178,7 @@ router.get('/api/admin/kanban/metrics', async (req, res) => {
 router.get('/api/admin/crm/recommended-actions', async (req, res) => {
   try {
     const { seller_id } = req.query
-    const { supabase } = req.app.locals
+    const supabase = getServerSupabaseClient()
 
     let query = supabase
       .from('recommended_actions')
@@ -209,7 +210,7 @@ router.get('/api/admin/crm/recommended-actions', async (req, res) => {
 router.post('/api/admin/crm/actions/:id/dismiss', async (req, res) => {
   try {
     const { id } = req.params
-    const { supabase } = req.app.locals
+    const supabase = getServerSupabaseClient()
 
     const { error } = await supabase
       .from('recommended_actions')
@@ -228,7 +229,7 @@ router.post('/api/admin/crm/actions/:id/dismiss', async (req, res) => {
 router.post('/api/admin/crm/actions/:id/complete', async (req, res) => {
   try {
     const { id } = req.params
-    const { supabase } = req.app.locals
+    const supabase = getServerSupabaseClient()
     const adminUserId = req.session?.adminUser?.id
 
     const { error } = await supabase
@@ -255,7 +256,7 @@ router.post('/api/admin/crm/actions/:id/complete', async (req, res) => {
 // Get all automation rules
 router.get('/api/admin/automation/rules', async (req, res) => {
   try {
-    const { supabase } = req.app.locals
+    const supabase = getServerSupabaseClient()
 
     const { data, error } = await supabase
       .from('automation_rules')
@@ -273,7 +274,7 @@ router.get('/api/admin/automation/rules', async (req, res) => {
 // Create automation rule
 router.post('/api/admin/automation/rules', async (req, res) => {
   try {
-    const { supabase } = req.app.locals
+    const supabase = getServerSupabaseClient()
     const rule = req.body
 
     const { data, error } = await supabase
@@ -299,7 +300,7 @@ router.patch('/api/admin/automation/rules/:id', async (req, res) => {
   try {
     const { id } = req.params
     const updates = req.body
-    const { supabase } = req.app.locals
+    const supabase = getServerSupabaseClient()
 
     const { data, error } = await supabase
       .from('automation_rules')
@@ -324,7 +325,7 @@ router.post('/api/admin/automation/rules/:id/toggle', async (req, res) => {
   try {
     const { id } = req.params
     const { enabled } = req.body
-    const { supabase } = req.app.locals
+    const supabase = getServerSupabaseClient()
 
     const { error } = await supabase
       .from('automation_rules')
@@ -343,7 +344,7 @@ router.post('/api/admin/automation/rules/:id/toggle', async (req, res) => {
 router.delete('/api/admin/automation/rules/:id', async (req, res) => {
   try {
     const { id } = req.params
-    const { supabase } = req.app.locals
+    const supabase = getServerSupabaseClient()
 
     const { error } = await supabase
       .from('automation_rules')
@@ -362,7 +363,7 @@ router.delete('/api/admin/automation/rules/:id', async (req, res) => {
 router.get('/api/admin/automation/logs', async (req, res) => {
   try {
     const { limit = 50 } = req.query
-    const { supabase } = req.app.locals
+    const supabase = getServerSupabaseClient()
 
     const { data, error } = await supabase
       .from('automation_logs')
@@ -386,7 +387,7 @@ router.get('/api/admin/automation/logs', async (req, res) => {
 router.get('/api/admin/impact/metrics', async (req, res) => {
   try {
     const { period = '30d' } = req.query
-    const { supabase } = req.app.locals
+    const supabase = getServerSupabaseClient()
 
     const { data, error } = await supabase
       .rpc('get_impact_metrics', { p_period: period })
@@ -413,7 +414,7 @@ router.get('/api/admin/impact/metrics', async (req, res) => {
 router.get('/api/admin/impact/sales-by-category', async (req, res) => {
   try {
     const { period = '30d' } = req.query
-    const { supabase } = req.app.locals
+    const supabase = getServerSupabaseClient()
 
     const { data, error } = await supabase
       .rpc('get_sales_by_category', { p_period: period })
@@ -430,7 +431,7 @@ router.get('/api/admin/impact/sales-by-category', async (req, res) => {
 router.get('/api/admin/impact/sales-by-city', async (req, res) => {
   try {
     const { period = '30d' } = req.query
-    const { supabase } = req.app.locals
+    const supabase = getServerSupabaseClient()
 
     const { data, error } = await supabase
       .rpc('get_sales_by_city', { p_period: period })
@@ -447,7 +448,7 @@ router.get('/api/admin/impact/sales-by-city', async (req, res) => {
 router.get('/api/admin/impact/conversion-funnel', async (req, res) => {
   try {
     const { period = '30d' } = req.query
-    const { supabase } = req.app.locals
+    const supabase = getServerSupabaseClient()
 
     const { data, error } = await supabase
       .rpc('get_conversion_funnel', { p_period: period })
@@ -479,7 +480,7 @@ router.get('/api/admin/impact/conversion-funnel', async (req, res) => {
 router.get('/api/admin/sellers/:id/intelligence', async (req, res) => {
   try {
     const { id } = req.params
-    const { supabase } = req.app.locals
+    const supabase = getServerSupabaseClient()
 
     const { data, error } = await supabase
       .rpc('get_seller_intelligence', { p_seller_id: id })
