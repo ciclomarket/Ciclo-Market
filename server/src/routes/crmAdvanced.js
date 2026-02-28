@@ -19,7 +19,7 @@ router.get('/api/admin/kanban/cards', async (req, res) => {
 
     let query = supabase
       .from('kanban_cards')
-      .select('*, seller:seller_id(seller_name, whatsapp_number)')
+      .select('*, seller:seller_id(full_name, store_name, whatsapp_number)')
       .order('priority', { ascending: true })
       .order('created_at', { ascending: true })
 
@@ -30,7 +30,19 @@ router.get('/api/admin/kanban/cards', async (req, res) => {
     const { data, error } = await query
     if (error) throw error
 
-    res.json(data || [])
+    // Transform data to calculate seller_name from full_name/store_name
+    const transformed = (data || []).map(card => {
+      const seller = card.seller || {}
+      const sellerName = seller.full_name || seller.store_name || card.seller_name || 'Sin nombre'
+      return {
+        ...card,
+        seller_name: sellerName,
+        whatsapp_number: card.whatsapp_number || seller.whatsapp_number || '',
+        seller: undefined // Remove nested seller object
+      }
+    })
+
+    res.json(transformed)
   } catch (err) {
     console.error('[kanban] fetch error:', err)
     res.status(500).json({ error: 'Failed to fetch kanban cards' })
