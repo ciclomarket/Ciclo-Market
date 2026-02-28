@@ -4,6 +4,8 @@ const { getServerSupabaseClient } = require('../lib/supabaseClient')
 const { sendMail, isMailConfigured } = require('../lib/mail')
 const { resolveFrontendBaseUrl } = require('../lib/savedSearch')
 const { calculateBikePrice } = require('../utils/pricingAlgorithm')
+const { buildSellerFollowupSoldEmail } = require('../emails/sellerFollowupSoldEmail')
+const { buildStoreAnalyticsHTML } = require('../emails/storeAnalyticsEmail')
 
 const router = express.Router()
 
@@ -83,6 +85,135 @@ async function isModerator(supabase, userId) {
     return false
   }
 }
+
+/* -------------------------------------------------------------------------- */
+/* Admin actions                                                              */
+/* -------------------------------------------------------------------------- */
+
+async function handleAdminSendEmailTemplate(req, res) {
+  try {
+    if (!isMailConfigured()) return res.status(503).json({ ok: false, error: 'mail_not_configured' })
+    const supabase = getSupabaseOrFail(res)
+    if (!supabase) return
+
+    const authUser = await getAuthUser(req, supabase)
+    if (!authUser) return res.status(401).json({ ok: false, error: 'unauthorized' })
+    const allowed = await isModerator(supabase, authUser.id)
+    if (!allowed) return res.status(403).json({ ok: false, error: 'forbidden' })
+
+    const body = req.body || {}
+    const sellerId = typeof body.seller_id === 'string' ? body.seller_id : null
+    const templateKey = typeof body.template_key === 'string' ? body.template_key.trim() : ''
+    const listingId = typeof body.listing_id === 'string' ? body.listing_id : null
+
+    if (!sellerId || !isUuid(sellerId) || !templateKey) {
+      return res.status(400).json({ ok: false, error: 'invalid_payload' })
+    }
+
+    const { data: profile, error: profileErr } = await supabase
+      .from('users')
+      .select('id,email,full_name,store_name,username')
+      .eq('id', sellerId)
+      .maybeSingle()
+    if (profileErr || !profile?.email || !validateEmail(profile.email)) {
+      return res.status(400).json({ ok: false, error: 'seller_email_missing' })
+    }
+
+    const { data: prefs } = await supabase
+      .from('seller_comm_prefs')
+      .select('email_opt_out,cooldown_until')
+      .eq('seller_id', sellerId)
+      .maybeSingle()
+
+    const optedOut = Boolean(prefs?.email_opt_out)
+    const cooldownUntil = prefs?.cooldown_until ? new Date(prefs.cooldown_until).getTime() : 0
+    if (optedOut) return res.status(403).json({ ok: false, error: 'email_opt_out' })
+    if (cooldownUntil && cooldownUntil > Date.now()) return res.status(403).json({ ok: false, error: 'cooldown_active' })
+
+    const sellerName = (profile.full_name || profile.store_name || profile.username || profile.email.split('@')[0] || 'Seller').toString()
+    const baseFront = resolveFrontendBaseUrl()
+
+    let email = null
+    
+    // Template builders
+    if (templateKey === 'seller_followup_sold') {
+      email = buildSellerFollowupSoldEmail({ baseFront, sellerName })
+    } else if (templateKey === 'trust_level_low') {
+      // Build trust level email (similar to campaign)
+      const listing = listingId 
+        ? (await supabase.from('listings').select('*').eq('id', listingId).maybeSingle()).data
+        : null
+      email = buildTrustLevelEmail({ baseFront, sellerName, listing, sellerId })
+    } else if (templateKey === 'renewal_reminder') {
+      const listing = listingId 
+        ? (await supabase.from('listings').select('*').eq('id', listingId).maybeSingle()).data
+        : null
+      email = buildRenewalReminderEmail({ baseFront, sellerName, listing })
+    } else if (templateKey === 'expired_notice') {
+      const listing = listingId 
+        ? (await supabase.from('listings').select('*').eq('id', listingId).maybeSingle()).data
+        : null
+      email = buildExpiredNoticeEmail({ baseFront, sellerName, listing })
+    } else if (templateKey === 'extend_90d') {
+      email = buildExtend90dEmail({ baseFront, sellerName })
+    } else if (templateKey === 'whatsapp_upsell') {
+      const listing = listingId 
+        ? (await supabase.from('listings').select('*').eq('id', listingId).maybeSingle()).data
+        : null
+      email = buildWhatsappUpsellEmail({ baseFront, sellerName, listing })
+    } else if (templateKey === 'custom') {
+      const context = body.context || {}
+      email = {
+        subject: context.customSubject || 'Mensaje de Ciclo Market',
+        html: buildCustomEmailHtml({ baseFront, sellerName, subject: context.customSubject, body: context.customBody }),
+        text: context.customBody || ''
+      }
+    } else {
+      return res.status(400).json({ ok: false, error: 'unknown_template_key' })
+    }
+
+    await sendMail({
+      from: process.env.SMTP_FROM || `Ciclo Market <${process.env.SMTP_USER || 'no-reply@ciclomarket.ar'}>`,
+      to: profile.email,
+      subject: email.subject,
+      html: email.html,
+      text: email.text,
+    })
+
+    const nowIso = new Date().toISOString()
+    await supabase.from('seller_outreach').insert({
+      seller_id: sellerId,
+      listing_id: listingId,
+      channel: 'email',
+      template_key: templateKey,
+      message_preview: clamp(email.subject, 280),
+      status: 'sent',
+      created_by: authUser.id,
+      created_at: nowIso,
+      sent_at: nowIso,
+      meta: {
+        source: 'admin_ops',
+        route: req.headers.referer || null,
+      },
+    })
+
+    // Apply cooldown for email too (default 7d) to avoid spam loops.
+    await supabase.from('seller_comm_prefs').upsert({
+      seller_id: sellerId,
+      last_contacted_at: nowIso,
+      cooldown_until: new Date(Date.now() + 7 * 86400000).toISOString(),
+    }, { onConflict: 'seller_id' })
+
+    return res.json({ ok: true })
+  } catch (err) {
+    console.error('[api] admin send-email-template failed', err?.message || err)
+    return res.status(500).json({ ok: false, error: 'unexpected_error' })
+  }
+}
+
+router.post('/api/admin/actions/send-email-template', handleAdminSendEmailTemplate)
+// Alias for monolith deployments serving Admin under /admin
+router.post('/admin/actions/send-email-template', handleAdminSendEmailTemplate)
 
 /* -------------------------------------------------------------------------- */
 /* Analytics events                                                           */
@@ -1583,5 +1714,268 @@ async function importMercadoLibreHandler(req, res) {
 }
 
 // MercadoLibre import endpoint moved to `./import` router (Puppeteer scraping).
+
+/* -------------------------------------------------------------------------- */
+/* Email Template Builders for Admin CRM                                      */
+/* -------------------------------------------------------------------------- */
+
+function buildTrustLevelEmail({ baseFront, sellerName, listing, sellerId }) {
+  const dashboardUrl = `${baseFront}/dashboard`
+  const listingUrl = listing?.slug 
+    ? `${baseFront}/listing/${listing.slug}` 
+    : dashboardUrl
+  
+  const safeName = escapeHtml(sellerName)
+  const listingTitle = escapeHtml(listing?.title || 'tu publicación')
+  
+  const subject = `⚠️ ${safeName}, estás dejando dinero sobre la mesa`
+  
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${subject}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;margin-top:20px;box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);">
+    <div style="background:#f1f5f9;padding:20px;text-align:center;border-bottom:2px solid #e2e8f0;">
+      <img src="${baseFront}/site-logo.png" alt="Ciclo Market" style="height:35px;">
+    </div>
+    <div style="padding:30px 24px;">
+      <h1 style="color:#111827;font-size:22px;margin:0 0 10px;line-height:1.3;text-align:center;">
+        ⚠️ ${safeName}, estás dejando dinero sobre la mesa.
+      </h1>
+      <p style="color:#4b5563;font-size:16px;line-height:1.5;text-align:center;">
+        Tu aviso <strong>"${listingTitle}"</strong> tiene <strong>baja credibilidad</strong>.
+        Los compradores filtran publicaciones que no parecen seguras.
+      </p>
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:20px;margin:20px 0;text-align:center;">
+        <div style="font-size:12px;text-transform:uppercase;color:#64748b;font-weight:700;letter-spacing:1px;margin-bottom:10px;">
+          TU NIVEL DE CONFIANZA ACTUAL
+        </div>
+        <div style="font-size:36px;font-weight:800;color:#111827;margin-bottom:10px;">2.5/5</div>
+        <div style="margin-top:12px;font-size:14px;color:#dc2626;font-weight:600;background:#fef2f2;display:inline-block;padding:6px 12px;border-radius:20px;">
+          Estado: Incompleto
+        </div>
+      </div>
+      <a href="${listingUrl}" style="background:#14212e;color:#ffffff;display:block;padding:16px 24px;text-decoration:none;border-radius:8px;font-weight:bold;text-align:center;font-size:16px;margin-top:20px;">
+        🚀 ACTIVAR NIVEL DE CONFIANZA 5/5
+      </a>
+      <div style="margin-top:20px;padding:15px;background:#f9fafb;border-radius:8px;font-size:14px;color:#374151;">
+        <strong>Checklist para mejorar:</strong><br>
+        ❌ <strong>WhatsApp Directo:</strong> Activá el chat para vender ya.<br>
+        ❌ <strong>Identidad:</strong> Tu comprador no sabe quién sos.<br>
+        ❌ <strong>Redes Sociales:</strong> Vinculá tu Instagram para dar confianza.
+      </div>
+    </div>
+  </div>
+  <div style="text-align:center;padding:20px;font-size:12px;color:#9ca3af;">
+    Enviado por Ciclo Market · <a href="${baseFront}/ayuda" style="color:#9ca3af;">Darse de baja</a>
+  </div>
+</body>
+</html>`
+
+  const text = `${safeName}, estás dejando dinero sobre la mesa.
+
+Tu aviso "${listingTitle}" tiene baja credibilidad.
+
+Checklist para mejorar:
+- Activá WhatsApp Directo
+- Verificá tu identidad
+- Vinculá tus redes sociales
+
+Activar Nivel de Confianza: ${listingUrl}
+
+Para no recibir más: ${baseFront}/ayuda`
+
+  return { subject, html, text }
+}
+
+function buildRenewalReminderEmail({ baseFront, sellerName, listing }) {
+  const listingTitle = escapeHtml(listing?.title || 'tu publicación')
+  const expiresAt = listing?.expires_at 
+    ? new Date(listing.expires_at).toLocaleDateString('es-AR')
+    : 'pronto'
+  
+  const subject = `Tu publicación "${listingTitle}" está por vencer`
+  
+  const html = `<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#f2f4f8;font-family:Inter,Arial,sans-serif;">
+  <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="width:100%;max-width:680px;margin:0 auto;">
+    <tr><td style="padding:22px 24px 10px;text-align:center;">
+      <img src="${baseFront}/site-logo.png" alt="Ciclo Market" style="height:56px;">
+    </td></tr>
+    <tr><td style="padding:0 24px 24px;">
+      <div style="background:#ffffff;border-radius:18px;border:1px solid #e6edf6;padding:18px;">
+        <h2 style="margin:0 0 10px;font-size:18px;color:#0c1723;">Hola ${escapeHtml(sellerName)} 👋</h2>
+        <p style="margin:0 0 12px;color:#334155;line-height:1.6;">
+          Tu aviso <strong>${listingTitle}</strong> vence el <strong>${expiresAt}</strong>.
+        </p>
+        <p style="margin:0 0 16px;color:#334155;line-height:1.6;">
+          Renovala ahora para seguir recibiendo consultas.
+        </p>
+        <p style="margin:0;text-align:center;">
+          <a href="${baseFront}/dashboard" style="display:inline-block;padding:12px 18px;background:#14212e;color:#fff;text-decoration:none;border-radius:999px;font-weight:700;">
+            Renovar publicación
+          </a>
+        </p>
+      </div>
+    </td></tr>
+  </table>
+</body>
+</html>`
+
+  const text = `Hola ${sellerName},
+
+Tu aviso "${listingTitle}" vence el ${expiresAt}.
+
+Renovala ahora para seguir recibiendo consultas:
+${baseFront}/dashboard`
+
+  return { subject, html, text }
+}
+
+function buildExpiredNoticeEmail({ baseFront, sellerName, listing }) {
+  const listingTitle = escapeHtml(listing?.title || 'tu publicación')
+  const subject = `Tu publicación "${listingTitle}" venció – renovala en 1 clic`
+  
+  const html = `<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#f2f4f8;font-family:Inter,Arial,sans-serif;">
+  <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="width:100%;max-width:680px;margin:0 auto;">
+    <tr><td style="padding:22px 24px 10px;text-align:center;">
+      <img src="${baseFront}/site-logo.png" alt="Ciclo Market" style="height:56px;">
+    </td></tr>
+    <tr><td style="padding:0 24px 24px;">
+      <div style="background:#ffffff;border-radius:18px;border:1px solid #e6edf6;padding:18px;">
+        <h2 style="margin:0 0 10px;font-size:18px;color:#0c1723;">Hola ${escapeHtml(sellerName)} 👋</h2>
+        <p style="margin:0 0 12px;color:#334155;line-height:1.6;">
+          Tu aviso <strong>${listingTitle}</strong> venció. Podés renovarlo ahora para que vuelva a mostrarse en el marketplace.
+        </p>
+        <p style="margin:0;text-align:center;">
+          <a href="${baseFront}/dashboard" style="display:inline-block;padding:12px 18px;background:#14212e;color:#fff;text-decoration:none;border-radius:999px;font-weight:700;">
+            Renovar en 1 clic
+          </a>
+        </p>
+      </div>
+    </td></tr>
+  </table>
+</body>
+</html>`
+
+  const text = `Hola ${sellerName},
+
+Tu aviso "${listingTitle}" venció. Podés renovarlo ahora:
+${baseFront}/dashboard`
+
+  return { subject, html, text }
+}
+
+function buildExtend90dEmail({ baseFront, sellerName }) {
+  const subject = '¡Extendimos tus publicaciones 90 días más en Ciclo Market!'
+  
+  const html = `<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#f2f4f8;font-family:Inter,Arial,sans-serif;">
+  <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="width:100%;max-width:680px;margin:0 auto;">
+    <tr><td style="padding:22px 24px 10px;text-align:center;">
+      <img src="${baseFront}/site-logo.png" alt="Ciclo Market" style="height:56px;">
+    </td></tr>
+    <tr><td style="padding:0 24px 24px;">
+      <div style="background:#ffffff;border-radius:18px;border:1px solid #e6edf6;padding:18px;">
+        <h2 style="margin:0 0 10px;font-size:18px;color:#0c1723;">¡Buenas noticias ${escapeHtml(sellerName)}! 🎉</h2>
+        <p style="margin:0 0 12px;color:#334155;line-height:1.6;">
+          Extendimos tus publicaciones <strong>90 días más</strong> gratuitamente para que sigas recibiendo consultas.
+        </p>
+        <p style="margin:0;text-align:center;">
+          <a href="${baseFront}/dashboard" style="display:inline-block;padding:12px 18px;background:#14212e;color:#fff;text-decoration:none;border-radius:999px;font-weight:700;">
+            Ver mis publicaciones
+          </a>
+        </p>
+      </div>
+    </td></tr>
+  </table>
+</body>
+</html>`
+
+  const text = `¡Buenas noticias ${sellerName}!
+
+Extendimos tus publicaciones 90 días más gratuitamente.
+
+Ver mis publicaciones: ${baseFront}/dashboard`
+
+  return { subject, html, text }
+}
+
+function buildWhatsappUpsellEmail({ baseFront, sellerName, listing }) {
+  const listingTitle = escapeHtml(listing?.title || 'tu publicación')
+  const subject = 'Recibiste consultas · Activá WhatsApp para vender más'
+  
+  const html = `<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#f2f4f8;font-family:Inter,Arial,sans-serif;">
+  <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="width:100%;max-width:680px;margin:0 auto;">
+    <tr><td style="padding:22px 24px 10px;text-align:center;">
+      <img src="${baseFront}/site-logo.png" alt="Ciclo Market" style="height:56px;">
+    </td></tr>
+    <tr><td style="padding:0 24px 24px;">
+      <div style="background:#ffffff;border-radius:18px;border:1px solid #e6edf6;padding:18px;">
+        <h2 style="margin:0 0 10px;font-size:18px;color:#0c1723;">Hola ${escapeHtml(sellerName)} 👋</h2>
+        <p style="margin:0 0 12px;color:#334155;line-height:1.6;">
+          Tu aviso <strong>${listingTitle}</strong> está recibiendo consultas. 
+          Activá <strong>WhatsApp Directo</strong> para cerrar ventas más rápido.
+        </p>
+        <div style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:12px;padding:16px;margin:16px 0;">
+          <strong>✅ Con WhatsApp activado:</strong><br>
+          • Los compradores te contactan en segundos<br>
+          • Respondés más rápido que por email<br>
+          • Cerrás ventas en minutos
+        </div>
+        <p style="margin:0;text-align:center;">
+          <a href="${baseFront}/dashboard" style="display:inline-block;padding:12px 18px;background:#14212e;color:#fff;text-decoration:none;border-radius:999px;font-weight:700;">
+            Activar WhatsApp
+          </a>
+        </p>
+      </div>
+    </td></tr>
+  </table>
+</body>
+</html>`
+
+  const text = `Hola ${sellerName},
+
+Tu aviso "${listingTitle}" está recibiendo consultas.
+
+Activá WhatsApp Directo para cerrar ventas más rápido:
+${baseFront}/dashboard`
+
+  return { subject, html, text }
+}
+
+function buildCustomEmailHtml({ baseFront, sellerName, subject, body }) {
+  return `<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#f2f4f8;font-family:Inter,Arial,sans-serif;">
+  <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="width:100%;max-width:680px;margin:0 auto;">
+    <tr><td style="padding:22px 24px 10px;text-align:center;">
+      <img src="${baseFront}/site-logo.png" alt="Ciclo Market" style="height:56px;">
+    </td></tr>
+    <tr><td style="padding:0 24px 24px;">
+      <div style="background:#ffffff;border-radius:18px;border:1px solid #e6edf6;padding:18px;">
+        <h2 style="margin:0 0 10px;font-size:18px;color:#0c1723;">Hola ${escapeHtml(sellerName)} 👋</h2>
+        <div style="color:#334155;line-height:1.6;white-space:pre-wrap;">${escapeHtml(body)}</div>
+        <p style="margin:16px 0 0;text-align:center;">
+          <a href="${baseFront}/dashboard" style="display:inline-block;padding:12px 18px;background:#14212e;color:#fff;text-decoration:none;border-radius:999px;font-weight:700;">
+            Ir a mi panel
+          </a>
+        </p>
+      </div>
+    </td></tr>
+  </table>
+</body>
+</html>`
+}
 
 module.exports = router

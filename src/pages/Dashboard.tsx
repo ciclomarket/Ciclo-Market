@@ -1151,7 +1151,7 @@ export default function Dashboard() {
                       if (import.meta.env.DEV && typeof window !== 'undefined') {
                         const proto = window.location.protocol
                         const host = window.location.hostname
-                        return `${proto}//${host}:5273/`
+                        return `${proto}//${host}:5273/admin/`
                       }
                     } catch { /* noop */ }
                     return envBase

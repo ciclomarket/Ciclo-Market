@@ -55,7 +55,7 @@ export default function LoginPage() {
         minHeight: '100vh',
         display: 'grid',
         placeItems: 'center',
-        background: 'radial-gradient(circle at 20% 20%, rgba(97,223,255,0.18), transparent 55%), #06101b',
+        background: 'linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%)',
         padding: '2rem',
       }}
     >
@@ -64,98 +64,186 @@ export default function LoginPage() {
         style={{
           width: '100%',
           maxWidth: '420px',
-          background: 'rgba(12, 23, 35, 0.9)',
-          borderRadius: '28px',
+          background: 'var(--admin-surface)',
+          borderRadius: 'var(--radius-2xl)',
           padding: '2.5rem',
-          boxShadow: '0 22px 65px rgba(4, 9, 15, 0.55)',
-          border: '1px solid rgba(255,255,255,0.08)',
+          boxShadow: 'var(--shadow-xl)',
+          border: '1px solid var(--admin-border)',
         }}
       >
-        <div style={{ marginBottom: '1.75rem' }}>
-          <p style={{ textTransform: 'uppercase', letterSpacing: '0.4em', fontSize: '0.68rem', color: '#6fbff5' }}>
+        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+          <div
+            style={{
+              width: 64,
+              height: 64,
+              background: 'linear-gradient(135deg, var(--cm-primary), var(--cm-primary-light))',
+              borderRadius: 'var(--radius-xl)',
+              display: 'grid',
+              placeItems: 'center',
+              color: 'white',
+              fontWeight: 700,
+              fontSize: '1.5rem',
+              margin: '0 auto 1.5rem',
+            }}
+          >
+            CM
+          </div>
+          <p
+            style={{
+              textTransform: 'uppercase',
+              letterSpacing: '0.2em',
+              fontSize: '0.6875rem',
+              fontWeight: 600,
+              color: 'var(--cm-accent)',
+              marginBottom: '0.5rem',
+            }}
+          >
             CicloMarket
           </p>
-          <h1 style={{ margin: '0.3rem 0', fontSize: '1.8rem', color: '#f2f6fb' }}>Panel moderador</h1>
-          <p style={{ color: '#8ea0b3', fontSize: '0.92rem', lineHeight: 1.55 }}>
-            Accedé con tu cuenta de moderador o administrador para gestionar el marketplace.
+          <h1
+            style={{
+              margin: 0,
+              fontSize: '1.5rem',
+              fontWeight: 700,
+              color: 'var(--admin-text)',
+            }}
+          >
+            Panel de Control
+          </h1>
+          <p
+            style={{
+              color: 'var(--admin-text-muted)',
+              fontSize: '0.875rem',
+              margin: '0.5rem 0 0',
+            }}
+          >
+            Accedé con tu cuenta de moderador o administrador
           </p>
         </div>
 
-        <label style={{ display: 'block', marginBottom: '1.1rem' }}>
-          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#9fb3c9', letterSpacing: '0.12em' }}>Email</span>
-          <input
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            type="email"
-            placeholder="moderador@ciclomarket.ar"
-            style={{
-              width: '100%',
-              marginTop: '0.5rem',
-              padding: '0.75rem 0.9rem',
-              borderRadius: '14px',
-              border: '1px solid rgba(255,255,255,0.08)',
-              backgroundColor: 'rgba(19,35,55,0.55)',
-              color: '#f2f6fb',
-            }}
-            autoComplete="email"
-          />
-        </label>
+        <div style={{ display: 'grid', gap: '1.25rem' }}>
+          <div>
+            <label
+              style={{
+                display: 'block',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                color: 'var(--admin-text-muted)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                marginBottom: '0.5rem',
+              }}
+            >
+              Email
+            </label>
+            <input
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              type="email"
+              placeholder="admin@ciclomarket.ar"
+              style={{
+                width: '100%',
+                padding: '0.75rem 1rem',
+                borderRadius: 'var(--radius-lg)',
+                border: '1px solid var(--admin-border)',
+                backgroundColor: 'var(--admin-surface)',
+                color: 'var(--admin-text)',
+                fontSize: '0.9375rem',
+                transition: 'border-color 200ms, box-shadow 200ms',
+              }}
+              onFocus={(e) => {
+                e.target.style.borderColor = 'var(--cm-accent)'
+                e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)'
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = 'var(--admin-border)'
+                e.target.style.boxShadow = 'none'
+              }}
+              autoComplete="email"
+            />
+          </div>
 
-        <label style={{ display: 'block', marginBottom: '1.25rem' }}>
-          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#9fb3c9', letterSpacing: '0.12em' }}>Contraseña</span>
-          <input
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            type="password"
-            placeholder="••••••••"
-            style={{
-              width: '100%',
-              marginTop: '0.5rem',
-              padding: '0.75rem 0.9rem',
-              borderRadius: '14px',
-              border: '1px solid rgba(255,255,255,0.08)',
-              backgroundColor: 'rgba(19,35,55,0.55)',
-              color: '#f2f6fb',
-            }}
-            autoComplete="current-password"
-          />
-        </label>
+          <div>
+            <label
+              style={{
+                display: 'block',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                color: 'var(--admin-text-muted)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                marginBottom: '0.5rem',
+              }}
+            >
+              Contraseña
+            </label>
+            <input
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              type="password"
+              placeholder="••••••••"
+              style={{
+                width: '100%',
+                padding: '0.75rem 1rem',
+                borderRadius: 'var(--radius-lg)',
+                border: '1px solid var(--admin-border)',
+                backgroundColor: 'var(--admin-surface)',
+                color: 'var(--admin-text)',
+                fontSize: '0.9375rem',
+                transition: 'border-color 200ms, box-shadow 200ms',
+              }}
+              onFocus={(e) => {
+                e.target.style.borderColor = 'var(--cm-accent)'
+                e.target.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.1)'
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = 'var(--admin-border)'
+                e.target.style.boxShadow = 'none'
+              }}
+              autoComplete="current-password"
+            />
+          </div>
+        </div>
 
         {(localError || error) && (
           <div
             style={{
-              marginBottom: '1rem',
-              padding: '0.75rem',
-              borderRadius: '12px',
-              backgroundColor: 'rgba(255, 107, 107, 0.12)',
-              color: '#ff8f8f',
-              fontSize: '0.85rem',
+              marginTop: '1.25rem',
+              padding: '0.875rem 1rem',
+              borderRadius: 'var(--radius-lg)',
+              backgroundColor: '#fef2f2',
+              color: 'var(--cm-danger)',
+              fontSize: '0.875rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
             }}
           >
-            {localError ?? error}
+            <span>⚠</span>
+            <span>{localError ?? error}</span>
           </div>
         )}
 
         <button
           type="submit"
           disabled={submitting}
+          className="btn btn-primary"
           style={{
             width: '100%',
-            padding: '0.85rem 1rem',
-            borderRadius: '16px',
-            border: 'none',
-            background: submitting
-              ? 'linear-gradient(135deg, #3a566f, #25394b)'
-              : 'linear-gradient(135deg, #61dfff, #4985ff)',
-            color: '#041226',
-            fontWeight: 700,
-            fontSize: '0.95rem',
-            cursor: submitting ? 'wait' : 'pointer',
-            transition: 'transform 0.15s ease, box-shadow 0.15s ease',
-            boxShadow: submitting ? 'none' : '0 10px 32px rgba(73, 133, 255, 0.35)',
+            marginTop: '1.5rem',
+            padding: '0.875rem 1.5rem',
+            fontSize: '0.9375rem',
+            fontWeight: 600,
           }}
         >
-          {submitting ? 'Ingresando…' : 'Ingresar'}
+          {submitting ? (
+            <>
+              <span className="admin-spinner" style={{ width: 16, height: 16, borderWidth: 2 }} />
+              <span>Ingresando…</span>
+            </>
+          ) : (
+            'Ingresar al Panel'
+          )}
         </button>
       </form>
     </div>

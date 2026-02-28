@@ -7,6 +7,7 @@ const SITE_ORIGIN = 'https://www.ciclomarket.ar'
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://jmtsgywgeysagnfgdovr.supabase.co'
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 const FACEBOOK_APP_ID = '1873135236620793'
+const API_UPSTREAM_ORIGIN = (process.env.API_UPSTREAM_ORIGIN || 'https://ciclo-market.onrender.com').replace(/\/$/, '')
 
 async function getSupabase() {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
@@ -248,6 +249,57 @@ exports.imageProxy = onRequest({ region: 'us-central1' }, async (req, res) => {
     Readable.fromWeb(upstream.body).pipe(res)
   } catch (err) {
     console.error('[functions/imageProxy] error', err)
+    res.status(502).send('Bad Gateway')
+  }
+})
+
+// API proxy: ensure `/api/*` works even when Hosting rewrites to SPA index.html.
+// Forwards Authorization headers (needed for authenticated actions like submitting reviews).
+exports.apiProxy = onRequest({ region: 'us-central1' }, async (req, res) => {
+  const method = String(req.method || 'GET').toUpperCase()
+  if (method === 'OPTIONS') {
+    res.set('Access-Control-Allow-Origin', SITE_ORIGIN)
+    res.set('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS')
+    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With')
+    res.set('Access-Control-Max-Age', '86400')
+    return res.status(204).send('')
+  }
+
+  try {
+    const upstreamUrl = new URL(req.originalUrl || req.url || '/api', API_UPSTREAM_ORIGIN)
+
+    const headers = {
+      accept: req.get('accept') || '*/*',
+    }
+    const authHeader = req.get('authorization')
+    if (authHeader) headers.authorization = authHeader
+    const contentType = req.get('content-type')
+    if (contentType) headers['content-type'] = contentType
+    const xrw = req.get('x-requested-with')
+    if (xrw) headers['x-requested-with'] = xrw
+
+    const init = { method, headers }
+    if (method !== 'GET' && method !== 'HEAD') {
+      // `rawBody` is available in Firebase Functions; fallback to empty buffer.
+      init.body = req.rawBody || Buffer.from('')
+    }
+
+    const upstream = await fetch(upstreamUrl.toString(), init)
+
+    res.status(upstream.status || 502)
+    const upstreamCt = upstream.headers.get('content-type')
+    if (upstreamCt) res.setHeader('Content-Type', upstreamCt)
+
+    // Avoid caching API responses at the edge by default.
+    res.setHeader('Cache-Control', 'no-store')
+
+    if (!upstream.body) {
+      const fallbackText = await upstream.text().catch(() => '')
+      return res.send(fallbackText || 'Upstream error')
+    }
+    Readable.fromWeb(upstream.body).pipe(res)
+  } catch (err) {
+    console.error('[functions/apiProxy] error', err)
     res.status(502).send('Bad Gateway')
   }
 })

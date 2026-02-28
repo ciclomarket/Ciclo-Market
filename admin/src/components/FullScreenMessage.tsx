@@ -12,22 +12,38 @@ export function FullScreenMessage({ title, message, action }: FullScreenMessageP
         padding: '2rem',
         display: 'grid',
         placeItems: 'center',
-        background: 'radial-gradient(circle at top, rgba(35,52,79,0.65), #04070d)',
+        background: 'linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%)',
       }}
     >
       <div
         style={{
           maxWidth: '420px',
-          backgroundColor: 'rgba(12, 23, 35, 0.85)',
-          borderRadius: '24px',
+          backgroundColor: 'var(--admin-surface)',
+          borderRadius: 'var(--radius-2xl)',
           padding: '2.5rem',
-          boxShadow: '0 18px 50px rgba(6, 12, 24, 0.6)',
-          border: '1px solid rgba(255,255,255,0.05)',
+          boxShadow: 'var(--shadow-xl)',
+          border: '1px solid var(--admin-border)',
           textAlign: 'center',
         }}
       >
-        <h1 style={{ fontSize: '1.8rem', marginBottom: '1rem', color: '#f2f6fb' }}>{title}</h1>
-        {message && <p style={{ color: '#a9b8c9', lineHeight: 1.6 }}>{message}</p>}
+        <div
+          style={{
+            width: 64,
+            height: 64,
+            background: '#fef2f2',
+            borderRadius: 'var(--radius-xl)',
+            display: 'grid',
+            placeItems: 'center',
+            fontSize: '2rem',
+            margin: '0 auto 1.5rem',
+          }}
+        >
+          ⚠
+        </div>
+        <h1 style={{ fontSize: '1.25rem', marginBottom: '0.75rem', color: 'var(--admin-text)', fontWeight: 700 }}>
+          {title}
+        </h1>
+        {message && <p style={{ color: 'var(--admin-text-muted)', lineHeight: 1.6, margin: 0 }}>{message}</p>}
         {action && <div style={{ marginTop: '1.5rem' }}>{action}</div>}
       </div>
     </div>

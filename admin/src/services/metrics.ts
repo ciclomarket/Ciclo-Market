@@ -1,5 +1,5 @@
 import { getSupabaseClient, supabaseEnabled } from '@app/services/supabase'
-import { fetchDailyEvents, type DailyPoint } from '@admin/services/engagement'
+import { cacheGet, cacheSet } from '@admin/services/memoryCache'
 
 export interface SummaryMetrics {
   totalUsers: number | null
@@ -33,6 +33,9 @@ export async function fetchSummaryMetrics(): Promise<SummaryMetrics> {
       draftListings: null,
     }
   }
+
+  const cached = cacheGet<SummaryMetrics>('metrics:summary')
+  if (cached) return cached
 
   const supabase = getSupabaseClient()
 
@@ -87,7 +90,7 @@ export async function fetchSummaryMetrics(): Promise<SummaryMetrics> {
     ),
   ])
 
-  return {
+  const result = {
     totalUsers,
     verifiedUsers,
     officialStores,
@@ -96,6 +99,8 @@ export async function fetchSummaryMetrics(): Promise<SummaryMetrics> {
     pausedListings,
     draftListings,
   }
+  cacheSet('metrics:summary', result, 60_000)
+  return result
 }
 
 /* ----------------------------- Payments (simple) -------------------------- */
@@ -130,7 +135,12 @@ export async function fetchRecentPayments(days = 90, maxRows = 1000): Promise<Pa
 }
 
 export async function summarizeRecentPayments(days = 90): Promise<PaymentsSummary> {
-  const rows = await fetchRecentPayments(days)
+  const safeDays = Math.max(1, Math.min(365, Math.floor(days)))
+  const cacheKey = `metrics:payments:${safeDays}`
+  const cached = cacheGet<PaymentsSummary>(cacheKey)
+  if (cached) return cached
+
+  const rows = await fetchRecentPayments(safeDays)
   const totalByCurrency: Record<string, number> = {}
   const totalByPlan: Record<string, number> = {}
   const byDayKey: Record<string, number> = {}
@@ -149,7 +159,9 @@ export async function summarizeRecentPayments(days = 90): Promise<PaymentsSummar
   const byDay = Object.entries(byDayKey)
     .sort(([a], [b]) => (a > b ? 1 : -1))
     .map(([day, total]) => ({ day, total, count: byDayCount[day] || 0, currency: 'ARS' }))
-  return { count: rows.length, totalByCurrency, totalByPlan, byDay }
+  const result = { count: rows.length, totalByCurrency, totalByPlan, byDay }
+  cacheSet(cacheKey, result, 60_000)
+  return result
 }
 
 /* ----------------------------- Listings active per day -------------------- */
@@ -213,6 +225,8 @@ const zeroGrowth: UserGrowthSummary = {
 
 export async function fetchUserGrowthSummary(): Promise<UserGrowthSummary> {
   if (!supabaseEnabled) return zeroGrowth
+  const cached = cacheGet<UserGrowthSummary>('metrics:userGrowth')
+  if (cached) return cached
   try {
     const supabase = getSupabaseClient()
     const { data, error } = await supabase
@@ -224,7 +238,7 @@ export async function fetchUserGrowthSummary(): Promise<UserGrowthSummary> {
       return zeroGrowth
     }
     const row = data as Record<string, number | null>
-    return {
+    const result = {
       users7d: Number(row.users_7d ?? 0),
       usersPrev7d: Number(row.users_prev_7d ?? 0),
       users30d: Number(row.users_30d ?? 0),
@@ -232,6 +246,8 @@ export async function fetchUserGrowthSummary(): Promise<UserGrowthSummary> {
       users90d: Number(row.users_90d ?? 0),
       usersPrev90d: Number(row.users_prev_90d ?? 0),
     }
+    cacheSet('metrics:userGrowth', result, 60_000)
+    return result
   } catch (err) {
     console.warn('[admin-metrics] user growth unexpected', err)
     return zeroGrowth
@@ -263,6 +279,8 @@ const zeroListingActivity: ListingActivitySummary = {
 
 export async function fetchListingActivitySummary(): Promise<ListingActivitySummary> {
   if (!supabaseEnabled) return zeroListingActivity
+  const cached = cacheGet<ListingActivitySummary>('metrics:listingActivity')
+  if (cached) return cached
   try {
     const supabase = getSupabaseClient()
     const { data, error } = await supabase
@@ -274,7 +292,7 @@ export async function fetchListingActivitySummary(): Promise<ListingActivitySumm
       return zeroListingActivity
     }
     const row = data as Record<string, number | null>
-    return {
+    const result = {
       created7d: Number(row.listings_created_7d ?? 0),
       createdPrev7d: Number(row.listings_created_prev_7d ?? 0),
       created30d: Number(row.listings_created_30d ?? 0),
@@ -284,6 +302,8 @@ export async function fetchListingActivitySummary(): Promise<ListingActivitySumm
       paused30d: Number(row.listings_paused_30d ?? 0),
       pausedPrev30d: Number(row.listings_paused_prev_30d ?? 0),
     }
+    cacheSet('metrics:listingActivity', result, 60_000)
+    return result
   } catch (err) {
     console.warn('[admin-metrics] listing activity unexpected', err)
     return zeroListingActivity
@@ -300,31 +320,9 @@ export interface FunnelCounts {
   periodDays: number
   site: FunnelStepCounts
   listing: FunnelStepCounts
-  wa: FunnelStepCounts
-  checkout: FunnelStepCounts
-}
-
-function sumLast(arr: DailyPoint[], windowSize: number): number {
-  if (!Array.isArray(arr) || arr.length === 0) return 0
-  return arr.slice(-windowSize).reduce((total, point) => total + (Number(point.total) || 0), 0)
-}
-
-function sumPrevious(arr: DailyPoint[], windowSize: number): number {
-  if (!Array.isArray(arr) || arr.length === 0) return 0
-  const sliceStart = Math.max(0, arr.length - windowSize * 2)
-  const sliceEnd = Math.max(0, arr.length - windowSize)
-  return arr.slice(sliceStart, sliceEnd).reduce((total, point) => total + (Number(point.total) || 0), 0)
-}
-
-function countWithinWindow(rows: PaymentRow[], windowMs: number, offsetMs = 0): number {
-  const upperBound = Date.now() - offsetMs
-  const lowerBound = upperBound - windowMs
-  return rows.reduce((acc, row) => {
-    const ts = Date.parse(row.created_at || '')
-    if (Number.isNaN(ts)) return acc
-    if (ts >= lowerBound && ts <= upperBound) return acc + 1
-    return acc
-  }, 0)
+  contactIntent: FunnelStepCounts
+  contactLogged: FunnelStepCounts
+  saleConfirmed: FunnelStepCounts
 }
 
 export async function fetchFunnelCounts(periodDays = 30): Promise<FunnelCounts> {
@@ -333,36 +331,43 @@ export async function fetchFunnelCounts(periodDays = 30): Promise<FunnelCounts> 
       periodDays,
       site: { current: 0, previous: 0 },
       listing: { current: 0, previous: 0 },
-      wa: { current: 0, previous: 0 },
-      checkout: { current: 0, previous: 0 },
+      contactIntent: { current: 0, previous: 0 },
+      contactLogged: { current: 0, previous: 0 },
+      saleConfirmed: { current: 0, previous: 0 },
     }
   }
 
-  const daysRequested = Math.max(periodDays * 2, 14)
-  const [events, payments] = await Promise.all([
-    fetchDailyEvents(daysRequested),
-    fetchRecentPayments(Math.min(Math.max(periodDays * 2, 14), 365)),
-  ])
-
   const window = Math.max(1, periodDays)
-  const siteCurrent = sumLast(events.site, window)
-  const sitePrev = sumPrevious(events.site, window)
-  const listingCurrent = sumLast(events.listing, window)
-  const listingPrev = sumPrevious(events.listing, window)
-  const waCurrent = sumLast(events.wa, window)
-  const waPrev = sumPrevious(events.wa, window)
+  const cacheKey = `metrics:funnel:${window}`
+  const cached = cacheGet<FunnelCounts>(cacheKey)
+  if (cached) return cached
 
-  const windowMs = window * 86400000
-  const checkoutCurrent = countWithinWindow(payments, windowMs, 0)
-  const checkoutPrev = countWithinWindow(payments, windowMs, windowMs)
-
-  return {
-    periodDays: window,
-    site: { current: siteCurrent, previous: sitePrev },
-    listing: { current: listingCurrent, previous: listingPrev },
-    wa: { current: waCurrent, previous: waPrev },
-    checkout: { current: checkoutCurrent, previous: checkoutPrev },
+  const supabase = getSupabaseClient()
+  const { data, error } = await supabase.rpc('admin_funnel_counts_compare', { p_days: window })
+  if (error || !Array.isArray(data) || !data[0]) {
+    console.warn('[admin-metrics] funnel rpc failed', error)
+    return {
+      periodDays: window,
+      site: { current: 0, previous: 0 },
+      listing: { current: 0, previous: 0 },
+      contactIntent: { current: 0, previous: 0 },
+      contactLogged: { current: 0, previous: 0 },
+      saleConfirmed: { current: 0, previous: 0 },
+    }
   }
+  const row = data[0] as Record<string, number | null>
+  const result: FunnelCounts = {
+    periodDays: window,
+    site: { current: Number(row.site_views_current ?? 0), previous: Number(row.site_views_prev ?? 0) },
+    listing: { current: Number(row.listing_views_current ?? 0), previous: Number(row.listing_views_prev ?? 0) },
+    contactIntent: { current: Number(row.contact_intent_current ?? 0), previous: Number(row.contact_intent_prev ?? 0) },
+    contactLogged: { current: Number(row.contact_logged_current ?? 0), previous: Number(row.contact_logged_prev ?? 0) },
+    saleConfirmed: { current: Number(row.sale_confirmed_current ?? 0), previous: Number(row.sale_confirmed_prev ?? 0) },
+  }
+  cacheSet(cacheKey, result, 60_000)
+  return result
+
+  // unreachable
 }
 
 /* ----------------------------- Listing quality ---------------------------- */

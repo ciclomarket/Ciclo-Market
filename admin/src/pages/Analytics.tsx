@@ -1,5 +1,10 @@
+/**
+ * Analytics Page with Impact Dashboard
+ */
+
 import { useEffect, useMemo, useState } from 'react'
 import { TimeSeriesChart } from '@admin/components/TimeSeriesChart'
+import { ImpactDashboard } from '@admin/components/crm/ImpactDashboard'
 import {
   summarizeRecentPayments,
   fetchListingQualityMetrics,
@@ -11,6 +16,8 @@ import {
   fetchTopListingsByWaClicks,
   type ListingEngagementTop,
 } from '@admin/services/engagement'
+
+type AnalyticsTab = 'revenue' | 'engagement' | 'impact'
 
 const currencyArs = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })
 const currencyUsd = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
@@ -35,7 +42,99 @@ function formatCtr(views: number, waClicks: number): string {
   return `${percentFormatter.format((waClicks / views) * 100)}%`
 }
 
+interface StatCardProps {
+  label: string
+  value: string
+  subvalue?: string
+  icon: string
+  color: 'blue' | 'green' | 'amber' | 'purple'
+}
+
+function StatCard({ label, value, subvalue, icon, color }: StatCardProps) {
+  const colorMap = {
+    blue: { bg: '#eff6ff', text: '#1d4ed8', border: '#bfdbfe' },
+    green: { bg: '#ecfdf5', text: '#047857', border: '#a7f3d0' },
+    amber: { bg: '#fffbeb', text: '#b45309', border: '#fcd34d' },
+    purple: { bg: '#f5f3ff', text: '#6d28d9', border: '#c4b5fd' },
+  }
+  const colors = colorMap[color]
+
+  return (
+    <div
+      className="admin-card"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 'var(--space-4)',
+      }}
+    >
+      <div
+        style={{
+          width: 48,
+          height: 48,
+          borderRadius: 'var(--radius-lg)',
+          background: colors.bg,
+          display: 'grid',
+          placeItems: 'center',
+          fontSize: '1.5rem',
+          border: `1px solid ${colors.border}`,
+        }}
+      >
+        {icon}
+      </div>
+      <div>
+        <div style={{ fontSize: '0.75rem', color: 'var(--admin-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          {label}
+        </div>
+        <div style={{ fontSize: '1.25rem', fontWeight: 700, color: colors.text }}>
+          {value}
+        </div>
+        {subvalue && (
+          <div style={{ fontSize: '0.75rem', color: 'var(--admin-text-muted)' }}>
+            {subvalue}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// Tab Button Component
+interface TabButtonProps {
+  active: boolean
+  onClick: () => void
+  icon: string
+  label: string
+}
+
+function TabButton({ active, onClick, icon, label }: TabButtonProps) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 'var(--space-2)',
+        padding: 'var(--space-3) var(--space-4)',
+        background: active ? 'var(--admin-surface)' : 'transparent',
+        border: 'none',
+        borderBottom: `2px solid ${active ? '#3b82f6' : 'transparent'}`,
+        color: active ? '#3b82f6' : 'var(--admin-text-muted)',
+        fontSize: '0.875rem',
+        fontWeight: 600,
+        cursor: 'pointer',
+        transition: 'all 0.2s',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      <span>{icon}</span>
+      <span>{label}</span>
+    </button>
+  )
+}
+
 export default function AnalyticsPage() {
+  const [activeTab, setActiveTab] = useState<AnalyticsTab>('revenue')
   const [payments, setPayments] = useState<PaymentsSummary | null>(null)
   const [listingQuality, setListingQuality] = useState<ListingQualityMetrics | null>(null)
   const [topViews, setTopViews] = useState<ListingEngagementTop[]>([])
@@ -94,174 +193,280 @@ export default function AnalyticsPage() {
 
   return (
     <div>
-      <section className="admin-card" style={{ marginBottom: '1.5rem' }}>
-        <h3>Ingresos por moneda (últimos 90 días)</h3>
-        <div style={{ display: 'grid', gap: '1.25rem', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', marginTop: '1rem' }}>
-          <div>
-            <div style={{ color: '#9fb3c9', fontSize: '0.82rem' }}>Total ARS</div>
-            <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#f2f6fb' }}>
-              {payments ? currencyArs.format(payments.totalByCurrency['ARS'] || 0) : '…'}
-            </div>
-          </div>
-          <div>
-            <div style={{ color: '#9fb3c9', fontSize: '0.82rem' }}>Total USD</div>
-            <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#f2f6fb' }}>
-              {payments ? currencyUsd.format(payments.totalByCurrency['USD'] || 0) : '…'}
-            </div>
-          </div>
-          <div>
-            <div style={{ color: '#9fb3c9', fontSize: '0.82rem' }}>Checkouts (90d)</div>
-            <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#f2f6fb' }}>
-              {payments ? numberFormatter.format(payments.count) : '…'}
-            </div>
-          </div>
-        </div>
+      {/* Tabs Navigation */}
+      <div style={{
+        display: 'flex',
+        borderBottom: '1px solid var(--admin-border)',
+        marginBottom: 'var(--space-5)',
+        overflowX: 'auto',
+        gap: 'var(--space-1)',
+      }}>
+        <TabButton
+          active={activeTab === 'revenue'}
+          onClick={() => setActiveTab('revenue')}
+          icon="💰"
+          label="Ingresos"
+        />
+        <TabButton
+          active={activeTab === 'engagement'}
+          onClick={() => setActiveTab('engagement')}
+          icon="📈"
+          label="Engagement"
+        />
+        <TabButton
+          active={activeTab === 'impact'}
+          onClick={() => setActiveTab('impact')}
+          icon="🎯"
+          label="Impacto CM"
+        />
+      </div>
 
-        <div style={{ marginTop: '2rem' }}>
-          <h4 style={{ marginBottom: '0.75rem', color: '#9fb3c9', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-            Distribución por plan
-          </h4>
-          {planBreakdown.length ? (
-            <div style={{ display: 'grid', gap: '0.6rem', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))' }}>
-              {planBreakdown.map((plan) => (
-                <div key={plan.plan} style={{ background: 'rgba(97,223,255,0.06)', borderRadius: '12px', padding: '0.75rem 1rem', border: '1px solid rgba(255,255,255,0.08)' }}>
-                  <div style={{ color: '#9fb3c9', fontSize: '0.8rem' }}>{plan.label}</div>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 600, color: '#f2f6fb' }}>{currencyArs.format(plan.amount)}</div>
-                </div>
-              ))}
+      {activeTab === 'revenue' && (
+        <div>
+          {/* Stats Row */}
+          <section className="admin-grid admin-grid-3" style={{ marginBottom: 'var(--space-5)' }}>
+            <StatCard
+              label="Total ARS (90d)"
+              value={payments ? currencyArs.format(payments.totalByCurrency['ARS'] || 0) : '…'}
+              icon="💰"
+              color="green"
+            />
+            <StatCard
+              label="Total USD (90d)"
+              value={payments ? currencyUsd.format(payments.totalByCurrency['USD'] || 0) : '…'}
+              icon="💵"
+              color="amber"
+            />
+            <StatCard
+              label="Checkouts"
+              value={payments ? numberFormatter.format(payments.count) : '…'}
+              subvalue="Últimos 90 días"
+              icon="🛒"
+              color="blue"
+            />
+          </section>
+
+          {/* Error */}
+          {error && (
+            <div className="admin-card" style={{ borderColor: 'var(--cm-danger)', marginBottom: 'var(--space-5)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', color: 'var(--cm-danger)' }}>
+                <span>⚠</span>
+                <span>{error}</span>
+              </div>
             </div>
-          ) : (
-            <p style={{ color: '#7f92ab' }}>{loading ? 'Cargando…' : 'Sin datos disponibles.'}</p>
           )}
-        </div>
-      </section>
 
-      {error ? (
-        <div className="admin-card" style={{ borderColor: 'rgba(255,107,107,0.4)', color: '#ff8f8f', marginBottom: '1.5rem' }}>
-          {error}
-        </div>
-      ) : null}
+          {/* Charts */}
+          <section className="admin-grid admin-grid-2" style={{ marginBottom: 'var(--space-5)' }}>
+            <article className="admin-card">
+              <div className="admin-card-header">
+                <div>
+                  <h3 className="admin-card-title">Ingresos Diarios</h3>
+                  <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--admin-text-muted)' }}>Últimos 90 días · ARS</p>
+                </div>
+              </div>
+              <TimeSeriesChart
+                data={revenueSeries}
+                height={240}
+                stroke="#3b82f6"
+                fill="rgba(59, 130, 246, 0.1)"
+                yFormatter={(value) => currencyArs.format(value)}
+                emptyLabel={loading ? 'Cargando…' : 'Sin datos'}
+              />
+            </article>
+            <article className="admin-card">
+              <div className="admin-card-header">
+                <div>
+                  <h3 className="admin-card-title">Checkouts Confirmados</h3>
+                  <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--admin-text-muted)' }}>Órdenes completadas por día</p>
+                </div>
+              </div>
+              <TimeSeriesChart
+                data={checkoutSeries}
+                height={240}
+                stroke="#10b981"
+                fill="rgba(16, 185, 129, 0.1)"
+                yFormatter={(value) => numberFormatter.format(Math.round(value))}
+                emptyLabel={loading ? 'Cargando…' : 'Sin datos'}
+              />
+            </article>
+          </section>
 
-      <section className="admin-grid" style={{ marginBottom: '1.5rem' }}>
-        <article className="admin-card">
-          <h3>Ingresos diarios</h3>
-          <p style={{ color: '#7f92ab', marginBottom: '0.75rem' }}>Últimos 90 días · escala ARS</p>
-          <TimeSeriesChart
-            data={revenueSeries}
-            height={240}
-            stroke="#61dfff"
-            fill="rgba(97,223,255,0.18)"
-            yFormatter={(value) => currencyArs.format(value)}
-            emptyLabel={loading ? 'Cargando…' : 'Sin datos'}
-          />
-        </article>
-        <article className="admin-card">
-          <h3>Checkouts confirmados</h3>
-          <p style={{ color: '#7f92ab', marginBottom: '0.75rem' }}>Número de órdenes completadas por día.</p>
-          <TimeSeriesChart
-            data={checkoutSeries}
-            height={240}
-            stroke="#6fff9d"
-            fill="rgba(111,255,157,0.18)"
-            yFormatter={(value) => numberFormatter.format(Math.round(value))}
-            emptyLabel={loading ? 'Cargando…' : 'Sin datos'}
-          />
-        </article>
-      </section>
-
-      <section className="admin-card" style={{ marginBottom: '1.5rem' }}>
-        <h3>Calidad de publicaciones (últimos 30 días)</h3>
-        <div style={{ display: 'grid', gap: '1.25rem', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', marginTop: '1rem' }}>
-          <div>
-            <div style={{ color: '#9fb3c9', fontSize: '0.82rem' }}>Promedio de vistas por publicación</div>
-            <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#f2f6fb' }}>
-              {listingQuality ? numberFormatter.format(Math.round(listingQuality.avgViews30d)) : '…'}
+          {/* Plan Breakdown */}
+          <section className="admin-card" style={{ marginBottom: 'var(--space-5)' }}>
+            <div className="admin-card-header">
+              <div>
+                <h3 className="admin-card-title">Distribución por Plan</h3>
+                <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--admin-text-muted)' }}>Ingresos segmentados por tipo de plan</p>
+              </div>
             </div>
-          </div>
-          <div>
-            <div style={{ color: '#9fb3c9', fontSize: '0.82rem' }}>Promedio de clics WA por publicación</div>
-            <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#f2f6fb' }}>
-              {listingQuality ? numberFormatter.format(Math.round(listingQuality.avgWaClicks30d)) : '…'}
-            </div>
-          </div>
-          <div>
-            <div style={{ color: '#9fb3c9', fontSize: '0.82rem' }}>Publicaciones monitorizadas</div>
-            <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#f2f6fb' }}>
-              {listingQuality ? numberFormatter.format(listingQuality.listingsTracked) : '…'}
-            </div>
-          </div>
+            {planBreakdown.length ? (
+              <div style={{ display: 'grid', gap: 'var(--space-3)', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+                {planBreakdown.map((plan) => (
+                  <div
+                    key={plan.plan}
+                    style={{
+                      padding: 'var(--space-4)',
+                      background: 'var(--admin-gray-50)',
+                      borderRadius: 'var(--radius-lg)',
+                      border: '1px solid var(--admin-border)',
+                    }}
+                  >
+                    <div style={{ fontSize: '0.75rem', color: 'var(--admin-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      {plan.label}
+                    </div>
+                    <div style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--admin-text)', marginTop: 'var(--space-1)' }}>
+                      {currencyArs.format(plan.amount)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p style={{ color: 'var(--admin-text-muted)' }}>{loading ? 'Cargando…' : 'Sin datos disponibles.'}</p>
+            )}
+          </section>
         </div>
-      </section>
+      )}
 
-      <section className="admin-grid">
-        <article className="admin-card">
-          <h3>Top 5 publicaciones por vistas (30d)</h3>
-          <div style={{ marginTop: '0.75rem', overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '520px' }}>
-              <thead>
-                <tr style={{ background: 'rgba(12,23,35,0.9)', textAlign: 'left', color: '#9fb3c9', fontSize: '0.78rem', letterSpacing: '0.08em' }}>
-                  <th style={{ padding: '0.6rem 0.9rem' }}>#</th>
-                  <th style={{ padding: '0.6rem 0.9rem' }}>Publicación</th>
-                  <th style={{ padding: '0.6rem 0.9rem' }}>Vistas</th>
-                  <th style={{ padding: '0.6rem 0.9rem' }}>Clics WA</th>
-                  <th style={{ padding: '0.6rem 0.9rem' }}>CTR</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr><td colSpan={5} style={{ padding: '1rem', color: '#92a5bc', textAlign: 'center' }}>Cargando…</td></tr>
-                ) : topViews.length ? (
-                  topViews.map((row, index) => (
-                    <tr key={row.id} style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-                      <td style={{ padding: '0.7rem 0.9rem', color: '#7f92ab' }}>{index + 1}</td>
-                      <td style={{ padding: '0.7rem 0.9rem', color: '#c2d5eb' }}>{row.title}</td>
-                      <td style={{ padding: '0.7rem 0.9rem', color: '#c2d5eb' }}>{numberFormatter.format(row.views)}</td>
-                      <td style={{ padding: '0.7rem 0.9rem', color: '#c2d5eb' }}>{numberFormatter.format(row.waClicks)}</td>
-                      <td style={{ padding: '0.7rem 0.9rem', color: '#c2d5eb' }}>{formatCtr(row.views, row.waClicks)}</td>
+      {activeTab === 'engagement' && (
+        <div>
+          {/* Listing Quality */}
+          <section className="admin-card" style={{ marginBottom: 'var(--space-5)' }}>
+            <div className="admin-card-header">
+              <div>
+                <h3 className="admin-card-title">Calidad de Publicaciones</h3>
+                <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--admin-text-muted)' }}>Métricas de los últimos 30 días</p>
+              </div>
+            </div>
+            <div style={{ display: 'grid', gap: 'var(--space-4)', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+              <div
+                style={{
+                  padding: 'var(--space-4)',
+                  background: '#eff6ff',
+                  borderRadius: 'var(--radius-lg)',
+                  border: '1px solid #bfdbfe',
+                }}
+              >
+                <div style={{ fontSize: '0.75rem', color: '#1e40af', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Promedio de vistas
+                </div>
+                <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#1d4ed8', marginTop: 'var(--space-1)' }}>
+                  {listingQuality ? numberFormatter.format(Math.round(listingQuality.avgViews30d)) : '…'}
+                </div>
+              </div>
+              <div
+                style={{
+                  padding: 'var(--space-4)',
+                  background: '#ecfdf5',
+                  borderRadius: 'var(--radius-lg)',
+                  border: '1px solid #a7f3d0',
+                }}
+              >
+                <div style={{ fontSize: '0.75rem', color: '#065f46', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Promedio de clics WA
+                </div>
+                <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#047857', marginTop: 'var(--space-1)' }}>
+                  {listingQuality ? numberFormatter.format(Math.round(listingQuality.avgWaClicks30d)) : '…'}
+                </div>
+              </div>
+              <div
+                style={{
+                  padding: 'var(--space-4)',
+                  background: '#fffbeb',
+                  borderRadius: 'var(--radius-lg)',
+                  border: '1px solid #fcd34d',
+                }}
+              >
+                <div style={{ fontSize: '0.75rem', color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Publicaciones monitorizadas
+                </div>
+                <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#b45309', marginTop: 'var(--space-1)' }}>
+                  {listingQuality ? numberFormatter.format(listingQuality.listingsTracked) : '…'}
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Top Listings */}
+          <section className="admin-grid admin-grid-2">
+            <article className="admin-card">
+              <div className="admin-card-header">
+                <div>
+                  <h3 className="admin-card-title">Top por Vistas</h3>
+                  <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--admin-text-muted)' }}>Últimos 30 días</p>
+                </div>
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Publicación</th>
+                      <th style={{ textAlign: 'right' }}>Vistas</th>
+                      <th style={{ textAlign: 'right' }}>CTR</th>
                     </tr>
-                  ))
-                ) : (
-                  <tr><td colSpan={5} style={{ padding: '1rem', color: '#92a5bc', textAlign: 'center' }}>Sin datos</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </article>
+                  </thead>
+                  <tbody>
+                    {loading ? (
+                      <tr><td colSpan={4} className="cell-muted" style={{ textAlign: 'center' }}>Cargando…</td></tr>
+                    ) : topViews.length ? (
+                      topViews.map((row, index) => (
+                        <tr key={row.id}>
+                          <td className="cell-muted">{index + 1}</td>
+                          <td className="cell-strong">{row.title}</td>
+                          <td className="cell-strong" style={{ textAlign: 'right' }}>{numberFormatter.format(row.views)}</td>
+                          <td className="cell-muted" style={{ textAlign: 'right' }}>{formatCtr(row.views, row.waClicks)}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr><td colSpan={4} className="cell-muted" style={{ textAlign: 'center' }}>Sin datos</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </article>
 
-        <article className="admin-card">
-          <h3>Top 5 publicaciones por clics de WhatsApp (30d)</h3>
-          <div style={{ marginTop: '0.75rem', overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '520px' }}>
-              <thead>
-                <tr style={{ background: 'rgba(12,23,35,0.9)', textAlign: 'left', color: '#9fb3c9', fontSize: '0.78rem', letterSpacing: '0.08em' }}>
-                  <th style={{ padding: '0.6rem 0.9rem' }}>#</th>
-                  <th style={{ padding: '0.6rem 0.9rem' }}>Publicación</th>
-                  <th style={{ padding: '0.6rem 0.9rem' }}>Clics WA</th>
-                  <th style={{ padding: '0.6rem 0.9rem' }}>Vistas</th>
-                  <th style={{ padding: '0.6rem 0.9rem' }}>CTR</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr><td colSpan={5} style={{ padding: '1rem', color: '#92a5bc', textAlign: 'center' }}>Cargando…</td></tr>
-                ) : topWa.length ? (
-                  topWa.map((row, index) => (
-                    <tr key={row.id} style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-                      <td style={{ padding: '0.7rem 0.9rem', color: '#7f92ab' }}>{index + 1}</td>
-                      <td style={{ padding: '0.7rem 0.9rem', color: '#c2d5eb' }}>{row.title}</td>
-                      <td style={{ padding: '0.7rem 0.9rem', color: '#c2d5eb' }}>{numberFormatter.format(row.waClicks)}</td>
-                      <td style={{ padding: '0.7rem 0.9rem', color: '#c2d5eb' }}>{numberFormatter.format(row.views)}</td>
-                      <td style={{ padding: '0.7rem 0.9rem', color: '#c2d5eb' }}>{formatCtr(row.views, row.waClicks)}</td>
+            <article className="admin-card">
+              <div className="admin-card-header">
+                <div>
+                  <h3 className="admin-card-title">Top por Clics WhatsApp</h3>
+                  <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--admin-text-muted)' }}>Últimos 30 días</p>
+                </div>
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Publicación</th>
+                      <th style={{ textAlign: 'right' }}>Clics</th>
+                      <th style={{ textAlign: 'right' }}>CTR</th>
                     </tr>
-                  ))
-                ) : (
-                  <tr><td colSpan={5} style={{ padding: '1rem', color: '#92a5bc', textAlign: 'center' }}>Sin datos</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </article>
-      </section>
+                  </thead>
+                  <tbody>
+                    {loading ? (
+                      <tr><td colSpan={4} className="cell-muted" style={{ textAlign: 'center' }}>Cargando…</td></tr>
+                    ) : topWa.length ? (
+                      topWa.map((row, index) => (
+                        <tr key={row.id}>
+                          <td className="cell-muted">{index + 1}</td>
+                          <td className="cell-strong">{row.title}</td>
+                          <td className="cell-strong" style={{ textAlign: 'right' }}>{numberFormatter.format(row.waClicks)}</td>
+                          <td className="cell-muted" style={{ textAlign: 'right' }}>{formatCtr(row.views, row.waClicks)}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr><td colSpan={4} className="cell-muted" style={{ textAlign: 'center' }}>Sin datos</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </article>
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'impact' && <ImpactDashboard />}
     </div>
   )
 }

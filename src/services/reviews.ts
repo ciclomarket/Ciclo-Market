@@ -1,6 +1,37 @@
-import { getSupabaseClient, supabaseEnabled } from './supabase'
+import { getSupabaseClient } from './supabase'
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').trim()
+function resolveApiBaseUrl() {
+  const explicit = String(import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/$/, '')
+  if (explicit) return explicit
+
+  const fallback = String(import.meta.env.VITE_API_FALLBACK_URL || '').trim().replace(/\/$/, '')
+  if (fallback) return fallback
+
+  // Production safety net: when the web runs on Firebase Hosting, `/api/*` can be
+  // rewritten to `index.html` (200 OK, HTML), breaking JSON fetches for reviews.
+  // If no explicit API base is configured and we are on the main domain, default
+  // to the Render API origin.
+  if (typeof window !== 'undefined') {
+    const host = window.location?.hostname || ''
+    if (host === 'ciclomarket.ar' || host === 'www.ciclomarket.ar') return 'https://ciclo-market.onrender.com'
+  }
+
+  // Default: same-origin `/api/*` (dev proxy, monolith setups, etc.)
+  return ''
+}
+
+const API_BASE = resolveApiBaseUrl()
+
+async function parseJsonOrThrow(res: Response) {
+  const contentType = (res.headers.get('content-type') || '').toLowerCase()
+  if (!contentType.includes('application/json')) {
+    const text = await res.text().catch(() => '')
+    const err = new Error('non_json_response')
+    ;(err as any).details = text.slice(0, 200)
+    throw err
+  }
+  return await res.json()
+}
 
 export type ReviewRecord = {
   id: string
@@ -54,7 +85,7 @@ export async function fetchSellerReviews(sellerId: string): Promise<{ reviews: R
     const endpoint = API_BASE ? `${API_BASE}/api/reviews/${encodeURIComponent(sellerId)}` : `/api/reviews/${encodeURIComponent(sellerId)}`
     const res = await fetch(endpoint)
     if (!res.ok) return null
-    const data = await res.json()
+    const data = await parseJsonOrThrow(res)
     return data
   } catch (err) {
     console.warn('[reviews] fetchSellerReviews failed', err)
@@ -66,11 +97,11 @@ export async function canUserReviewSeller(buyerId: string, sellerId: string): Pr
   try {
     const endpoint = API_BASE ? `${API_BASE}/api/reviews/can-review?sellerId=${encodeURIComponent(sellerId)}&buyerId=${encodeURIComponent(buyerId)}` : `/api/reviews/can-review?sellerId=${encodeURIComponent(sellerId)}&buyerId=${encodeURIComponent(buyerId)}`
     const res = await fetch(endpoint)
-    if (!res.ok) return { allowed: false }
-    return await res.json()
+    if (!res.ok) return { allowed: false, reason: 'api_unavailable' }
+    return await parseJsonOrThrow(res)
   } catch (err) {
     console.warn('[reviews] canUserReviewSeller failed', err)
-    return { allowed: false }
+    return { allowed: false, reason: 'api_unavailable' }
   }
 }
 
@@ -92,5 +123,5 @@ export async function submitReview(payload: { sellerId: string; buyerId: string;
     const text = await res.text()
     throw new Error(text || 'No pudimos enviar la reseña')
   }
-  return await res.json()
+  return await parseJsonOrThrow(res)
 }

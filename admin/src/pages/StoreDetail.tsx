@@ -19,22 +19,15 @@ interface DeltaBadgeProps {
 }
 
 function DeltaBadge({ current, previous }: DeltaBadgeProps) {
-  const styleBase: React.CSSProperties = {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '0.3rem',
-    fontSize: '0.82rem',
-    fontWeight: 600,
-  }
-  if (previous <= 0) {
-    if (current <= 0) return <span style={{ ...styleBase, color: '#7f92ab' }}>—</span>
-    return <span style={{ ...styleBase, color: '#6fff9d' }}>▲ +{numberFormatter.format(current)}</span>
-  }
   const diff = current - previous
+  if (previous <= 0) {
+    if (current <= 0) return <span className="badge badge-gray">—</span>
+    return <span className="badge badge-green">▲ +{numberFormatter.format(current)}</span>
+  }
   const pct = (diff / previous) * 100
-  if (Math.abs(pct) < 0.1) return <span style={{ ...styleBase, color: '#7f92ab' }}>—</span>
-  if (pct > 0) return <span style={{ ...styleBase, color: '#6fff9d' }}>▲ {percentFormatter.format(pct)}%</span>
-  return <span style={{ ...styleBase, color: '#ff8f8f' }}>▼ {percentFormatter.format(Math.abs(pct))}%</span>
+  if (Math.abs(pct) < 0.1) return <span className="badge badge-gray">—</span>
+  if (pct > 0) return <span className="badge badge-green">▲ {percentFormatter.format(pct)}%</span>
+  return <span className="badge badge-red">▼ {percentFormatter.format(Math.abs(pct))}%</span>
 }
 
 export default function StoreDetailPage() {
@@ -81,130 +74,133 @@ export default function StoreDetailPage() {
 
   return (
     <div>
-      <section className="admin-card" style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
-        <div>
-          <h3>{store?.store_name ?? 'Tienda sin nombre'}</h3>
-          <p style={{ color: '#9fb3c9' }}>
-            {store ? `${store.city ?? ''}${store.city && store.province ? ', ' : ''}${store.province ?? ''}` || 'Ubicación no informada' : ''}
-          </p>
-          <p style={{ color: '#7f92ab', marginTop: '0.5rem' }}>
-            Slug: <strong>{store?.store_slug ?? '—'}</strong>
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            onClick={() => navigate(-1)}
-            style={{
-              padding: '0.5rem 0.9rem',
-              borderRadius: '12px',
-              border: '1px solid rgba(255,255,255,0.12)',
-              background: 'rgba(255,255,255,0.08)',
-              color: '#f2f6fb',
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            Volver
-          </button>
-          <Link
-            to="/stores"
-            style={{
-              padding: '0.5rem 0.9rem',
-              borderRadius: '12px',
-              border: '1px solid rgba(97,223,255,0.3)',
-              background: 'linear-gradient(135deg, rgba(97,223,255,0.24), rgba(73,133,255,0.24))',
-              color: '#f2f6fb',
-              fontWeight: 600,
-            }}
-          >
-            Ver listado
-          </Link>
-        </div>
-      </section>
-
-      {error ? (
-        <div className="admin-card" style={{ borderColor: 'rgba(255,107,107,0.4)', color: '#ff8f8f', marginBottom: '1.5rem' }}>{error}</div>
-      ) : null}
-
-      <section className="admin-card" style={{ marginBottom: '1.5rem' }}>
-        <h3>Métricas (últimos 30 días)</h3>
-        <div style={{ display: 'grid', gap: '1rem', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', marginTop: '1rem' }}>
+      {/* Header */}
+      <div className="admin-card" style={{ marginBottom: 'var(--space-5)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 'var(--space-4)', flexWrap: 'wrap' }}>
           <div>
-            <div style={{ color: '#9fb3c9', fontSize: '0.82rem' }}>Vistas tienda</div>
-            <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#f2f6fb' }}>
+            <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: 'var(--admin-text)' }}>
+              {store?.store_name ?? 'Tienda sin nombre'}
+            </h2>
+            <p style={{ margin: 'var(--space-1) 0 0', fontSize: '0.875rem', color: 'var(--admin-text-muted)' }}>
+              {store ? `${store.city ?? ''}${store.city && store.province ? ', ' : ''}${store.province ?? ''}` || 'Ubicación no informada' : ''}
+            </p>
+            <div style={{ marginTop: 'var(--space-2)' }}>
+              <span className="badge badge-gray">Slug: {store?.store_slug ?? '—'}</span>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+            <button type="button" onClick={() => navigate(-1)} className="btn btn-secondary">
+              ← Volver
+            </button>
+            <Link to="/stores" className="btn btn-primary">
+              Ver listado
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      {/* Error */}
+      {error && (
+        <div className="admin-card" style={{ borderColor: 'var(--cm-danger)', marginBottom: 'var(--space-5)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', color: 'var(--cm-danger)' }}>
+            <span>⚠</span>
+            <span>{error}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Metrics */}
+      <section className="admin-card" style={{ marginBottom: 'var(--space-5)' }}>
+        <div className="admin-card-header">
+          <div>
+            <h3 className="admin-card-title">Métricas (últimos 30 días)</h3>
+          </div>
+        </div>
+        <div style={{ display: 'grid', gap: 'var(--space-4)', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
+          <div style={{ padding: 'var(--space-4)', background: '#eff6ff', borderRadius: 'var(--radius-lg)', border: '1px solid #bfdbfe' }}>
+            <div style={{ fontSize: '0.75rem', color: '#1e40af', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Vistas tienda</div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#1d4ed8', marginTop: 'var(--space-1)' }}>
               {store ? numberFormatter.format(store.storeViews30d) : '…'}
             </div>
           </div>
-          <div>
-            <div style={{ color: '#9fb3c9', fontSize: '0.82rem' }}>Vistas avisos</div>
-            <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#f2f6fb' }}>
+          <div style={{ padding: 'var(--space-4)', background: '#ecfdf5', borderRadius: 'var(--radius-lg)', border: '1px solid #a7f3d0' }}>
+            <div style={{ fontSize: '0.75rem', color: '#065f46', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Vistas avisos</div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#047857', marginTop: 'var(--space-1)' }}>
               {store ? numberFormatter.format(store.listingViews30d) : '…'}
             </div>
           </div>
-          <div>
-            <div style={{ color: '#9fb3c9', fontSize: '0.82rem' }}>Clics WhatsApp</div>
-            <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#f2f6fb' }}>
+          <div style={{ padding: 'var(--space-4)', background: '#fffbeb', borderRadius: 'var(--radius-lg)', border: '1px solid #fcd34d' }}>
+            <div style={{ fontSize: '0.75rem', color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Clics WhatsApp</div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#b45309', marginTop: 'var(--space-1)' }}>
               {store ? numberFormatter.format(store.waClicks30d) : '…'}
             </div>
           </div>
-          <div>
-            <div style={{ color: '#9fb3c9', fontSize: '0.82rem' }}>CTR avisos → WA</div>
-            <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#f2f6fb' }}>
+          <div style={{ padding: 'var(--space-4)', background: '#faf5ff', borderRadius: 'var(--radius-lg)', border: '1px solid #e9d5ff' }}>
+            <div style={{ fontSize: '0.75rem', color: '#6b21a8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>CTR avisos → WA</div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#7c3aed', marginTop: 'var(--space-1)' }}>
               {store ? `${percentFormatter.format(ctrListing)}%` : '…'}
             </div>
           </div>
-          <div>
-            <div style={{ color: '#9fb3c9', fontSize: '0.82rem' }}>Checkouts (30d)</div>
-            <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#f2f6fb' }}>
+          <div style={{ padding: 'var(--space-4)', background: 'var(--admin-gray-50)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--admin-border)' }}>
+            <div style={{ fontSize: '0.75rem', color: 'var(--admin-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Checkouts</div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--admin-text)', marginTop: 'var(--space-1)' }}>
               {detail ? numberFormatter.format(detail.checkouts30d) : '…'}
             </div>
-            <div style={{ marginTop: '0.35rem' }}>
-              {detail ? <DeltaBadge current={detail.checkouts30d} previous={detail.checkoutsPrev30d} /> : null}
+            <div style={{ marginTop: 'var(--space-1)' }}>
+              {detail && <DeltaBadge current={detail.checkouts30d} previous={detail.checkoutsPrev30d} />}
             </div>
           </div>
         </div>
-        <div style={{ marginTop: '1.2rem', color: '#7f92ab', fontSize: '0.85rem' }}>
-          Avisos activos: <strong style={{ color: '#c2d5eb' }}>{store ? store.activeListings : '—'}</strong>
+        <div style={{ marginTop: 'var(--space-4)', padding: 'var(--space-3)', background: 'var(--admin-gray-50)', borderRadius: 'var(--radius-lg)', fontSize: '0.875rem', color: 'var(--admin-text-secondary)' }}>
+          Avisos activos: <strong style={{ color: 'var(--admin-text)' }}>{store ? store.activeListings : '—'}</strong>
         </div>
       </section>
 
+      {/* Listings */}
       <section className="admin-card">
-        <h3>Publicaciones de la tienda</h3>
-        <p style={{ color: '#7f92ab', marginBottom: '0.75rem' }}>Ordenadas por vistas de los últimos 30 días.</p>
+        <div className="admin-card-header">
+          <div>
+            <h3 className="admin-card-title">Publicaciones de la tienda</h3>
+            <p style={{ margin: 'var(--space-1) 0 0', fontSize: '0.875rem', color: 'var(--admin-text-muted)' }}>Ordenadas por vistas de los últimos 30 días</p>
+          </div>
+        </div>
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '760px' }}>
+          <table className="admin-table">
             <thead>
-              <tr style={{ background: 'rgba(12,23,35,0.9)', textAlign: 'left', color: '#9fb3c9', fontSize: '0.78rem', letterSpacing: '0.08em' }}>
-                <th style={{ padding: '0.6rem 0.9rem' }}>Publicación</th>
-                <th style={{ padding: '0.6rem 0.9rem' }}>Estado</th>
-                <th style={{ padding: '0.6rem 0.9rem' }}>Plan</th>
-                <th style={{ padding: '0.6rem 0.9rem' }}>Creado</th>
-                <th style={{ padding: '0.6rem 0.9rem' }}>Vistas 30d</th>
-                <th style={{ padding: '0.6rem 0.9rem' }}>Clics WA 30d</th>
-                <th style={{ padding: '0.6rem 0.9rem' }}>CTR 30d</th>
+              <tr>
+                <th>Publicación</th>
+                <th>Estado</th>
+                <th>Plan</th>
+                <th>Creado</th>
+                <th style={{ textAlign: 'right' }}>Vistas 30d</th>
+                <th style={{ textAlign: 'right' }}>Clics WA 30d</th>
+                <th style={{ textAlign: 'right' }}>CTR</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={7} style={{ padding: '1rem', color: '#92a5bc', textAlign: 'center' }}>Cargando publicaciones…</td></tr>
+                <tr><td colSpan={7} className="cell-muted" style={{ textAlign: 'center' }}>Cargando…</td></tr>
               ) : sortedListings.length ? (
                 sortedListings.map((listing) => {
                   const ctr = listing.views30d > 0 ? (listing.waClicks30d / listing.views30d) * 100 : 0
                   return (
-                    <tr key={listing.id} style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-                      <td style={{ padding: '0.8rem 0.9rem', color: '#c2d5eb' }}>{listing.title}</td>
-                      <td style={{ padding: '0.8rem 0.9rem', color: '#c2d5eb' }}>{listing.status ?? '—'}</td>
-                      <td style={{ padding: '0.8rem 0.9rem', color: '#c2d5eb' }}>{listing.sellerPlan ?? '—'}</td>
-                      <td style={{ padding: '0.8rem 0.9rem', color: '#c2d5eb' }}>{formatDate(listing.createdAt)}</td>
-                      <td style={{ padding: '0.8rem 0.9rem', color: '#c2d5eb' }}>{numberFormatter.format(listing.views30d)}</td>
-                      <td style={{ padding: '0.8rem 0.9rem', color: '#c2d5eb' }}>{numberFormatter.format(listing.waClicks30d)}</td>
-                      <td style={{ padding: '0.8rem 0.9rem', color: '#c2d5eb' }}>{percentFormatter.format(ctr)}%</td>
+                    <tr key={listing.id}>
+                      <td className="cell-strong">{listing.title}</td>
+                      <td>
+                        <span className={`badge ${listing.status === 'active' ? 'badge-green' : 'badge-gray'}`}>
+                          {listing.status ?? '—'}
+                        </span>
+                      </td>
+                      <td><span className="badge badge-gray">{listing.sellerPlan ?? '—'}</span></td>
+                      <td className="cell-muted">{formatDate(listing.createdAt)}</td>
+                      <td className="cell-strong" style={{ textAlign: 'right' }}>{numberFormatter.format(listing.views30d)}</td>
+                      <td style={{ textAlign: 'right' }}>{numberFormatter.format(listing.waClicks30d)}</td>
+                      <td className="cell-muted" style={{ textAlign: 'right' }}>{percentFormatter.format(ctr)}%</td>
                     </tr>
                   )
                 })
               ) : (
-                <tr><td colSpan={7} style={{ padding: '1rem', color: '#92a5bc', textAlign: 'center' }}>La tienda no tiene publicaciones activas.</td></tr>
+                <tr><td colSpan={7} className="cell-muted" style={{ textAlign: 'center' }}>La tienda no tiene publicaciones activas.</td></tr>
               )}
             </tbody>
           </table>

@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 
 interface TimeSeriesPoint {
   date: string
@@ -21,14 +21,15 @@ const defaultDateFormat = new Intl.DateTimeFormat('es-AR', { day: '2-digit', mon
 
 export function TimeSeriesChart({
   data,
-  height = 220,
-  stroke = '#61dfff',
-  fill = 'rgba(97,223,255,0.16)',
+  height = 260,
+  stroke = '#3b82f6',
+  fill = 'rgba(59, 130, 246, 0.1)',
   xTicks = 4,
   yTicks = 4,
   yFormatter = (value) => defaultNumberFormat.format(value),
   emptyLabel = 'Sin datos',
 }: TimeSeriesChartProps) {
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null)
   const prepared = useMemo(() => {
     const points: Array<{ x: number; y: number; label: string }> = []
     for (const point of data) {
@@ -46,7 +47,7 @@ export function TimeSeriesChart({
 
   if (!prepared) {
     return (
-      <div style={{ color: '#92a5bc', padding: '1rem 0' }}>
+      <div style={{ color: 'var(--admin-text-muted)', padding: '1rem 0' }}>
         {emptyLabel}
       </div>
     )
@@ -54,7 +55,7 @@ export function TimeSeriesChart({
 
   const width = 720
   const viewWidth = width
-  const viewHeight = height
+  const viewHeight = Math.max(240, height)
   const margin = { top: 20, right: 32, bottom: 36, left: 56 }
   const chartWidth = viewWidth - margin.left - margin.right
   const chartHeight = viewHeight - margin.top - margin.bottom
@@ -97,11 +98,41 @@ export function TimeSeriesChart({
     yTickValues.push(yStep * i)
   }
 
+  const hoverPoint = (hoverIdx != null && hoverIdx >= 0 && hoverIdx < prepared.points.length)
+    ? prepared.points[hoverIdx]
+    : null
+  const hoverX = hoverPoint ? scaleX(hoverPoint.x) : null
+  const hoverY = hoverPoint ? scaleY(hoverPoint.y) : null
+
   return (
-    <svg width="100%" viewBox={`0 0 ${viewWidth} ${viewHeight}`} role="img" aria-label="Serie temporal">
-      <rect x={margin.left} y={margin.top} width={chartWidth} height={chartHeight} fill="none" stroke="rgba(255,255,255,0.06)" />
+    <svg
+      width="100%"
+      viewBox={`0 0 ${viewWidth} ${viewHeight}`}
+      role="img"
+      aria-label="Serie temporal"
+      onMouseLeave={() => setHoverIdx(null)}
+      onMouseMove={(ev) => {
+        const rect = ev.currentTarget.getBoundingClientRect()
+        const xPx = ev.clientX - rect.left
+        const x = (xPx / Math.max(1, rect.width)) * viewWidth
+        const clamped = Math.max(margin.left, Math.min(margin.left + chartWidth, x))
+        const t = prepared.minX + ((clamped - margin.left) / chartWidth) * (prepared.maxX - prepared.minX || 1)
+        let bestIdx = 0
+        let bestDist = Number.POSITIVE_INFINITY
+        for (let i = 0; i < prepared.points.length; i += 1) {
+          const d = Math.abs(prepared.points[i].x - t)
+          if (d < bestDist) {
+            bestDist = d
+            bestIdx = i
+          }
+        }
+        setHoverIdx(bestIdx)
+      }}
+      style={{ touchAction: 'none' }}
+    >
+      <rect x={margin.left} y={margin.top} width={chartWidth} height={chartHeight} fill="none" stroke="var(--admin-border)" />
       <path d={areaPath} fill={fill || 'none'} stroke="none" />
-      <path d={path} fill="none" stroke={stroke} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+      <path d={path} fill="none" stroke={stroke} strokeWidth={3} strokeLinejoin="round" strokeLinecap="round" opacity={0.95} />
 
       {/* Y axis */}
       <line
@@ -109,7 +140,7 @@ export function TimeSeriesChart({
         y1={margin.top}
         x2={margin.left}
         y2={margin.top + chartHeight}
-        stroke="rgba(255,255,255,0.18)"
+        stroke="var(--admin-border)"
         strokeWidth={1}
       />
       {yTickValues.map((value) => {
@@ -121,7 +152,7 @@ export function TimeSeriesChart({
               y1={y}
               x2={margin.left + chartWidth}
               y2={y}
-              stroke="rgba(255,255,255,0.06)"
+              stroke="var(--admin-border-light)"
               strokeWidth={0.5}
             />
             <text
@@ -129,7 +160,7 @@ export function TimeSeriesChart({
               y={y + 4}
               textAnchor="end"
               fontSize="11"
-              fill="#7f92ab"
+              fill="var(--admin-text-muted)"
             >
               {yFormatter(value)}
             </text>
@@ -143,7 +174,7 @@ export function TimeSeriesChart({
         y1={margin.top + chartHeight}
         x2={margin.left + chartWidth}
         y2={margin.top + chartHeight}
-        stroke="rgba(255,255,255,0.18)"
+        stroke="var(--admin-border)"
         strokeWidth={1}
       />
       {xTickValues.map((value) => {
@@ -155,7 +186,7 @@ export function TimeSeriesChart({
               y1={margin.top + chartHeight}
               x2={x}
               y2={margin.top + chartHeight + 6}
-              stroke="rgba(255,255,255,0.24)"
+              stroke="var(--admin-border)"
               strokeWidth={1}
             />
             <text
@@ -163,13 +194,37 @@ export function TimeSeriesChart({
               y={margin.top + chartHeight + 20}
               textAnchor="middle"
               fontSize="11"
-              fill="#7f92ab"
+              fill="var(--admin-text-muted)"
             >
               {defaultDateFormat.format(new Date(value))}
             </text>
           </g>
         )
       })}
+
+      {hoverPoint && hoverX != null && hoverY != null ? (
+        <g>
+          <line
+            x1={hoverX}
+            y1={margin.top}
+            x2={hoverX}
+            y2={margin.top + chartHeight}
+            stroke="var(--admin-border)"
+            strokeWidth={1}
+            strokeDasharray="4 4"
+          />
+          <circle cx={hoverX} cy={hoverY} r={5} fill={stroke} stroke="var(--admin-surface)" strokeWidth={2} />
+          <g transform={`translate(${Math.min(hoverX + 10, viewWidth - 220)},${Math.max(margin.top + 6, hoverY - 26)})`}>
+            <rect width="210" height="44" rx="10" fill="var(--admin-surface)" stroke="var(--admin-border)" />
+            <text x="12" y="18" fontSize="12" fill="var(--admin-text)" fontWeight="700">
+              {defaultDateFormat.format(new Date(hoverPoint.x))}
+            </text>
+            <text x="12" y="34" fontSize="12" fill="var(--admin-text-secondary)">
+              {yFormatter(hoverPoint.y)}
+            </text>
+          </g>
+        </g>
+      ) : null}
     </svg>
   )
 }

@@ -230,6 +230,18 @@ export default function Profile() {
     })()
   }, [user?.id, sellerId])
 
+  const prettyCanReviewReason = useCallback((reason?: string) => {
+    const r = String(reason || '').trim().toLowerCase()
+    if (!r) return 'Aún no podés escribir una reseña.'
+    if (r === 'api_unavailable') return 'No pudimos validar si podés reseñar en este momento. Probá de nuevo en unos minutos.'
+    if (r === 'self_review') return 'No podés dejar una reseña en tu propio perfil.'
+    if (r === 'already_reviewed') return 'Ya dejaste una reseña para este vendedor.'
+    if (r === 'no_contact') return 'Para publicar una reseña necesitás haber contactado al vendedor (WhatsApp o email).'
+    if (r === 'missing_fields') return 'Faltan datos para validar la reseña. Verificá que estés logueado.'
+    if (r === 'unexpected_error') return 'Ocurrió un error al validar la reseña. Intentá de nuevo en unos minutos.'
+    return 'Aún no podés escribir una reseña.'
+  }, [])
+
   // Cargar créditos del vendedor si el usuario actual es moderador
   useEffect(() => {
     if (!isModerator || !sellerId) {
@@ -560,7 +572,7 @@ export default function Profile() {
             )}
             {canReview && !canReview.allowed && (
               <div className="rounded-2xl border border-[#14212e]/10 bg-[#f2f6fb] p-3 text-xs text-[#14212e]/70">
-                {canReview.reason || 'Aún no podés escribir una reseña.'}
+                {prettyCanReviewReason(canReview.reason)}
               </div>
             )}
             {(!reviewsSummary || reviewsSummary.count === 0) ? (

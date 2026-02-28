@@ -11,14 +11,22 @@ export interface AdminListingRow {
   sellerName: string | null
   sellerEmail: string | null
   sellerPlan: string | null
+  description: string | null
+  imagesCount: number
   createdAt: string | null
   expiresAt: string | null
   views7d: number
   views30d: number
   views90d: number
-  waClicks7d: number
-  waClicks30d: number
-  waClicks90d: number
+  contactsTotal7d: number
+  contactsTotal30d: number
+  waContacts7d: number
+  waContacts30d: number
+  emailContacts7d: number
+  emailContacts30d: number
+  chatContacts7d: number
+  chatContacts30d: number
+  lastContactAt: string | null
 }
 
 export interface FetchAdminListingsParams {
@@ -37,7 +45,7 @@ export async function fetchAdminListings(params: FetchAdminListingsParams = {}):
   const supabase = getSupabaseClient()
   let query = supabase
     .from('listings')
-    .select('id, title, category, price, price_currency, status, seller_id, seller_name, seller_email, seller_plan, plan, plan_code, created_at, expires_at')
+    .select('id, title, category, price, price_currency, status, seller_id, seller_name, seller_email, seller_plan, plan, plan_code, description, images, created_at, expires_at')
     .order('created_at', { ascending: false })
     .limit(limit)
 
@@ -66,28 +74,87 @@ export async function fetchAdminListings(params: FetchAdminListingsParams = {}):
     return []
   }
 
-  const rows = data.map((row: any) => ({
-    id: String(row.id ?? ''),
-    title: String(row.title ?? 'Sin título'),
-    category: row.category ?? null,
-    price: typeof row.price === 'number' ? row.price : (row.price ? Number(row.price) : null),
-    priceCurrency: row.price_currency ?? null,
-    status: row.status ?? null,
-    sellerId: row.seller_id ?? null,
-    sellerName: row.seller_name ?? null,
-    sellerEmail: row.seller_email ?? null,
-    sellerPlan: row.seller_plan ?? row.plan ?? row.plan_code ?? null,
-    createdAt: row.created_at ?? null,
-    expiresAt: row.expires_at ?? null,
-    views7d: 0,
-    views30d: 0,
-    views90d: 0,
-    waClicks7d: 0,
-    waClicks30d: 0,
-    waClicks90d: 0,
-  }))
+  const rows: AdminListingRow[] = data.map((row) => {
+    const record = row as Record<string, unknown>
+    const rawImages = record.images
+    const imagesCount = Array.isArray(rawImages) ? rawImages.length : 0
+    const rawPrice = record.price
+    const price = typeof rawPrice === 'number' ? rawPrice : (typeof rawPrice === 'string' ? Number(rawPrice) : null)
+
+    return {
+      id: String(record.id ?? ''),
+      title: String(record.title ?? 'Sin título'),
+      category: typeof record.category === 'string' ? record.category : null,
+      price: Number.isFinite(price ?? NaN) ? (price as number) : null,
+      priceCurrency: typeof record.price_currency === 'string' ? record.price_currency : null,
+      status: typeof record.status === 'string' ? record.status : null,
+      sellerId: typeof record.seller_id === 'string' ? record.seller_id : null,
+      sellerName: typeof record.seller_name === 'string' ? record.seller_name : null,
+      sellerEmail: typeof record.seller_email === 'string' ? record.seller_email : null,
+      sellerPlan: typeof record.seller_plan === 'string'
+        ? record.seller_plan
+        : (typeof record.plan === 'string' ? record.plan : (typeof record.plan_code === 'string' ? record.plan_code : null)),
+      description: typeof record.description === 'string' ? record.description : null,
+      imagesCount,
+      createdAt: typeof record.created_at === 'string' ? record.created_at : null,
+      expiresAt: typeof record.expires_at === 'string' ? record.expires_at : null,
+      views7d: 0,
+      views30d: 0,
+      views90d: 0,
+      contactsTotal7d: 0,
+      contactsTotal30d: 0,
+      waContacts7d: 0,
+      waContacts30d: 0,
+      emailContacts7d: 0,
+      emailContacts30d: 0,
+      chatContacts7d: 0,
+      chatContacts30d: 0,
+      lastContactAt: null,
+    }
+  })
 
   if (!rows.length) return rows
+
+  // Fill seller identity from public.users when listings has missing denormalized fields.
+  // This avoids showing "Sin nombre" when seller_name/email wasn't populated on listing creation.
+  try {
+    const sellerIds = Array.from(new Set(rows.map((r) => r.sellerId).filter((id): id is string => Boolean(id))))
+    const missingSellerIds = sellerIds.filter((id) => rows.some((r) => r.sellerId === id && (!r.sellerName || !r.sellerEmail)))
+    if (missingSellerIds.length) {
+      const usersQuery = await supabase
+        .from('users')
+        .select('id, full_name, store_name, email')
+        .in('id', missingSellerIds)
+      if (!usersQuery.error && Array.isArray(usersQuery.data)) {
+        const userMap = new Map<string, { fullName: string | null; storeName: string | null; email: string | null }>()
+        for (const entry of usersQuery.data as Record<string, unknown>[]) {
+          const id = typeof entry.id === 'string' ? entry.id : null
+          if (!id) continue
+          userMap.set(id, {
+            fullName: typeof entry.full_name === 'string' ? entry.full_name : null,
+            storeName: typeof entry.store_name === 'string' ? entry.store_name : null,
+            email: typeof entry.email === 'string' ? entry.email : null,
+          })
+        }
+        for (const row of rows) {
+          if (!row.sellerId) continue
+          const user = userMap.get(row.sellerId)
+          if (!user) continue
+          if (!row.sellerEmail && user.email) row.sellerEmail = user.email
+          if (!row.sellerName) {
+            row.sellerName = user.fullName
+              ?? user.storeName
+              ?? (user.email ? user.email.split('@')[0] : null)
+              ?? row.sellerId
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[admin-listings] seller identity hydration failed', err)
+  }
+
+  let mergedRows = rows
 
   try {
     const metricsQuery = await supabase
@@ -95,11 +162,11 @@ export async function fetchAdminListings(params: FetchAdminListingsParams = {}):
       .select('listing_id, views_7d, views_30d, views_90d, wa_clicks_7d, wa_clicks_30d, wa_clicks_90d')
       .in('listing_id', rows.map((r) => r.id))
     if (!metricsQuery.error && Array.isArray(metricsQuery.data)) {
-      const metricsMap = new Map<string, any>()
-      for (const entry of metricsQuery.data as any[]) {
+      const metricsMap = new Map<string, Record<string, unknown>>()
+      for (const entry of metricsQuery.data as Record<string, unknown>[]) {
         metricsMap.set(String(entry.listing_id), entry)
       }
-      return rows.map((row) => {
+      mergedRows = mergedRows.map((row) => {
         const metrics = metricsMap.get(row.id)
         if (!metrics) return row
         return {
@@ -107,9 +174,6 @@ export async function fetchAdminListings(params: FetchAdminListingsParams = {}):
           views7d: Number(metrics.views_7d ?? 0),
           views30d: Number(metrics.views_30d ?? 0),
           views90d: Number(metrics.views_90d ?? 0),
-          waClicks7d: Number(metrics.wa_clicks_7d ?? 0),
-          waClicks30d: Number(metrics.wa_clicks_30d ?? 0),
-          waClicks90d: Number(metrics.wa_clicks_90d ?? 0),
         }
       })
     }
@@ -117,5 +181,47 @@ export async function fetchAdminListings(params: FetchAdminListingsParams = {}):
     console.warn('[admin-listings] engagement metrics failed', err)
   }
 
-  return rows
+  try {
+    const contactQuery = await supabase
+      .from('admin_listing_contact_summary')
+      .select([
+        'listing_id',
+        'last_contact_at',
+        'contacts_total_7d',
+        'contacts_total_30d',
+        'wa_contacts_7d',
+        'wa_contacts_30d',
+        'email_contacts_7d',
+        'email_contacts_30d',
+        'chat_contacts_7d',
+        'chat_contacts_30d',
+      ].join(','))
+      .in('listing_id', rows.map((r) => r.id))
+    if (!contactQuery.error && Array.isArray(contactQuery.data)) {
+      const contactMap = new Map<string, Record<string, unknown>>()
+      for (const entry of contactQuery.data as Record<string, unknown>[]) {
+        contactMap.set(String(entry.listing_id), entry)
+      }
+      mergedRows = mergedRows.map((row) => {
+        const contacts = contactMap.get(row.id)
+        if (!contacts) return row
+        return {
+          ...row,
+          lastContactAt: typeof contacts.last_contact_at === 'string' ? contacts.last_contact_at : null,
+          contactsTotal7d: Number(contacts.contacts_total_7d ?? 0),
+          contactsTotal30d: Number(contacts.contacts_total_30d ?? 0),
+          waContacts7d: Number(contacts.wa_contacts_7d ?? 0),
+          waContacts30d: Number(contacts.wa_contacts_30d ?? 0),
+          emailContacts7d: Number(contacts.email_contacts_7d ?? 0),
+          emailContacts30d: Number(contacts.email_contacts_30d ?? 0),
+          chatContacts7d: Number(contacts.chat_contacts_7d ?? 0),
+          chatContacts30d: Number(contacts.chat_contacts_30d ?? 0),
+        }
+      })
+    }
+  } catch (err) {
+    console.warn('[admin-listings] contact metrics failed', err)
+  }
+
+  return mergedRows
 }

@@ -284,35 +284,19 @@ export async function fetchStoreActivityCounts(): Promise<Record<string, number>
   try {
     const supabase = getSupabaseClient()
     const { data, error } = await supabase
-      .from('listings')
-      .select('seller_id, status, moderation_state, archived_at, expires_at')
-      .not('seller_id', 'is', null)
+      .from('admin_store_active_listings')
+      .select('seller_id, active_count')
 
     if (error || !Array.isArray(data)) return {}
 
-    const now = Date.now()
-    const counts: Record<string, number> = {}
-    for (const row of data as any[]) {
-      const sid = String(row?.seller_id || '')
-      if (!sid) continue
-
-      const status = typeof row?.status === 'string' ? row.status.trim().toLowerCase() : ''
-      if (status && ['draft', 'deleted', 'archived', 'expired'].includes(status)) continue
-      if (row?.archived_at) continue
-
-      const mod = typeof row?.moderation_state === 'string' ? row.moderation_state.trim().toLowerCase() : 'approved'
-      if (mod && mod !== 'approved') continue
-
-      const expiresAt = row?.expires_at ? Date.parse(row.expires_at) : null
-      if (typeof expiresAt === 'number' && !Number.isNaN(expiresAt) && expiresAt > 0 && expiresAt < now) continue
-
-      // Consideramos "publicado" si status está en active/published o si no está seteado (legacy).
-      if (status && !['active', 'published'].includes(status)) continue
-
-      counts[sid] = (counts[sid] || 0) + 1
-    }
-    return counts
-  } catch {
+    return data.reduce<Record<string, number>>((acc, row: any) => {
+      const sid = row?.seller_id ? String(row.seller_id) : ''
+      if (!sid) return acc
+      acc[sid] = Number(row.active_count ?? 0) || 0
+      return acc
+    }, {})
+  } catch (err) {
+    console.warn('[users] fetchStoreActivityCounts failed', err)
     return {}
   }
 }

@@ -8,6 +8,7 @@ import EngagementPage from '@admin/pages/Engagement'
 import ListingsPage from '@admin/pages/Listings'
 import StoresPage from '@admin/pages/Stores'
 import StoreDetailPage from '@admin/pages/StoreDetail'
+import ActionInboxPage from '@admin/pages/ActionInbox'
 import { AdminLayout } from '@admin/components/AdminLayout'
 
 function ProtectedApp() {
@@ -15,6 +16,7 @@ function ProtectedApp() {
     <Routes>
       <Route element={<AdminLayout />}>
         <Route path="/" element={<OverviewPage />} />
+        <Route path="/ops" element={<ActionInboxPage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/listings" element={<ListingsPage />} />
         <Route path="/engagement" element={<EngagementPage />} />

@@ -4,6 +4,11 @@ import { resolve } from 'path'
 
 export default defineConfig({
   root: __dirname,
+  base: '/admin/',
+  define: {
+    // Ensure admin build uses its own Supabase auth storage key
+    'import.meta.env.VITE_APP_SCOPE': JSON.stringify('admin'),
+  },
   plugins: [react()],
   publicDir: resolve(__dirname, '../public'),
   resolve: {
@@ -19,8 +24,8 @@ export default defineConfig({
     },
   },
   build: {
-    // Emit admin build inside the main web dist so static hosting can serve /admin
-    outDir: resolve(__dirname, '../dist/admin'),
+    // Build is served by the backend under `/admin`
+    outDir: resolve(__dirname, '../dist-admin'),
     emptyOutDir: true,
     sourcemap: true,
   },

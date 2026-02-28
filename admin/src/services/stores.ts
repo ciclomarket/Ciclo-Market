@@ -102,34 +102,20 @@ export async function fetchAdminStoreDetail(storeId: string): Promise<AdminStore
   ])
   const store = storeSummary[0] ?? null
   const listings = await fetchAdminListings({ sellerId: storeId, limit: 200 })
-  const listingIds = listings.map((l) => l.id).filter(Boolean)
   let checkouts30d = 0
   let checkoutsPrev30d = 0
-  if (supabaseEnabled && listingIds.length > 0) {
+  if (supabaseEnabled) {
     const supabase = getSupabaseClient()
-    const now = new Date()
-    const since30 = new Date(now.getTime() - 30 * 86400000).toISOString()
-    const prevStart = new Date(now.getTime() - 60 * 86400000).toISOString()
     try {
-      const [{ count: current }, { count: previous }] = await Promise.all([
-        supabase
-          .from('payments')
-          .select('id', { head: true, count: 'exact' })
-          .eq('status', 'succeeded')
-          .in('listing_id', listingIds)
-          .gte('created_at', since30),
-        supabase
-          .from('payments')
-          .select('id', { head: true, count: 'exact' })
-          .eq('status', 'succeeded')
-          .in('listing_id', listingIds)
-          .gte('created_at', prevStart)
-          .lt('created_at', since30),
-      ])
-      checkouts30d = typeof current === 'number' ? current : 0
-      checkoutsPrev30d = typeof previous === 'number' ? previous : 0
+      const { data, error } = await supabase
+        .rpc('admin_store_checkouts_compare', { p_seller_id: storeId, p_days: 30 })
+        .maybeSingle()
+      if (!error && data) {
+        checkouts30d = Number((data as any).current_count ?? 0) || 0
+        checkoutsPrev30d = Number((data as any).previous_count ?? 0) || 0
+      }
     } catch (err) {
-      console.warn('[admin-stores] fetch checkouts failed', err)
+      console.warn('[admin-stores] admin_store_checkouts_compare failed', err)
     }
   }
   return { store, listings, checkouts30d, checkoutsPrev30d }

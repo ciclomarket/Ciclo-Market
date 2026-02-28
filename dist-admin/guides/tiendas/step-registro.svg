@@ -1,0 +1,42 @@
+<svg width="1200" height="720" viewBox="0 0 1200 720" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b1220"/>
+      <stop offset="1" stop-color="#14212e"/>
+    </linearGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#f8fafc"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="1200" height="720" rx="26" fill="url(#bg)"/>
+  <rect x="70" y="70" width="1060" height="580" rx="22" fill="url(#card)" stroke="#e5e7eb"/>
+  <rect x="70" y="70" width="1060" height="64" rx="22" fill="#0b1220"/>
+  <circle cx="110" cy="102" r="8" fill="#ef4444"/>
+  <circle cx="136" cy="102" r="8" fill="#f59e0b"/>
+  <circle cx="162" cy="102" r="8" fill="#10b981"/>
+  <text x="210" y="110" fill="#e5e7eb" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="700">Ciclo Market · Registro</text>
+
+  <text x="120" y="200" fill="#0f172a" font-family="Inter, Arial, sans-serif" font-size="30" font-weight="900">Creá tu cuenta</text>
+  <text x="120" y="240" fill="#475569" font-family="Inter, Arial, sans-serif" font-size="18">Confirmá tu email para habilitar el panel de tienda.</text>
+
+  <rect x="120" y="290" width="520" height="60" rx="14" fill="#ffffff" stroke="#e2e8f0"/>
+  <text x="145" y="328" fill="#64748b" font-family="Inter, Arial, sans-serif" font-size="16">Email</text>
+
+  <rect x="120" y="370" width="520" height="60" rx="14" fill="#ffffff" stroke="#e2e8f0"/>
+  <text x="145" y="408" fill="#64748b" font-family="Inter, Arial, sans-serif" font-size="16">Contraseña</text>
+
+  <rect x="120" y="460" width="520" height="60" rx="16" fill="#2563eb"/>
+  <text x="380" y="498" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="900" text-anchor="middle">Crear cuenta</text>
+
+  <rect x="720" y="220" width="340" height="300" rx="20" fill="#0b1220"/>
+  <text x="750" y="270" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="900">Tip</text>
+  <text x="750" y="304" fill="#cbd5e1" font-family="Inter, Arial, sans-serif" font-size="15">Usá un email de la tienda.</text>
+  <text x="750" y="332" fill="#cbd5e1" font-family="Inter, Arial, sans-serif" font-size="15">Así tu equipo puede acceder.</text>
+
+  <rect x="730" y="370" width="320" height="120" rx="16" fill="#111827" stroke="#1f2937"/>
+  <text x="750" y="414" fill="#e5e7eb" font-family="Inter, Arial, sans-serif" font-size="14">Luego vas a ver:</text>
+  <text x="750" y="444" fill="#e5e7eb" font-family="Inter, Arial, sans-serif" font-size="14">Dashboard → Publicaciones</text>
+  <text x="750" y="474" fill="#e5e7eb" font-family="Inter, Arial, sans-serif" font-size="14">Dashboard → Editar tienda</text>
+</svg>
+

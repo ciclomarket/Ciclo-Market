@@ -16,13 +16,13 @@ export async function fetchDailyEvents(days = 30): Promise<DailyEventsByType> {
   const { data, error } = await supabase
     .from('admin_events_daily')
     .select('day, type, total')
+    .gte('day', sinceIso)
   if (error || !Array.isArray(data)) return { site: [], listing: [], store: [], wa: [] }
   const rows = (data as any[]).map((r) => ({ day: String(r.day).slice(0, 10), type: String(r.type), total: Number(r.total) || 0 }))
-  const filtered = rows.filter((r) => r.day >= sinceIso)
-  const site = filtered.filter((r) => r.type === 'site_view').map((r) => ({ day: r.day, total: r.total }))
-  const listing = filtered.filter((r) => r.type === 'listing_view').map((r) => ({ day: r.day, total: r.total }))
-  const store = filtered.filter((r) => r.type === 'store_view').map((r) => ({ day: r.day, total: r.total }))
-  const wa = filtered.filter((r) => r.type === 'wa_click').map((r) => ({ day: r.day, total: r.total }))
+  const site = rows.filter((r) => r.type === 'site_view').map((r) => ({ day: r.day, total: r.total }))
+  const listing = rows.filter((r) => r.type === 'listing_view').map((r) => ({ day: r.day, total: r.total }))
+  const store = rows.filter((r) => r.type === 'store_view').map((r) => ({ day: r.day, total: r.total }))
+  const wa = rows.filter((r) => r.type === 'wa_click').map((r) => ({ day: r.day, total: r.total }))
   // Ordenar por día
   const cmp = (a: DailyPoint, b: DailyPoint) => (a.day < b.day ? -1 : 1)
   return { site: site.sort(cmp), listing: listing.sort(cmp), store: store.sort(cmp), wa: wa.sort(cmp) }

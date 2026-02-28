@@ -23,6 +23,12 @@
         ]
       },
       {
+        "source": "/admin/index.html",
+        "headers": [
+          { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+        ]
+      },
+      {
         "source": "**/*.{png,jpg,jpeg,webp,svg,gif}",
         "headers": [
           { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
@@ -69,9 +75,11 @@
       { "source": "/merchant-feed.xml", "function": "sitemapProxy" },
       { "source": "/api/feed/google.xml", "function": "sitemapProxy" },
       { "source": "/feed/google.xml", "function": "sitemapProxy" },
+      { "source": "/api/**", "function": "apiProxy" },
       { "source": "/blog/**", "function": "shareBlog" },
       { "source": "/listing/**", "function": "shareListing" },
       { "source": "/tienda/**", "function": "shareStore" },
+      { "source": "/admin", "destination": "/admin/index.html" },
       { "source": "/admin/**", "destination": "/admin/index.html" },
       { "source": "**", "destination": "/index.html" }
     ]

@@ -302,8 +302,16 @@ const allowed = (() => {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean)
-  if (!raw.length) return []
-  const expanded = new Set()
+  
+  // Siempre permitir ciclomarket.ar (producción)
+  const expanded = new Set([
+    'https://www.ciclomarket.ar',
+    'https://ciclomarket.ar',
+    'http://localhost:5173', // Vite dev
+    'http://localhost:5273', // Admin dev
+    ...raw
+  ])
+  
   for (const entry of raw) {
     const normalized = entry.replace(/\/$/, '')
     if (!normalized) continue
@@ -340,6 +348,10 @@ app.use(importRouter)
 
 // Custom application API (analytics, reviews, share boost, etc.)
 app.use(appApiRouter)
+
+// CRM Advanced API (Kanban, Next Best Action, Automation Rules, Impact Dashboard)
+const { crmAdvancedRouter } = require('./routes/crmAdvanced')
+app.use(crmAdvancedRouter)
 
 /* ----------------------------- Cron jobs ---------------------------------- */
 // Start scheduled jobs after basic middleware is ready
