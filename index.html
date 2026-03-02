@@ -1,4 +1,3 @@
-
 <!doctype html>
 <html lang="es">
   <head>
@@ -6,33 +5,42 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Ciclo Market – Marketplace de bicicletas</title>
     <meta name="description" content="Publicá tu bici, encontrá ofertas y conectá con vendedores en Ciclo Market. Clasificados de bicicletas en Argentina." />
+    
+    <!-- Critical CSS inline para evitar bloqueo de renderizado -->
+    <style>
+      /* Reset mínimo para evitar FOUC (Flash of Unstyled Content) */
+      *,*::before,*::after{box-sizing:border-box}
+      html{-webkit-text-size-adjust:100%;-moz-tab-size:4;tab-size:4}
+      body{margin:0;font-family:Inter,system-ui,-apple-system,sans-serif;line-height:1.5;background:#f8fafc;color:#0f172a}
+      #root{min-height:100vh}
+      /* Placeholder para imagen hero LCP */
+      .hero-lcp-placeholder{background:#14212E;background-image:radial-gradient(circle at center,rgba(28,46,63,.9),#14212E);min-height:400px}
+      /* Evitar layout shift en imágenes sin dimensiones */
+      img{max-width:100%;height:auto}
+      /* Skeleton loading para cards */
+      .skeleton{background:linear-gradient(90deg,#e5e7eb 25%,#f3f4f6 50%,#e5e7eb 75%);background-size:200% 100%;animation:skeleton 1.5s infinite}
+      @keyframes skeleton{0%{background-position:200% 0}100%{background-position:-200% 0}}
+    </style>
+    
+    <!-- Preconnect a dominios críticos -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <!-- Preconnect to Supabase storage for faster image TLS negotiation -->
     <link rel="preconnect" href="https://jmtsgywgeysagnfgdovr.supabase.co" crossorigin>
     <link rel="dns-prefetch" href="https://jmtsgywgeysagnfgdovr.supabase.co">
-    <!-- Preconnect to API (Render) to reduce initial request latency -->
     <link rel="preconnect" href="https://ciclo-market.onrender.com" crossorigin>
     <link rel="dns-prefetch" href="https://ciclo-market.onrender.com">
-    <!-- Load Google Fonts CSS without render-blocking -->
-    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" media="print" onload="this.media='all'">
-    <noscript>
-      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-    </noscript>
+    
+    <!-- Preload LCP hero con alta prioridad -->
+    <link rel="preload" as="image" href="/bicicletas-home.webp" type="image/webp" fetchpriority="high">
+    
+    <!-- Cargar CSS de fonts de forma no bloqueante -->
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"></noscript>
+    
     <link rel="stylesheet" href="/src/index.css">
-    <!-- Preload LCP hero (prefer WebP) -->
-    <link rel="preload" as="image" href="/bicicletas-home.webp" type="image/webp" imagesizes="100vw" fetchpriority="high">
-    <style>
-      /* Paint something instantly while SPA hydrates + hero image loads */
-      .hero-lcp-placeholder {
-        background-color: #14212E;
-        background-image: radial-gradient(circle at center, rgba(28,46,63,0.9), #14212E);
-      }
-    </style>
     <link rel="icon" type="image/png" href="/favicon.png" />
 
-    <!-- OpenGraph (home, canonical www) -->
+    <!-- OpenGraph -->
     <link rel="canonical" href="https://www.ciclomarket.ar/" />
     <meta property="og:title" content="Ciclo Market – Marketplace de bicicletas" />
     <meta property="og:description" content="Publicá tu bici y conectá con compradores. Ciclo Market." />
@@ -41,23 +49,29 @@
     <meta property="og:image" content="https://www.ciclomarket.ar/logo-azul.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
+    
     <!-- Twitter -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Ciclo Market – Marketplace de bicicletas" />
     <meta name="twitter:description" content="Publicá tu bici y conectá con compradores." />
     <meta name="twitter:image" content="https://www.ciclomarket.ar/logo-azul.png" />
-    <!-- fb:app_id removido para evitar warnings si no está configurado -->
+    
     <meta name="facebook-domain-verification" content="41vv7fzi6iagjgk62frhdk0t4ottbq" />
-    <!-- Google Analytics 4 -->
+    
+    <!-- Google Analytics 4 - Cargar de forma no bloqueante -->
     <script>
       window.dataLayer = window.dataLayer || [];
       function gtag(){window.dataLayer.push(arguments);}
       gtag('consent','default',{ analytics_storage:'granted' });
-    </script>
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-9PZQB9FK57"></script>
-    <script>
-      gtag('js', new Date());
-      gtag('config', 'G-9PZQB9FK57', { send_page_view: false });
+      // Cargar GA de forma diferida para no bloquear LCP
+      window.addEventListener('load', function() {
+        const gaScript = document.createElement('script');
+        gaScript.async = true;
+        gaScript.src = 'https://www.googletagmanager.com/gtag/js?id=G-9PZQB9FK57';
+        document.head.appendChild(gaScript);
+        gtag('js', new Date());
+        gtag('config', 'G-9PZQB9FK57', { send_page_view: false });
+      });
     </script>
   </head>
   <body class="bg-mb-bg text-mb-ink">

@@ -1,5 +1,16 @@
 import { useMemo, useEffect, Suspense, lazy } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { useINPReporter } from './hooks/useOptimizedEvent'
+
+// Componente de loading optimizado que no causa CLS
+function PageLoadingFallback() {
+  return (
+    <div className="min-h-[50vh] flex flex-col items-center justify-center">
+      <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+      <span className="mt-4 text-sm text-gray-500">Cargando…</span>
+    </div>
+  )
+}
 import Header from './components/Header'
 const Newsletter = lazyWithRetry(() => import('./components/Newsletter'))
 const CookieConsent = lazyWithRetry(() => import('./components/CookieConsent'))
@@ -474,6 +485,9 @@ export default function App() {
   const location = useLocation()
   const seoConfig = useMemo(() => resolveSeoForPath(location.pathname, location.search), [location.pathname, location.search])
   const isInstagramLanding = location.pathname === '/ig' || location.pathname === '/links'
+  
+  // Reportar INP para debugging de performance
+  useINPReporter()
   useEffect(() => {
     const gtag = (window as any).gtag as ((...args: any[]) => void) | undefined
     if (typeof gtag === 'function') {
@@ -500,7 +514,7 @@ export default function App() {
 
                   <main className="flex-1">
                     <ErrorBoundary>
-                      <Suspense fallback={<div className="py-10 text-center text-[#14212e]/70">Cargando…</div>}>
+                      <Suspense fallback={<PageLoadingFallback />}>
                         <Routes>
                       {/* Home */}
                       <Route path="/" element={<Home />} />
