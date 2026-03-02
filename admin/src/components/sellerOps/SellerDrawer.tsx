@@ -1,9 +1,21 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 import type { SellerOpsDetails, SellerStage, ListingRow } from '@admin/services/sellerOps'
-import { addSellerNote, createSellerTask, markSellerSale, sendSellerEmailTemplate, setSellerStage } from '@admin/services/sellerOps'
+import { addSellerNote, createSellerTask, markSellerSale, sendSellerEmailTemplate, setSellerStage, fetchSellerTags, addSellerTag, removeSellerTag, PREDEFINED_TAGS, scheduleFollowUp, markListingAsSold, logOutreachWhatsApp } from '@admin/services/sellerOps'
 import { EmailTemplatePicker, EMAIL_TEMPLATES, type EmailTemplateKey } from './EmailTemplatePicker'
 
-type TabKey = 'profile' | 'listings' | 'engagement' | 'outreach' | 'tasks' | 'notes' | 'emails'
+type TabKey = 'profile' | 'listings' | 'engagement' | 'outreach' | 'tasks' | 'notes' | 'emails' | 'timeline'
+
+// Timeline item types
+interface TimelineItem {
+  id: string
+  type: 'outreach' | 'task' | 'note' | 'stage_change' | 'listing' | 'sale'
+  title: string
+  description?: string
+  timestamp: string
+  meta?: Record<string, unknown>
+  icon: string
+  color: string
+}
 
 const dateTimeFormatter = new Intl.DateTimeFormat('es-AR', { dateStyle: 'medium', timeStyle: 'short' })
 const dateFormatter = new Intl.DateTimeFormat('es-AR', { dateStyle: 'medium' })
@@ -82,6 +94,208 @@ export function SellerDrawer({ open, details, onClose, onRefresh }: SellerDrawer
   const [customSubject, setCustomSubject] = useState('')
   const [customBody, setCustomBody] = useState('')
   const [showPreview, setShowPreview] = useState(false)
+  
+  // Tags state
+  const [sellerTags, setSellerTags] = useState<string[]>([])
+  const [showTagSelector, setShowTagSelector] = useState(false)
+  
+  // Load tags when drawer opens
+  useEffect(() => {
+    if (!open || !details?.sellerId) return
+    fetchSellerTags(details.sellerId).then(setSellerTags).catch(console.error)
+  }, [open, details?.sellerId])
+  
+  const handleAddTag = async (tag: string) => {
+    if (!details?.sellerId) return
+    try {
+      await addSellerTag(details.sellerId, tag)
+      setSellerTags(prev => [...prev, tag])
+    } catch (err) {
+      console.error('[tags] add failed', err)
+    }
+  }
+  
+  const handleRemoveTag = async (tag: string) => {
+    if (!details?.sellerId) return
+    try {
+      await removeSellerTag(details.sellerId, tag)
+      setSellerTags(prev => prev.filter(t => t !== tag))
+    } catch (err) {
+      console.error('[tags] remove failed', err)
+    }
+  }
+  
+  // Follow-up state
+  const [showFollowUpForm, setShowFollowUpForm] = useState(false)
+  const [followUpType, setFollowUpType] = useState<'whatsapp' | 'email' | 'call'>('whatsapp')
+  const [followUpWhen, setFollowUpWhen] = useState<'tomorrow' | '3days' | '1week' | 'custom'>('tomorrow')
+  const [followUpNote, setFollowUpNote] = useState('')
+  
+  // Listings filter state
+  const [listingSearchQuery, setListingSearchQuery] = useState('')
+  const [listingSortBy, setListingSortBy] = useState<'newest' | 'most_views' | 'most_contacts'>('newest')
+  
+  // WhatsApp Quick Send state
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState(false)
+  const [selectedListingForWA, setSelectedListingForWA] = useState<ListingRow | null>(null)
+  const [customWAMessage, setCustomWAMessage] = useState('')
+  const [recentWAMessages, setRecentWAMessages] = useState<string[]>([])
+  
+  // Load recent messages from localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('cm_recent_wa_messages')
+      if (saved) setRecentWAMessages(JSON.parse(saved))
+    } catch { /* ignore */ }
+  }, [])
+  
+  // Save recent messages
+  const saveRecentMessage = (msg: string) => {
+    setRecentWAMessages(prev => {
+      const updated = [msg, ...prev.filter(m => m !== msg)].slice(0, 10)
+      localStorage.setItem('cm_recent_wa_messages', JSON.stringify(updated))
+      return updated
+    })
+  }
+  
+  // Generate smart message based on context
+  const generateSmartMessage = (listing?: ListingRow | null): string => {
+    const sellerName = details?.summary?.seller_name?.split(' ')[0] || 'hola'
+    const hasContacts = (details?.summary?.wa_clicks_30d || 0) + (details?.summary?.email_contacts_30d || 0) > 0
+    
+    if (listing && listing.total_contacts_30d && listing.total_contacts_30d > 0) {
+      return `Hola ${sellerName}, soy Rodri de Ciclo Market. Vi que tu publicación "${listing.title?.substring(0, 40)}..." recibió ${listing.total_contacts_30d} consultas estos días. ¿La vendiste?\n\nRespondé con un número:\n1) Sí, por Ciclo Market\n2) Sí, por fuera\n3) Todavía no\n4) Quiero mejorarla (precio/fotos)`
+    }
+    
+    if (hasContacts) {
+      return `Hola ${sellerName}, soy Rodri de Ciclo Market. Vi que tu publicación recibió consultas estos días. ¿La vendiste?\n\nRespondé con un número:\n1) Sí, por Ciclo Market\n2) Sí, por fuera\n3) Todavía no\n4) Quiero mejorarla (precio/fotos)`
+    }
+    
+    return `Hola ${sellerName}, soy Rodri de Ciclo Market. ¿Cómo va la venta de tu bici? ¿Necesitás ayuda con algo?`
+  }
+  
+  // Open WhatsApp with popup
+  const openWhatsAppPopup = (listing?: ListingRow | null) => {
+    setSelectedListingForWA(listing || null)
+    setCustomWAMessage(generateSmartMessage(listing))
+    setShowWhatsAppModal(true)
+  }
+  
+  // Send WhatsApp
+  const sendWhatsApp = () => {
+    const phone = details?.summary?.whatsapp_number
+    if (!phone) return
+    
+    const normalized = phone.replace(/[^\d]/g, '').replace(/^0+/, '')
+    const text = encodeURIComponent(customWAMessage)
+    const url = `https://wa.me/${normalized}?text=${text}`
+    
+    // Open in popup
+    const width = 500
+    const height = 700
+    const left = window.screenX + (window.outerWidth - width) / 2
+    const top = window.screenY + (window.outerHeight - height) / 2
+    
+    window.open(
+      url,
+      'whatsapp-popup',
+      `width=${width},height=${height},left=${left},top=${top},popup=yes,resizable=yes,scrollbars=yes`
+    )
+    
+    // Save to recent
+    saveRecentMessage(customWAMessage)
+    
+    // Log outreach
+    logOutreachWhatsApp({
+      sellerId: details!.sellerId,
+      messagePreview: customWAMessage,
+      createdBy: null,
+      listingId: selectedListingForWA?.id || null,
+      meta: { source: 'crm_quick_send' },
+      cooldownDays: 0,
+    }).catch(console.error)
+    
+    setShowWhatsAppModal(false)
+    onRefresh()
+  }
+  
+  // Filter and sort listings
+  const filteredListings = useMemo(() => {
+    if (!details?.listings) return []
+    
+    let filtered = details.listings
+    
+    // Filter by search query
+    if (listingSearchQuery.trim()) {
+      const query = listingSearchQuery.toLowerCase()
+      filtered = filtered.filter(l => 
+        (l.title?.toLowerCase() || '').includes(query) ||
+        (l.slug?.toLowerCase() || '').includes(query)
+      )
+    }
+    
+    // Sort
+    switch (listingSortBy) {
+      case 'newest':
+        filtered = [...filtered].sort((a, b) => 
+          new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+        )
+        break
+      case 'most_views':
+        filtered = [...filtered].sort((a, b) => (b.views_30d || 0) - (a.views_30d || 0))
+        break
+      case 'most_contacts':
+        filtered = [...filtered].sort((a, b) => (b.total_contacts_30d || 0) - (a.total_contacts_30d || 0))
+        break
+    }
+    
+    return filtered
+  }, [details?.listings, listingSearchQuery, listingSortBy])
+  
+  const handleScheduleFollowUp = async () => {
+    if (!details?.sellerId) return
+    
+    let dueAt: Date
+    switch (followUpWhen) {
+      case 'tomorrow': dueAt = new Date(Date.now() + 24 * 60 * 60 * 1000); break
+      case '3days': dueAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000); break
+      case '1week': dueAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); break
+      default: dueAt = new Date(Date.now() + 24 * 60 * 60 * 1000)
+    }
+    
+    setBusy(true)
+    try {
+      await scheduleFollowUp({
+        sellerId: details.sellerId,
+        dueAt: dueAt.toISOString(),
+        type: followUpType,
+        note: followUpNote,
+      })
+      setSuccess('Follow-up programado correctamente')
+      setShowFollowUpForm(false)
+      setFollowUpNote('')
+      onRefresh()
+    } catch (e: any) {
+      setError(e?.message ?? 'Error al programar follow-up')
+    } finally {
+      setBusy(false)
+    }
+  }
+  
+  const handleMarkListingSold = async (listingId: string, listingTitle: string | null) => {
+    if (!confirm(`¿Marcar "${listingTitle || 'esta publicación'}" como vendida?`)) return
+    
+    setBusy(true)
+    try {
+      await markListingAsSold(listingId)
+      setSuccess('Publicación marcada como vendida')
+      onRefresh()
+    } catch (e: any) {
+      setError(e?.message ?? 'Error al marcar como vendida')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   useEffect(() => {
     if (!open) return
@@ -93,6 +307,11 @@ export function SellerDrawer({ open, details, onClose, onRefresh }: SellerDrawer
     setCustomSubject('')
     setCustomBody('')
     setShowPreview(false)
+    setListingSearchQuery('')
+    setListingSortBy('newest')
+    setShowWhatsAppModal(false)
+    setSelectedListingForWA(null)
+    setCustomWAMessage('')
   }, [open, details?.sellerId])
 
   useEffect(() => {
@@ -122,6 +341,86 @@ export function SellerDrawer({ open, details, onClose, onRefresh }: SellerDrawer
     setStageDraft(stage)
   }, [open, stage])
 
+  const tabs: Array<[TabKey, string, string]> = [
+    ['profile', 'Perfil', '👤'],
+    ['timeline', 'Timeline', '📅'],
+    ['listings', 'Publicaciones', '📦'],
+    ['engagement', 'Engagement', '📊'],
+    ['outreach', 'Outreach', '📧'],
+    ['tasks', 'Tareas', '✓'],
+    ['notes', 'Notas', '📝'],
+    ['emails', 'Emails', '✉️'],
+  ]
+
+  // Build timeline from all activities
+  const timelineItems: TimelineItem[] = useMemo(() => {
+    if (!details) return []
+    
+    const items: TimelineItem[] = []
+    
+    // Outreach
+    details.outreach.forEach(o => {
+      items.push({
+        id: o.id,
+        type: 'outreach',
+        title: o.channel === 'whatsapp' ? 'WhatsApp enviado' : 'Email enviado',
+        description: o.message_preview || undefined,
+        timestamp: o.sent_at || o.created_at,
+        meta: { status: o.status, channel: o.channel },
+        icon: o.channel === 'whatsapp' ? '💬' : '📧',
+        color: o.channel === 'whatsapp' ? '#10b981' : '#3b82f6',
+      })
+    })
+    
+    // Tasks
+    details.tasksOpen.forEach(t => {
+      items.push({
+        id: t.id,
+        type: 'task',
+        title: `Tarea: ${t.type}`,
+        description: t.payload?.note as string || undefined,
+        timestamp: t.created_at,
+        meta: { status: t.status, priority: t.priority },
+        icon: '✓',
+        color: t.status === 'open' ? '#f59e0b' : '#6b7280',
+      })
+    })
+    
+    // Notes
+    details.notes.forEach(n => {
+      items.push({
+        id: n.id,
+        type: 'note',
+        title: 'Nota agregada',
+        description: n.note,
+        timestamp: n.created_at,
+        meta: { createdBy: n.created_by },
+        icon: '📝',
+        color: '#8b5cf6',
+      })
+    })
+    
+    // Listings
+    details.listings.forEach(l => {
+      items.push({
+        id: l.id,
+        type: 'listing',
+        title: 'Publicación creada',
+        description: l.title || undefined,
+        timestamp: l.created_at || '',
+        meta: { price: l.price, status: l.status },
+        icon: '📦',
+        color: '#6366f1',
+      })
+    })
+    
+    // Sort by timestamp desc
+    return items
+      .filter(i => i.timestamp)
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+  }, [details])
+
+  // Early return after all hooks
   if (!open) return null
 
   const saveStage = async () => {
@@ -250,16 +549,6 @@ export function SellerDrawer({ open, details, onClose, onRefresh }: SellerDrawer
 
   const selectedTemplateData = EMAIL_TEMPLATES.find(t => t.key === selectedTemplate)
 
-  const tabs: Array<[TabKey, string, string]> = [
-    ['profile', 'Perfil', '👤'],
-    ['listings', 'Publicaciones', '📦'],
-    ['engagement', 'Engagement', '📊'],
-    ['outreach', 'Outreach', '📧'],
-    ['tasks', 'Tareas', '✓'],
-    ['notes', 'Notas', '📝'],
-    ['emails', 'Emails', '✉️'],
-  ]
-
   return (
     <div className="admin-drawer-overlay" role="dialog" aria-modal="true">
       <button type="button" onClick={onClose} className="admin-drawer-backdrop" aria-label="Cerrar" />
@@ -308,7 +597,272 @@ export function SellerDrawer({ open, details, onClose, onRefresh }: SellerDrawer
             >
               ✉️ Enviar Email
             </button>
+            <button
+              type="button"
+              onClick={() => openWhatsAppPopup()}
+              disabled={busy || !details || !details?.summary?.whatsapp_number}
+              className="btn btn-sm"
+              style={{ background: '#dcfce7', borderColor: '#22c55e', color: '#15803d' }}
+              title={details?.summary?.whatsapp_number ? 'Enviar WhatsApp rápido' : 'Sin número de WhatsApp'}
+            >
+              💬 WhatsApp Rápido
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowFollowUpForm(true)}
+              disabled={busy || !details}
+              className="btn btn-sm"
+              style={{ background: '#fef3c7', borderColor: '#f59e0b', color: '#92400e' }}
+            >
+              ⏰ Follow-up
+            </button>
           </div>
+          
+          {/* Follow-up Form Modal */}
+          {showFollowUpForm && (
+            <div style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.5)',
+              display: 'grid',
+              placeItems: 'center',
+              zIndex: 200,
+            }}>
+              <div style={{
+                background: 'var(--admin-surface)',
+                borderRadius: 'var(--radius-xl)',
+                padding: 'var(--space-6)',
+                width: '100%',
+                maxWidth: '420px',
+                margin: 'var(--space-4)',
+              }}>
+                <h3 style={{ margin: '0 0 var(--space-4)', fontSize: '1.125rem', fontWeight: 700 }}>
+                  ⏰ Programar Follow-up
+                </h3>
+                
+                <div style={{ display: 'grid', gap: 'var(--space-4)' }}>
+                  <div>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--admin-text-muted)', textTransform: 'uppercase' }}>
+                      Tipo de contacto
+                    </label>
+                    <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
+                      {(['whatsapp', 'email', 'call'] as const).map(type => (
+                        <button
+                          key={type}
+                          onClick={() => setFollowUpType(type)}
+                          style={{
+                            flex: 1,
+                            padding: 'var(--space-2)',
+                            border: `1px solid ${followUpType === type ? '#3b82f6' : 'var(--admin-border)'}`,
+                            background: followUpType === type ? '#eff6ff' : 'white',
+                            color: followUpType === type ? '#3b82f6' : 'var(--admin-text)',
+                            borderRadius: 'var(--radius)',
+                            fontSize: '0.875rem',
+                            cursor: 'pointer',
+                            fontWeight: followUpType === type ? 600 : 400,
+                          }}
+                        >
+                          {type === 'whatsapp' ? '💬 WhatsApp' : type === 'email' ? '📧 Email' : '📞 Llamada'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--admin-text-muted)', textTransform: 'uppercase' }}>
+                      Cuándo
+                    </label>
+                    <select
+                      className="admin-select"
+                      style={{ marginTop: 'var(--space-2)' }}
+                      value={followUpWhen}
+                      onChange={(e) => setFollowUpWhen(e.target.value as any)}
+                    >
+                      <option value="tomorrow">Mañana</option>
+                      <option value="3days">En 3 días</option>
+                      <option value="1week">En 1 semana</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--admin-text-muted)', textTransform: 'uppercase' }}>
+                      Nota (opcional)
+                    </label>
+                    <textarea
+                      className="admin-textarea"
+                      style={{ marginTop: 'var(--space-2)' }}
+                      value={followUpNote}
+                      onChange={(e) => setFollowUpNote(e.target.value)}
+                      placeholder="Ej: Preguntar si vendió..."
+                      rows={3}
+                    />
+                  </div>
+                </div>
+                
+                <div style={{ display: 'flex', gap: 'var(--space-3)', justifyContent: 'flex-end', marginTop: 'var(--space-5)' }}>
+                  <button
+                    onClick={() => setShowFollowUpForm(false)}
+                    className="btn btn-secondary"
+                    disabled={busy}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => void handleScheduleFollowUp()}
+                    className="btn btn-primary"
+                    disabled={busy}
+                  >
+                    {busy ? 'Guardando...' : 'Programar'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* WhatsApp Quick Send Modal */}
+          {showWhatsAppModal && (
+            <div style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.5)',
+              display: 'grid',
+              placeItems: 'center',
+              zIndex: 200,
+            }}>
+              <div style={{
+                background: 'var(--admin-surface)',
+                borderRadius: 'var(--radius-xl)',
+                padding: 'var(--space-6)',
+                width: '100%',
+                maxWidth: '520px',
+                margin: 'var(--space-4)',
+              }}>
+                <h3 style={{ margin: '0 0 var(--space-4)', fontSize: '1.125rem', fontWeight: 700 }}>
+                  💬 Enviar WhatsApp a {details?.summary?.seller_name?.split(' ')[0]}
+                </h3>
+                
+                {selectedListingForWA && (
+                  <div style={{ 
+                    padding: 'var(--space-3)', 
+                    background: '#f0fdf4', 
+                    borderRadius: 'var(--radius)',
+                    marginBottom: 'var(--space-4)',
+                    fontSize: '0.875rem',
+                  }}>
+                    <strong>Sobre:</strong> {selectedListingForWA.title?.substring(0, 50)}...
+                    {selectedListingForWA.total_contacts_30d ? (
+                      <span style={{ color: '#15803d', marginLeft: 'var(--space-2)' }}>
+                        ({selectedListingForWA.total_contacts_30d} contactos en 30d)
+                      </span>
+                    ) : null}
+                  </div>
+                )}
+                
+                {/* Quick message templates */}
+                <div style={{ marginBottom: 'var(--space-4)' }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--admin-text-muted)', textTransform: 'uppercase' }}>
+                    Plantillas rápidas
+                  </label>
+                  <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-2)', flexWrap: 'wrap' }}>
+                    <button
+                      onClick={() => setCustomWAMessage(generateSmartMessage(selectedListingForWA))}
+                      className="btn btn-sm"
+                      style={{ background: '#f3f4f6', fontSize: '0.75rem' }}
+                    >
+                      🎯 Detectar contexto
+                    </button>
+                    <button
+                      onClick={() => setCustomWAMessage(`Hola ${details?.summary?.seller_name?.split(' ')[0] || ''}, soy Rodri de Ciclo Market. ¿Cómo va la venta de tu bici?`)}
+                      className="btn btn-sm"
+                      style={{ background: '#f3f4f6', fontSize: '0.75rem' }}
+                    >
+                      👋 Saludo simple
+                    </button>
+                    <button
+                      onClick={() => setCustomWAMessage(`Hola ${details?.summary?.seller_name?.split(' ')[0] || ''}, soy Rodri de Ciclo Market. ¿Necesitás ayuda con el precio o las fotos de tu publicación?`)}
+                      className="btn btn-sm"
+                      style={{ background: '#f3f4f6', fontSize: '0.75rem' }}
+                    >
+                      💡 Ofrecer ayuda
+                    </button>
+                  </div>
+                </div>
+                
+                {/* Recent messages */}
+                {recentWAMessages.length > 0 && (
+                  <div style={{ marginBottom: 'var(--space-4)' }}>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--admin-text-muted)', textTransform: 'uppercase' }}>
+                      Mensajes recientes
+                    </label>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)', marginTop: 'var(--space-2)' }}>
+                      {recentWAMessages.slice(0, 3).map((msg, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => setCustomWAMessage(msg)}
+                          style={{
+                            textAlign: 'left',
+                            padding: 'var(--space-2)',
+                            background: '#f9fafb',
+                            border: '1px solid var(--admin-border)',
+                            borderRadius: 'var(--radius)',
+                            fontSize: '0.75rem',
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                        >
+                          {msg.substring(0, 60)}...
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Message editor */}
+                <div>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--admin-text-muted)', textTransform: 'uppercase' }}>
+                    Mensaje
+                  </label>
+                  <textarea
+                    className="admin-textarea"
+                    style={{ marginTop: 'var(--space-2)', minHeight: '120px', fontSize: '0.875rem' }}
+                    value={customWAMessage}
+                    onChange={(e) => setCustomWAMessage(e.target.value)}
+                    placeholder="Escribí tu mensaje..."
+                    onKeyDown={(e) => {
+                      if (e.ctrlKey && e.key === 'Enter') {
+                        e.preventDefault()
+                        sendWhatsApp()
+                      }
+                      if (e.key === 'Escape') {
+                        setShowWhatsAppModal(false)
+                      }
+                    }}
+                  />
+                  <div style={{ fontSize: '0.75rem', color: 'var(--admin-text-muted)', marginTop: 'var(--space-1)' }}>
+                    Ctrl+Enter para enviar · Esc para cerrar
+                  </div>
+                </div>
+                
+                <div style={{ display: 'flex', gap: 'var(--space-3)', justifyContent: 'flex-end', marginTop: 'var(--space-5)' }}>
+                  <button
+                    onClick={() => setShowWhatsAppModal(false)}
+                    className="btn btn-secondary"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={sendWhatsApp}
+                    className="btn btn-primary"
+                    style={{ background: '#22c55e', borderColor: '#22c55e' }}
+                  >
+                    💬 Abrir WhatsApp
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Stage Selector */}
           <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', marginTop: 'var(--space-4)', padding: 'var(--space-3)', background: 'var(--admin-surface)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--admin-border)' }}>
@@ -416,26 +970,275 @@ export function SellerDrawer({ open, details, onClose, onRefresh }: SellerDrawer
                   <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--admin-text-secondary)', lineHeight: 1.6 }}>{profile.bio}</p>
                 </div>
               )}
+              
+              {/* Tags Section */}
+              <div className="admin-card" style={{ margin: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-3)' }}>
+                  <h4 style={{ margin: 0, fontSize: '0.875rem', fontWeight: 600, color: 'var(--admin-text)' }}>Tags</h4>
+                  <button 
+                    onClick={() => setShowTagSelector(!showTagSelector)}
+                    className="btn btn-sm"
+                    style={{ background: 'var(--admin-gray-100)', borderColor: 'var(--admin-border)' }}
+                  >
+                    + Agregar
+                  </button>
+                </div>
+                
+                {/* Current tags */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)', marginBottom: sellerTags.length ? 'var(--space-3)' : 0 }}>
+                  {sellerTags.length ? (
+                    sellerTags.map(tag => {
+                      const tagDef = PREDEFINED_TAGS.find(t => t.key === tag)
+                      return (
+                        <span 
+                          key={tag}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '4px 12px',
+                            background: tagDef ? `${tagDef.color}15` : 'var(--admin-gray-100)',
+                            color: tagDef?.color || 'var(--admin-text)',
+                            borderRadius: 'var(--radius)',
+                            fontSize: '0.8125rem',
+                            fontWeight: 500,
+                            border: `1px solid ${tagDef ? `${tagDef.color}30` : 'var(--admin-border)'}`,
+                          }}
+                        >
+                          {tagDef?.label || tag}
+                          <button
+                            onClick={() => handleRemoveTag(tag)}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              cursor: 'pointer',
+                              padding: '0 2px',
+                              fontSize: '0.75rem',
+                              color: 'inherit',
+                              opacity: 0.7,
+                            }}
+                            title="Remover tag"
+                          >
+                            ✕
+                          </button>
+                        </span>
+                      )
+                    })
+                  ) : (
+                    <span style={{ fontSize: '0.875rem', color: 'var(--admin-text-muted)' }}>Sin tags</span>
+                  )}
+                </div>
+                
+                {/* Tag selector */}
+                {showTagSelector && (
+                  <div style={{ 
+                    display: 'flex', 
+                    flexWrap: 'wrap', 
+                    gap: 'var(--space-2)',
+                    padding: 'var(--space-3)',
+                    background: 'var(--admin-gray-50)',
+                    borderRadius: 'var(--radius)',
+                  }}>
+                    {PREDEFINED_TAGS.filter(t => !sellerTags.includes(t.key)).map(tag => (
+                      <button
+                        key={tag.key}
+                        onClick={() => handleAddTag(tag.key)}
+                        style={{
+                          padding: '4px 12px',
+                          background: 'white',
+                          border: `1px solid ${tag.color}`,
+                          color: tag.color,
+                          borderRadius: 'var(--radius)',
+                          fontSize: '0.8125rem',
+                          cursor: 'pointer',
+                          fontWeight: 500,
+                        }}
+                      >
+                        {tag.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
           {tab === 'listings' && (
             <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
-              {details?.listings?.length ? (
-                details.listings.map((l) => (
+              {/* Search and Sort Controls */}
+              {details?.listings && details.listings.length > 0 && (
+                <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap', alignItems: 'center' }}>
+                  {/* Search */}
+                  <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
+                    <span style={{ 
+                      position: 'absolute', 
+                      left: 'var(--space-2)', 
+                      top: '50%', 
+                      transform: 'translateY(-50%)',
+                      color: 'var(--admin-text-muted)',
+                      fontSize: '0.875rem'
+                    }}>🔍</span>
+                    <input
+                      type="text"
+                      value={listingSearchQuery}
+                      onChange={(e) => setListingSearchQuery(e.target.value)}
+                      placeholder="Filtrar publicaciones..."
+                      className="admin-input"
+                      style={{ paddingLeft: '32px', fontSize: '0.875rem' }}
+                    />
+                    {listingSearchQuery && (
+                      <button
+                        onClick={() => setListingSearchQuery('')}
+                        style={{
+                          position: 'absolute',
+                          right: 'var(--space-2)',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          color: 'var(--admin-text-muted)',
+                          fontSize: '0.75rem',
+                          padding: '2px',
+                        }}
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                  
+                  {/* Sort */}
+                  <select
+                    value={listingSortBy}
+                    onChange={(e) => setListingSortBy(e.target.value as any)}
+                    className="admin-select"
+                    style={{ width: 'auto', fontSize: '0.875rem' }}
+                  >
+                    <option value="newest">📅 Más recientes</option>
+                    <option value="most_views">👁️ Más vistas (30d)</option>
+                    <option value="most_contacts">💬 Más contactos (30d)</option>
+                  </select>
+                </div>
+              )}
+              
+              {/* Results count */}
+              {listingSearchQuery && (
+                <div style={{ fontSize: '0.8125rem', color: 'var(--admin-text-muted)' }}>
+                  Mostrando {filteredListings.length} de {details?.listings?.length || 0} publicaciones
+                </div>
+              )}
+              
+              {filteredListings.length ? (
+                filteredListings.map((l) => (
                   <div key={l.id} className="admin-card" style={{ margin: 0 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 'var(--space-3)' }}>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontWeight: 600, color: 'var(--admin-text)', marginBottom: 'var(--space-1)' }}>
                           {l.title || 'Sin título'}
                         </div>
-                        <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', marginBottom: 'var(--space-2)' }}>
                           <span className={`badge ${l.status === 'active' ? 'badge-green' : 'badge-gray'}`}>
                             {l.status || '—'}
                           </span>
                           <span className="badge badge-gray">{l.moderation_state || '—'}</span>
                           <span className="badge badge-blue">{formatDate(l.created_at)}</span>
                         </div>
+                        
+                        {/* Engagement Metrics */}
+                        <div style={{ 
+                          display: 'flex', 
+                          gap: 'var(--space-3)', 
+                          padding: 'var(--space-2)',
+                          background: 'var(--admin-gray-50)',
+                          borderRadius: 'var(--radius)',
+                          fontSize: '0.8125rem',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <span>👁️</span>
+                            <span style={{ color: 'var(--admin-text-muted)' }}>Vistas:</span>
+                            <span style={{ fontWeight: 600 }}>{l.views_30d || 0}</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <span>📱</span>
+                            <span style={{ color: 'var(--admin-text-muted)' }}>WA:</span>
+                            <span style={{ fontWeight: 600, color: l.wa_clicks_30d ? '#047857' : 'inherit' }}>
+                              {l.wa_clicks_30d || 0}
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <span>✉️</span>
+                            <span style={{ color: 'var(--admin-text-muted)' }}>Email:</span>
+                            <span style={{ fontWeight: 600 }}>{l.email_clicks_30d || 0}</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginLeft: 'auto' }}>
+                            <span>💬</span>
+                            <span style={{ color: 'var(--admin-text-muted)' }}>Total:</span>
+                            <span style={{ 
+                              fontWeight: 700, 
+                              color: (l.total_contacts_30d || 0) > 0 ? '#047857' : 'var(--admin-text-muted)' 
+                            }}>
+                              {l.total_contacts_30d || 0}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        {/* Price if available */}
+                        {l.price && (
+                          <div style={{ marginTop: 'var(--space-2)', fontSize: '0.8125rem' }}>
+                            <span style={{ color: 'var(--admin-text-muted)' }}>Precio: </span>
+                            <span style={{ fontWeight: 600 }}>
+                              {l.price_currency === 'USD' ? 'US$' : '$'}{l.price.toLocaleString()}
+                            </span>
+                          </div>
+                        )}
+                        
+                        {/* Action buttons */}
+                        {l.status !== 'sold' && (
+                          <div style={{ marginTop: 'var(--space-3)', display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+                            <button
+                              onClick={() => handleMarkListingSold(l.id, l.title)}
+                              disabled={busy}
+                              className="btn btn-sm"
+                              style={{ 
+                                background: '#ecfdf5', 
+                                borderColor: '#10b981', 
+                                color: '#047857',
+                                fontSize: '0.8125rem',
+                              }}
+                            >
+                              ✅ Marcar como vendida
+                            </button>
+                            <button
+                              onClick={() => openWhatsAppPopup(l)}
+                              disabled={busy || !details?.summary?.whatsapp_number}
+                              className="btn btn-sm"
+                              style={{ 
+                                background: '#dcfce7', 
+                                borderColor: '#22c55e', 
+                                color: '#15803d',
+                                fontSize: '0.8125rem',
+                              }}
+                            >
+                              💬 WA sobre esta
+                            </button>
+                            <a
+                              href={`https://www.ciclomarket.ar/listing/${l.slug || l.id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="btn btn-sm btn-secondary"
+                              style={{ fontSize: '0.8125rem' }}
+                            >
+                              🔗 Ver
+                            </a>
+                          </div>
+                        )}
+                        {l.status === 'sold' && (
+                          <div style={{ marginTop: 'var(--space-3)' }}>
+                            <span className="badge badge-green" style={{ fontSize: '0.8125rem' }}>
+                              ✅ Vendida
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -443,7 +1246,12 @@ export function SellerDrawer({ open, details, onClose, onRefresh }: SellerDrawer
               ) : (
                 <div className="admin-empty">
                   <div className="admin-empty-icon">📭</div>
-                  <div className="admin-empty-title">Sin publicaciones</div>
+                  <div className="admin-empty-title">
+                    {listingSearchQuery ? 'No se encontraron publicaciones' : 'Sin publicaciones'}
+                  </div>
+                  {listingSearchQuery && (
+                    <p>Probá con otra búsqueda</p>
+                  )}
                 </div>
               )}
             </div>
@@ -481,6 +1289,97 @@ export function SellerDrawer({ open, details, onClose, onRefresh }: SellerDrawer
                   <span>{formatDateTime(summary?.last_lead_at)}</span>
                 </div>
               </div>
+            </div>
+          )}
+
+          {tab === 'timeline' && (
+            <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
+              <h4 style={{ margin: 0, fontSize: '0.875rem', fontWeight: 600, color: 'var(--admin-text)' }}>
+                Historial de Actividad ({timelineItems.length})
+              </h4>
+              
+              {timelineItems.length ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+                  {timelineItems.map((item, index) => (
+                    <div 
+                      key={item.id} 
+                      className="admin-card" 
+                      style={{ 
+                        margin: 0,
+                        borderLeft: `3px solid ${item.color}`,
+                        position: 'relative',
+                      }}
+                    >
+                      {/* Connector line */}
+                      {index < timelineItems.length - 1 && (
+                        <div style={{
+                          position: 'absolute',
+                          left: '20px',
+                          bottom: '-16px',
+                          width: '2px',
+                          height: '16px',
+                          background: 'var(--admin-border)',
+                        }} />
+                      )}
+                      
+                      <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'flex-start' }}>
+                        {/* Icon */}
+                        <div style={{
+                          width: 40,
+                          height: 40,
+                          borderRadius: '50%',
+                          background: `${item.color}15`,
+                          display: 'grid',
+                          placeItems: 'center',
+                          fontSize: '1.25rem',
+                          flexShrink: 0,
+                        }}>
+                          {item.icon}
+                        </div>
+                        
+                        {/* Content */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+                            <div style={{ fontWeight: 600, color: 'var(--admin-text)', fontSize: '0.9375rem' }}>
+                              {item.title}
+                            </div>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--admin-text-muted)', whiteSpace: 'nowrap' }}>
+                              {formatDateTime(item.timestamp)}
+                            </span>
+                          </div>
+                          
+                          {item.description && (
+                            <p style={{ margin: 'var(--space-1) 0 0', fontSize: '0.875rem', color: 'var(--admin-text-secondary)', lineHeight: 1.5 }}>
+                              {item.description}
+                            </p>
+                          )}
+                          
+                          {/* Meta badges */}
+                          {item.meta && (
+                            <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-2)', flexWrap: 'wrap' }}>
+                              {item.meta.status && (
+                                <span className={`badge ${getStatusBadgeClass(String(item.meta.status))}`}>
+                                  {String(item.meta.status)}
+                                </span>
+                              )}
+                              {item.meta.channel && (
+                                <span className={`badge ${getChannelBadgeClass(String(item.meta.channel))}`}>
+                                  {String(item.meta.channel)}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="admin-empty">
+                  <div className="admin-empty-icon">📭</div>
+                  <div className="admin-empty-title">Sin actividad registrada</div>
+                </div>
+              )}
             </div>
           )}
 

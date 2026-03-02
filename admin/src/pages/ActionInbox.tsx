@@ -16,10 +16,12 @@ import {
   createSellerTask,
   fetchSellerOpsDetails,
   fetchSellerOpsInbox,
+  fetchSellerOpsStats,
   logOutreachWhatsApp,
   ensureKanbanCard,
   type CrmSellerSummaryRow,
   type SellerOpsDetails,
+  type SellerOpsStats,
 } from '@admin/services/sellerOps'
 import { useAdminAuth } from '@admin/context/AdminAuthContext'
 import { supabaseEnabled } from '@app/services/supabase'
@@ -30,6 +32,7 @@ type FilterBool = 'all' | 'yes' | 'no'
 type FilterCooldown = 'all' | 'active' | 'inactive'
 type FilterSellerType = 'all' | 'store' | 'particular'
 type FilterHasActiveListings = 'all' | 'yes'
+type FilterAssignedTo = 'all' | 'me' | 'unassigned'
 type TabView = 'list' | 'kanban' | 'actions' | 'automation'
 
 const sortFields: SellerOpsSortField[] = ['score', 'active_listings', 'wa_30d', 'email_30d', 'contacts_30d', 'last_lead']
@@ -56,6 +59,10 @@ function asFilterSellerType(value: string): FilterSellerType {
 
 function asFilterHasActiveListings(value: string): FilterHasActiveListings {
   return value === 'yes' || value === 'all' ? value : 'all'
+}
+
+function asFilterAssignedTo(value: string): FilterAssignedTo {
+  return value === 'me' || value === 'unassigned' || value === 'all' ? value : 'all'
 }
 
 function asSortField(value: string): SellerOpsSortField {
@@ -119,6 +126,39 @@ const defaultMessage = (sellerName: string, listingUrl: string | null) => [
   '4) Quiero mejorarla (precio/fotos)',
   'Si querés que te ayudemos más rápido, respondé: PRECIO o FOTOS (o AYUDA).',
 ].join('\n')
+
+// CSV Export helpers
+function convertToCSV(rows: CrmSellerSummaryRow[]): string {
+  const headers = ['ID', 'Nombre', 'Email', 'WhatsApp', 'Ciudad', 'Provincia', 'Stage', 'Score', 'Activos', 'WA 7d', 'WA 30d', 'Contactos 30d', 'Store', 'Último Lead']
+  const csvRows = rows.map(r => [
+    r.seller_id,
+    r.seller_name,
+    r.email || '',
+    r.whatsapp_number || '',
+    r.city || '',
+    r.province || '',
+    r.stage || '',
+    r.score,
+    r.active_listings_count,
+    r.wa_clicks_7d,
+    r.wa_clicks_30d,
+    r.contacts_total_30d,
+    r.is_store ? 'Sí' : 'No',
+    r.last_lead_at || ''
+  ].map(v => `"${String(v).replace(/"/g, '""')}"`))
+  
+  return [headers.join(','), ...csvRows.map(r => r.join(','))].join('\n')
+}
+
+function downloadCSV(csv: string, filename: string) {
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const link = document.createElement('a')
+  link.href = URL.createObjectURL(blob)
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+}
 
 // Stats Card Component
 interface StatCardProps {
@@ -236,11 +276,24 @@ export default function ActionInboxPage() {
   const [filterCooldown, setFilterCooldown] = useState<FilterCooldown>('all')
   const [filterOptedOut, setFilterOptedOut] = useState<FilterBool>('all')
   const [filterHasActiveListings, setFilterHasActiveListings] = useState<FilterHasActiveListings>('all')
+  const [filterAssignedTo, setFilterAssignedTo] = useState<FilterAssignedTo>('all')
+  
+  // Search state
+  const [searchQuery, setSearchQuery] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  
+  // Bulk selection state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [showBulkActions, setShowBulkActions] = useState(false)
 
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [drawerLoading, setDrawerLoading] = useState(false)
   const [drawerDetails, setDrawerDetails] = useState<SellerOpsDetails | null>(null)
   const [drawerError, setDrawerError] = useState<string | null>(null)
+  
+  // Stats from database (totals, not just current page)
+  const [stats, setStats] = useState<SellerOpsStats>({ total: 0, withActiveListings: 0, stores: 0, atRisk: 0 })
+  const [statsLoading, setStatsLoading] = useState(false)
 
   useEffect(() => {
     const cache = readActionInboxCache()
@@ -257,6 +310,7 @@ export default function ActionInboxPage() {
     setFilterCooldown(asFilterCooldown(cache.filterCooldown || 'all'))
     setFilterOptedOut(asFilterBool(cache.filterOptedOut || 'all'))
     setFilterHasActiveListings(asFilterHasActiveListings(cache.filterHasActiveListings || 'all'))
+    setFilterAssignedTo(asFilterAssignedTo((cache as any).filterAssignedTo || 'all'))
     setActiveTab(cache.activeTab || 'list')
     setRows(cache.rows)
     setLoading(false)
@@ -273,10 +327,22 @@ export default function ActionInboxPage() {
     if (filterCooldown === 'active') f.cooldown_active = true
     else if (filterCooldown === 'inactive') f.cooldown_active = false
     if (filterHasActiveListings === 'yes') f.active_only = true
+    if (filterAssignedTo === 'me' && user?.id) f.assigned_to = user.id
+    else if (filterAssignedTo === 'unassigned') f.assigned_to = null
+    if (debouncedSearch.trim()) f.search = debouncedSearch.trim()
     return f
-  }, [filterStoreOnly, filterStage, filterOptedOut, filterCooldown, filterHasActiveListings])
+  }, [filterStoreOnly, filterStage, filterOptedOut, filterCooldown, filterHasActiveListings, filterAssignedTo, debouncedSearch, user?.id])
 
   const [debouncedFilters, setDebouncedFilters] = useState<Record<string, unknown>>(serverFilters)
+
+  // Debounce search query
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      setDebouncedSearch(searchQuery)
+      setPage(1)
+    }, 300)
+    return () => window.clearTimeout(t)
+  }, [searchQuery])
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -445,20 +511,144 @@ export default function ActionInboxPage() {
     void openDrawer(card.seller_id)
   }
 
+  const handleKanbanWhatsAppClick = async (card: KanbanCard) => {
+    const message = defaultMessage(card.seller_name || '!', null)
+    const phone = card.whatsapp_number
+    
+    if (!phone) {
+      alert('Este seller no tiene número de WhatsApp')
+      return
+    }
+
+    // Open WhatsApp
+    const normalized = phone.replace(/[^\d]/g, '').replace(/^0+/, '')
+    const text = encodeURIComponent(message)
+    const href = `https://wa.me/${normalized}${text ? `?text=${text}` : ''}`
+    window.open(href, '_blank', 'noopener,noreferrer')
+
+    // Log outreach
+    try {
+      await logOutreachWhatsApp({
+        sellerId: card.seller_id,
+        messagePreview: message,
+        createdBy: user?.id ?? null,
+        listingId: card.listing_id ?? null,
+        meta: {
+          source: 'admin_kanban',
+          url: typeof window !== 'undefined' ? window.location.href : null,
+          kanban_card_id: card.id,
+          kanban_stage: card.stage,
+        },
+        cooldownDays: 0,
+      })
+      // Refresh inbox to show updated last_contact_at
+      void loadInbox({ filters: serverFilters })
+    } catch (err) {
+      console.warn('[seller-ops] log outreach failed', err)
+    }
+  }
+
   const handleActionClick = (action: RecommendedAction) => {
     if (action.seller_id) {
       void openDrawer(action.seller_id)
     }
   }
 
-  // Calculate stats
-  const stats = useMemo(() => {
-    const total = rows.length
-    const withActiveListings = rows.filter(r => (r.active_listings_count ?? 0) > 0).length
-    const stores = rows.filter(r => r.is_store).length
-    const atRisk = rows.filter(r => r.stage === 'at_risk').length
-    return { total, withActiveListings, stores, atRisk }
-  }, [rows])
+  // Load stats from database (totals across all pages)
+  const loadStats = useCallback(async () => {
+    setStatsLoading(true)
+    try {
+      const data = await fetchSellerOpsStats()
+      setStats(data)
+    } catch (err) {
+      console.warn('[seller-ops] stats failed', err)
+    } finally {
+      setStatsLoading(false)
+    }
+  }, [])
+
+  // Bulk selection handlers
+  const handleToggleSelect = (sellerId: string) => {
+    setSelectedIds(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(sellerId)) {
+        newSet.delete(sellerId)
+      } else {
+        newSet.add(sellerId)
+      }
+      return newSet
+    })
+  }
+
+  const handleSelectAll = () => {
+    setSelectedIds(new Set(rows.map(r => r.seller_id)))
+  }
+
+  const handleSelectNone = () => {
+    setSelectedIds(new Set())
+  }
+
+  const isAllSelected = rows.length > 0 && rows.every(r => selectedIds.has(r.seller_id))
+
+  // Bulk actions
+  const handleBulkStageChange = async () => {
+    const stage = window.prompt('Nuevo stage (lead, onboarding, active, at_risk, churned):', 'active')
+    if (!stage) return
+    const validStages = ['lead', 'onboarding', 'active', 'at_risk', 'churned']
+    if (!validStages.includes(stage)) {
+      alert('Stage inválido')
+      return
+    }
+    try {
+      // Import setSellerStage dynamically to avoid circular deps
+      const { setSellerStage } = await import('@admin/services/sellerOps')
+      await Promise.all(
+        Array.from(selectedIds).map(id => 
+          setSellerStage({ sellerId: id, stage: stage as any })
+        )
+      )
+      setSelectedIds(new Set())
+      void loadInbox({ filters: serverFilters })
+    } catch (err) {
+      console.error('[bulk] stage change failed', err)
+      alert('Error al cambiar stages')
+    }
+  }
+
+  const handleBulkAssign = async () => {
+    if (!user?.id) return
+    const assignToMe = window.confirm('¿Asignar estos sellers a vos?')
+    if (!assignToMe) return
+    try {
+      const { setSellerStage } = await import('@admin/services/sellerOps')
+      await Promise.all(
+        Array.from(selectedIds).map(id => 
+          setSellerStage({ sellerId: id, stage: 'active', ownerAdminUserId: user.id })
+        )
+      )
+      setSelectedIds(new Set())
+      void loadInbox({ filters: serverFilters })
+    } catch (err) {
+      console.error('[bulk] assign failed', err)
+      alert('Error al asignar')
+    }
+  }
+
+  const handleBulkExport = () => {
+    const selectedRows = rows.filter(r => selectedIds.has(r.seller_id))
+    const csv = convertToCSV(selectedRows)
+    downloadCSV(csv, `sellers-${new Date().toISOString().split('T')[0]}.csv`)
+  }
+
+  // Clear selection when page changes
+  useEffect(() => {
+    setSelectedIds(new Set())
+  }, [page, debouncedFilters])
+
+  useEffect(() => {
+    if (!hydrated) return
+    void loadStats()
+  }, [hydrated, loadStats])
 
   if (!supabaseEnabled) {
     return (
@@ -473,10 +663,10 @@ export default function ActionInboxPage() {
     <div>
       {/* Stats Row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 'var(--space-4)', marginBottom: 'var(--space-5)' }}>
-        <StatCard label="Total Sellers" value={stats.total} icon="👥" color="blue" />
-        <StatCard label="Con Activos" value={stats.withActiveListings} icon="📦" color="green" />
-        <StatCard label="Stores" value={stats.stores} icon="🏪" color="amber" />
-        <StatCard label="At Risk" value={stats.atRisk} icon="⚠️" color="red" />
+        <StatCard label="Total Sellers" value={statsLoading ? '...' : stats.total} icon="👥" color="blue" />
+        <StatCard label="Con Activos" value={statsLoading ? '...' : stats.withActiveListings} icon="📦" color="green" />
+        <StatCard label="Stores" value={statsLoading ? '...' : stats.stores} icon="🏪" color="amber" />
+        <StatCard label="At Risk" value={statsLoading ? '...' : stats.atRisk} icon="⚠️" color="red" />
       </div>
 
       {/* Tabs Navigation */}
@@ -536,6 +726,47 @@ export default function ActionInboxPage() {
               </button>
             </div>
 
+            {/* Search Bar */}
+            <div style={{ marginBottom: 'var(--space-4)' }}>
+              <div style={{ position: 'relative', maxWidth: '480px' }}>
+                <span style={{ 
+                  position: 'absolute', 
+                  left: 'var(--space-3)', 
+                  top: '50%', 
+                  transform: 'translateY(-50%)',
+                  color: 'var(--admin-text-muted)',
+                  fontSize: '1rem'
+                }}>🔍</span>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Buscar por nombre, email o teléfono..."
+                  className="admin-input"
+                  style={{ paddingLeft: '40px' }}
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    style={{
+                      position: 'absolute',
+                      right: 'var(--space-3)',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: 'var(--admin-text-muted)',
+                      fontSize: '1rem',
+                      padding: '4px',
+                    }}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            </div>
+
             <div className="admin-filters" style={{ margin: 0, border: 'none', padding: 0 }}>
               <div className="admin-filters-group">
                 <label className="admin-form-label">Tipo de seller</label>
@@ -547,6 +778,19 @@ export default function ActionInboxPage() {
                   <option value="all">Todos</option>
                   <option value="store">Stores</option>
                   <option value="particular">Particulares</option>
+                </select>
+              </div>
+
+              <div className="admin-filters-group">
+                <label className="admin-form-label">Asignado a</label>
+                <select
+                  className="admin-select"
+                  value={filterAssignedTo}
+                  onChange={(e) => setFilterAssignedTo(asFilterAssignedTo(e.target.value))}
+                >
+                  <option value="all">Todos</option>
+                  <option value="me">Mis sellers</option>
+                  <option value="unassigned">Sin asignar</option>
                 </select>
               </div>
 
@@ -616,6 +860,58 @@ export default function ActionInboxPage() {
             </div>
           )}
 
+          {/* Bulk Actions Toolbar */}
+          {selectedIds.size > 0 && (
+            <div 
+              className="admin-card" 
+              style={{ 
+                marginBottom: 'var(--space-4)', 
+                background: '#eff6ff',
+                borderColor: '#3b82f6',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: 'var(--space-3)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+                <span style={{ fontWeight: 600, color: '#1d4ed8' }}>
+                  {selectedIds.size} seleccionados
+                </span>
+                <button 
+                  onClick={handleSelectNone}
+                  className="btn btn-sm"
+                  style={{ background: 'white', borderColor: '#3b82f6', color: '#3b82f6' }}
+                >
+                  Deseleccionar
+                </button>
+              </div>
+              <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+                <button 
+                  onClick={handleBulkAssign}
+                  className="btn btn-sm btn-primary"
+                >
+                  👤 Asignarme
+                </button>
+                <button 
+                  onClick={handleBulkStageChange}
+                  className="btn btn-sm"
+                  style={{ background: 'white', borderColor: '#3b82f6', color: '#3b82f6' }}
+                >
+                  🏷️ Cambiar Stage
+                </button>
+                <button 
+                  onClick={handleBulkExport}
+                  className="btn btn-sm"
+                  style={{ background: 'white', borderColor: '#3b82f6', color: '#3b82f6' }}
+                >
+                  📥 Exportar CSV
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Table Container */}
           <div className="admin-table-container">
             {loading ? (
@@ -641,6 +937,11 @@ export default function ActionInboxPage() {
                   setSortDirection(nextDirection)
                   void loadInbox({ filters: serverFilters, page: 1, pageSize, sort: nextSort })
                 }}
+                selectedIds={selectedIds}
+                onToggleSelect={handleToggleSelect}
+                onSelectAll={handleSelectAll}
+                onSelectNone={handleSelectNone}
+                isAllSelected={isAllSelected}
               />
             )}
 
@@ -693,7 +994,7 @@ export default function ActionInboxPage() {
           overflow: 'hidden',
           minHeight: '600px',
         }}>
-          <KanbanBoard onCardClick={handleKanbanCardClick} />
+          <KanbanBoard onCardClick={handleKanbanCardClick} onWhatsAppClick={handleKanbanWhatsAppClick} />
         </div>
       )}
 

@@ -47,6 +47,7 @@ const { buildEmailHtml: buildFree2PaidEmailHtml } = (() => {
 const { processPayment, recordPaymentIntent } = require('./services/paymentService')
 const appApiRouter = require('./routes/appApi')
 const importRouter = require('./routes/import')
+const { whatsappRouter } = require('./routes/whatsapp')
 // Sweepstake feature removed
 const path = require('path')
 // const https = require('https') // removed: used only for Google rating proxy
@@ -352,6 +353,9 @@ app.use(appApiRouter)
 // CRM Advanced API (Kanban, Next Best Action, Automation Rules, Impact Dashboard)
 const { crmAdvancedRouter } = require('./routes/crmAdvanced')
 app.use(crmAdvancedRouter)
+
+// WhatsApp Cloud API routes
+app.use(whatsappRouter)
 
 /* ----------------------------- Cron jobs ---------------------------------- */
 // Start scheduled jobs after basic middleware is ready

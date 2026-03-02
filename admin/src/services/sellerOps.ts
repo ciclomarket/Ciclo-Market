@@ -31,6 +31,7 @@ export interface CrmSellerSummaryRow {
   cooldown_until: string | null
   last_contacted_at: string | null
   score: number
+  tags?: string[]
 }
 
 export interface FetchSellerOpsInboxArgs {
@@ -42,6 +43,57 @@ export interface FetchSellerOpsInboxArgs {
 
 export interface FetchSellerOpsInboxResult {
   rows: CrmSellerSummaryRow[]
+}
+
+export interface SellerOpsStats {
+  total: number
+  withActiveListings: number
+  stores: number
+  atRisk: number
+}
+
+export async function fetchSellerOpsStats(): Promise<SellerOpsStats> {
+  if (!supabaseEnabled) return { total: 0, withActiveListings: 0, stores: 0, atRisk: 0 }
+  
+  const cacheKey = 'sellerOps:stats'
+  const cached = cacheGet<SellerOpsStats>(cacheKey)
+  if (cached) return cached
+
+  const supabase = getSupabaseClient()
+  
+  // Get counts in parallel - using count with different filters
+  const [
+    { count: total },
+    { count: withActiveListings },
+    { count: stores },
+    { count: atRisk },
+  ] = await Promise.all([
+    supabase
+      .from('crm_seller_summary')
+      .select('*', { count: 'exact', head: true }),
+    supabase
+      .from('crm_seller_summary')
+      .select('*', { count: 'exact', head: true })
+      .gt('active_listings_count', 0),
+    supabase
+      .from('crm_seller_summary')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_store', true),
+    supabase
+      .from('crm_seller_summary')
+      .select('*', { count: 'exact', head: true })
+      .eq('stage', 'at_risk'),
+  ])
+
+  const result: SellerOpsStats = {
+    total: total ?? 0,
+    withActiveListings: withActiveListings ?? 0,
+    stores: stores ?? 0,
+    atRisk: atRisk ?? 0,
+  }
+  
+  cacheSet(cacheKey, result, 60_000) // 1 minute cache
+  return result
 }
 
 export async function fetchSellerOpsInbox({ page, pageSize, filters = {}, sort }: FetchSellerOpsInboxArgs): Promise<FetchSellerOpsInboxResult> {
@@ -101,6 +153,11 @@ export interface ListingRow {
   price: number | null
   price_currency: string | null
   slug: string | null
+  // Engagement metrics
+  views_30d?: number
+  wa_clicks_30d?: number
+  email_clicks_30d?: number
+  total_contacts_30d?: number
 }
 
 export type OutreachChannel = 'whatsapp' | 'email'
@@ -153,6 +210,84 @@ export interface SellerOpsDetails {
   notes: SellerNoteRow[]
 }
 
+async function fetchListingsWithEngagement(sellerId: string, supabase: any): Promise<ListingRow[]> {
+  // Get listings
+  const { data: listings, error } = await supabase
+    .from('listings')
+    .select('id,title,status,moderation_state,created_at,expires_at,price,price_currency,slug')
+    .eq('seller_id', sellerId)
+    .order('created_at', { ascending: false })
+    .limit(50)
+  
+  if (error || !listings) return []
+  
+  // Get engagement metrics for these listings (last 30 days)
+  const listingIds = listings.map((l: any) => l.id)
+  
+  if (listingIds.length === 0) return listings as ListingRow[]
+  
+  try {
+    // Fetch events summary for these listings (last 30 days)
+    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+    
+    // Query events table (views and WA clicks)
+    const { data: eventsData } = await supabase
+      .from('events')
+      .select('listing_id, type')
+      .in('listing_id', listingIds)
+      .gte('created_at', since)
+    
+    // Query contact_events table (email contacts)
+    const { data: contactEventsData } = await supabase
+      .from('contact_events')
+      .select('listing_id, type')
+      .in('listing_id', listingIds)
+      .eq('type', 'email')
+      .gte('created_at', since)
+    
+    // Aggregate metrics by listing
+    const metrics: Record<string, { views: number; wa_clicks: number; email_clicks: number }> = {}
+    
+    // Process events (views and WA clicks)
+    if (eventsData) {
+      for (const event of eventsData) {
+        if (!event.listing_id) continue
+        if (!metrics[event.listing_id]) {
+          metrics[event.listing_id] = { views: 0, wa_clicks: 0, email_clicks: 0 }
+        }
+        if (event.type === 'listing_view') {
+          metrics[event.listing_id].views += 1
+        } else if (event.type === 'wa_click') {
+          metrics[event.listing_id].wa_clicks += 1
+        }
+      }
+    }
+    
+    // Process contact_events (email clicks)
+    if (contactEventsData) {
+      for (const event of contactEventsData) {
+        if (!event.listing_id) continue
+        if (!metrics[event.listing_id]) {
+          metrics[event.listing_id] = { views: 0, wa_clicks: 0, email_clicks: 0 }
+        }
+        metrics[event.listing_id].email_clicks += 1
+      }
+    }
+    
+    // Merge metrics with listings
+    return listings.map((l: any) => ({
+      ...l,
+      views_30d: metrics[l.id]?.views || 0,
+      wa_clicks_30d: metrics[l.id]?.wa_clicks || 0,
+      email_clicks_30d: metrics[l.id]?.email_clicks || 0,
+      total_contacts_30d: (metrics[l.id]?.wa_clicks || 0) + (metrics[l.id]?.email_clicks || 0),
+    })) as ListingRow[]
+  } catch (err) {
+    console.warn('[seller-ops] failed to fetch engagement metrics', err)
+    return listings as ListingRow[]
+  }
+}
+
 export async function fetchSellerOpsDetails(sellerId: string): Promise<SellerOpsDetails> {
   if (!supabaseEnabled) {
     return { sellerId, summary: null, profile: null, listings: [], outreach: [], tasksOpen: [], notes: [] }
@@ -162,7 +297,7 @@ export async function fetchSellerOpsDetails(sellerId: string): Promise<SellerOps
   const [
     summaryResp,
     profileResp,
-    listingsResp,
+    listingsData,
     outreachResp,
     tasksResp,
     notesResp,
@@ -177,12 +312,7 @@ export async function fetchSellerOpsDetails(sellerId: string): Promise<SellerOps
       .select('id,email,full_name,whatsapp_number,verified,created_at,store_enabled,store_name,store_slug,store_phone,store_website,city,province,bio')
       .eq('id', sellerId)
       .maybeSingle(),
-    supabase
-      .from('listings')
-      .select('id,title,status,moderation_state,created_at,expires_at,price,price_currency,slug')
-      .eq('seller_id', sellerId)
-      .order('created_at', { ascending: false })
-      .limit(50),
+    fetchListingsWithEngagement(sellerId, supabase),
     supabase
       .from('seller_outreach')
       .select('id,seller_id,listing_id,channel,template_key,message_preview,status,created_by,created_at,sent_at,meta')
@@ -211,7 +341,7 @@ export async function fetchSellerOpsDetails(sellerId: string): Promise<SellerOps
     sellerId,
     summary,
     profile,
-    listings: Array.isArray(listingsResp.data) ? (listingsResp.data as unknown as ListingRow[]) : [],
+    listings: Array.isArray(listingsData) ? listingsData : [],
     outreach: Array.isArray(outreachResp.data) ? (outreachResp.data as unknown as SellerOutreachRow[]) : [],
     tasksOpen: Array.isArray(tasksResp.data) ? (tasksResp.data as unknown as SellerTaskRow[]) : [],
     notes: Array.isArray(notesResp.data) ? (notesResp.data as unknown as SellerNoteRow[]) : [],
@@ -404,5 +534,158 @@ export async function markSellerSale(args: {
     source: args.source ?? 'admin_manual',
     created_by: args.createdBy ?? null,
   })
+  if (error) throw error
+}
+
+// Tags management
+export const PREDEFINED_TAGS = [
+  { key: 'hot_lead', label: '🔥 Hot Lead', color: '#ef4444' },
+  { key: 'call_today', label: '📞 Llamar hoy', color: '#f59e0b' },
+  { key: 'vip', label: '⭐ VIP', color: '#8b5cf6' },
+  { key: 'needs_price_help', label: '💰 Ayuda con precio', color: '#10b981' },
+  { key: 'photo_issues', label: '📸 Problemas fotos', color: '#6b7280' },
+  { key: 'responsive', label: '💬 Responde rápido', color: '#3b82f6' },
+  { key: 'unresponsive', label: '😴 No responde', color: '#9ca3af' },
+  { key: 'renewal_risk', label: '⚠️ Riesgo renovación', color: '#dc2626' },
+] as const
+
+export type SellerTag = typeof PREDEFINED_TAGS[number]['key']
+
+export async function fetchSellerTags(sellerId: string): Promise<string[]> {
+  if (!supabaseEnabled) return []
+  const supabase = getSupabaseClient()
+  const { data, error } = await supabase
+    .from('seller_pipeline')
+    .select('tags')
+    .eq('seller_id', sellerId)
+    .maybeSingle()
+  
+  if (error) {
+    console.warn('[seller-tags] fetch failed', error)
+    return []
+  }
+  return (data?.tags as string[]) || []
+}
+
+export async function addSellerTag(sellerId: string, tag: string): Promise<void> {
+  if (!supabaseEnabled) throw new Error('supabase_disabled')
+  const supabase = getSupabaseClient()
+  
+  // Get current tags
+  const { data } = await supabase
+    .from('seller_pipeline')
+    .select('tags')
+    .eq('seller_id', sellerId)
+    .maybeSingle()
+  
+  const currentTags = (data?.tags as string[]) || []
+  if (currentTags.includes(tag)) return // Already exists
+  
+  const { error } = await supabase
+    .from('seller_pipeline')
+    .upsert({
+      seller_id: sellerId,
+      tags: [...currentTags, tag],
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'seller_id' })
+  
+  if (error) throw error
+}
+
+export async function removeSellerTag(sellerId: string, tag: string): Promise<void> {
+  if (!supabaseEnabled) throw new Error('supabase_disabled')
+  const supabase = getSupabaseClient()
+  
+  // Get current tags
+  const { data } = await supabase
+    .from('seller_pipeline')
+    .select('tags')
+    .eq('seller_id', sellerId)
+    .maybeSingle()
+  
+  const currentTags = (data?.tags as string[]) || []
+  const newTags = currentTags.filter(t => t !== tag)
+  
+  const { error } = await supabase
+    .from('seller_pipeline')
+    .upsert({
+      seller_id: sellerId,
+      tags: newTags,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'seller_id' })
+  
+  if (error) throw error
+}
+
+// Follow-ups (uses seller_tasks table with type=FOLLOWUP)
+export interface FollowUpData {
+  id?: string
+  sellerId: string
+  dueAt: string // ISO date
+  type: 'whatsapp' | 'email' | 'call'
+  note?: string
+  createdBy?: string | null
+}
+
+export async function scheduleFollowUp(args: FollowUpData): Promise<void> {
+  if (!supabaseEnabled) throw new Error('supabase_disabled')
+  const supabase = getSupabaseClient()
+  
+  const { error } = await supabase.from('seller_tasks').insert({
+    seller_id: args.sellerId,
+    type: `FOLLOWUP_${args.type.toUpperCase()}`,
+    due_at: args.dueAt,
+    status: 'open',
+    source: 'manual',
+    priority: 1, // Higher priority for follow-ups
+    payload: { 
+      note: args.note || '',
+      created_by: args.createdBy,
+    },
+  })
+  
+  if (error) throw error
+}
+
+export async function completeFollowUp(taskId: string): Promise<void> {
+  if (!supabaseEnabled) throw new Error('supabase_disabled')
+  const supabase = getSupabaseClient()
+  
+  const { error } = await supabase
+    .from('seller_tasks')
+    .update({ status: 'done', completed_at: new Date().toISOString() })
+    .eq('id', taskId)
+  
+  if (error) throw error
+}
+
+export async function snoozeFollowUp(taskId: string, hours: number): Promise<void> {
+  if (!supabaseEnabled) throw new Error('supabase_disabled')
+  const supabase = getSupabaseClient()
+  
+  const newDueAt = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString()
+  
+  const { error } = await supabase
+    .from('seller_tasks')
+    .update({ due_at: newDueAt, status: 'snoozed' })
+    .eq('id', taskId)
+  
+  if (error) throw error
+}
+
+// Mark listing as sold
+export async function markListingAsSold(listingId: string): Promise<void> {
+  if (!supabaseEnabled) throw new Error('supabase_disabled')
+  const supabase = getSupabaseClient()
+  
+  const { error } = await supabase
+    .from('listings')
+    .update({ 
+      status: 'sold',
+      updated_at: new Date().toISOString(),
+      expires_at: new Date().toISOString(), // Expire immediately
+    })
+    .eq('id', listingId)
+  
   if (error) throw error
 }

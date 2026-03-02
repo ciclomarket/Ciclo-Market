@@ -49,6 +49,12 @@ export interface SellerOpsTableProps {
   sortField: SellerOpsSortField
   sortDirection: SellerOpsSortDirection
   onToggleSort: (field: SellerOpsSortField) => void
+  // Bulk selection props
+  selectedIds: Set<string>
+  onToggleSelect: (sellerId: string) => void
+  onSelectAll: () => void
+  onSelectNone: () => void
+  isAllSelected: boolean
 }
 
 function sortIndicator(active: boolean, direction: SellerOpsSortDirection): string {
@@ -90,6 +96,11 @@ export function SellerOpsTable({
   sortField,
   sortDirection,
   onToggleSort,
+  selectedIds,
+  onToggleSelect,
+  onSelectAll,
+  onSelectNone,
+  isAllSelected,
 }: SellerOpsTableProps) {
   if (rows.length === 0) {
     return (
@@ -101,10 +112,21 @@ export function SellerOpsTable({
     )
   }
 
+  const selectedCount = selectedIds.size
+
   return (
     <table className="admin-table">
       <thead>
         <tr>
+          <th style={{ width: 40, textAlign: 'center' }}>
+            <input
+              type="checkbox"
+              checked={isAllSelected}
+              onChange={() => isAllSelected ? onSelectNone() : onSelectAll()}
+              style={{ cursor: 'pointer' }}
+              title={isAllSelected ? 'Deseleccionar todos' : 'Seleccionar todos de esta página'}
+            />
+          </th>
           <th style={{ minWidth: 200 }}>Seller</th>
           <th style={{ textAlign: 'center' }}>
             <SortableHeader label="Score" field="score" sortField={sortField} sortDirection={sortDirection} onToggleSort={onToggleSort} />
@@ -131,8 +153,21 @@ export function SellerOpsTable({
         </tr>
       </thead>
       <tbody>
-        {rows.map((row) => (
-          <tr key={row.seller_id}>
+        {rows.map((row) => {
+          const isSelected = selectedIds.has(row.seller_id)
+          return (
+          <tr 
+            key={row.seller_id}
+            style={isSelected ? { background: '#eff6ff' } : undefined}
+          >
+            <td style={{ textAlign: 'center' }}>
+              <input
+                type="checkbox"
+                checked={isSelected}
+                onChange={() => onToggleSelect(row.seller_id)}
+                style={{ cursor: 'pointer' }}
+              />
+            </td>
             <td>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
                 <div style={{ fontWeight: 600, color: 'var(--admin-text)' }}>
@@ -211,7 +246,7 @@ export function SellerOpsTable({
               </div>
             </td>
           </tr>
-        ))}
+        )})}
       </tbody>
     </table>
   )

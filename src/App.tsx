@@ -63,6 +63,7 @@ const CheckoutFailure = lazy(() => import('./pages/Checkout/Failure'))
 const CheckoutPending = lazy(() => import('./pages/Checkout/Pending'))
 import SeoHead, { type SeoHeadProps } from './components/SeoHead'
 import GlobalJsonLd from './components/GlobalJsonLd'
+import Breadcrumbs from './components/Breadcrumbs'
 import { useRef } from 'react'
 import { trackMetaPixel } from './lib/metaPixel'
 const MyListingsPage = lazyWithRetry(() => import('./pages/MyListings'))
@@ -494,6 +495,7 @@ export default function App() {
                   <SeoHead {...seoConfig} />
                   <GlobalJsonLd />
                   {!isInstagramLanding && <Header />}
+                  <Breadcrumbs />
                   <ScrollToTop />
 
                   <main className="flex-1">

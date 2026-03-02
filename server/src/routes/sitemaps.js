@@ -99,6 +99,47 @@ function buildUrlSet(urls, fallbackEntry) {
     .join('\n')}\n</urlset>`
 }
 
+// Sitemap con imágenes (para listings)
+function buildUrlSetWithImages(urls, fallbackEntry) {
+  const entries = Array.isArray(urls) ? [...urls] : []
+  if (entries.length === 0) {
+    const fallback =
+      fallbackEntry && fallbackEntry.loc
+        ? fallbackEntry
+        : {
+            loc: resolveFrontendBaseUrl(),
+            changefreq: 'weekly',
+            priority: '0.3',
+          }
+    entries.push(fallback)
+  }
+  
+  return `${XML_HEADER}\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n${entries
+    .map((entry) => {
+      let parts = [`    <url>`, `      <loc>${escapeXml(entry.loc)}</loc>`]
+      if (entry.lastmod) parts.push(`      <lastmod>${escapeXml(entry.lastmod)}</lastmod>`)
+      if (entry.changefreq) parts.push(`      <changefreq>${escapeXml(entry.changefreq)}</changefreq>`)
+      if (entry.priority) parts.push(`      <priority>${escapeXml(entry.priority)}</priority>`)
+      
+      // Agregar imágenes si existen
+      if (entry.images && Array.isArray(entry.images) && entry.images.length > 0) {
+        entry.images.forEach((img) => {
+          if (img.url) {
+            parts.push(`      <image:image>`)
+            parts.push(`        <image:loc>${escapeXml(img.url)}</image:loc>`)
+            if (img.title) parts.push(`        <image:title>${escapeXml(img.title)}</image:title>`)
+            if (img.caption) parts.push(`        <image:caption>${escapeXml(img.caption)}</image:caption>`)
+            parts.push(`      </image:image>`)
+          }
+        })
+      }
+      
+      parts.push('    </url>')
+      return parts.join('\n')
+    })
+    .join('\n')}\n</urlset>`
+}
+
 function buildSitemapIndex(entries) {
   const payload = entries
     .map(({ loc, lastmod }) => {
@@ -235,12 +276,13 @@ async function getListingsPageData(page) {
 
   try {
     const supabase = getServerSupabaseClient()
+    // Usamos updated_at si existe (para detectar cambios de precio/descripción), sino created_at
+    // También traemos images para el image sitemap
     const { data, error, count } = await supabase
       .from('listings')
-      // Nota: algunas instalaciones no tienen `updated_at` en `listings`.
-      .select('slug, created_at, status', { count: 'exact' })
+      .select('slug, created_at, updated_at, status, images, title', { count: 'exact' })
       .eq('status', 'active')
-      .order('created_at', { ascending: false })
+      .order('updated_at', { ascending: false })
       .range(from, to)
     if (error) throw error
     const items = []
@@ -248,16 +290,34 @@ async function getListingsPageData(page) {
     for (const row of data || []) {
       const slug = String(row.slug || '').trim()
       if (!slug) continue
-      const lastmod = formatDate(row.created_at) || undefined
+      // Usar updated_at si existe, sino created_at
+      const dateToUse = row.updated_at || row.created_at
+      const lastmod = formatDate(dateToUse) || undefined
       if (lastmod) {
         const ts = Date.parse(lastmod)
         if (!Number.isNaN(ts) && ts > latest) latest = ts
       }
+      
+      // Extraer primera imagen para el image sitemap
+      const images = []
+      if (row.images && Array.isArray(row.images) && row.images.length > 0) {
+        const firstImage = row.images[0]
+        const imageUrl = typeof firstImage === 'string' ? firstImage : (firstImage?.url || null)
+        if (imageUrl) {
+          images.push({
+            url: imageUrl,
+            title: row.title || 'Bicicleta en venta',
+            caption: `Bicicleta en venta en Ciclo Market`,
+          })
+        }
+      }
+      
       items.push({
         loc: `${origin}/listing/${encodeURIComponent(slug)}`,
         lastmod,
         changefreq: 'daily',
         priority: '0.9',
+        images: images.length > 0 ? images : undefined,
       })
     }
     const totalItems = typeof count === 'number' && count > 0 ? count : items.length
@@ -279,7 +339,7 @@ async function getListingsPageData(page) {
 
 async function getListingsSitemap(page) {
   const pageData = await getListingsPageData(page)
-  const xml = buildUrlSet(pageData.items)
+  const xml = buildUrlSetWithImages(pageData.items)
   return { xml, ...pageData }
 }
 
@@ -291,7 +351,7 @@ async function getShoppingSitemap() {
     ...entry,
     priority: '1.0',
   }))
-  const xml = buildUrlSet(items)
+  const xml = buildUrlSetWithImages(items)
   const payload = { xml, lastmod: pageData.lastmod }
   setCache('shopping', payload, 5 * 60 * 1000)
   return payload

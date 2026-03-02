@@ -194,7 +194,7 @@ router.get('/api/admin/crm/recommended-actions', async (req, res) => {
 
     let query = supabase
       .from('recommended_actions')
-      .select('*, seller:seller_id(seller_name), listing:listing_id(title)')
+      .select('*, seller:seller_id(full_name, store_name), listing:listing_id(title)')
       .eq('dismissed', false)
       .eq('completed', false)
       .order('priority', { ascending: true })
@@ -204,12 +204,16 @@ router.get('/api/admin/crm/recommended-actions', async (req, res) => {
     const { data, error } = await query.limit(20)
     if (error) throw error
 
-    // Transform data
-    const actions = (data || []).map(row => ({
-      ...row,
-      seller_name: row.seller?.seller_name,
-      listing_title: row.listing?.title,
-    }))
+    // Transform data - use full_name or store_name from users table
+    const actions = (data || []).map(row => {
+      const seller = row.seller || {}
+      const sellerName = seller.full_name || seller.store_name || 'Sin nombre'
+      return {
+        ...row,
+        seller_name: sellerName,
+        listing_title: row.listing?.title,
+      }
+    })
 
     res.json(actions)
   } catch (err) {
