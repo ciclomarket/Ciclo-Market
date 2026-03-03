@@ -11,10 +11,11 @@ const { sendMail, isMailConfigured } = require('../lib/mail')
 const {
   BRAND,
   escapeHtml,
+  formatPrice,
+  normaliseImageUrl,
   buildUnsubscribeLink,
   buildBaseLayout,
   buildHeroSection,
-  buildProductGrid,
   buildCTAButton,
   buildListingText,
 } = require('../emails/emailBase')
@@ -52,28 +53,54 @@ async function fetchLatestListings(supabase, limit = LISTINGS_COUNT) {
 }
 
 async function fetchNewsletterSubscribers(supabase, limit = DEFAULT_BATCH_LIMIT, excludeUserIds = []) {
-  // Paso 1: Obtener user_ids de usuarios con marketing_emails = true
-  let settingsQuery = supabase
-    .from('user_notification_settings')
-    .select('user_id')
-    .eq('marketing_emails', true)
-    .limit(limit * 2)
+  // Intentar obtener usuarios con marketing_emails = true
+  let userIds = []
   
-  if (excludeUserIds.length > 0) {
-    settingsQuery = settingsQuery.not('user_id', 'in', `(${excludeUserIds.join(',')})`)
+  try {
+    let settingsQuery = supabase
+      .from('user_notification_settings')
+      .select('user_id')
+      .eq('marketing_emails', true)
+      .limit(limit * 2)
+    
+    if (excludeUserIds.length > 0) {
+      settingsQuery = settingsQuery.not('user_id', 'in', `(${excludeUserIds.join(',')})`)
+    }
+    
+    const { data: settingsData } = await settingsQuery
+    userIds = (settingsData || []).map(row => row.user_id).filter(Boolean)
+  } catch (e) {
+    // Fallback: tabla vacía o no existe
   }
   
-  const { data: settingsData, error: settingsError } = await settingsQuery
-  
-  if (settingsError) {
-    console.warn(`[${AUTOMATION_TYPE}] error fetching settings`, settingsError)
-    return []
+  // Si no hay usuarios con marketing_emails, usar TODOS los usuarios
+  if (!userIds.length) {
+    console.info(`[${AUTOMATION_TYPE}] user_notification_settings vacía, usando todos los usuarios`)
+    
+    let usersQuery = supabase
+      .from('users')
+      .select('id,email,full_name')
+      .limit(limit * 2)
+    
+    if (excludeUserIds.length > 0) {
+      usersQuery = usersQuery.not('id', 'in', `(${excludeUserIds.join(',')})`)
+    }
+    
+    const { data: allUsers, error: usersError } = await usersQuery
+    
+    if (usersError) {
+      console.warn(`[${AUTOMATION_TYPE}] error fetching users`, usersError)
+      return []
+    }
+    
+    return (allUsers || []).map(row => ({
+      userId: row.id,
+      email: row.email,
+      fullName: row.full_name || 'Ciclista',
+    })).filter(u => u.email).slice(0, limit)
   }
   
-  const userIds = (settingsData || []).map(row => row.user_id).filter(Boolean)
-  if (!userIds.length) return []
-  
-  // Paso 2: Obtener datos de usuarios
+  // Obtener datos de usuarios con marketing_emails
   const { data: usersData, error: usersError } = await supabase
     .from('users')
     .select('id,email,full_name')
