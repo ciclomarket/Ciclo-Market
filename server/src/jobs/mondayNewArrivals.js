@@ -52,27 +52,42 @@ async function fetchLatestListings(supabase, limit = LISTINGS_COUNT) {
 }
 
 async function fetchNewsletterSubscribers(supabase, limit = DEFAULT_BATCH_LIMIT, excludeUserIds = []) {
-  let query = supabase
+  // Paso 1: Obtener user_ids de usuarios con marketing_emails = true
+  let settingsQuery = supabase
     .from('user_notification_settings')
-    .select('user_id, marketing_emails, users!inner(id,email,full_name)')
+    .select('user_id')
     .eq('marketing_emails', true)
-    .limit(limit)
+    .limit(limit * 2)
   
   if (excludeUserIds.length > 0) {
-    query = query.not('user_id', 'in', `(${excludeUserIds.join(',')})`)
+    settingsQuery = settingsQuery.not('user_id', 'in', `(${excludeUserIds.join(',')})`)
   }
   
-  const { data, error } = await query
+  const { data: settingsData, error: settingsError } = await settingsQuery
   
-  if (error) {
-    console.warn(`[${AUTOMATION_TYPE}] error fetching subscribers`, error)
+  if (settingsError) {
+    console.warn(`[${AUTOMATION_TYPE}] error fetching settings`, settingsError)
     return []
   }
   
-  return (data || []).map(row => ({
-    userId: row.user_id,
-    email: row.users?.email,
-    fullName: row.users?.full_name || 'Ciclista',
+  const userIds = (settingsData || []).map(row => row.user_id).filter(Boolean)
+  if (!userIds.length) return []
+  
+  // Paso 2: Obtener datos de usuarios
+  const { data: usersData, error: usersError } = await supabase
+    .from('users')
+    .select('id,email,full_name')
+    .in('id', userIds.slice(0, limit))
+  
+  if (usersError) {
+    console.warn(`[${AUTOMATION_TYPE}] error fetching users`, usersError)
+    return []
+  }
+  
+  return (usersData || []).map(row => ({
+    userId: row.id,
+    email: row.email,
+    fullName: row.full_name || 'Ciclista',
   })).filter(u => u.email)
 }
 
