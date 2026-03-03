@@ -23,7 +23,8 @@ const ChooseType = lazyWithRetry(() => import('./pages/Publish/ChooseType'))
 const PublishNew = lazyWithRetry(() => import('./pages/Publish/PublishNew'))
 const ListingDetail = lazyWithRetry(() => import('./pages/ListingDetail'))
 const HighlightListing = lazyWithRetry(() => import('./pages/HighlightListing'))
-const Dashboard = lazyWithRetry(() => import('./pages/Dashboard'))
+const Dashboard = lazyWithRetry(() => import('./pages/DashboardUnified'))
+const StoreDashboard = lazyWithRetry(() => import('./pages/DashboardUnified')) // Deprecated: using unified dashboard
 const Profile = lazyWithRetry(() => import('./pages/Profile'))
 const Login = lazyWithRetry(() => import('./pages/Auth/Login'))
 const Register = lazyWithRetry(() => import('./pages/Auth/Register'))
@@ -567,6 +568,10 @@ export default function App() {
                             <Dashboard />
                           </ProtectedRoute>
                         }
+                      />
+                      <Route
+                        path="/dashboard/tienda"
+                        element={<Navigate to="/dashboard?tab=tienda" replace />}
                       />
                       <Route
                         path="/my-listings"

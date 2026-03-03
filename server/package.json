@@ -13,7 +13,14 @@
     "campaign:trustblast": "node ./scripts/campaigns/sendTrustLevelBlast.js",
     "send-upsell-emails": "node ./scripts/campaigns/sendWhatsappUpsellBlast.js",
     "campaign:free-recent-whatsapp": "node ./scripts/campaigns/sendFreeRecentWhatsappUpsell.js",
-    "campaign:carnaval": "node ./scripts/campaigns/sendCarnavalDiscountBlast.js"
+    "campaign:carnaval": "node ./scripts/campaigns/sendCarnavalDiscountBlast.js",
+    "email:monday:once": "node -e \"require('./src/jobs/mondayNewArrivals').sendMondayEmails({dryRun:false}).then(r=>{console.log(r);process.exit(0)}).catch(e=>{console.error(e);process.exit(1)})\"",
+    "email:monday:dry": "node -e \"require('./src/jobs/mondayNewArrivals').sendMondayEmails({dryRun:true,limit:5}).then(r=>{console.log(JSON.stringify(r,null,2));process.exit(0)}).catch(e=>{console.error(e);process.exit(1)})\"",
+    "email:wednesday:once": "node -e \"require('./src/jobs/wednesdayListingUpdate').sendWednesdayEmails({dryRun:false}).then(r=>{console.log(r);process.exit(0)}).catch(e=>{console.error(e);process.exit(1)})\"",
+    "email:wednesday:dry": "node -e \"require('./src/jobs/wednesdayListingUpdate').sendWednesdayEmails({dryRun:true,limit:5}).then(r=>{console.log(JSON.stringify(r,null,2));process.exit(0)}).catch(e=>{console.error(e);process.exit(1)})\"",
+    "email:friday:once": "node -e \"require('./src/jobs/fridayUpgradeOffer').sendFridayEmails({dryRun:false}).then(r=>{console.log(r);process.exit(0)}).catch(e=>{console.error(e);process.exit(1)})\"",
+    "email:friday:dry": "node -e \"require('./src/jobs/fridayUpgradeOffer').sendFridayEmails({dryRun:true,limit:5}).then(r=>{console.log(JSON.stringify(r,null,2));process.exit(0)}).catch(e=>{console.error(e);process.exit(1)})\"",
+    "email:test": "node ./scripts/sendTestEmail.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.74.0",

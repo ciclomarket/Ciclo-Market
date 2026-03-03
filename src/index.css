@@ -317,3 +317,12 @@ body {
 .animate-float-slow { animation: floatSlow 7s ease-in-out infinite; }
 .animate-float-medium { animation: floatMedium 5.5s ease-in-out infinite; }
 .perspective-1000 { perspective: 1000px; }
+
+/* Hide scrollbar but allow scrolling */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}

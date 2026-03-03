@@ -124,6 +124,10 @@ export default function Profile() {
     if (!Number.isFinite(raw)) return 0
     return Math.min(Math.max(raw, 1), 5)
   }, [searchParams])
+  const listingIdFromUrl = useMemo(() => {
+    const raw = String(searchParams.get('listing_id') || '').trim()
+    return raw || undefined
+  }, [searchParams])
 
   const [activeTab, setActiveTab] = useState<SellerTab>('Perfil')
   const [mobileActiveTab, setMobileActiveTab] = useState<SellerTab | null>(null)
@@ -839,7 +843,7 @@ export default function Profile() {
               if (!sellerId || !user?.id) return
               try {
                 setReviewSubmitting(true)
-                await submitReview({ sellerId, buyerId: user.id, rating: reviewRating, isVerifiedSale: reviewIsVerifiedSale, tags: reviewTags, comment: reviewComment })
+                await submitReview({ sellerId, buyerId: user.id, listingId: listingIdFromUrl, rating: reviewRating, isVerifiedSale: reviewIsVerifiedSale, tags: reviewTags, comment: reviewComment })
                 showToast('Gracias por tu reseña')
                 setReviewModalOpen(false)
                 setReviewRating(0)

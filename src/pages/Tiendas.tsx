@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { MapPin, Package } from 'lucide-react'
+import { MapPin, Package, Search, Store, CheckCircle2, Star, Phone, Globe } from 'lucide-react'
 import Container from '../components/Container'
 import SeoHead from '../components/SeoHead'
 import { fetchStores, fetchStoreActivityCounts, type StoreSummary } from '../services/users'
@@ -8,14 +8,15 @@ import { fetchListings } from '../services/listings'
 import { buildPublicUrlSafe } from '../lib/supabaseImages'
 import type { Category } from '../types'
 
-type StoreCategoryFilter = 'Todos' | 'Accesorios' | 'Indumentaria'
+type StoreCategoryFilter = 'Todos' | 'Bicicletas' | 'Accesorios' | 'Indumentaria'
 type StoreCategoryMap = Record<string, Category[]>
 type ProvinceCount = Record<string, number>
 
-const STORE_CATEGORY_CARDS: Array<{ key: StoreCategoryFilter; label: string; description: string }> = [
-  { key: 'Todos', label: 'Todas', description: 'Todo el catálogo disponible' },
-  { key: 'Accesorios', label: 'Accesorios', description: 'Componentes, upgrades y electrónica' },
-  { key: 'Indumentaria', label: 'Indumentaria', description: 'Ropa técnica y cascos' },
+const STORE_CATEGORY_CARDS: Array<{ key: StoreCategoryFilter; label: string; description: string; icon: string }> = [
+  { key: 'Todos', label: 'Todas las tiendas', description: 'Ver todo el catálogo', icon: '🏪' },
+  { key: 'Bicicletas', label: 'Bicicletas', description: 'Tiendas especializadas', icon: '🚲' },
+  { key: 'Accesorios', label: 'Accesorios', description: 'Componentes y upgrades', icon: '🔧' },
+  { key: 'Indumentaria', label: 'Indumentaria', description: 'Ropa técnica y cascos', icon: '👕' },
 ]
 
 const normalizeText = (value: string) =>
@@ -171,70 +172,109 @@ export default function Tiendas() {
     })
   }
   if (query.trim()) {
-    activeFilterChips.push({ key: 'query', label: `Búsqueda: “${query.trim()}”`, onRemove: () => setQuery('') })
+    activeFilterChips.push({ key: 'query', label: `Búsqueda: "${query.trim()}"`, onRemove: () => setQuery('') })
   }
   const hasActiveFilters = activeFilterChips.length > 0
 
   return (
     <>
       <SeoHead
-        title="Tiendas oficiales | Ciclo Market"
+        title="Tiendas oficiales de bicicletas | Ciclo Market"
         description="Descubrí tiendas oficiales verificadas en Ciclo Market. Explorá su catálogo, filtrá por provincia y encontrá productos publicados por cada tienda."
         canonicalPath="/tiendas"
       />
 
-      <div className="min-h-[calc(100vh-var(--header-h))] bg-gray-50">
-        <Container className="pt-10 pb-6">
-          <div className="max-w-3xl">
-            <h1 className="text-3xl font-extrabold tracking-tight text-mb-ink sm:text-4xl">Tiendas oficiales</h1>
-            <p className="mt-2 text-gray-600">
-              Tiendas verificadas dentro de Ciclo Market. Entrá a cada tienda para ver su catálogo y contacto.
+      {/* Hero Section */}
+      <div className="bg-gradient-to-br from-[#0f1729] via-[#1e293b] to-[#0f1729] text-white">
+        <Container className="py-16 md:py-20">
+          <div className="max-w-3xl mx-auto text-center">
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 backdrop-blur rounded-full text-sm font-medium mb-6">
+              <Store className="w-4 h-4" />
+              Tiendas Verificadas
+            </div>
+            <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight mb-4">
+              Tiendas oficiales
+            </h1>
+            <p className="text-lg text-white/80 max-w-2xl mx-auto">
+              Encontrá las mejores bicicleterías de Argentina. Todas las tiendas están verificadas 
+              y cuentan con catálogo actualizado, precios reales y atención personalizada.
             </p>
           </div>
+        </Container>
+      </div>
 
-          <div className="mt-6 grid gap-3 md:grid-cols-12 md:items-end">
-            <div className="md:col-span-6">
-              <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500">Buscar</label>
-              <input
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Nombre de tienda, ciudad o provincia…"
-                className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-mb-ink shadow-sm focus:border-mb-primary focus:ring-1 focus:ring-mb-primary"
-              />
-            </div>
-            <div className="md:col-span-3">
-              <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500">Provincia</label>
-              <select
-                value={selectedProvinces[0] ?? ''}
-                onChange={(event) => {
-                  const value = event.target.value
-                  setSelectedProvinces(value ? [value] : [])
+      {/* Search & Filters Bar */}
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-30">
+        <Container className="py-3 md:py-4">
+          {/* Mobile: Compact filters row */}
+          <div className="flex flex-col gap-3">
+            {/* Search + Filters Row */}
+            <div className="flex gap-2">
+              {/* Search */}
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="search"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Buscar tienda..."
+                  className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-900 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
+                />
+              </div>
+              
+              {/* Mobile filter button */}
+              <button
+                type="button"
+                onClick={() => {
+                  const el = document.getElementById('mobile-filters')
+                  el?.classList.toggle('hidden')
                 }}
-                className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm text-mb-ink shadow-sm focus:border-mb-primary focus:ring-1 focus:ring-mb-primary"
+                className="md:hidden flex items-center gap-1.5 px-3 py-2.5 bg-gray-100 text-gray-700 rounded-xl text-sm font-medium"
               >
-                <option value="">Todas</option>
-                {provinceOptions.map((p) => (
-                  <option key={p} value={p}>
-                    {p} ({provinceCounts[p] ?? 0})
-                  </option>
-                ))}
-              </select>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                </svg>
+                Filtros
+              </button>
             </div>
-            <div className="md:col-span-3">
-              <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500">Orden</label>
-              <select
-                value={sortMode}
-                onChange={(event) => setSortMode(event.target.value as 'active' | 'alpha')}
-                className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm text-mb-ink shadow-sm focus:border-mb-primary focus:ring-1 focus:ring-mb-primary"
-              >
-                <option value="active">Más activas</option>
-                <option value="alpha">Alfabético</option>
-              </select>
+            
+            {/* Desktop filters */}
+            <div id="mobile-filters" className="hidden md:flex flex-col md:flex-row gap-3">
+              {/* Province Select */}
+              <div className="md:w-56">
+                <select
+                  value={selectedProvinces[0] ?? ''}
+                  onChange={(event) => {
+                    const value = event.target.value
+                    setSelectedProvinces(value ? [value] : [])
+                  }}
+                  className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                >
+                  <option value="">Todas las provincias</option>
+                  {provinceOptions.map((p) => (
+                    <option key={p} value={p}>
+                      {p} ({provinceCounts[p] ?? 0})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Sort */}
+              <div className="md:w-40">
+                <select
+                  value={sortMode}
+                  onChange={(event) => setSortMode(event.target.value as 'active' | 'alpha')}
+                  className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                >
+                  <option value="active">Más activas</option>
+                  <option value="alpha">Alfabético</option>
+                </select>
+              </div>
             </div>
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center gap-2">
+          {/* Category Chips - Horizontal scroll on mobile */}
+          <div className="flex items-center gap-2 mt-3 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0 md:pb-0 md:flex-wrap scrollbar-hide">
             {STORE_CATEGORY_CARDS.map((card) => {
               const active = categoryFilter === card.key
               return (
@@ -242,59 +282,74 @@ export default function Tiendas() {
                   key={card.key}
                   type="button"
                   onClick={() => setCategoryFilter(card.key)}
-                  className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                  className={`flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium whitespace-nowrap transition flex-shrink-0 ${
                     active
-                      ? 'bg-mb-primary text-white shadow-sm'
-                      : 'bg-white text-mb-ink border border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                      ? 'bg-blue-600 text-white shadow-md'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
-                  {card.label}
+                  <span className="text-base">{card.icon}</span>
+                  <span>{card.label}</span>
                 </button>
               )
             })}
 
-            {hasActiveFilters ? (
+            {hasActiveFilters && (
               <button
                 type="button"
                 onClick={handleClearFilters}
-                className="ml-auto text-sm font-semibold text-gray-600 underline-offset-4 hover:text-gray-900 hover:underline"
+                className="ml-2 text-sm font-medium text-gray-500 hover:text-gray-900 whitespace-nowrap flex-shrink-0"
               >
-                Limpiar filtros
+                Limpiar
               </button>
-            ) : null}
+            )}
           </div>
 
-          {hasActiveFilters ? (
-            <div className="mt-3 flex flex-wrap items-center gap-2">
+          {/* Active Filters */}
+          {hasActiveFilters && (
+            <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-gray-100">
               {activeFilterChips.map((chip) => (
                 <button
                   key={chip.key}
                   type="button"
                   onClick={chip.onRemove}
-                  className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:border-gray-300"
+                  className="inline-flex items-center gap-2 rounded-full bg-blue-50 text-blue-700 px-3 py-1.5 text-sm font-medium hover:bg-blue-100"
                 >
                   <span>{chip.label}</span>
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    className="h-3.5 w-3.5"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6m0 12L6 6" />
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               ))}
             </div>
-          ) : null}
+          )}
         </Container>
+      </div>
 
-        <Container className="pb-12">
-          {loading ? (
-            <div className="rounded-2xl border border-gray-200 bg-white p-6 text-center text-gray-600">Cargando tiendas…</div>
-          ) : filteredStores.length ? (
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+      {/* Results */}
+      <Container className="py-8">
+        {loading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="bg-white rounded-xl md:rounded-2xl border border-gray-100 overflow-hidden animate-pulse">
+                <div className="h-28 sm:h-32 md:h-36 bg-gray-200" />
+                <div className="p-4 md:p-6">
+                  <div className="w-16 h-16 md:w-20 md:h-20 bg-gray-200 rounded-xl md:rounded-2xl -mt-8 md:-mt-10 mb-3 md:mb-4" />
+                  <div className="h-5 md:h-6 bg-gray-200 rounded w-3/4 mb-2" />
+                  <div className="h-3.5 md:h-4 bg-gray-200 rounded w-1/2" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : filteredStores.length ? (
+          <>
+            <div className="flex items-center justify-between mb-6">
+              <p className="text-gray-600">
+                Mostrando <span className="font-semibold text-gray-900">{filteredStores.length}</span> tiendas
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
               {filteredStores.map((store) => {
                 const storeName = store.store_name || store.store_slug
                 const avatar = buildPublicUrlSafe(store.store_avatar_url || '/avatar-placeholder.png') || ''
@@ -306,90 +361,143 @@ export default function Tiendas() {
                   <Link
                     key={store.id}
                     to={`/tienda/${encodeURIComponent(store.store_slug)}`}
-                    className="group overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-xl"
-                    aria-label={`Ver tienda ${storeName}`}
+                    className="group bg-white rounded-xl md:rounded-2xl border border-gray-100 overflow-hidden hover:shadow-lg md:hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5 md:hover:-translate-y-1"
                   >
-                    <div className="relative z-0 h-32 overflow-hidden">
+                    {/* Banner */}
+                    <div className="relative h-28 sm:h-32 md:h-36 overflow-hidden">
                       {banner ? (
-                        <img src={banner} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" />
+                        <img 
+                          src={banner} 
+                          alt="" 
+                          className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          loading="lazy" 
+                          decoding="async" 
+                        />
                       ) : (
-                        <div className="h-full w-full bg-gradient-to-r from-gray-800 to-gray-900" aria-hidden="true" />
+                        <div className="h-full w-full bg-gradient-to-r from-blue-600 to-blue-800" />
                       )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
+                      
+                      {/* Verified Badge */}
+                      <div className="absolute top-2 right-2 md:top-3 md:right-3">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 md:px-2.5 md:py-1 bg-white/90 backdrop-blur rounded-full text-xs font-medium text-blue-700">
+                          <CheckCircle2 className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                          <span className="hidden sm:inline">Verificada</span>
+                        </span>
+                      </div>
                     </div>
 
-                    <div className="px-6 pb-6">
-                      <div className="relative z-10 -mt-10 flex justify-center">
+                    {/* Content */}
+                    <div className="px-4 md:px-6 pb-4 md:pb-6">
+                      {/* Avatar */}
+                      <div className="relative -mt-8 md:-mt-12 mb-3 md:mb-4">
                         <img
                           src={avatar}
                           alt={storeName}
-                          className="h-20 w-20 rounded-full object-cover ring-4 ring-white shadow-sm"
+                          className="w-16 h-16 md:w-24 md:h-24 rounded-xl md:rounded-2xl object-cover ring-3 md:ring-4 ring-white shadow-md bg-white"
                           loading="lazy"
                           decoding="async"
                         />
                       </div>
 
-                      <div className="mt-4 text-center">
-                        <div className="text-lg font-bold text-mb-ink">{storeName}</div>
-                        <div className="mt-2 flex flex-col items-center gap-1 text-sm text-gray-600">
-                          <div className="flex items-center gap-2">
-                            <MapPin className="h-4 w-4 text-gray-400" aria-hidden="true" />
-                            <span className="truncate">{location}</span>
+                      {/* Info */}
+                      <div>
+                        <h3 className="text-lg md:text-xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors line-clamp-1">
+                          {storeName}
+                        </h3>
+                        
+                        <div className="mt-2 md:mt-3 space-y-1 md:space-y-2">
+                          <div className="flex items-center gap-1.5 text-xs md:text-sm text-gray-600">
+                            <MapPin className="h-3.5 w-3.5 md:h-4 md:w-4 text-gray-400 flex-shrink-0" />
+                            <span className="line-clamp-1">{location}</span>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <Package className="h-4 w-4 text-gray-400" aria-hidden="true" />
-                            <span>{productCount} productos publicados</span>
+                          
+                          <div className="flex items-center gap-1.5 text-xs md:text-sm text-gray-600">
+                            <Package className="h-3.5 w-3.5 md:h-4 md:w-4 text-gray-400" />
+                            <span>{productCount} productos</span>
                           </div>
                         </div>
-                      </div>
 
-                      <div className="mt-5">
-                        <span className="inline-flex w-full items-center justify-center rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-mb-ink transition group-hover:border-gray-300 group-hover:bg-gray-50">
-                          Ver tienda
-                        </span>
+                        {/* Quick Contact */}
+                        <div className="mt-3 md:mt-4 flex items-center gap-2">
+                          {store.store_phone && (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 md:px-3 md:py-1.5 bg-green-50 text-green-700 rounded-lg text-xs md:text-sm font-medium">
+                              <Phone className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                              <span className="hidden sm:inline">WhatsApp</span>
+                            </span>
+                          )}
+                          {store.store_website && (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 md:px-3 md:py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs md:text-sm font-medium">
+                              <Globe className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                              <span className="hidden sm:inline">Web</span>
+                            </span>
+                          )}
+                        </div>
+
+                        {/* CTA */}
+                        <div className="mt-3 md:mt-5">
+                          <span className="flex items-center justify-center w-full py-2 md:py-2.5 bg-gray-900 text-white rounded-lg md:rounded-xl text-sm md:text-base font-semibold group-hover:bg-blue-600 transition-colors">
+                            Ver catálogo
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </Link>
                 )
               })}
             </div>
-          ) : (
-            <div className="rounded-2xl border border-gray-200 bg-white p-6 text-center text-gray-600">
-              {stores.length === 0 ? 'No hay tiendas publicadas aún.' : 'No encontramos tiendas con esos filtros.'}
+          </>
+        ) : (
+          <div className="text-center py-16">
+            <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Store className="w-10 h-10 text-gray-400" />
             </div>
-          )}
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              {stores.length === 0 ? 'No hay tiendas publicadas aún' : 'No encontramos tiendas con esos filtros'}
+            </h3>
+            <p className="text-gray-500 mb-4">
+              {stores.length === 0 
+                ? 'Sé el primero en abrir una tienda en Ciclo Market' 
+                : 'Probá con otros filtros o búsqueda'}
+            </p>
+            {hasActiveFilters && (
+              <button
+                onClick={handleClearFilters}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700"
+              >
+                Limpiar filtros
+              </button>
+            )}
+          </div>
+        )}
 
-          <div className="mt-10 rounded-2xl border border-gray-200 bg-white p-6">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-mb-ink">¿Querés abrir una tienda en Ciclo Market?</h2>
-                <p className="mt-1 text-sm text-gray-600">
-                  Mostrá tu catálogo, sumá contacto directo y beneficios de difusión. Coordinemos la verificación.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-3">
-                <a
-                  href="mailto:admin@ciclomarket.ar"
-                  className="inline-flex items-center justify-center rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-mb-ink hover:bg-gray-50"
-                >
-                  admin@ciclomarket.ar
-                </a>
-                <Link
-                  to="/dashboard"
-                  className="inline-flex items-center justify-center rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-mb-ink hover:bg-gray-50"
-                >
-                  Ir al panel
-                </Link>
-                <Link
-                  to="/publicar"
-                  className="inline-flex items-center justify-center rounded-xl bg-mb-primary px-4 py-2 text-sm font-semibold text-white hover:bg-mb-primary/90"
-                >
-                  Ver planes
-                </Link>
-              </div>
+        {/* CTA Section */}
+        <div className="mt-16 bg-gradient-to-r from-blue-600 to-blue-700 rounded-3xl p-8 md:p-12 text-white text-center">
+          <div className="max-w-2xl mx-auto">
+            <h2 className="text-2xl md:text-3xl font-bold mb-4">
+              ¿Tenés una bicicletería?
+            </h2>
+            <p className="text-blue-100 text-lg mb-6">
+              Unite a las tiendas oficiales de Ciclo Market y llegá a miles de ciclistas. 
+              Publicá tu catálogo, recibí consultas y vendé más.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <Link
+                to="/vender/tiendas"
+                className="inline-flex items-center justify-center px-6 py-3 bg-white text-blue-600 rounded-xl font-semibold hover:bg-blue-50 transition-colors"
+              >
+                Conocer beneficios
+              </Link>
+              <a
+                href="mailto:admin@ciclomarket.ar"
+                className="inline-flex items-center justify-center px-6 py-3 bg-blue-500/50 backdrop-blur text-white rounded-xl font-semibold hover:bg-blue-500/70 transition-colors"
+              >
+                Contactar ventas
+              </a>
             </div>
           </div>
-        </Container>
-      </div>
+        </div>
+      </Container>
     </>
   )
 }

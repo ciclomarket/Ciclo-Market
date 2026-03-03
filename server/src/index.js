@@ -38,6 +38,16 @@ const { startSavedSearchDigestJob, runSavedSearchDigestOnce } = (() => {
 const { startDeletedPurgerJob } = (() => {
   try { return require('./jobs/deletedPurger') } catch { return {} }
 })()
+// New weekly email automations
+const { startMondayNewArrivalsJob, sendMondayEmails } = (() => {
+  try { return require('./jobs/mondayNewArrivals') } catch { return {} }
+})()
+const { startWednesdayListingUpdateJob, sendWednesdayEmails } = (() => {
+  try { return require('./jobs/wednesdayListingUpdate') } catch { return {} }
+})()
+const { startFridayUpgradeOfferJob, sendFridayEmails } = (() => {
+  try { return require('./jobs/fridayUpgradeOffer') } catch { return {} }
+})()
 const { buildStoreAnalyticsHTML } = (() => {
   try { return require('./emails/storeAnalyticsEmail') } catch { return {} }
 })()
@@ -48,6 +58,7 @@ const { processPayment, recordPaymentIntent } = require('./services/paymentServi
 const appApiRouter = require('./routes/appApi')
 const importRouter = require('./routes/import')
 const { whatsappRouter } = require('./routes/whatsapp')
+const emailCronRouter = require('./routes/emailCron')
 // Sweepstake feature removed
 const path = require('path')
 // const https = require('https') // removed: used only for Google rating proxy
@@ -357,6 +368,9 @@ app.use(crmAdvancedRouter)
 // WhatsApp Cloud API routes
 app.use(whatsappRouter)
 
+// Email automation cron routes (test endpoints)
+app.use(emailCronRouter)
+
 /* ----------------------------- Cron jobs ---------------------------------- */
 // Start scheduled jobs after basic middleware is ready
 try { startNewsletterDigestJob && startNewsletterDigestJob() } catch {}
@@ -364,6 +378,10 @@ try { startStoreAnalyticsDigestJob && startStoreAnalyticsDigestJob() } catch {}
 try { startMarketingAutomationsJob && startMarketingAutomationsJob() } catch {}
 try { startSavedSearchDigestJob && startSavedSearchDigestJob() } catch {}
 try { startDeletedPurgerJob && startDeletedPurgerJob() } catch {}
+// New weekly email automations
+try { startMondayNewArrivalsJob && startMondayNewArrivalsJob() } catch {}
+try { startWednesdayListingUpdateJob && startWednesdayListingUpdateJob() } catch {}
+try { startFridayUpgradeOfferJob && startFridayUpgradeOfferJob() } catch {}
 
 /* Google Reviews endpoints removed */
 

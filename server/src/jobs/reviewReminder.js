@@ -25,7 +25,7 @@ async function fetchReadyEmailReminders(supabase, limit) {
   const nowIso = new Date().toISOString()
   const { data, error } = await supabase
     .from('review_reminders')
-    .select('id,buyer_id,seller_id,ready_at,sent_email')
+    .select('id,buyer_id,seller_id,listing_id,ready_at,sent_email')
     .lte('ready_at', nowIso)
     .eq('sent_email', false)
     .order('ready_at', { ascending: true })
@@ -67,11 +67,12 @@ async function sendEmailsForReminders(supabase, reminders) {
     const to = buyer?.email
     if (!to) continue
     const sellerName = String(seller?.full_name || '').trim() || 'este vendedor'
-    const vendorUrl = baseFront ? `${baseFront}/vendedor/${r.seller_id}` : null
+    const listingIdParam = r.listing_id ? `&listing_id=${r.listing_id}` : ''
+    const vendorUrl = baseFront ? `${baseFront}/vendedor/${r.seller_id}?review=true${listingIdParam}` : null
     const starLinks = baseFront
       ? Array.from({ length: 5 }).map((_, idx) => {
         const rating = idx + 1
-        const href = `${baseFront}/vendedor/${r.seller_id}?review=true&rating=${rating}`
+        const href = `${baseFront}/vendedor/${r.seller_id}?review=true&rating=${rating}${listingIdParam}`
         return `<a href="${href}" style="display:inline-block;font-size:34px;line-height:1;color:#f59e0b;text-decoration:none;padding:0 4px;" title="${rating} de 5">★</a>`
       }).join('')
       : ''

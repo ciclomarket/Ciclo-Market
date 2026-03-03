@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { CalendarDays, Globe, Instagram, MapPin, Package } from 'lucide-react'
+import { CalendarDays, Globe, Instagram, MapPin, Package, MessageCircle, Star, CheckCircle2, Phone } from 'lucide-react'
 import Container from '../components/Container'
 import SeoHead, { type SeoHeadProps } from '../components/SeoHead'
 import FilterDropdown from '../components/FilterDropdown'
@@ -1515,81 +1515,123 @@ const handleClearFilters = useCallback(() => {
   return (
     <div className="min-h-[70vh] overflow-x-hidden bg-gray-50 text-gray-900">
       <SeoHead {...seoConfig} />
+      
+      {/* Hero Header - Mobile Optimized */}
       <div className="w-full">
-        <div className="relative h-48 w-full overflow-hidden bg-gradient-to-r from-gray-800 to-gray-900 md:h-64">
+        {/* Banner */}
+        <div className="relative h-40 sm:h-48 md:h-56 w-full overflow-hidden bg-gradient-to-r from-gray-900 to-gray-800">
           {banner ? (
             <img
               src={buildPublicUrlSafe(banner) || ''}
-              alt="Banner de la tienda"
+              alt=""
               className="h-full w-full object-cover"
               style={{ objectPosition: `center ${bannerPosY}%` }}
               loading="eager"
               decoding="async"
             />
-          ) : null}
-          <div className="pointer-events-none absolute inset-0 bg-black/10" aria-hidden="true" />
+          ) : (
+            <div className="absolute inset-0 bg-gradient-to-br from-blue-600 to-blue-800" />
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+          
+          {/* Stats Bar - Hidden on mobile, shown on sm+ */}
+          <div className="hidden sm:block absolute bottom-0 left-0 right-0">
+            <Container>
+              <div className="flex items-center gap-4 md:gap-6 py-3 text-white/90 text-xs md:text-sm">
+                <span className="flex items-center gap-1.5">
+                  <Package className="h-3.5 w-3.5 md:h-4 md:w-4" />
+                  {listings.length} productos
+                </span>
+                {profile.created_at && (
+                  <span className="flex items-center gap-1.5">
+                    <CalendarDays className="h-3.5 w-3.5 md:h-4 md:w-4" />
+                    Desde {new Date(profile.created_at).toLocaleDateString('es-AR', { year: 'numeric', month: 'short' })}
+                  </span>
+                )}
+                <span className="flex items-center gap-1 px-2 py-0.5 bg-white/20 backdrop-blur rounded-full text-xs font-medium">
+                  <CheckCircle2 className="h-3 w-3" />
+                  Verificada
+                </span>
+              </div>
+            </Container>
+          </div>
         </div>
 
+        {/* Store Info Bar */}
         <div className="bg-white border-b border-gray-200">
-          <Container className="pb-6">
-            <div className="relative -mt-4 flex flex-col gap-6 md:-mt-12 md:flex-row md:items-end md:justify-between">
-              <div className="flex items-end gap-4">
+          <Container className="pt-0 pb-4 sm:py-4">
+            {/* Mobile: Stack layout */}
+            <div className="flex flex-col">
+              {/* Avatar + Name Row */}
+              <div className="flex items-start gap-3 -mt-10 sm:-mt-12 mb-3 relative z-10">
                 <img
                   src={buildPublicUrlSafe(avatar) || ''}
                   alt={storeName}
-                  className="h-24 w-24 rounded-2xl object-cover ring-4 ring-white shadow-sm md:h-28 md:w-28"
+                  className="h-20 w-20 sm:h-24 sm:w-24 md:h-28 md:w-28 rounded-xl sm:rounded-2xl object-cover ring-4 ring-white shadow-lg bg-white flex-shrink-0 relative z-10"
                   loading="eager"
                   decoding="async"
                 />
-                <div className="min-w-0 pb-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h1 className="text-2xl font-extrabold tracking-tight text-mb-ink md:text-3xl">{storeName}</h1>
-                  </div>
-
-                  <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-gray-600">
-                    {address ? (
-                      <span className="inline-flex min-w-0 items-start gap-2">
-                        <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" aria-hidden="true" />
-                        <span className="min-w-0 whitespace-normal break-words leading-snug">{address}</span>
-                      </span>
-                    ) : null}
-
-                    {(profile.store_instagram || profile.store_website) ? (
-                      <span className="inline-flex items-center gap-3">
-                        {profile.store_instagram ? (
-                          <a
-                            href={normalizeHandle(profile.store_instagram, 'ig')}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-2 font-semibold text-gray-700 hover:text-mb-primary"
-                          >
-                            <Instagram className="h-4 w-4" aria-hidden="true" />
-                            Instagram
-                          </a>
-                        ) : null}
-                        {profile.store_website ? (
-                          <a
-                            href={profile.store_website}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-2 font-semibold text-gray-700 hover:text-mb-primary"
-                          >
-                            <Globe className="h-4 w-4" aria-hidden="true" />
-                            Web
-                          </a>
-                        ) : null}
-                      </span>
-                    ) : null}
+                <div className="pt-10 sm:pt-12 flex-1 min-w-0">
+                  <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-900 truncate">{storeName}</h1>
+                  {/* Mobile stats */}
+                  <div className="flex sm:hidden items-center gap-2 mt-1 text-xs text-gray-500">
+                    <span>{listings.length} productos</span>
+                    <span>•</span>
+                    <span className="text-emerald-600 font-medium">Verificada</span>
                   </div>
                 </div>
               </div>
 
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              {/* Address */}
+              {address && (
+                <div className="flex items-start gap-1.5 text-sm text-gray-600 mb-3">
+                  <MapPin className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                  <span className="line-clamp-2">{address}</span>
+                </div>
+              )}
+
+              {/* Social Links - Horizontal scroll on mobile */}
+              <div className="flex items-center gap-2 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 sm:pb-0 sm:flex-wrap scrollbar-hide">
+                {profile.store_instagram && (
+                  <a
+                    href={normalizeHandle(profile.store_instagram, 'ig')}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs sm:text-sm font-medium hover:bg-gray-200 transition-colors flex-shrink-0"
+                  >
+                    <Instagram className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                    Instagram
+                  </a>
+                )}
+                {profile.store_website && (
+                  <a
+                    href={profile.store_website}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs sm:text-sm font-medium hover:bg-gray-200 transition-colors flex-shrink-0"
+                  >
+                    <Globe className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                    Web
+                  </a>
+                )}
+                {profile.store_phone && (
+                  <a
+                    href={`tel:${profile.store_phone}`}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs sm:text-sm font-medium hover:bg-gray-200 transition-colors flex-shrink-0"
+                  >
+                    <Phone className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                    {profile.store_phone}
+                  </a>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 mt-4">
                 {(() => {
                   const waNumber = normaliseWhatsapp(profile.whatsapp_number || phone || '')
                   const trimmedStoreName = (storeName || '').trim()
                   const storeWaMessage = trimmedStoreName
-                    ? `Hola ${trimmedStoreName}! Vi tu tienda en Ciclo Market.`
+                    ? `Hola ${trimmedStoreName}! Vi tu tienda en Ciclo Market y me interesa consultarte.`
                     : 'Hola! Vi tu tienda en Ciclo Market.'
                   const waLink = buildWhatsappUrl(waNumber || (profile.whatsapp_number || phone || ''), storeWaMessage)
                   const href = waLink || undefined
@@ -1599,42 +1641,29 @@ const handleClearFilters = useCallback(() => {
                       href={href}
                       target={disabled ? undefined : '_blank'}
                       rel={disabled ? undefined : 'noreferrer'}
-                      className={`inline-flex items-center justify-center rounded-xl px-5 py-3 text-sm font-bold transition ${
+                      className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-bold transition ${
                         disabled
                           ? 'cursor-not-allowed bg-emerald-600/50 text-white/80'
-                          : 'bg-emerald-600 text-white hover:bg-emerald-500'
+                          : 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm'
                       }`}
                       onClick={(e) => {
                         if (disabled) e.preventDefault()
                       }}
-                      aria-label="Contactar por WhatsApp"
                     >
-                      Contactar por WhatsApp
+                      <MessageCircle className="h-4 w-4" />
+                      Contactar
                     </a>
                   )
                 })()}
 
                 <button
                   type="button"
-                  className="inline-flex items-center justify-center rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-bold text-mb-ink hover:bg-gray-50"
-                  aria-label="Seguir tienda"
+                  className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-bold text-gray-700 hover:bg-gray-50 transition-colors"
                 >
+                  <Star className="h-4 w-4" />
                   Seguir
                 </button>
               </div>
-            </div>
-
-            <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm text-gray-600">
-              <span className="inline-flex items-center gap-2">
-                <Package className="h-4 w-4 text-gray-400" aria-hidden="true" />
-                {listings.length} productos publicados
-              </span>
-              {profile.created_at ? (
-                <span className="inline-flex items-center gap-2">
-                  <CalendarDays className="h-4 w-4 text-gray-400" aria-hidden="true" />
-                  En Ciclo Market desde {new Date(profile.created_at).toLocaleDateString('es-AR', { year: 'numeric', month: 'long' })}
-                </span>
-              ) : null}
             </div>
           </Container>
         </div>

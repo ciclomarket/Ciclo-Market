@@ -307,6 +307,23 @@ export default function Dashboard() {
     }
   }, [loadData])
 
+  // Redirigir a dashboard de tienda si el usuario es store (solo en /dashboard sin tab específico)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    
+    const currentTab = searchParams.get('tab')
+    const currentPath = window.location.pathname
+    
+    // Solo redirigir si:
+    // 1. No está cargando
+    // 2. Es una tienda
+    // 3. No hay tab específico
+    // 4. Está exactamente en /dashboard (no en /dashboard/otra-cosa)
+    if (!loading && profile?.store_enabled && !currentTab && currentPath === '/dashboard') {
+      navigate('/dashboard/tienda', { replace: true })
+    }
+  }, [loading, profile?.store_enabled, navigate, searchParams])
+
   // Dispara eventos de registro y login tras volver de OAuth (si corresponde)
   useEffect(() => {
     try {
@@ -917,9 +934,14 @@ export default function Dashboard() {
               <p className="mt-1 text-sm text-gray-600">Gestioná tu tienda y mantené al día tus publicaciones.</p>
           <div className="mt-4 flex flex-wrap gap-2">
             {profile?.store_enabled && profile?.store_slug && (
-              <Button to={`/tienda/${profile.store_slug}`} variant="ghost" className="border-gray-300 text-[#14212e] hover:bg-gray-50">
-                Tu tienda
-              </Button>
+              <>
+                <Button to={`/tienda/${profile.store_slug}`} variant="ghost" className="border-gray-300 text-[#14212e] hover:bg-gray-50">
+                  Tu tienda
+                </Button>
+                <Button to="/dashboard/tienda" variant="ghost" className="border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100">
+                  Dashboard de tienda
+                </Button>
+              </>
             )}
             <Button
               to="/publicar"
