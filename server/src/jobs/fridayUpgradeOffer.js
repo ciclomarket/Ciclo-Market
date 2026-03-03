@@ -29,11 +29,31 @@ const DEFAULT_CRON = '0 11 * * 5' // Viernes 11am
 const DEFAULT_BATCH_LIMIT = 200
 const COOLDOWN_DAYS = 14 // No spamear, 14 días entre envíos
 
-const BENEFITS = [
-  'Contacto directo por WhatsApp para cerrar más rápido',
-  'Prioridad en el marketplace y hasta 14 días de destaque',
-  'Hasta 8 fotos y difusión en redes sociales',
-]
+// Planes y beneficios detallados
+const PLANS = {
+  premium: {
+    name: 'Plan PREMIUM',
+    price: 9000,
+    benefits: [
+      'Publicación destacada 14 días',
+      'Hasta 6 fotos',
+      'Prioridad en búsquedas',
+      'Soporte por email',
+    ]
+  },
+  pro: {
+    name: 'Plan PRO',
+    price: 13000,
+    benefits: [
+      'Publicación destacada 30 días',
+      'Hasta 12 fotos',
+      'Prioridad máxima en búsquedas',
+      'Soporte prioritario WhatsApp',
+      'Difusión en redes sociales',
+      'Badge "Vendedor Pro"',
+    ]
+  }
+}
 
 // Precios desde AVAILABLE_PLANS o fallback
 function getPlanPrices() {
@@ -229,53 +249,58 @@ function buildFridayEmail({ seller, baseFront, baseApi }) {
     </tr>
   </table>`
   
-  // Benefits
-  const benefitsSection = `
-  <!-- BENEFITS -->
-  <table align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;background:#ffffff;">
-    <tr>
-      <td style="padding:0 30px 20px;">
-        <h2 style="margin:0 0 20px;font-family:'Times New Roman',Times,serif;font-size:24px;font-weight:400;color:#000000;">¿Qué ganás al hacer upgrade?</h2>
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-          ${BENEFITS.map(b => `
-          <tr>
-            <td style="padding:8px 0;vertical-align:top;width:32px;">
-              <span style="display:inline-block;width:24px;height:24px;background:#000000;color:#ffffff;border-radius:50%;text-align:center;line-height:24px;font-size:14px;font-weight:700;">✓</span>
-            </td>
-            <td style="padding:8px 0;vertical-align:top;">
-              <span style="font-family:Helvetica,Arial,sans-serif;color:#000000;font-size:15px;line-height:130%;">${escapeHtml(b)}</span>
-            </td>
-          </tr>
-          `).join('')}
-        </table>
-      </td>
-    </tr>
-  </table>`
-  
-  // Pricing cards - 2 columnas
+  // Pricing cards - 2 columnas con checklists
   const pricingSection = `
   <!-- PRICING CARDS -->
   <table align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;background:#ffffff;">
     <tr>
       <td style="padding:20px 20px 30px;">
         <div style="overflow:hidden;">
-          <!-- Plan Básico -->
+          <!-- Plan PREMIUM -->
           <div class="col-product" style="padding:10px;box-sizing:border-box;">
-            <div style="border:1px solid #000000;border-radius:12px;padding:24px;text-align:center;">
-              <div style="font-family:Helvetica,Arial,sans-serif;font-size:14px;color:#64748b;margin-bottom:12px;">Plan Básico</div>
-              <div style="font-family:'Times New Roman',Times,serif;font-size:32px;font-weight:400;color:#000000;margin-bottom:4px;">${formatPrice(prices.basic)}</div>
-              <div style="font-family:Helvetica,Arial,sans-serif;font-size:12px;color:#64748b;margin-bottom:20px;">por publicación</div>
-              <a href="${checkoutBasic}" style="display:block;padding:14px;background:#000000;color:#ffffff;text-decoration:none;border-radius:100px;font-family:Helvetica,Arial,sans-serif;font-weight:600;font-size:14px;text-align:center;">Elegir Básico</a>
+            <div style="border:1px solid #000000;border-radius:12px;padding:24px;text-align:left;height:100%;">
+              <div style="text-align:center;margin-bottom:16px;">
+                <div style="font-family:Helvetica,Arial,sans-serif;font-size:12px;color:#64748b;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em;">Plan</div>
+                <div style="font-family:'Times New Roman',Times,serif;font-size:28px;font-weight:400;color:#000000;margin-bottom:8px;">PREMIUM</div>
+                <div style="font-family:'Times New Roman',Times,serif;font-size:32px;font-weight:400;color:#000000;">${formatPrice(PLANS.premium.price)}</div>
+              </div>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom:20px;">
+                ${PLANS.premium.benefits.map(benefit => `
+                <tr>
+                  <td style="padding:6px 0;vertical-align:top;width:20px;">
+                    <span style="color:#000000;font-size:14px;">✓</span>
+                  </td>
+                  <td style="padding:6px 0;vertical-align:top;">
+                    <span style="font-family:Helvetica,Arial,sans-serif;color:#000000;font-size:14px;line-height:130%;">${escapeHtml(benefit)}</span>
+                  </td>
+                </tr>
+                `).join('')}
+              </table>
+              <a href="${checkoutBasic}" style="display:block;padding:14px;background:#000000;color:#ffffff;text-decoration:none;border-radius:100px;font-family:Helvetica,Arial,sans-serif;font-weight:600;font-size:14px;text-align:center;">Elegir PREMIUM</a>
             </div>
           </div>
-          <!-- Plan Premium -->
+          <!-- Plan PRO -->
           <div class="col-product" style="padding:10px;box-sizing:border-box;">
-            <div style="border:2px solid #000000;border-radius:12px;padding:24px;text-align:center;position:relative;">
-              <div style="position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:#000000;color:#ffffff;padding:4px 12px;border-radius:12px;font-size:10px;font-weight:700;font-family:Helvetica,Arial,sans-serif;letter-spacing:0.05em;">RECOMENDADO</div>
-              <div style="font-family:Helvetica,Arial,sans-serif;font-size:14px;color:#64748b;margin-bottom:12px;margin-top:10px;">Plan Premium</div>
-              <div style="font-family:'Times New Roman',Times,serif;font-size:32px;font-weight:400;color:#000000;margin-bottom:4px;">${formatPrice(prices.premium)}</div>
-              <div style="font-family:Helvetica,Arial,sans-serif;font-size:12px;color:#64748b;margin-bottom:20px;">por publicación</div>
-              <a href="${checkoutPremium}" style="display:block;padding:14px;background:#000000;color:#ffffff;text-decoration:none;border-radius:100px;font-family:Helvetica,Arial,sans-serif;font-weight:600;font-size:14px;text-align:center;">Elegir Premium</a>
+            <div style="border:2px solid #000000;border-radius:12px;padding:24px;text-align:left;height:100%;position:relative;">
+              <div style="position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:#000000;color:#ffffff;padding:4px 16px;border-radius:12px;font-size:10px;font-weight:700;font-family:Helvetica,Arial,sans-serif;letter-spacing:0.05em;text-transform:uppercase;">Recomendado</div>
+              <div style="text-align:center;margin-bottom:16px;margin-top:10px;">
+                <div style="font-family:Helvetica,Arial,sans-serif;font-size:12px;color:#64748b;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em;">Plan</div>
+                <div style="font-family:'Times New Roman',Times,serif;font-size:28px;font-weight:400;color:#000000;margin-bottom:8px;">PRO</div>
+                <div style="font-family:'Times New Roman',Times,serif;font-size:32px;font-weight:400;color:#000000;">${formatPrice(PLANS.pro.price)}</div>
+              </div>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom:20px;">
+                ${PLANS.pro.benefits.map(benefit => `
+                <tr>
+                  <td style="padding:6px 0;vertical-align:top;width:20px;">
+                    <span style="color:#000000;font-size:14px;">✓</span>
+                  </td>
+                  <td style="padding:6px 0;vertical-align:top;">
+                    <span style="font-family:Helvetica,Arial,sans-serif;color:#000000;font-size:14px;line-height:130%;">${escapeHtml(benefit)}</span>
+                  </td>
+                </tr>
+                `).join('')}
+              </table>
+              <a href="${checkoutPremium}" style="display:block;padding:14px;background:#000000;color:#ffffff;text-decoration:none;border-radius:100px;font-family:Helvetica,Arial,sans-serif;font-weight:600;font-size:14px;text-align:center;">Elegir PRO</a>
             </div>
           </div>
         </div>
@@ -290,7 +315,7 @@ function buildFridayEmail({ seller, baseFront, baseApi }) {
     align: 'center'
   })
   
-  const content = hero + listingSection + benefitsSection + pricingSection + mainCTA
+  const content = hero + listingSection + pricingSection + mainCTA
   
   const unsubscribeUrl = buildUnsubscribeLink(seller.email, baseFront)
   const html = buildBaseLayout({

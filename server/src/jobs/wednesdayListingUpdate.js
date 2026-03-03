@@ -201,7 +201,7 @@ function buildWednesdayEmail({ seller, stats, baseFront }) {
     </tr>
   </table>`
   
-  // Top listings - grid de 2 columnas como The Pros Closet
+  // Top listings - grid ordenado con bordes
   let listingsHtml = `
   <!-- TOP LISTINGS -->
   <table align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;">
@@ -210,32 +210,66 @@ function buildWednesdayEmail({ seller, stats, baseFront }) {
         <h2 style="margin:0;font-family:'Times New Roman',Times,serif;font-size:24px;font-weight:400;color:#000000;">Tus publicaciones más vistas</h2>
       </td>
     </tr>
+  </table>
+  <table align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;">
     <tr>
-      <td style="padding:10px 20px;">
-        <div style="overflow:hidden;">
+      <td style="padding:10px 20px 20px;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+          <tr>
   `
   
-  for (const item of topListings) {
+  for (let i = 0; i < topListings.length; i++) {
+    const item = topListings[i]
     const image = normaliseImageUrl(item.images?.[0], baseFront)
     const link = `${baseFront}/listing/${encodeURIComponent(item.slug || item.id)}`
     const price = formatPrice(item.price, item.price_currency)
     
+    // Cerrar fila anterior si no es la primera
+    if (i > 0 && i % 2 === 0) {
+      listingsHtml += '</tr><tr>'
+    }
+    
     listingsHtml += `
-      <div class="col-product" style="padding:10px;box-sizing:border-box;">
-        <a href="${link}" target="_blank">
-          <img src="${image}" alt="${escapeHtml(item.title)}" style="width:100%;height:auto;display:block;margin-bottom:12px;">
-        </a>
-        <p style="margin:0 0 4px;font-family:Helvetica,Arial,sans-serif;font-size:14px;line-height:130%;color:#000000;">
-          <a href="${link}" target="_blank" style="color:#000000;text-decoration:none;">${escapeHtml(item.title)}</a>
-        </p>
-        ${price ? `<p style="margin:0 0 4px;font-family:Helvetica,Arial,sans-serif;font-size:16px;font-weight:700;color:#000000;">${price}</p>` : ''}
-        <p style="margin:0;font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#64748b;">👁 ${item.views7d} visitas · 📞 ${item.contacts7d} contactos</p>
-      </div>
+      <td style="padding:10px;width:50%;vertical-align:top;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #e5e5e5;border-radius:8px;overflow:hidden;">
+          <tr>
+            <td>
+              <a href="${link}" target="_blank">
+                <img src="${image}" alt="${escapeHtml(item.title)}" style="width:100%;height:180px;object-fit:cover;display:block;">
+              </a>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:16px;">
+              <p style="margin:0 0 8px;font-family:Helvetica,Arial,sans-serif;font-size:14px;line-height:130%;color:#000000;font-weight:600;">
+                <a href="${link}" target="_blank" style="color:#000000;text-decoration:none;">${escapeHtml(item.title)}</a>
+              </p>
+              ${price ? `<p style="margin:0 0 8px;font-family:Helvetica,Arial,sans-serif;font-size:18px;font-weight:700;color:#000000;">${price}</p>` : ''}
+              <table role="presentation" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td style="padding-right:12px;">
+                    <span style="font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#64748b;">👁 ${item.views7d}</span>
+                  </td>
+                  <td>
+                    <span style="font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#64748b;">📞 ${item.contacts7d}</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </td>
     `
   }
   
+  // Si hay solo 1 item en la última fila, agregar celda vacía
+  if (topListings.length % 2 === 1) {
+    listingsHtml += '<td style="padding:10px;width:50%;"></td>'
+  }
+  
   listingsHtml += `
-        </div>
+          </tr>
+        </table>
       </td>
     </tr>
   </table>`

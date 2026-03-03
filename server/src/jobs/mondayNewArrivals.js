@@ -96,24 +96,71 @@ function buildMondayEmail({ subscriber, listings, baseFront }) {
   const userName = escapeHtml(subscriber.fullName?.split(' ')[0] || 'Ciclista')
   const year = new Date().getFullYear()
   
-  // Preparar items para el grid
-  const items = listings.map(item => ({
-    image: item.images?.[0],
-    title: item.title,
-    price: item.price,
-    price_currency: item.price_currency,
-    location: item.location || item.seller_location,
-    link: `${baseFront}/listing/${encodeURIComponent(item.slug || item.id)}`,
-  }))
-  
-  // Construir contenido con los nuevos componentes
+  // Construir contenido con grid ordenado
   const hero = buildHeroSection({
     title: '¡Nuevos ingresos de la semana!',
     subtitle: `Hola ${userName}, estas son las últimas bicis que ingresaron al marketplace.`,
     baseFront,
   })
   
-  const productGrid = buildProductGrid(items, baseFront)
+  // Grid de productos - 2 columnas ordenado
+  let productGrid = `
+  <!-- PRODUCT GRID -->
+  <table align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;">
+    <tr>
+      <td style="padding:10px 20px 20px;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+          <tr>
+  `
+  
+  for (let i = 0; i < listings.length; i++) {
+    const item = listings[i]
+    const image = normaliseImageUrl(item.images?.[0], baseFront)
+    const link = `${baseFront}/listing/${encodeURIComponent(item.slug || item.id)}`
+    const price = formatPrice(item.price, item.price_currency)
+    const location = escapeHtml(item.location || item.seller_location || '')
+    
+    // Cerrar fila anterior si no es la primera y es par
+    if (i > 0 && i % 2 === 0) {
+      productGrid += '</tr><tr>'
+    }
+    
+    productGrid += `
+      <td style="padding:10px;width:50%;vertical-align:top;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #e5e5e5;border-radius:8px;overflow:hidden;">
+          <tr>
+            <td>
+              <a href="${link}" target="_blank">
+                <img src="${image}" alt="${escapeHtml(item.title)}" style="width:100%;height:200px;object-fit:cover;display:block;">
+              </a>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:16px;">
+              <p style="margin:0 0 8px;font-family:Helvetica,Arial,sans-serif;font-size:14px;line-height:130%;color:#000000;font-weight:600;">
+                <a href="${link}" target="_blank" style="color:#000000;text-decoration:none;">${escapeHtml(item.title)}</a>
+              </p>
+              ${price ? `<p style="margin:0 0 8px;font-family:Helvetica,Arial,sans-serif;font-size:18px;font-weight:700;color:#000000;">${price}</p>` : ''}
+              ${location ? `<p style="margin:0;font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#64748b;">📍 ${location}</p>` : ''}
+            </td>
+          </tr>
+        </table>
+      </td>
+    `
+  }
+  
+  // Si hay cantidad impar, completar con celda vacía
+  if (listings.length % 2 === 1) {
+    productGrid += '<td style="padding:10px;width:50%;"></td>'
+  }
+  
+  productGrid += `
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>`
+  
   const ctaButton = buildCTAButton({
     text: 'Ver todas las bicis',
     url: `${baseFront}/marketplace`,
