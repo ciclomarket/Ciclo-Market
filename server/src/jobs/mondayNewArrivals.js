@@ -26,9 +26,9 @@ const {
 
 const AUTOMATION_TYPE = 'monday_new_arrivals'
 const DEFAULT_CRON = '0 9 * * 1' // Lunes 9am
-const DEFAULT_BATCH_LIMIT = 200
+const DEFAULT_BATCH_LIMIT = 100 // Límite de Resend gratis
 const LISTINGS_COUNT = 8
-const COOLDOWN_DAYS = 7 // No reenviar a mismo usuario en 7 días
+const COOLDOWN_DAYS = 7 // Cooldown por tipo de email (puede recibir lunes+miércoles+viernes)
 
 // ============================================================================
 // DATA FETCHING
@@ -259,7 +259,7 @@ async function recordSend(supabase, userId, email, metadata = {}) {
   }
 }
 
-async function sendMondayEmails({ dryRun = false, limit = DEFAULT_BATCH_LIMIT, force = false } = {}) {
+async function sendMondayEmails({ dryRun = false, limit = DEFAULT_BATCH_LIMIT, force = false, dayOffset = 0 } = {}) {
   if (!isMailConfigured()) {
     throw new Error('Mail no configurado (RESEND_API_KEY o SMTP_*)')
   }
@@ -274,15 +274,27 @@ async function sendMondayEmails({ dryRun = false, limit = DEFAULT_BATCH_LIMIT, f
     return { sent: 0, recipients: [], dryRun, listingsCount: 0 }
   }
   
-  // Fetch recent recipients (cooldown)
+  // Fetch recent recipients (cooldown por tipo específico)
   const recentRecipients = force ? new Set() : await fetchRecentRecipients(supabase, COOLDOWN_DAYS)
   
-  // Fetch subscribers
-  const subscribers = await fetchNewsletterSubscribers(supabase, limit, Array.from(recentRecipients))
-  if (!subscribers.length) {
+  // Calcular offset basado en el día de la semana para distribuir envíos
+  // Lunes = offset 0, próximo lunes = offset 100, etc.
+  const now = new Date()
+  const dayOfWeek = now.getDay() // 0=domingo, 1=lunes, ..., 6=sábado
+  const weekNumber = Math.floor(now.getTime() / (7 * 24 * 60 * 60 * 1000))
+  const calculatedOffset = (dayOffset || dayOfWeek) * DEFAULT_BATCH_LIMIT
+  
+  // Fetch subscribers con paginación
+  const allSubscribers = await fetchNewsletterSubscribers(supabase, 1000, Array.from(recentRecipients))
+  if (!allSubscribers.length) {
     console.info(`[${AUTOMATION_TYPE}] no subscribers to email`)
     return { sent: 0, recipients: [], dryRun, listingsCount: listings.length }
   }
+  
+  // Seleccionar solo el batch correspondiente a hoy
+  const subscribers = allSubscribers.slice(calculatedOffset, calculatedOffset + limit)
+  
+  console.info(`[${AUTOMATION_TYPE}] total subscribers: ${allSubscribers.length}, batch: ${calculatedOffset}-${calculatedOffset + limit}`)
   
   const results = []
   let sent = 0
