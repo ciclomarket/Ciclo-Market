@@ -13,7 +13,9 @@ const {
   escapeHtml,
   buildUnsubscribeLink,
   buildBaseLayout,
-  buildListingCard,
+  buildHeroSection,
+  buildProductGrid,
+  buildCTAButton,
   buildListingText,
 } = require('../emails/emailBase')
 
@@ -94,44 +96,31 @@ function buildMondayEmail({ subscriber, listings, baseFront }) {
   const userName = escapeHtml(subscriber.fullName?.split(' ')[0] || 'Ciclista')
   const year = new Date().getFullYear()
   
-  // Grid de 2 columnas para los items
-  let itemsHtml = ''
-  for (let i = 0; i < listings.length; i += 2) {
-    const row = listings.slice(i, i + 2)
-    itemsHtml += `
-      <tr>
-        ${row.map(item => `
-          <td style="padding:8px;width:50%;vertical-align:top;">
-            ${buildListingCard(item, baseFront)}
-          </td>
-        `).join('')}
-        ${row.length === 1 ? '<td style="padding:8px;width:50%;"></td>' : ''}
-      </tr>
-    `
-  }
+  // Preparar items para el grid
+  const items = listings.map(item => ({
+    image: item.images?.[0],
+    title: item.title,
+    price: item.price,
+    price_currency: item.price_currency,
+    location: item.location || item.seller_location,
+    link: `${baseFront}/listing/${encodeURIComponent(item.slug || item.id)}`,
+  }))
   
-  const content = `
-    <tr>
-      <td style="padding:32px 24px 16px;">
-        <h1 style="margin:0 0 8px;font-size:26px;color:${BRAND.colors.text};font-weight:700;">¡Nuevos ingresos de la semana!</h1>
-        <p style="margin:0;color:${BRAND.colors.muted};font-size:15px;line-height:1.5;">
-          Hola ${userName}, estas son las últimas bicis que ingresaron al marketplace. ¡No te las pierdas!
-        </p>
-      </td>
-    </tr>
-    <tr>
-      <td style="padding:0 16px 24px;">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-          ${itemsHtml}
-        </table>
-      </td>
-    </tr>
-    <tr>
-      <td style="padding:0 24px 32px;text-align:center;">
-        <a href="${baseFront}/marketplace" style="display:inline-block;padding:14px 28px;background:${BRAND.colors.primary};color:#fff;text-decoration:none;border-radius:12px;font-weight:700;font-size:15px;">Ver todas las bicis</a>
-      </td>
-    </tr>
-  `
+  // Construir contenido con los nuevos componentes
+  const hero = buildHeroSection({
+    title: '¡Nuevos ingresos de la semana!',
+    subtitle: `Hola ${userName}, estas son las últimas bicis que ingresaron al marketplace.`,
+    baseFront,
+  })
+  
+  const productGrid = buildProductGrid(items, baseFront)
+  const ctaButton = buildCTAButton({
+    text: 'Ver todas las bicis',
+    url: `${baseFront}/marketplace`,
+    align: 'center'
+  })
+  
+  const content = hero + productGrid + ctaButton
   
   const unsubscribeUrl = buildUnsubscribeLink(subscriber.email, baseFront)
   const html = buildBaseLayout({
@@ -140,6 +129,7 @@ function buildMondayEmail({ subscriber, listings, baseFront }) {
     baseFront,
     unsubscribeUrl,
     userEmail: subscriber.email,
+    preheader: `${listings.length} nuevas bicicletas ingresaron esta semana.`,
   })
   
   // Text version

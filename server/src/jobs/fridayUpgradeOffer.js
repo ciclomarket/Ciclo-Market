@@ -16,6 +16,8 @@ const {
   normaliseImageUrl,
   buildUnsubscribeLink,
   buildBaseLayout,
+  buildHeroSection,
+  buildCTAButton,
 } = require('../emails/emailBase')
 
 // ============================================================================
@@ -184,46 +186,39 @@ function buildFridayEmail({ seller, baseFront, baseApi }) {
     baseApi,
   })
   
-  // Benefits list
-  const benefitsHtml = BENEFITS.map(b => `
+  // Hero con badge de oferta
+  const hero = `
+  <!-- HERO -->
+  <table align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;background:#F8F7F3;">
     <tr>
-      <td style="padding:8px 0;vertical-align:top;width:28px;">
-        <span style="display:inline-block;width:22px;height:22px;background:#22c55e;color:#fff;border-radius:50%;text-align:center;line-height:22px;font-size:14px;font-weight:700;">✓</span>
-      </td>
-      <td style="padding:8px 0;vertical-align:top;">
-        <span style="color:${BRAND.colors.text};font-size:15px;line-height:1.5;">${escapeHtml(b)}</span>
+      <td style="padding:40px 30px 20px;text-align:center;">
+        <div style="display:inline-block;background:#000000;color:#ffffff;padding:6px 14px;border-radius:20px;font-size:11px;font-weight:600;margin-bottom:16px;letter-spacing:0.05em;text-transform:uppercase;">Oferta Especial</div>
+        <h1 style="margin:0 0 16px;font-family:'Times New Roman',Times,serif;font-size:40px;font-weight:400;line-height:110%;color:#000000;text-align:center;letter-spacing:-0.01em;">Tu publicación puede rendir más</h1>
+        <p style="margin:0;font-family:Helvetica,Arial,sans-serif;font-size:18px;font-weight:400;line-height:130%;color:#000000;text-align:center;">Hola ${userName}, pasate a un plan pago y conseguí comprador más rápido.</p>
       </td>
     </tr>
-  `).join('')
+  </table>`
   
-  const content = `
+  // Listing preview - estilo elegante
+  const listingSection = `
+  <!-- LISTING PREVIEW -->
+  <table align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;background:#ffffff;">
     <tr>
-      <td style="padding:32px 24px 16px;">
-        <div style="display:inline-block;background:#fef3c7;color:#92400e;padding:6px 14px;border-radius:20px;font-size:12px;font-weight:700;margin-bottom:12px;letter-spacing:0.02em;">OFERTA ESPECIAL</div>
-        <h1 style="margin:0 0 8px;font-size:26px;color:${BRAND.colors.text};font-weight:700;">Tu publicación puede rendir más</h1>
-        <p style="margin:0;color:${BRAND.colors.muted};font-size:15px;line-height:1.5;">
-          Hola ${userName}, pasate a un plan pago y conseguí comprador más rápido.
-        </p>
-      </td>
-    </tr>
-    
-    <!-- Listing preview -->
-    <tr>
-      <td style="padding:0 24px 24px;">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid ${BRAND.colors.border};border-radius:12px;background:${BRAND.colors.light};">
+      <td style="padding:30px;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #e5e5e5;border-radius:12px;background:#F8F7F3;">
           <tr>
             <td style="padding:20px;">
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                 <tr>
-                  <td style="width:120px;vertical-align:top;">
-                    <a href="${listingLink}">
-                      <img src="${listingImage}" style="width:120px;height:90px;object-fit:cover;border-radius:8px;display:block;">
+                  <td style="width:140px;vertical-align:top;">
+                    <a href="${listingLink}" target="_blank">
+                      <img src="${listingImage}" style="width:140px;height:100px;object-fit:cover;border-radius:8px;display:block;">
                     </a>
                   </td>
-                  <td style="padding-left:18px;vertical-align:top;">
-                    <div style="font-weight:600;color:${BRAND.colors.text};font-size:16px;margin-bottom:6px;">${escapeHtml(listing.title)}</div>
-                    ${listingPrice ? `<div style="color:${BRAND.colors.accent};font-weight:700;font-size:20px;margin-bottom:6px;">${listingPrice}</div>` : ''}
-                    <div style="font-size:13px;color:#dc2626;font-weight:600;">⚠️ Plan actual: Gratis</div>
+                  <td style="padding-left:20px;vertical-align:top;">
+                    <div style="font-family:Helvetica,Arial,sans-serif;font-weight:600;color:#000000;font-size:16px;margin-bottom:6px;line-height:130%;">${escapeHtml(listing.title)}</div>
+                    ${listingPrice ? `<div style="font-family:Helvetica,Arial,sans-serif;color:#000000;font-weight:700;font-size:20px;margin-bottom:6px;">${listingPrice}</div>` : ''}
+                    <div style="font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#dc2626;font-weight:600;">⚠️ Plan actual: Gratis</div>
                   </td>
                 </tr>
               </table>
@@ -232,52 +227,70 @@ function buildFridayEmail({ seller, baseFront, baseApi }) {
         </table>
       </td>
     </tr>
-    
-    <!-- Benefits -->
+  </table>`
+  
+  // Benefits
+  const benefitsSection = `
+  <!-- BENEFITS -->
+  <table align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;background:#ffffff;">
     <tr>
-      <td style="padding:0 24px 24px;">
-        <h2 style="margin:0 0 16px;font-size:18px;color:${BRAND.colors.text};">¿Qué ganás al hacer upgrade?</h2>
+      <td style="padding:0 30px 20px;">
+        <h2 style="margin:0 0 20px;font-family:'Times New Roman',Times,serif;font-size:24px;font-weight:400;color:#000000;">¿Qué ganás al hacer upgrade?</h2>
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-          ${benefitsHtml}
-        </table>
-      </td>
-    </tr>
-    
-    <!-- Pricing cards -->
-    <tr>
-      <td style="padding:0 24px 24px;">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+          ${BENEFITS.map(b => `
           <tr>
-            <td style="padding:8px;width:50%;vertical-align:top;">
-              <div style="border:2px solid ${BRAND.colors.border};border-radius:12px;padding:20px;text-align:center;">
-                <div style="font-size:14px;color:${BRAND.colors.muted};margin-bottom:8px;">Plan Básico</div>
-                <div style="font-size:28px;font-weight:700;color:${BRAND.colors.text};margin-bottom:4px;">${formatPrice(prices.basic)}</div>
-                <div style="font-size:12px;color:${BRAND.colors.muted};margin-bottom:16px;">por publicación</div>
-                <a href="${checkoutBasic}" style="display:block;padding:12px;background:${BRAND.colors.primary};color:#fff;text-decoration:none;border-radius:8px;font-weight:700;font-size:14px;">Elegir Básico</a>
-              </div>
+            <td style="padding:8px 0;vertical-align:top;width:32px;">
+              <span style="display:inline-block;width:24px;height:24px;background:#000000;color:#ffffff;border-radius:50%;text-align:center;line-height:24px;font-size:14px;font-weight:700;">✓</span>
             </td>
-            <td style="padding:8px;width:50%;vertical-align:top;">
-              <div style="border:2px solid ${BRAND.colors.accent};border-radius:12px;padding:20px;text-align:center;position:relative;">
-                <div style="position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:${BRAND.colors.accent};color:#fff;padding:4px 12px;border-radius:12px;font-size:11px;font-weight:700;">RECOMENDADO</div>
-                <div style="font-size:14px;color:${BRAND.colors.muted};margin-bottom:8px;">Plan Premium</div>
-                <div style="font-size:28px;font-weight:700;color:${BRAND.colors.text};margin-bottom:4px;">${formatPrice(prices.premium)}</div>
-                <div style="font-size:12px;color:${BRAND.colors.muted};margin-bottom:16px;">por publicación</div>
-                <a href="${checkoutPremium}" style="display:block;padding:12px;background:${BRAND.colors.accent};color:#fff;text-decoration:none;border-radius:8px;font-weight:700;font-size:14px;">Elegir Premium</a>
-              </div>
+            <td style="padding:8px 0;vertical-align:top;">
+              <span style="font-family:Helvetica,Arial,sans-serif;color:#000000;font-size:15px;line-height:130%;">${escapeHtml(b)}</span>
             </td>
           </tr>
+          `).join('')}
         </table>
       </td>
     </tr>
-    
-    <!-- Main CTA -->
+  </table>`
+  
+  // Pricing cards - 2 columnas
+  const pricingSection = `
+  <!-- PRICING CARDS -->
+  <table align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;background:#ffffff;">
     <tr>
-      <td style="padding:0 24px 32px;text-align:center;">
-        <a href="${checkoutPremium}" style="display:inline-block;padding:18px 36px;background:${BRAND.colors.primary};color:#fff;text-decoration:none;border-radius:12px;font-weight:700;font-size:16px;">Hacer upgrade en 1 clic →</a>
-        <p style="margin:12px 0 0;font-size:12px;color:#94a3b8;">Link seguro · Checkout con MercadoPago</p>
+      <td style="padding:20px 20px 30px;">
+        <div style="overflow:hidden;">
+          <!-- Plan Básico -->
+          <div class="col-product" style="padding:10px;box-sizing:border-box;">
+            <div style="border:1px solid #000000;border-radius:12px;padding:24px;text-align:center;">
+              <div style="font-family:Helvetica,Arial,sans-serif;font-size:14px;color:#64748b;margin-bottom:12px;">Plan Básico</div>
+              <div style="font-family:'Times New Roman',Times,serif;font-size:32px;font-weight:400;color:#000000;margin-bottom:4px;">${formatPrice(prices.basic)}</div>
+              <div style="font-family:Helvetica,Arial,sans-serif;font-size:12px;color:#64748b;margin-bottom:20px;">por publicación</div>
+              <a href="${checkoutBasic}" style="display:block;padding:14px;background:#000000;color:#ffffff;text-decoration:none;border-radius:100px;font-family:Helvetica,Arial,sans-serif;font-weight:600;font-size:14px;text-align:center;">Elegir Básico</a>
+            </div>
+          </div>
+          <!-- Plan Premium -->
+          <div class="col-product" style="padding:10px;box-sizing:border-box;">
+            <div style="border:2px solid #000000;border-radius:12px;padding:24px;text-align:center;position:relative;">
+              <div style="position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:#000000;color:#ffffff;padding:4px 12px;border-radius:12px;font-size:10px;font-weight:700;font-family:Helvetica,Arial,sans-serif;letter-spacing:0.05em;">RECOMENDADO</div>
+              <div style="font-family:Helvetica,Arial,sans-serif;font-size:14px;color:#64748b;margin-bottom:12px;margin-top:10px;">Plan Premium</div>
+              <div style="font-family:'Times New Roman',Times,serif;font-size:32px;font-weight:400;color:#000000;margin-bottom:4px;">${formatPrice(prices.premium)}</div>
+              <div style="font-family:Helvetica,Arial,sans-serif;font-size:12px;color:#64748b;margin-bottom:20px;">por publicación</div>
+              <a href="${checkoutPremium}" style="display:block;padding:14px;background:#000000;color:#ffffff;text-decoration:none;border-radius:100px;font-family:Helvetica,Arial,sans-serif;font-weight:600;font-size:14px;text-align:center;">Elegir Premium</a>
+            </div>
+          </div>
+        </div>
       </td>
     </tr>
-  `
+  </table>`
+  
+  // CTA Principal
+  const mainCTA = buildCTAButton({
+    text: 'Hacer upgrade en 1 clic →',
+    url: checkoutPremium,
+    align: 'center'
+  })
+  
+  const content = hero + listingSection + benefitsSection + pricingSection + mainCTA
   
   const unsubscribeUrl = buildUnsubscribeLink(seller.email, baseFront)
   const html = buildBaseLayout({
@@ -428,5 +441,6 @@ function startFridayUpgradeOfferJob() {
 module.exports = {
   startFridayUpgradeOfferJob,
   sendFridayEmails,
+  buildFridayEmail,
   AUTOMATION_TYPE,
 }

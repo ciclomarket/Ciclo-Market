@@ -1,6 +1,13 @@
 /**
- * Email Base - Layout y helpers compartidos para automatizaciones de email
+ * Email Base - Layout profesional inspirado en The Pros Closet
  * CicloMarket - 2026
+ * 
+ * Características:
+ * - Max-width: 600px (responsive)
+ * - Fuentes: Times New Roman para headers, Helvetica para body
+ * - Colores: Beige #F8F7F3, Negro #000000, Blanco #ffffff
+ * - Cards de producto: 2 columnas en desktop, 1 en mobile
+ * - Botones: Negros con border-radius 100px
  */
 
 const crypto = require('crypto')
@@ -15,14 +22,14 @@ const BRAND = {
   email: 'admin@ciclomarket.ar',
   instagram: '@ciclomarket.ar',
   instagramUrl: 'https://instagram.com/ciclomarket.ar',
-  logoPath: '/site-logo.png',
+  logoUrl: 'https://www.ciclomarket.ar/site-logo.png',
   colors: {
-    primary: '#14212e',
-    accent: '#2563eb',
-    text: '#0c1723',
+    black: '#000000',
+    white: '#ffffff',
+    beige: '#F8F7F3',
+    accent: '#22c55e',
     muted: '#64748b',
-    light: '#f6f8fb',
-    border: '#e5ebf3',
+    lightGray: '#f5f5f5',
   }
 }
 
@@ -78,55 +85,235 @@ function buildUnsubscribeLink(email, baseUrl) {
 }
 
 // ============================================================================
-// LAYOUT BASE
+// LAYOUT BASE - Estilo The Pros Closet
 // ============================================================================
 
-function buildBaseLayout({ title, content, baseFront, unsubscribeUrl, userEmail, extraFooter = '' }) {
+function buildBaseLayout({ title, content, baseFront, unsubscribeUrl, userEmail, preheader = '' }) {
   const year = new Date().getFullYear()
   const viewInBrowser = `${baseFront}/email/view?type=preview&t=${Date.now()}`
   
   return `<!DOCTYPE html>
-<html lang="es">
+<html lang="es" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
   <meta name="supported-color-schemes" content="light">
   <title>${escapeHtml(title)}</title>
+  <style type="text/css">
+    #outlook a { padding: 0; }
+    body {
+      margin: 0;
+      padding: 0;
+      -webkit-text-size-adjust: 100%;
+      -ms-text-size-adjust: 100%;
+      background-color: #ffffff;
+    }
+    table, td {
+      border-collapse: collapse;
+      mso-table-lspace: 0pt;
+      mso-table-rspace: 0pt;
+    }
+    img {
+      border: 0;
+      height: auto;
+      line-height: 100%;
+      outline: none;
+      text-decoration: none;
+      -ms-interpolation-mode: bicubic;
+      max-width: 100%;
+    }
+    p { display: block; margin: 13px 0; }
+    
+    /* Desktop */
+    @media only screen and (min-width:600px) {
+      .mj-column-per-100 { width: 100% !important; max-width: 100%; }
+      .mj-column-per-50 { width: 50% !important; max-width: 50%; }
+    }
+    
+    /* Mobile */
+    @media only screen and (max-width:599px) {
+      .mj-column-per-50 { width: 100% !important; max-width: 100%; }
+      .col-product { width: 100% !important; float: none !important; }
+      .nav-text { font-size: 14px !important; }
+      .header-headline { font-size: 32px !important; }
+      .mobile-padding { padding: 20px !important; }
+    }
+    
+    /* Product grid */
+    .col-product {
+      width: 50%;
+      float: left;
+      box-sizing: border-box;
+    }
+    .col-product img {
+      max-width: 100%;
+      height: auto;
+      display: block;
+    }
+    .col-product a {
+      text-decoration: none;
+      color: #000000;
+    }
+    
+    /* Utils */
+    a { color: #000000; text-decoration: none; }
+    a.nav-text { color: #ffffff !important; text-decoration: none !important; }
+  </style>
+  <!--[if mso]>
+    <noscript>
+    <xml>
+    <o:OfficeDocumentSettings>
+      <o:AllowPNG/>
+      <o:PixelsPerInch>96</o:PixelsPerInch>
+    </o:OfficeDocumentSettings>
+    </xml>
+    </noscript>
+  <![endif]-->
 </head>
-<body style="margin:0;padding:0;background:#f5f5f5;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;-webkit-font-smoothing:antialiased;">
-  <!-- Preview text (oculto) -->
-  <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">${escapeHtml(title)}</div>
+<body style="word-spacing:normal;background-color:#ffffff;max-width:600px;margin:0 auto;">
   
-  <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="width:100%;max-width:640px;margin:0 auto;background:#ffffff;">
-    <!-- Header -->
+  <!-- Preview text (oculto) -->
+  ${preheader ? `<div style="display:none;font-size:1px;color:#ffffff;line-height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;">${escapeHtml(preheader)}</div>` : ''}
+  
+  <!-- LOGO -->
+  <table align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;">
     <tr>
-      <td style="padding:24px;text-align:center;border-bottom:1px solid ${BRAND.colors.border};">
-        <a href="${baseFront}" style="text-decoration:none;">
-          <img src="${baseFront}${BRAND.logoPath}" alt="${BRAND.name}" style="height:56px;width:auto;display:block;margin:0 auto;">
+      <td align="center" style="padding:30px 20px;">
+        <a href="${baseFront}" target="_blank">
+          <img src="${BRAND.logoUrl}" alt="${BRAND.name}" style="height:70px;width:auto;display:block;">
         </a>
       </td>
     </tr>
-    
-    <!-- Content -->
-    ${content}
-    
-    <!-- Footer -->
-    <tr>
-      <td style="padding:24px;background:${BRAND.colors.light};border-top:1px solid ${BRAND.colors.border};text-align:center;">
-        <p style="margin:0 0 12px;font-size:13px;color:${BRAND.colors.muted};">
-          <a href="${viewInBrowser}" style="color:${BRAND.colors.accent};text-decoration:underline;">Ver en navegador</a>
-          ${unsubscribeUrl ? ` · <a href="${unsubscribeUrl}" style="color:${BRAND.colors.accent};text-decoration:underline;">Desuscribirme</a>` : ''}
-        </p>
-        ${extraFooter ? `<p style="margin:0 0 12px;font-size:13px;color:${BRAND.colors.muted};">${extraFooter}</p>` : ''}
-        <p style="margin:0;font-size:12px;color:#94a3b8;line-height:1.5;">
-          <strong>${BRAND.name}</strong> · Marketplace de bicicletas para Argentina<br>
-          Seguinos en Instagram: <a href="${BRAND.instagramUrl}" style="color:${BRAND.colors.accent};text-decoration:none;">${BRAND.instagram}</a><br>
-          © ${year} ${BRAND.name}. Todos los derechos reservados.
-        </p>
+  </table>
+  
+  <!-- NAV BAR NEGRA -->
+  <table align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;background:#000000;">
+    <tr style="height:55px;">
+      <td align="center" style="padding:0;">
+        <table border="0" cellpadding="0" cellspacing="0" role="presentation">
+          <tr>
+            <td style="padding:0 15px;">
+              <a href="${baseFront}/marketplace" class="nav-text" style="font-family:Helvetica,Arial,sans-serif;font-size:16px;color:#ffffff;text-decoration:none;">Bicicletas</a>
+            </td>
+            <td style="padding:0 15px;">
+              <a href="${baseFront}/marketplace?cat=Accesorios" class="nav-text" style="font-family:Helvetica,Arial,sans-serif;font-size:16px;color:#ffffff;text-decoration:none;">Accesorios</a>
+            </td>
+            <td style="padding:0 15px;">
+              <a href="${baseFront}/tiendas" class="nav-text" style="font-family:Helvetica,Arial,sans-serif;font-size:16px;color:#ffffff;text-decoration:none;">Tiendas</a>
+            </td>
+          </tr>
+        </table>
       </td>
     </tr>
   </table>
+  
+  ${content}
+  
+  <!-- FOOTER NEGRO - Update Settings -->
+  <table align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;background:#000000;margin-top:16px;">
+    <tr>
+      <td style="padding:30px;direction:ltr;font-size:0px;text-align:center;">
+        <!--[if mso | IE]><table role="presentation" border="0" cellpadding="0" cellspacing="0"><tr><td style="vertical-align:top;width:300px;" ><![endif]-->
+        <div style="display:inline-block;width:100%;max-width:300px;vertical-align:top;">
+          <table border="0" cellpadding="0" cellspacing="0" role="presentation" width="100%">
+            <tr>
+              <td align="center" style="padding:10px 0;">
+                <img src="${baseFront}/favicon-96x96.png" alt="${BRAND.name}" style="width:80px;height:80px;border-radius:50%;">
+              </td>
+            </tr>
+          </table>
+        </div>
+        <!--[if mso | IE]></td><td style="vertical-align:top;width:300px;" ><![endif]-->
+        <div style="display:inline-block;width:100%;max-width:300px;vertical-align:top;">
+          <table border="0" cellpadding="0" cellspacing="0" role="presentation" width="100%">
+            <tr>
+              <td align="left" style="padding:10px 0 10px 25px;">
+                <div style="font-family:Helvetica,Arial,sans-serif;font-size:14px;font-weight:400;line-height:130%;text-align:left;color:#ffffff;">
+                  Para desuscribirte o cambiar tus preferencias de notificación, actualizá tu cuenta.
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td align="left" style="padding:20px 0 10px 25px;">
+                <table border="0" cellpadding="0" cellspacing="0" role="presentation">
+                  <tr>
+                    <td align="center" bgcolor="#ffffff" style="border-radius:100px;background:#ffffff;">
+                      <a href="${unsubscribeUrl}" style="display:inline-block;background:#ffffff;color:#000000;font-family:Helvetica,Arial,sans-serif;font-size:14px;font-weight:600;line-height:130%;margin:0;text-decoration:none;text-transform:none;padding:12px 24px;border-radius:100px;">Desuscribirme</a>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </div>
+        <!--[if mso | IE]></td></tr></table><![endif]-->
+      </td>
+    </tr>
+  </table>
+  
+  <!-- ICONOS / BENEFICIOS -->
+  <table align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;">
+    <tr>
+      <td id="multi_icon_container" align="center" style="padding:35px 20px 20px;text-align:center;">
+        <div style="display:inline-block;margin:0 30px;text-align:center;">
+          <div style="font-size:32px;margin-bottom:8px;">🚚</div>
+          <p style="font-family:Helvetica,Arial,sans-serif;font-size:14px;font-weight:400;line-height:130%;text-align:center;color:#000000;margin:0;">Publicaciones<br>Verificadas</p>
+        </div>
+        <div style="display:inline-block;margin:0 30px;text-align:center;">
+          <div style="font-size:32px;margin-bottom:8px;">🛡️</div>
+          <p style="font-family:Helvetica,Arial,sans-serif;font-size:14px;font-weight:400;line-height:130%;text-align:center;color:#000000;margin:0;">Compra Segura<br>en Argentina</p>
+        </div>
+        <div style="display:inline-block;margin:0 30px;text-align:center;">
+          <div style="font-size:32px;margin-bottom:8px;">💬</div>
+          <p style="font-family:Helvetica,Arial,sans-serif;font-size:14px;font-weight:400;line-height:130%;text-align:center;color:#000000;margin:0;">Contacto Directo<br>con Vendedores</p>
+        </div>
+      </td>
+    </tr>
+  </table>
+  
+  <!-- CONTACTO -->
+  <table align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;">
+    <tr>
+      <td style="border-top:1px solid #000000;padding:30px 20px;">
+        <div style="font-family:'Times New Roman',Times,serif;font-size:22px;font-weight:400;line-height:130%;text-align:left;color:#000000;margin-bottom:16px;">¿Tenés preguntas?</div>
+        <div style="font-family:Helvetica,Arial,sans-serif;font-size:14px;font-weight:400;line-height:130%;text-align:left;color:#000000;">
+          Nuestro equipo está aquí para ayudarte vía email o Instagram.<br>
+          <a href="${BRAND.instagramUrl}" style="color:#000000;text-decoration:underline;">${BRAND.instagram}</a>
+        </div>
+      </td>
+    </tr>
+  </table>
+  
+  <!-- SOCIAL / DIRECCION -->
+  <table align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;background:#F8F7F3;">
+    <tr>
+      <td style="padding:30px 20px;">
+        <table border="0" cellpadding="0" cellspacing="0" role="presentation">
+          <tr>
+            <td style="padding:0 10px;">
+              <a href="${BRAND.instagramUrl}" target="_blank">
+                <img src="${baseFront}/icons/instagram.svg" alt="Instagram" width="24" height="24" style="display:block;">
+              </a>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:0 20px 30px;">
+        <div style="font-family:Helvetica,Arial,sans-serif;font-size:12px;font-weight:400;line-height:130%;text-align:left;color:#64748b;">
+          <a href="${viewInBrowser}" style="color:#000000;text-decoration:underline;">Ver en navegador</a> · 
+          <a href="${unsubscribeUrl}" style="color:#000000;text-decoration:underline;">Desuscribirme</a>
+        </div>
+        <div style="font-family:Helvetica,Arial,sans-serif;font-size:12px;font-weight:400;line-height:130%;text-align:left;color:#64748b;margin-top:12px;">
+          © ${year} ${BRAND.name} · Marketplace de bicicletas para Argentina
+        </div>
+      </td>
+    </tr>
+  </table>
+  
 </body>
 </html>`
 }
@@ -135,78 +322,76 @@ function buildBaseLayout({ title, content, baseFront, unsubscribeUrl, userEmail,
 // COMPONENTES REUTILIZABLES
 // ============================================================================
 
-function buildListingCard(item, baseFront) {
-  const image = normaliseImageUrl(item.images?.[0], baseFront)
-  const link = `${baseFront}/listing/${encodeURIComponent(item.slug || item.id)}`
-  const price = formatPrice(item.price, item.price_currency)
-  const location = escapeHtml(item.location || item.seller_location || '')
-  const brand = escapeHtml(item.brand || '')
-  const model = escapeHtml(item.model || '')
-  const title = escapeHtml(item.title || 'Publicación en Ciclo Market')
-  
+function buildHeroSection({ title, subtitle, baseFront }) {
   return `
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid ${BRAND.colors.border};border-radius:12px;overflow:hidden;margin-bottom:12px;">
-      <tr>
-        <td style="padding:0;vertical-align:top;">
-          <a href="${link}" style="display:block;text-decoration:none;">
-            <img src="${image}" alt="${title}" style="width:100%;height:160px;object-fit:cover;display:block;">
-          </a>
-        </td>
-      </tr>
-      <tr>
-        <td style="padding:16px;">
-          ${brand ? `<div style="font-size:12px;color:${BRAND.colors.muted};text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">${brand}</div>` : ''}
-          <div style="font-weight:600;color:${BRAND.colors.text};font-size:15px;line-height:1.3;margin-bottom:4px;">${title}</div>
-          ${price ? `<div style="color:${BRAND.colors.accent};font-weight:700;font-size:18px;margin-bottom:4px;">${price}</div>` : ''}
-          ${location ? `<div style="color:${BRAND.colors.muted};font-size:13px;margin-bottom:12px;">📍 ${location}</div>` : ''}
-          <a href="${link}" style="display:inline-block;padding:10px 18px;background:${BRAND.colors.primary};color:#fff;text-decoration:none;border-radius:8px;font-size:13px;font-weight:600;">Ver publicación</a>
-        </td>
-      </tr>
-    </table>
-  `
+  <!-- HERO SECTION -->
+  <table align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;background:#F8F7F3;">
+    <tr>
+      <td class="mobile-padding" style="padding:40px 30px;">
+        <h1 class="header-headline" style="margin:0 0 16px;font-family:'Times New Roman',Times,serif;font-size:40px;font-weight:400;line-height:110%;color:#000000;text-align:center;letter-spacing:-0.01em;">
+          ${escapeHtml(title)}
+        </h1>
+        ${subtitle ? `<p style="margin:0;font-family:Helvetica,Arial,sans-serif;font-size:18px;font-weight:400;line-height:130%;color:#000000;text-align:center;">${escapeHtml(subtitle)}</p>` : ''}
+      </td>
+    </tr>
+  </table>`
 }
 
-function buildListingRow(item, baseFront, opts = {}) {
-  const { showStats = false, views7d = 0, contacts7d = 0 } = opts
-  const image = normaliseImageUrl(item.images?.[0], baseFront)
-  const link = `${baseFront}/listing/${encodeURIComponent(item.slug || item.id)}`
-  const price = formatPrice(item.price, item.price_currency)
-  const location = escapeHtml(item.location || item.seller_location || '')
-  const title = escapeHtml(item.title || 'Publicación')
-  const status = item.status || 'active'
-  const statusLabel = status === 'active' ? 'Activa' : status === 'published' ? 'Publicada' : status
-  const statusColor = status === 'active' ? '#22c55e' : '#f59e0b'
+function buildProductGrid(items, baseFront) {
+  // items: array de { image, title, price, location, link }
+  const rows = []
+  for (let i = 0; i < items.length; i += 2) {
+    const rowItems = items.slice(i, i + 2)
+    const rowHtml = rowItems.map(item => {
+      const image = normaliseImageUrl(item.image, baseFront)
+      const price = formatPrice(item.price, item.price_currency)
+      const title = escapeHtml(item.title)
+      const location = escapeHtml(item.location || '')
+      
+      return `
+        <div class="col-product" style="padding:10px;box-sizing:border-box;">
+          <a href="${item.link}" target="_blank">
+            <img src="${image}" alt="${title}" style="width:100%;height:auto;display:block;margin-bottom:12px;">
+          </a>
+          <p style="margin:0 0 4px;font-family:Helvetica,Arial,sans-serif;font-size:14px;line-height:130%;color:#000000;">
+            <a href="${item.link}" target="_blank" style="color:#000000;text-decoration:none;">${title}</a>
+          </p>
+          ${price ? `<p style="margin:0 0 4px;font-family:Helvetica,Arial,sans-serif;font-size:16px;font-weight:700;color:#000000;">${price}</p>` : ''}
+          ${location ? `<p style="margin:0;font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#64748b;">📍 ${location}</p>` : ''}
+        </div>
+      `
+    }).join('')
+    
+    rows.push(`<div style="overflow:hidden;">${rowHtml}</div>`)
+  }
   
   return `
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid ${BRAND.colors.border};border-radius:12px;margin-bottom:12px;">
-      <tr>
-        <td style="padding:16px;">
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-            <tr>
-              <td style="width:90px;vertical-align:top;">
-                <a href="${link}">
-                  <img src="${image}" style="width:90px;height:70px;object-fit:cover;border-radius:8px;display:block;">
-                </a>
-              </td>
-              <td style="padding-left:14px;vertical-align:top;">
-                <div style="font-weight:600;color:${BRAND.colors.text};font-size:15px;margin-bottom:4px;">${title}</div>
-                ${price ? `<div style="color:${BRAND.colors.accent};font-weight:700;margin-bottom:4px;">${price}</div>` : ''}
-                <div style="font-size:12px;color:${BRAND.colors.muted};margin-bottom:6px;">
-                  <span style="display:inline-block;padding:2px 8px;background:${statusColor}20;color:${statusColor};border-radius:12px;font-weight:600;">${statusLabel}</span>
-                  ${location ? `· ${location}` : ''}
-                </div>
-                ${showStats ? `
-                <div style="font-size:12px;color:${BRAND.colors.muted};">
-                  👁 ${views7d} visitas · 📞 ${contacts7d} contactos (7d)
-                </div>
-                ` : ''}
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-  `
+  <!-- PRODUCT GRID -->
+  <table align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;">
+    <tr>
+      <td style="padding:20px 20px 0;">
+        ${rows.join('')}
+      </td>
+    </tr>
+  </table>`
+}
+
+function buildCTAButton({ text, url, align = 'center' }) {
+  return `
+  <!-- CTA BUTTON -->
+  <table align="${align}" border="0" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;margin:20px 0;">
+    <tr>
+      <td align="${align}" style="padding:20px 30px;">
+        <table border="0" cellpadding="0" cellspacing="0" role="presentation">
+          <tr>
+            <td align="center" bgcolor="#000000" style="border-radius:100px;background:#000000;">
+              <a href="${url}" target="_blank" style="display:inline-block;background:#000000;color:#ffffff;font-family:Helvetica,Arial,sans-serif;font-size:16px;font-weight:400;line-height:130%;margin:0;text-decoration:none;padding:14px 32px;border-radius:100px;">${escapeHtml(text)}</a>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>`
 }
 
 // ============================================================================
@@ -216,12 +401,7 @@ function buildListingRow(item, baseFront, opts = {}) {
 function buildListingText(item, baseFront) {
   const link = `${baseFront}/listing/${encodeURIComponent(item.slug || item.id)}`
   const price = formatPrice(item.price, item.price_currency)
-  const parts = [
-    item.brand || item.title,
-    price,
-    item.location || item.seller_location,
-    link
-  ].filter(Boolean)
+  const parts = [item.title, price, item.location || item.seller_location, link].filter(Boolean)
   return parts.join(' · ')
 }
 
@@ -237,7 +417,8 @@ module.exports = {
   signUnsubscribe,
   buildUnsubscribeLink,
   buildBaseLayout,
-  buildListingCard,
-  buildListingRow,
+  buildHeroSection,
+  buildProductGrid,
+  buildCTAButton,
   buildListingText,
 }

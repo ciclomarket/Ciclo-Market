@@ -22,8 +22,8 @@ const path = require('path')
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') })
 
 const { sendMondayEmails } = require('../src/jobs/mondayNewArrivals')
-const { sendWednesdayEmails } = require('../src/jobs/wednesdayListingUpdate')
-const { sendFridayEmails } = require('../src/jobs/fridayUpgradeOffer')
+const { sendWednesdayEmails, fetchUserListingsWithStats, buildWednesdayEmail } = require('../src/jobs/wednesdayListingUpdate')
+const { sendFridayEmails, buildFridayEmail } = require('../src/jobs/fridayUpgradeOffer')
 const { getServerSupabaseClient } = require('../src/lib/supabaseClient')
 const { sendMail, isMailConfigured } = require('../src/lib/mail')
 
@@ -225,8 +225,6 @@ async function main() {
     } else {
       // Reconstruir y enviar al email especificado
       const supabase = getServerSupabaseClient()
-      const { buildWednesdayEmail } = require('../src/jobs/wednesdayListingUpdate')
-      const { fetchUserListingsWithStats } = require('../src/jobs/wednesdayListingUpdate')
       
       const stats = await fetchUserListingsWithStats(supabase, args['seller-id'])
       const { subject, html, text } = buildWednesdayEmail({
@@ -270,7 +268,6 @@ async function main() {
       console.log(sellerData.preview)
     } else {
       const supabase = getServerSupabaseClient()
-      const { buildFridayEmail } = require('../src/jobs/fridayUpgradeOffer')
       
       // Fetch listing
       const { data: listing } = await supabase

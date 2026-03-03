@@ -11,9 +11,12 @@ const { sendMail, isMailConfigured } = require('../lib/mail')
 const {
   BRAND,
   escapeHtml,
+  formatPrice,
+  normaliseImageUrl,
   buildUnsubscribeLink,
   buildBaseLayout,
-  buildListingRow,
+  buildHeroSection,
+  buildCTAButton,
 } = require('../emails/emailBase')
 
 // ============================================================================
@@ -165,85 +168,99 @@ function buildWednesdayEmail({ seller, stats, baseFront }) {
   const topListings = listings.slice(0, TOP_LISTINGS_COUNT)
   const hasMore = listings.length > TOP_LISTINGS_COUNT
   
-  // Stats cards
-  const statsHtml = `
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom:24px;">
-      <tr>
-        <td style="padding:8px;width:33%;">
-          <div style="background:${BRAND.colors.light};border-radius:12px;padding:20px;text-align:center;border:1px solid ${BRAND.colors.border};">
-            <div style="font-size:32px;font-weight:700;color:${BRAND.colors.primary};">${totalViews}</div>
-            <div style="font-size:12px;color:${BRAND.colors.muted};margin-top:4px;">👁 Visitas (7d)</div>
-          </div>
-        </td>
-        <td style="padding:8px;width:33%;">
-          <div style="background:${BRAND.colors.light};border-radius:12px;padding:20px;text-align:center;border:1px solid ${BRAND.colors.border};">
-            <div style="font-size:32px;font-weight:700;color:${BRAND.colors.primary};">${totalContacts}</div>
-            <div style="font-size:12px;color:${BRAND.colors.muted};margin-top:4px;">📞 Contactos (7d)</div>
-          </div>
-        </td>
-        <td style="padding:8px;width:33%;">
-          <div style="background:${BRAND.colors.light};border-radius:12px;padding:20px;text-align:center;border:1px solid ${BRAND.colors.border};">
-            <div style="font-size:32px;font-weight:700;color:${BRAND.colors.primary};">${totalListings}</div>
-            <div style="font-size:12px;color:${BRAND.colors.muted};margin-top:4px;">📦 Publicaciones</div>
-          </div>
-        </td>
-      </tr>
-    </table>
-  `
+  // Hero section
+  const hero = buildHeroSection({
+    title: '¿Cómo va tu publicación?',
+    subtitle: `Hola ${userName}, acá está el resumen de rendimiento de tus publicaciones esta semana.`,
+    baseFront,
+  })
   
-  // Top listings
-  let listingsHtml = `
+  // Stats cards - estilo minimalista
+  const statsSection = `
+  <!-- STATS SECTION -->
+  <table align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;background:#ffffff;">
     <tr>
-      <td style="padding:0 24px 8px;">
-        <h2 style="margin:0 0 16px;font-size:18px;color:${BRAND.colors.text};">Tus publicaciones más vistas</h2>
+      <td style="padding:20px 30px;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+          <tr>
+            <td style="padding:10px;width:33%;text-align:center;">
+              <div style="font-family:'Times New Roman',Times,serif;font-size:36px;font-weight:400;color:#000000;">${totalViews}</div>
+              <div style="font-family:Helvetica,Arial,sans-serif;font-size:12px;color:#64748b;margin-top:4px;">Visitas (7d)</div>
+            </td>
+            <td style="padding:10px;width:33%;text-align:center;">
+              <div style="font-family:'Times New Roman',Times,serif;font-size:36px;font-weight:400;color:#000000;">${totalContacts}</div>
+              <div style="font-family:Helvetica,Arial,sans-serif;font-size:12px;color:#64748b;margin-top:4px;">Contactos (7d)</div>
+            </td>
+            <td style="padding:10px;width:33%;text-align:center;">
+              <div style="font-family:'Times New Roman',Times,serif;font-size:36px;font-weight:400;color:#000000;">${totalListings}</div>
+              <div style="font-family:Helvetica,Arial,sans-serif;font-size:12px;color:#64748b;margin-top:4px;">Publicaciones</div>
+            </td>
+          </tr>
+        </table>
       </td>
     </tr>
+  </table>`
+  
+  // Top listings - grid de 2 columnas como The Pros Closet
+  let listingsHtml = `
+  <!-- TOP LISTINGS -->
+  <table align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;">
+    <tr>
+      <td style="padding:30px 30px 10px;">
+        <h2 style="margin:0;font-family:'Times New Roman',Times,serif;font-size:24px;font-weight:400;color:#000000;">Tus publicaciones más vistas</h2>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:10px 20px;">
+        <div style="overflow:hidden;">
   `
   
   for (const item of topListings) {
+    const image = normaliseImageUrl(item.images?.[0], baseFront)
+    const link = `${baseFront}/listing/${encodeURIComponent(item.slug || item.id)}`
+    const price = formatPrice(item.price, item.price_currency)
+    
     listingsHtml += `
-      <tr>
-        <td style="padding:0 24px 12px;">
-          ${buildListingRow(item, baseFront, { showStats: true, views7d: item.views7d, contacts7d: item.contacts7d })}
-        </td>
-      </tr>
-    `
-  }
-  
-  if (hasMore) {
-    listingsHtml += `
-      <tr>
-        <td style="padding:8px 24px 24px;text-align:center;">
-          <a href="${baseFront}/dashboard?tab=listings" style="color:${BRAND.colors.accent};text-decoration:none;font-size:14px;font-weight:600;">
-            Ver todas las ${totalListings} publicaciones →
-          </a>
-        </td>
-      </tr>
-    `
-  }
-  
-  const content = `
-    <tr>
-      <td style="padding:32px 24px 16px;">
-        <h1 style="margin:0 0 8px;font-size:24px;color:${BRAND.colors.text};font-weight:700;">¿Cómo va tu publicación?</h1>
-        <p style="margin:0;color:${BRAND.colors.muted};font-size:15px;line-height:1.5;">
-          Hola ${userName}, acá está el resumen de rendimiento de tus publicaciones esta semana.
+      <div class="col-product" style="padding:10px;box-sizing:border-box;">
+        <a href="${link}" target="_blank">
+          <img src="${image}" alt="${escapeHtml(item.title)}" style="width:100%;height:auto;display:block;margin-bottom:12px;">
+        </a>
+        <p style="margin:0 0 4px;font-family:Helvetica,Arial,sans-serif;font-size:14px;line-height:130%;color:#000000;">
+          <a href="${link}" target="_blank" style="color:#000000;text-decoration:none;">${escapeHtml(item.title)}</a>
         </p>
+        ${price ? `<p style="margin:0 0 4px;font-family:Helvetica,Arial,sans-serif;font-size:16px;font-weight:700;color:#000000;">${price}</p>` : ''}
+        <p style="margin:0;font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#64748b;">👁 ${item.views7d} visitas · 📞 ${item.contacts7d} contactos</p>
+      </div>
+    `
+  }
+  
+  listingsHtml += `
+        </div>
       </td>
     </tr>
-    <tr>
-      <td style="padding:0 16px;">
-        ${statsHtml}
-      </td>
-    </tr>
-    ${listingsHtml}
-    <tr>
-      <td style="padding:8px 24px 32px;text-align:center;">
-        <a href="${baseFront}/dashboard?tab=listings" style="display:inline-block;padding:14px 28px;background:${BRAND.colors.primary};color:#fff;text-decoration:none;border-radius:12px;font-weight:700;font-size:15px;margin-right:8px;">Ver todas</a>
-        <a href="${baseFront}/planes" style="display:inline-block;padding:14px 28px;background:#fff;color:${BRAND.colors.primary};text-decoration:none;border-radius:12px;font-weight:700;font-size:15px;border:2px solid ${BRAND.colors.primary};">Mejorar publicación</a>
-      </td>
-    </tr>
-  `
+  </table>`
+  
+  // Ver todas (si hay más)
+  let moreLink = ''
+  if (hasMore) {
+    moreLink = `
+    <table align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;">
+      <tr>
+        <td align="center" style="padding:10px 30px 30px;">
+          <a href="${baseFront}/dashboard?tab=listings" style="font-family:Helvetica,Arial,sans-serif;font-size:14px;color:#000000;text-decoration:underline;">Ver todas las ${totalListings} publicaciones →</a>
+        </td>
+      </tr>
+    </table>`
+  }
+  
+  // CTAs
+  const ctas = buildCTAButton({
+    text: 'Ver todas mis publicaciones',
+    url: `${baseFront}/dashboard?tab=listings`,
+    align: 'center'
+  })
+  
+  const content = hero + statsSection + listingsHtml + moreLink + ctas
   
   const unsubscribeUrl = buildUnsubscribeLink(seller.email, baseFront)
   const html = buildBaseLayout({
@@ -252,6 +269,7 @@ function buildWednesdayEmail({ seller, stats, baseFront }) {
     baseFront,
     unsubscribeUrl,
     userEmail: seller.email,
+    preheader: `${totalViews} visitas esta semana · ${totalContacts} contactos`,
   })
   
   // Text version
@@ -399,5 +417,7 @@ function startWednesdayListingUpdateJob() {
 module.exports = {
   startWednesdayListingUpdateJob,
   sendWednesdayEmails,
+  fetchUserListingsWithStats,
+  buildWednesdayEmail,
   AUTOMATION_TYPE,
 }
