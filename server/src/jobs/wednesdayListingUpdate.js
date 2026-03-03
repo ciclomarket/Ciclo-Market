@@ -350,7 +350,7 @@ async function recordSend(supabase, userId, email, metadata = {}) {
   }
 }
 
-async function sendWednesdayEmails({ dryRun = false, limit = DEFAULT_BATCH_LIMIT, force = false } = {}) {
+async function sendWednesdayEmails({ dryRun = false, limit = DEFAULT_BATCH_LIMIT, force = false, dayOffset = 0 } = {}) {
   if (!isMailConfigured()) {
     throw new Error('Mail no configurado (RESEND_API_KEY o SMTP_*)')
   }
@@ -358,15 +358,23 @@ async function sendWednesdayEmails({ dryRun = false, limit = DEFAULT_BATCH_LIMIT
   const supabase = getServerSupabaseClient()
   const baseFront = (process.env.FRONTEND_URL || BRAND.url).split(',')[0].trim().replace(/\/$/, '')
   
+  // Sistema de batches: obtener todos los usuarios y seleccionar el batch correspondiente
+  let calculatedLimit = limit
+  let calculatedOffset = dayOffset * limit
+  
   // Fetch recent recipients (cooldown)
   const recentRecipients = force ? new Set() : await fetchRecentRecipients(supabase, COOLDOWN_DAYS)
   
-  // Fetch sellers
-  const sellers = await fetchActiveSellers(supabase, limit, Array.from(recentRecipients))
-  if (!sellers.length) {
+  // Obtener todos los sellers y aplicar offset
+  const allSellers = await fetchActiveSellers(supabase, 1000, Array.from(recentRecipients))
+  if (!allSellers.length) {
     console.info(`[${AUTOMATION_TYPE}] no sellers to email`)
     return { sent: 0, recipients: [], dryRun }
   }
+  
+  const sellers = allSellers.slice(calculatedOffset, calculatedOffset + calculatedLimit)
+  
+  console.info(`[${AUTOMATION_TYPE}] Batch ${dayOffset + 1}: usuarios ${calculatedOffset + 1}-${calculatedOffset + sellers.length}`)
   
   const results = []
   let sent = 0
@@ -429,19 +437,33 @@ function startWednesdayListingUpdateJob() {
     return
   }
   
-  const schedule = process.env.WEDNESDAY_UPDATE_CRON || DEFAULT_CRON
   const tz = process.env.WEDNESDAY_UPDATE_TZ || 'America/Argentina/Buenos_Aires'
   
-  const task = cron.schedule(schedule, async () => {
+  // Miércoles - Batch 0 (usuarios 1-100)
+  const scheduleWednesday = process.env.WEDNESDAY_UPDATE_CRON || '0 10 * * 3'
+  const taskWednesday = cron.schedule(scheduleWednesday, async () => {
     try {
-      await sendWednesdayEmails()
+      console.info(`[${AUTOMATION_TYPE}] Miércoles - Batch 1 (dayOffset=0)`)
+      await sendWednesdayEmails({ dayOffset: 0 })
     } catch (err) {
-      console.error(`[${AUTOMATION_TYPE}] job failed`, err)
+      console.error(`[${AUTOMATION_TYPE}] Miércoles job failed`, err)
     }
   }, { timezone: tz })
+  taskWednesday.start()
+  console.info(`[${AUTOMATION_TYPE}] Miércoles job started with cron ${scheduleWednesday}`)
   
-  task.start()
-  console.info(`[${AUTOMATION_TYPE}] job started with cron ${schedule} tz ${tz}`)
+  // Jueves - Batch 1 (usuarios 101-200)
+  const scheduleThursday = process.env.WEDNESDAY_UPDATE_THURSDAY_CRON || '0 10 * * 4'
+  const taskThursday = cron.schedule(scheduleThursday, async () => {
+    try {
+      console.info(`[${AUTOMATION_TYPE}] Jueves - Batch 2 (dayOffset=1)`)
+      await sendWednesdayEmails({ dayOffset: 1 })
+    } catch (err) {
+      console.error(`[${AUTOMATION_TYPE}] Jueves job failed`, err)
+    }
+  }, { timezone: tz })
+  taskThursday.start()
+  console.info(`[${AUTOMATION_TYPE}] Jueves job started with cron ${scheduleThursday}`)
 }
 
 // ============================================================================

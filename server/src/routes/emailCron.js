@@ -191,4 +191,60 @@ router.get('/cron/email-stats', ensureCronSecret, async (req, res) => {
   }
 })
 
+// Nuevo endpoint: Disparar con sistema de batches (round-robin)
+router.post('/cron/send-batch', ensureCronSecret, async (req, res) => {
+  try {
+    const { type } = req.body // 'monday', 'wednesday', 'friday'
+    const dryRun = req.body?.dryRun === true
+    const force = req.body?.force === true
+    
+    if (!['monday', 'wednesday', 'friday'].includes(type)) {
+      return res.status(400).json({ ok: false, error: 'type must be monday|wednesday|friday' })
+    }
+    
+    const { calculateBatchOffset } = require('../jobs/emailScheduler')
+    const supabase = require('../lib/supabaseClient').getServerSupabaseClient()
+    
+    // Obtener total de usuarios
+    let totalUsers = 0
+    if (type === 'monday') {
+      const { data } = await supabase.from('user_notification_settings').select('user_id').eq('marketing_emails', true)
+      totalUsers = data?.length || 0
+    } else if (type === 'wednesday') {
+      const { data } = await supabase.from('listings').select('seller_id').in('status', ['active', 'published'])
+      totalUsers = [...new Set(data?.map(l => l.seller_id) || [])].length
+    } else {
+      const { data } = await supabase.from('listings').select('seller_id').or('plan.eq.free,plan_code.eq.free').in('status', ['active', 'published'])
+      totalUsers = [...new Set(data?.map(l => l.seller_id) || [])].length
+    }
+    
+    const batchInfo = calculateBatchOffset(totalUsers, 100)
+    
+    let result
+    if (type === 'monday') {
+      const { sendMondayEmails } = require('../jobs/mondayNewArrivals')
+      result = await sendMondayEmails({ dryRun, limit: 100, force, dayOffset: batchInfo.batchNumber - 1 })
+    } else if (type === 'wednesday') {
+      const { sendWednesdayEmails } = require('../jobs/wednesdayListingUpdate')
+      result = await sendWednesdayEmails({ dryRun, limit: 100, force, dayOffset: batchInfo.batchNumber - 1 })
+    } else {
+      const { sendFridayEmails } = require('../jobs/fridayUpgradeOffer')
+      result = await sendFridayEmails({ dryRun, limit: 100, force, dayOffset: batchInfo.batchNumber - 1 })
+    }
+    
+    res.json({
+      ok: true,
+      type,
+      dryRun,
+      batch: batchInfo,
+      totalUsers,
+      sent: result.sent,
+      recipients: dryRun ? result.recipients?.slice(0, 5) : undefined
+    })
+  } catch (err) {
+    console.error('[emailCron] send-batch failed', err)
+    res.status(500).json({ ok: false, error: err.message })
+  }
+})
+
 module.exports = router

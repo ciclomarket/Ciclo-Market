@@ -267,6 +267,10 @@ async function sendMondayEmails({ dryRun = false, limit = DEFAULT_BATCH_LIMIT, f
   const supabase = getServerSupabaseClient()
   const baseFront = (process.env.FRONTEND_URL || BRAND.url).split(',')[0].trim().replace(/\/$/, '')
   
+  // Sistema de batches: obtener todos los usuarios y seleccionar el batch correspondiente
+  let calculatedLimit = limit
+  let calculatedOffset = dayOffset * limit
+  
   // Fetch listings
   const listings = await fetchLatestListings(supabase, LISTINGS_COUNT)
   if (!listings.length) {
@@ -277,24 +281,16 @@ async function sendMondayEmails({ dryRun = false, limit = DEFAULT_BATCH_LIMIT, f
   // Fetch recent recipients (cooldown por tipo específico)
   const recentRecipients = force ? new Set() : await fetchRecentRecipients(supabase, COOLDOWN_DAYS)
   
-  // Calcular offset basado en el día de la semana para distribuir envíos
-  // Lunes = offset 0, próximo lunes = offset 100, etc.
-  const now = new Date()
-  const dayOfWeek = now.getDay() // 0=domingo, 1=lunes, ..., 6=sábado
-  const weekNumber = Math.floor(now.getTime() / (7 * 24 * 60 * 60 * 1000))
-  const calculatedOffset = (dayOffset || dayOfWeek) * DEFAULT_BATCH_LIMIT
-  
-  // Fetch subscribers con paginación
+  // Obtener todos los usuarios y aplicar offset
   const allSubscribers = await fetchNewsletterSubscribers(supabase, 1000, Array.from(recentRecipients))
   if (!allSubscribers.length) {
     console.info(`[${AUTOMATION_TYPE}] no subscribers to email`)
     return { sent: 0, recipients: [], dryRun, listingsCount: listings.length }
   }
   
-  // Seleccionar solo el batch correspondiente a hoy
-  const subscribers = allSubscribers.slice(calculatedOffset, calculatedOffset + limit)
+  const subscribers = allSubscribers.slice(calculatedOffset, calculatedOffset + calculatedLimit)
   
-  console.info(`[${AUTOMATION_TYPE}] total subscribers: ${allSubscribers.length}, batch: ${calculatedOffset}-${calculatedOffset + limit}`)
+  console.info(`[${AUTOMATION_TYPE}] Batch ${dayOffset + 1}: usuarios ${calculatedOffset + 1}-${calculatedOffset + subscribers.length}`)
   
   const results = []
   let sent = 0
@@ -349,19 +345,33 @@ function startMondayNewArrivalsJob() {
     return
   }
   
-  const schedule = process.env.MONDAY_NEW_ARRIVALS_CRON || DEFAULT_CRON
   const tz = process.env.MONDAY_NEW_ARRIVALS_TZ || 'America/Argentina/Buenos_Aires'
   
-  const task = cron.schedule(schedule, async () => {
+  // Lunes - Batch 0 (usuarios 1-100)
+  const scheduleMonday = process.env.MONDAY_NEW_ARRIVALS_CRON || '0 9 * * 1'
+  const taskMonday = cron.schedule(scheduleMonday, async () => {
     try {
-      await sendMondayEmails()
+      console.info(`[${AUTOMATION_TYPE}] Lunes - Batch 1 (dayOffset=0)`)
+      await sendMondayEmails({ dayOffset: 0 })
     } catch (err) {
-      console.error(`[${AUTOMATION_TYPE}] job failed`, err)
+      console.error(`[${AUTOMATION_TYPE}] Lunes job failed`, err)
     }
   }, { timezone: tz })
+  taskMonday.start()
+  console.info(`[${AUTOMATION_TYPE}] Lunes job started with cron ${scheduleMonday}`)
   
-  task.start()
-  console.info(`[${AUTOMATION_TYPE}] job started with cron ${schedule} tz ${tz}`)
+  // Martes - Batch 1 (usuarios 101-200)
+  const scheduleTuesday = process.env.MONDAY_NEW_ARRIVALS_TUESDAY_CRON || '0 9 * * 2'
+  const taskTuesday = cron.schedule(scheduleTuesday, async () => {
+    try {
+      console.info(`[${AUTOMATION_TYPE}] Martes - Batch 2 (dayOffset=1)`)
+      await sendMondayEmails({ dayOffset: 1 })
+    } catch (err) {
+      console.error(`[${AUTOMATION_TYPE}] Martes job failed`, err)
+    }
+  }, { timezone: tz })
+  taskTuesday.start()
+  console.info(`[${AUTOMATION_TYPE}] Martes job started with cron ${scheduleTuesday}`)
 }
 
 // ============================================================================

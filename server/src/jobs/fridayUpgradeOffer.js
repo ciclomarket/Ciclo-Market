@@ -370,7 +370,7 @@ async function recordSend(supabase, userId, email, metadata = {}) {
   }
 }
 
-async function sendFridayEmails({ dryRun = false, limit = DEFAULT_BATCH_LIMIT, force = false } = {}) {
+async function sendFridayEmails({ dryRun = false, limit = DEFAULT_BATCH_LIMIT, force = false, dayOffset = 0 } = {}) {
   if (!isMailConfigured()) {
     throw new Error('Mail no configurado (RESEND_API_KEY o SMTP_*)')
   }
@@ -379,15 +379,23 @@ async function sendFridayEmails({ dryRun = false, limit = DEFAULT_BATCH_LIMIT, f
   const baseFront = (process.env.FRONTEND_URL || BRAND.url).split(',')[0].trim().replace(/\/$/, '')
   const baseApi = process.env.SERVER_BASE_URL || baseFront
   
+  // Sistema de batches: obtener todos los usuarios y seleccionar el batch correspondiente
+  let calculatedLimit = limit
+  let calculatedOffset = dayOffset * limit
+  
   // Fetch recent recipients (cooldown)
   const recentRecipients = force ? new Set() : await fetchRecentRecipients(supabase, COOLDOWN_DAYS)
   
-  // Fetch free plan sellers
-  const sellers = await fetchFreePlanSellers(supabase, limit, Array.from(recentRecipients))
-  if (!sellers.length) {
+  // Obtener todos los sellers free y aplicar offset
+  const allSellers = await fetchFreePlanSellers(supabase, 1000, Array.from(recentRecipients))
+  if (!allSellers.length) {
     console.info(`[${AUTOMATION_TYPE}] no free plan sellers to email`)
     return { sent: 0, recipients: [], dryRun }
   }
+  
+  const sellers = allSellers.slice(calculatedOffset, calculatedOffset + calculatedLimit)
+  
+  console.info(`[${AUTOMATION_TYPE}] Batch ${dayOffset + 1}: usuarios ${calculatedOffset + 1}-${calculatedOffset + sellers.length}`)
   
   const results = []
   let sent = 0
@@ -444,19 +452,33 @@ function startFridayUpgradeOfferJob() {
     return
   }
   
-  const schedule = process.env.FRIDAY_UPGRADE_CRON || DEFAULT_CRON
   const tz = process.env.FRIDAY_UPGRADE_TZ || 'America/Argentina/Buenos_Aires'
   
-  const task = cron.schedule(schedule, async () => {
+  // Viernes - Batch 0 (usuarios 1-100)
+  const scheduleFriday = process.env.FRIDAY_UPGRADE_CRON || '0 11 * * 5'
+  const taskFriday = cron.schedule(scheduleFriday, async () => {
     try {
-      await sendFridayEmails()
+      console.info(`[${AUTOMATION_TYPE}] Viernes - Batch 1 (dayOffset=0)`)
+      await sendFridayEmails({ dayOffset: 0 })
     } catch (err) {
-      console.error(`[${AUTOMATION_TYPE}] job failed`, err)
+      console.error(`[${AUTOMATION_TYPE}] Viernes job failed`, err)
     }
   }, { timezone: tz })
+  taskFriday.start()
+  console.info(`[${AUTOMATION_TYPE}] Viernes job started with cron ${scheduleFriday}`)
   
-  task.start()
-  console.info(`[${AUTOMATION_TYPE}] job started with cron ${schedule} tz ${tz}`)
+  // Sábado - Batch 1 (usuarios 101-200)
+  const scheduleSaturday = process.env.FRIDAY_UPGRADE_SATURDAY_CRON || '0 11 * * 6'
+  const taskSaturday = cron.schedule(scheduleSaturday, async () => {
+    try {
+      console.info(`[${AUTOMATION_TYPE}] Sábado - Batch 2 (dayOffset=1)`)
+      await sendFridayEmails({ dayOffset: 1 })
+    } catch (err) {
+      console.error(`[${AUTOMATION_TYPE}] Sábado job failed`, err)
+    }
+  }, { timezone: tz })
+  taskSaturday.start()
+  console.info(`[${AUTOMATION_TYPE}] Sábado job started with cron ${scheduleSaturday}`)
 }
 
 // ============================================================================
