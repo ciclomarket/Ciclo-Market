@@ -24,7 +24,8 @@
     "pricing:admin": "node ./scripts/pricing-admin.js",
     "pricing:sync:ciclomarket": "node -e \"const s=require('./src/services/pricingScraperService'); s.processPendingJobs({limit:1}).then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})\"",
     "pricing:recalculate": "node -e \"const {createClient}=require('@supabase/supabase-js'); const sb=createClient(process.env.SUPABASE_URL,process.env.SUPABASE_SERVICE_ROLE_KEY); sb.rpc('recalculate_market_prices_enhanced').then(()=>{console.log('✅ Recalculated');process.exit(0)}).catch(e=>{console.error(e);process.exit(1)})\"",
-    "pricing:stats": "node -e \"require('./scripts/pricing-admin').showStats().then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})\""
+    "pricing:stats": "node -e \"require('./scripts/pricing-admin').showStats().then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})\"",
+    "pricing:scrape:mercadolibre": "node ./scripts/scrape-mercadolibre-api.js"
   },
   "dependencies": {
     "@notionhq/client": "^3.1.1",
@@ -32,6 +33,7 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "fuse.js": "^7.1.0",
     "mercadopago": "^2.9.0",
     "node-cron": "^3.0.3",
     "nodemailer": "^6.9.14",

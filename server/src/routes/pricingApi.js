@@ -6,6 +6,7 @@
 const express = require('express')
 const { createClient } = require('@supabase/supabase-js')
 const { z } = require('zod')
+const Fuse = require('fuse.js')
 
 const router = express.Router()
 
@@ -163,7 +164,7 @@ router.post('/ingest', async (req, res) => {
 
 /**
  * GET /api/v1/pricing/suggest
- * Obtiene sugerencia de precio para un modelo
+ * Obtiene sugerencia de precio usando FUZZY MATCHING
  */
 router.get('/suggest', async (req, res) => {
   try {
@@ -184,136 +185,111 @@ router.get('/suggest', async (req, res) => {
     }
 
     const { brand, model, year, condition, currency } = validation.data
+    const searchQuery = `${brand} ${model}`.toLowerCase()
 
-    // Buscar bike_model_id
-    const { data: bikeModel, error: modelError } = await supabase
-      .from('bike_models')
-      .select('id, brand, model, year_released, category')
-      .ilike('brand', brand)
-      .ilike('model', `%${model}%`)
-      .single()
+    console.log(`[Pricing API] Fuzzy search for: "${searchQuery}"`)
 
-    if (modelError || !bikeModel) {
-      // Intentar buscar en aliases
-      const { data: alias } = await supabase
-        .from('bike_model_aliases')
-        .select('bike_model_id, bike_models(*)')
-        .ilike('alias', `%${model}%`)
-        .limit(1)
-        .single()
-
-      if (!alias) {
-        return res.status(404).json({
-          error: 'Model not found',
-          code: 'model_not_found',
-          suggestion: 'Try searching with different spelling or check available models'
-        })
-      }
-    }
-
-    const bikeModelId = bikeModel?.id
-
-    // Buscar precios de mercado exactos
-    const { data: marketPrice, error: priceError } = await supabase
-      .from('market_prices')
-      .select('*')
-      .eq('bike_model_id', bikeModelId)
-      .eq('condition', condition)
-      .eq('year', year)
-      .eq('currency', currency)
-      .order('calculated_at', { ascending: false })
-      .limit(1)
-      .single()
-
-    // Si no hay precio exacto, buscar similares (±2 años)
-    let similarPrices = null
-    if (!marketPrice) {
-      const { data: similar } = await supabase
-        .from('market_prices')
-        .select('*')
-        .eq('bike_model_id', bikeModelId)
-        .eq('condition', condition)
-        .eq('currency', currency)
-        .gte('year', year - 2)
-        .lte('year', year + 2)
-        .order('sample_size', { ascending: false })
-        .limit(1)
-        .single()
-      
-      similarPrices = similar
-    }
-
-    // Buscar listings individuales para muestras
-    const { data: samples } = await supabase
+    // Traer listings activos con títulos similares (usando búsqueda amplia)
+    const { data: listings, error: listingsError } = await supabase
       .from('price_listings')
-      .select('source, price, currency, condition, province, scraped_at, external_url')
-      .eq('bike_model_id', bikeModelId)
+      .select('*')
       .eq('status', 'active')
       .eq('currency', currency)
-      .order('scraped_at', { ascending: false })
-      .limit(10)
+      .or(`title.ilike.%${brand}%,title.ilike.%${model}%`)
+      .limit(500)
 
-    // Calcular fuentes
-    const sources = {}
-    if (samples) {
-      samples.forEach(s => {
-        if (!sources[s.source]) {
-          sources[s.source] = { count: 0, avg_price: 0, total: 0 }
+    if (listingsError) {
+      console.error('[Pricing API] Error fetching listings:', listingsError)
+      throw listingsError
+    }
+
+    if (!listings || listings.length === 0) {
+      return res.json({
+        model: { brand, model, year },
+        suggestion: null,
+        sources: {},
+        samples: [],
+        alternatives: {
+          message: 'No encontramos publicaciones similares',
+          actions: ['Intentá con otra marca', 'Probá sin el número de modelo']
         }
-        sources[s.source].count++
-        sources[s.source].total += s.price
-      })
-      
-      Object.keys(sources).forEach(key => {
-        sources[key].avg_price = Math.round(sources[key].total / sources[key].count)
-        delete sources[key].total
       })
     }
 
-    // Construir respuesta
-    const hasExact = !!marketPrice
-    const hasSimilar = !!similarPrices
-    const confidence = hasExact ? 'high' : hasSimilar ? 'medium' : 'low'
-    
-    const priceData = marketPrice || similarPrices
+    // Fuzzy matching con Fuse.js
+    const fuseOptions = {
+      keys: ['title'],
+      threshold: 0.4, // 0 = exacto, 1 = cualquier cosa. 0.4 es buen balance
+      includeScore: true,
+      ignoreLocation: true, // Busca en cualquier parte del título
+      minMatchCharLength: 3
+    }
+
+    const fuse = new Fuse(listings, fuseOptions)
+    const fuzzyResults = fuse.search(searchQuery)
+
+    // Tomar resultados con score > 0.6 (más alto = mejor match)
+    const matchedListings = fuzzyResults
+      .filter(r => r.score <= 0.6)
+      .map(r => r.item)
+
+    console.log(`[Pricing API] Fuzzy matched: ${matchedListings.length} from ${fuzzyResults.length} candidates`)
+
+    // Si no hay matches buenos, usar los mejores disponibles
+    const finalListings = matchedListings.length > 0 
+      ? matchedListings 
+      : fuzzyResults.slice(0, 20).map(r => r.item)
+
+    // Calcular estadísticas
+    const prices = finalListings.map(l => l.price).sort((a, b) => a - b)
+    const avg = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length)
+    const median = prices[Math.floor(prices.length / 2)]
+    const p25 = prices[Math.floor(prices.length * 0.25)]
+    const p75 = prices[Math.floor(prices.length * 0.75)]
+
+    // Agrupar por fuente
+    const sources = {}
+    finalListings.forEach(l => {
+      if (!sources[l.source]) {
+        sources[l.source] = { count: 0, total: 0 }
+      }
+      sources[l.source].count++
+      sources[l.source].total += l.price
+    })
+
+    Object.keys(sources).forEach(key => {
+      sources[key].avg_price = Math.round(sources[key].total / sources[key].count)
+      delete sources[key].total
+    })
+
+    // Determinar confianza
+    let confidence = 'low'
+    if (matchedListings.length >= 10) confidence = 'high'
+    else if (matchedListings.length >= 5) confidence = 'medium'
 
     res.json({
-      bike_model_id: bikeModelId,
-      model: {
-        brand: bikeModel?.brand,
-        model: bikeModel?.model,
-        year: year,
-        category: bikeModel?.category
+      model: { brand, model, year },
+      fuzzy_match: {
+        total_candidates: listings.length,
+        matches_found: matchedListings.length,
+        best_score: fuzzyResults[0]?.score || 1
       },
-      suggestion: priceData ? {
+      suggestion: {
         confidence,
-        price_ars: currency === 'ARS' ? priceData.median_price : null,
-        price_usd: currency === 'USD' ? priceData.median_price : null,
+        price_ars: currency === 'ARS' ? median : null,
         currency,
-        range: {
-          low: priceData.p25 || priceData.min_price,
-          mid: priceData.median_price,
-          high: priceData.p75 || priceData.max_price
-        },
-        sample_size: priceData.sample_size,
-        calculated_at: priceData.calculated_at
-      } : null,
+        range: { low: p25, mid: median, high: p75 },
+        sample_size: finalListings.length,
+        calculated_at: new Date().toISOString()
+      },
       sources,
-      samples: samples?.map(s => ({
-        source: s.source,
-        price: s.price,
-        condition: s.condition,
-        province: s.province,
-        listed_at: s.scraped_at
-      })),
-      alternatives: !priceData ? {
-        message: 'No pricing data available for this exact model/year',
-        actions: [
-          'Check similar years (±2)',
-          'Check different condition',
-          'Browse active listings directly'
-        ]
-      } : null
+      samples: finalListings.slice(0, 10).map(l => ({
+        source: l.source,
+        title: l.title,
+        price: l.price,
+        province: l.province,
+        listed_at: l.listed_at
+      }))
     })
 
   } catch (err) {

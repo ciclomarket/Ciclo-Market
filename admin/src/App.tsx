@@ -9,6 +9,7 @@ import ListingsPage from '@admin/pages/Listings'
 import StoresPage from '@admin/pages/Stores'
 import StoreDetailPage from '@admin/pages/StoreDetail'
 import ActionInboxPage from '@admin/pages/ActionInbox'
+import PricingPage from '@admin/pages/Pricing'
 import { AdminLayout } from '@admin/components/AdminLayout'
 
 function ProtectedApp() {
@@ -22,6 +23,7 @@ function ProtectedApp() {
         <Route path="/engagement" element={<EngagementPage />} />
         <Route path="/stores" element={<StoresPage />} />
         <Route path="/stores/:id" element={<StoreDetailPage />} />
+        <Route path="/pricing" element={<PricingPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
