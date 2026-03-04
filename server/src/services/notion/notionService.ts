@@ -1,0 +1,251 @@
+import { z } from 'zod'
+import { getEnv, getNotionClient, notionRequest } from './notionClient'
+
+export type WeeklyKpis = {
+  weekKey: string
+  weekStart: string
+  weekEnd: string
+  newListings7d: number
+  contacts7d: number
+  priceDrops7d: number
+  medianHoursToFirstContact: number | null
+  topListingsByViews: Array<{ listingId: string; title: string; views: number }>
+  topModelsByLikes: Array<{ model: string; likes: number }>
+}
+
+export type InsightPayload = {
+  title: string
+  category: string
+  metric: string
+  value: number
+  period: string
+  source?: string
+}
+
+export type TaskPayload = {
+  task: string
+  type: string
+  day: string
+  priority: string
+  status?: string
+  owner?: string
+  notes?: string
+  taskKey?: string
+}
+
+const reportSchema = z.object({
+  weekKey: z.string().min(4),
+  weekStart: z.string().min(8),
+  weekEnd: z.string().min(8),
+  newListings7d: z.number().int().nonnegative(),
+  contacts7d: z.number().int().nonnegative(),
+  priceDrops7d: z.number().int().nonnegative(),
+  medianHoursToFirstContact: z.number().nonnegative().nullable(),
+  topListingsByViews: z.array(z.object({ listingId: z.string(), title: z.string(), views: z.number().int().nonnegative() })),
+  topModelsByLikes: z.array(z.object({ model: z.string(), likes: z.number().int().nonnegative() })),
+})
+
+const insightSchema = z.object({
+  title: z.string().min(3),
+  category: z.string().min(2),
+  metric: z.string().min(2),
+  value: z.number(),
+  period: z.string().min(2),
+  source: z.string().min(2).default('Supabase'),
+})
+
+const taskSchema = z.object({
+  task: z.string().min(3),
+  type: z.string().min(2),
+  day: z.string().min(2),
+  priority: z.string().min(2),
+  status: z.string().min(2).default('Todo'),
+  owner: z.string().min(2).default('Growth'),
+  notes: z.string().default(''),
+  taskKey: z.string().optional(),
+})
+
+function requireDbId(name: string): string {
+  const value = getEnv(name)
+  if (!value) throw new Error(`${name} no configurado`)
+  return value
+}
+
+function toRichText(value: unknown) {
+  const content = String(value || '').slice(0, 2000)
+  return [{ text: { content } }]
+}
+
+function buildWeeklyReportTitle(weekKey: string): string {
+  return `Weekly Market Report ${weekKey}`
+}
+
+function buildWeeklyReportLink(weekKey: string): string {
+  return `https://www.ciclomarket.ar/admin/growth-os?week=${encodeURIComponent(weekKey)}`
+}
+
+function buildReportNotes(kpis: WeeklyKpis): string {
+  const medianText = Number.isFinite(kpis.medianHoursToFirstContact)
+    ? `${Number(kpis.medianHoursToFirstContact).toFixed(2)}h`
+    : 'N/A'
+
+  const topListings = kpis.topListingsByViews
+    .slice(0, 5)
+    .map((item, idx) => `${idx + 1}. ${item.title} (${item.views} views)`)
+    .join(' | ')
+
+  const topModels = kpis.topModelsByLikes
+    .slice(0, 5)
+    .map((item, idx) => `${idx + 1}. ${item.model} (${item.likes} likes)`)
+    .join(' | ')
+
+  return [
+    `Periodo: ${kpis.weekStart} -> ${kpis.weekEnd}`,
+    `New listings (7d): ${kpis.newListings7d}`,
+    `Contacts (7d): ${kpis.contacts7d}`,
+    `Price drops (7d): ${kpis.priceDrops7d}`,
+    `Median time to first contact: ${medianText}`,
+    `Top listings by views: ${topListings || 'sin datos'}`,
+    `Top models by likes: ${topModels || 'sin datos'}`,
+  ].join('\n')
+}
+
+async function findPageByUrl(databaseId: string, url: string) {
+  const notion = getNotionClient()
+  const response = await notionRequest('databases.query.findPageByUrl', () =>
+    notion.databases.query({
+      database_id: databaseId,
+      page_size: 1,
+      filter: {
+        property: 'Link',
+        url: { equals: url },
+      },
+    })
+  )
+  return response.results?.[0] || null
+}
+
+async function findPageByUniqueKey(databaseId: string, uniqueKey: string) {
+  const notion = getNotionClient()
+  const response = await notionRequest('databases.query.findPageByUniqueKey', () =>
+    notion.databases.query({
+      database_id: databaseId,
+      page_size: 1,
+      filter: {
+        property: 'UniqueKey',
+        rich_text: { contains: uniqueKey },
+      },
+    })
+  )
+  return response.results?.[0] || null
+}
+
+async function findTaskByTaskKey(databaseId: string, taskKey: string) {
+  const notion = getNotionClient()
+  const response = await notionRequest('databases.query.findTaskByTaskKey', () =>
+    notion.databases.query({
+      database_id: databaseId,
+      page_size: 1,
+      filter: {
+        property: 'Notes',
+        rich_text: { contains: `[taskKey:${taskKey}]` },
+      },
+    })
+  )
+  return response.results?.[0] || null
+}
+
+export async function createWeeklyReport(rawKpis: WeeklyKpis) {
+  const kpis = reportSchema.parse(rawKpis)
+  const notion = getNotionClient()
+  const dbContent = requireDbId('NOTION_DB_CONTENT')
+
+  const title = buildWeeklyReportTitle(kpis.weekKey)
+  const link = buildWeeklyReportLink(kpis.weekKey)
+  const notes = buildReportNotes(kpis)
+  const publishDate = new Date(`${kpis.weekEnd}T12:00:00.000Z`).toISOString()
+
+  const existing = await findPageByUrl(dbContent, link)
+
+  const properties = {
+    Title: { title: [{ text: { content: title } }] },
+    Status: { select: { name: 'Published' } },
+    Channel: { select: { name: 'Notion' } },
+    'Publish Date': { date: { start: publishDate } },
+    Link: { url: link },
+    Notes: { rich_text: toRichText(notes) },
+    'Insight Ref': { rich_text: toRichText(`week:${kpis.weekKey}`) },
+  }
+
+  if (existing?.id) {
+    await notionRequest('pages.update.weeklyReport', () => notion.pages.update({ page_id: existing.id, properties }))
+    return { mode: 'updated', pageId: existing.id, title, link }
+  }
+
+  const created = await notionRequest('pages.create.weeklyReport', () =>
+    notion.pages.create({ parent: { database_id: dbContent }, properties })
+  )
+
+  return { mode: 'created', pageId: created.id, title, link }
+}
+
+export async function upsertInsight(insightKey: string, rawPayload: InsightPayload) {
+  const payload = insightSchema.parse(rawPayload)
+  const notion = getNotionClient()
+  const dbInsights = requireDbId('NOTION_DB_INSIGHTS')
+
+  const existing = await findPageByUniqueKey(dbInsights, insightKey)
+
+  const properties = {
+    Title: { title: [{ text: { content: payload.title } }] },
+    Category: { select: { name: payload.category } },
+    Metric: { rich_text: toRichText(payload.metric) },
+    Value: { number: payload.value },
+    Period: { rich_text: toRichText(payload.period) },
+    Source: { select: { name: payload.source || 'Supabase' } },
+    UniqueKey: { rich_text: toRichText(insightKey) },
+  }
+
+  if (existing?.id) {
+    await notionRequest('pages.update.insight', () => notion.pages.update({ page_id: existing.id, properties }))
+    return { mode: 'updated', pageId: existing.id, insightKey }
+  }
+
+  const created = await notionRequest('pages.create.insight', () =>
+    notion.pages.create({ parent: { database_id: dbInsights }, properties })
+  )
+
+  return { mode: 'created', pageId: created.id, insightKey }
+}
+
+export async function createTask(rawPayload: TaskPayload) {
+  const payload = taskSchema.parse(rawPayload)
+  const notion = getNotionClient()
+  const dbTasks = requireDbId('NOTION_DB_TASKS')
+
+  if (payload.taskKey) {
+    const existing = await findTaskByTaskKey(dbTasks, payload.taskKey)
+    if (existing?.id) {
+      return { mode: 'skipped_existing', pageId: existing.id, taskKey: payload.taskKey }
+    }
+  }
+
+  const notes = payload.taskKey ? `${payload.notes}\n[taskKey:${payload.taskKey}]` : payload.notes
+
+  const created = await notionRequest('pages.create.task', () =>
+    notion.pages.create({
+      parent: { database_id: dbTasks },
+      properties: {
+        Task: { title: [{ text: { content: payload.task } }] },
+        Type: { select: { name: payload.type } },
+        Day: { select: { name: payload.day } },
+        Priority: { select: { name: payload.priority } },
+        Status: { select: { name: payload.status } },
+        Owner: { rich_text: toRichText(payload.owner) },
+        Notes: { rich_text: toRichText(notes) },
+      },
+    })
+  )
+
+  return { mode: 'created', pageId: created.id, taskKey: payload.taskKey || null }
+}

@@ -59,6 +59,8 @@ const appApiRouter = require('./routes/appApi')
 const importRouter = require('./routes/import')
 const { whatsappRouter } = require('./routes/whatsapp')
 const emailCronRouter = require('./routes/emailCron')
+const pricingApiRouter = require('./routes/pricingApi')
+const notionSyncRouter = require('./routes/notionSync')
 // Sweepstake feature removed
 const path = require('path')
 // const https = require('https') // removed: used only for Google rating proxy
@@ -370,6 +372,12 @@ app.use(whatsappRouter)
 
 // Email automation cron routes (test endpoints)
 app.use(emailCronRouter)
+
+// Notion Growth OS sync (protected endpoint)
+app.use(notionSyncRouter)
+
+// Pricing API routes (ingesta de precios, sugerencias, analytics)
+app.use('/api/v1/pricing', pricingApiRouter)
 
 /* ----------------------------- Cron jobs ---------------------------------- */
 // Start scheduled jobs after basic middleware is ready
@@ -1752,6 +1760,24 @@ app.listen(PORT, '0.0.0.0', () => {
     } catch (err) {
       console.warn('[extendExpired90d] cron not started:', err?.message || err)
     }
+  }
+  // Pricing scraper jobs
+  if (process.env.PRICING_SCRAPER_ENABLED === 'true') {
+    try {
+      const pricingJobs = require('./jobs/pricingJobs')
+      pricingJobs.initializeRecurringJobs()
+      
+      // Scheduler cada minuto para jobs de scraping
+      const cron = require('node-cron')
+      cron.schedule('* * * * *', () => {
+        pricingJobs.runScheduledJobs().catch((e) => console.warn('[pricingJobs] cron error', e?.message || e))
+      })
+      console.info('[pricingJobs] scheduler started')
+    } catch (err) {
+      console.warn('[pricingJobs] not started:', err?.message || err)
+    }
+  } else {
+    console.info('[pricingJobs] disabled (PRICING_SCRAPER_ENABLED != "true")')
   }
 })
 /* ----------------------------- Auth helper -------------------------------- */

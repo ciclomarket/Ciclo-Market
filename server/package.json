@@ -20,15 +20,22 @@
     "email:wednesday:dry": "node -e \"require('./src/jobs/wednesdayListingUpdate').sendWednesdayEmails({dryRun:true,limit:5}).then(r=>{console.log(JSON.stringify(r,null,2));process.exit(0)}).catch(e=>{console.error(e);process.exit(1)})\"",
     "email:friday:once": "node -e \"require('./src/jobs/fridayUpgradeOffer').sendFridayEmails({dryRun:false}).then(r=>{console.log(r);process.exit(0)}).catch(e=>{console.error(e);process.exit(1)})\"",
     "email:friday:dry": "node -e \"require('./src/jobs/fridayUpgradeOffer').sendFridayEmails({dryRun:true,limit:5}).then(r=>{console.log(JSON.stringify(r,null,2));process.exit(0)}).catch(e=>{console.error(e);process.exit(1)})\"",
-    "email:test": "node ./scripts/sendTestEmail.js"
+    "email:test": "node ./scripts/sendTestEmail.js",
+    "pricing:admin": "node ./scripts/pricing-admin.js",
+    "pricing:sync:ciclomarket": "node -e \"const s=require('./src/services/pricingScraperService'); s.processPendingJobs({limit:1}).then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})\"",
+    "pricing:recalculate": "node -e \"const {createClient}=require('@supabase/supabase-js'); const sb=createClient(process.env.SUPABASE_URL,process.env.SUPABASE_SERVICE_ROLE_KEY); sb.rpc('recalculate_market_prices_enhanced').then(()=>{console.log('✅ Recalculated');process.exit(0)}).catch(e=>{console.error(e);process.exit(1)})\"",
+    "pricing:stats": "node -e \"require('./scripts/pricing-admin').showStats().then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})\""
   },
   "dependencies": {
+    "@notionhq/client": "^3.1.1",
     "@supabase/supabase-js": "^2.74.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "mercadopago": "^2.9.0",
     "node-cron": "^3.0.3",
-    "nodemailer": "^6.9.14"
+    "nodemailer": "^6.9.14",
+    "pino": "^9.9.0",
+    "zod": "^4.3.6"
   }
 }
