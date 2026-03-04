@@ -1,6 +1,8 @@
 const { getServerSupabaseClient } = require('../../lib/supabaseClient')
 
 const PAGE_SIZE = 1000
+const CONTACT_MEDIAN_WINDOW_DAYS = 14
+const LISTINGS_NO_CONTACT_AGE_DAYS = 7
 
 function addDays(date, days) {
   const copy = new Date(date.getTime())
@@ -32,8 +34,7 @@ async function fetchAllRows(queryFactory, pageSize = PAGE_SIZE) {
 
   while (true) {
     const to = from + pageSize - 1
-    const query = queryFactory().range(from, to)
-    const { data, error } = await query
+    const { data, error } = await queryFactory().range(from, to)
     if (error) throw error
 
     const batch = data || []
@@ -50,10 +51,46 @@ function median(values) {
   if (!values.length) return null
   const sorted = [...values].sort((a, b) => a - b)
   const middle = Math.floor(sorted.length / 2)
-  if (sorted.length % 2 === 0) {
-    return (sorted[middle - 1] + sorted[middle]) / 2
-  }
+  if (sorted.length % 2 === 0) return (sorted[middle - 1] + sorted[middle]) / 2
   return sorted[middle]
+}
+
+async function fetchContactsForListingIds(supabase, listingIds) {
+  if (!listingIds.length) return []
+
+  const chunkSize = 500
+  const rows = []
+  for (let i = 0; i < listingIds.length; i += chunkSize) {
+    const chunk = listingIds.slice(i, i + chunkSize)
+    const { data, error } = await supabase
+      .from('contact_events')
+      .select('listing_id,created_at')
+      .in('listing_id', chunk)
+      .order('created_at', { ascending: true })
+
+    if (error) throw error
+    rows.push(...(data || []))
+  }
+
+  return rows
+}
+
+function getTopListingsByViews(listingViewsRows, listingMetaMap, limit = 10) {
+  const viewsByListing = new Map()
+  for (const row of listingViewsRows) {
+    const listingId = String(row?.listing_id || '')
+    if (!listingId) continue
+    viewsByListing.set(listingId, (viewsByListing.get(listingId) || 0) + 1)
+  }
+
+  return Array.from(viewsByListing.entries())
+    .map(([listingId, views]) => ({
+      listingId,
+      views,
+      title: listingMetaMap.get(listingId)?.title || `Listing ${listingId.slice(0, 8)}`,
+    }))
+    .sort((a, b) => b.views - a.views)
+    .slice(0, limit)
 }
 
 async function getWeeklyKpis(options = {}) {
@@ -67,130 +104,104 @@ async function getWeeklyKpis(options = {}) {
 
   const supabase = getServerSupabaseClient()
 
-  const listings7d = await fetchAllRows(() =>
-    supabase
-      .from('listings')
-      .select('id,title,brand,model,created_at')
-      .gte('created_at', periodStartIso)
-      .lte('created_at', periodEndIso)
-      .order('created_at', { ascending: false })
-  )
-
-  const contactEvents7d = await fetchAllRows(() =>
-    supabase
-      .from('contact_events')
-      .select('listing_id,created_at,type')
-      .gte('created_at', periodStartIso)
-      .lte('created_at', periodEndIso)
-      .order('created_at', { ascending: false })
-  )
-
-  const listingViews7d = await fetchAllRows(() =>
-    supabase
-      .from('listing_views')
-      .select('listing_id,created_at')
-      .gte('created_at', periodStartIso)
-      .lte('created_at', periodEndIso)
-  )
-
-  const listingLikes7d = await fetchAllRows(() =>
-    supabase
-      .from('listing_likes')
-      .select('listing_id,created_at')
-      .gte('created_at', periodStartIso)
-      .lte('created_at', periodEndIso)
-  )
-
-  const priceDrops7d = await fetchAllRows(() =>
-    supabase
-      .from('price_adjustments')
-      .select('old_price,new_price,changed_at')
-      .gte('changed_at', periodStartIso)
-      .lte('changed_at', periodEndIso)
-  )
-  const priceDropsOnly = priceDrops7d.filter((row) => Number(row?.new_price) < Number(row?.old_price))
-
-  const listingIdsFromViews = Array.from(new Set(listingViews7d.map((v) => String(v.listing_id)).filter(Boolean)))
-  const listingIdsFromLikes = Array.from(new Set(listingLikes7d.map((l) => String(l.listing_id)).filter(Boolean)))
-  const listingIdsNeeded = Array.from(new Set([...listingIdsFromViews, ...listingIdsFromLikes, ...listings7d.map((l) => String(l.id))]))
-
-  const listingMeta = new Map()
-  if (listingIdsNeeded.length) {
-    const rows = await fetchAllRows(() =>
+  const [listings7d, listingViews7d, contactEvents7d, priceAdjustments7d] = await Promise.all([
+    fetchAllRows(() =>
       supabase
         .from('listings')
-        .select('id,title,brand,model,created_at')
-        .in('id', listingIdsNeeded)
-    )
-
-    for (const row of rows) {
-      listingMeta.set(String(row.id), row)
-    }
-  }
-
-  const viewCounts = new Map()
-  for (const row of listingViews7d) {
-    const listingId = String(row.listing_id || '')
-    if (!listingId) continue
-    viewCounts.set(listingId, (viewCounts.get(listingId) || 0) + 1)
-  }
-
-  const topListingsByViews = Array.from(viewCounts.entries())
-    .map(([listingId, views]) => ({
-      listingId,
-      views,
-      title: listingMeta.get(listingId)?.title || `Listing ${listingId.slice(0, 8)}`,
-    }))
-    .sort((a, b) => b.views - a.views)
-    .slice(0, 10)
-
-  const likesByModel = new Map()
-  for (const row of listingLikes7d) {
-    const listingId = String(row.listing_id || '')
-    const meta = listingMeta.get(listingId)
-    if (!meta) continue
-
-    const brand = String(meta.brand || '').trim()
-    const model = String(meta.model || '').trim()
-    const key = `${brand} ${model}`.trim() || model || brand || 'Unknown model'
-    likesByModel.set(key, (likesByModel.get(key) || 0) + 1)
-  }
-
-  const topModelsByLikes = Array.from(likesByModel.entries())
-    .map(([model, likes]) => ({ model, likes }))
-    .sort((a, b) => b.likes - a.likes)
-    .slice(0, 10)
-
-  const listingIdsForContactMedian = listings7d.map((l) => String(l.id))
-  let medianHoursToFirstContact = null
-
-  if (listingIdsForContactMedian.length) {
-    const contactsForListings = await fetchAllRows(() =>
+        .select('id,title,created_at,status,archived_at')
+        .gte('created_at', periodStartIso)
+        .lte('created_at', periodEndIso)
+        .order('created_at', { ascending: false })
+    ),
+    fetchAllRows(() =>
+      supabase
+        .from('listing_views')
+        .select('listing_id,created_at')
+        .gte('created_at', periodStartIso)
+        .lte('created_at', periodEndIso)
+    ),
+    fetchAllRows(() =>
       supabase
         .from('contact_events')
-        .select('listing_id,created_at')
-        .in('listing_id', listingIdsForContactMedian)
-        .order('created_at', { ascending: true })
+        .select('listing_id,created_at,type')
+        .gte('created_at', periodStartIso)
+        .lte('created_at', periodEndIso)
+    ),
+    fetchAllRows(() =>
+      supabase
+        .from('price_adjustments')
+        .select('old_price,new_price,changed_at')
+        .gte('changed_at', periodStartIso)
+        .lte('changed_at', periodEndIso)
+    ),
+  ])
+
+  const priceDropsOnly = priceAdjustments7d.filter((row) => Number(row?.new_price) < Number(row?.old_price))
+
+  const listingIdsFromViews = Array.from(new Set(listingViews7d.map((v) => String(v.listing_id || '')).filter(Boolean)))
+  const listingMetaMap = new Map()
+
+  if (listingIdsFromViews.length) {
+    const listingMetaRows = await fetchAllRows(() =>
+      supabase
+        .from('listings')
+        .select('id,title,created_at')
+        .in('id', listingIdsFromViews)
     )
-
-    const firstContactByListing = new Map()
-    for (const row of contactsForListings) {
-      const listingId = String(row.listing_id || '')
-      if (!listingId || firstContactByListing.has(listingId)) continue
-      firstContactByListing.set(listingId, row.created_at)
-    }
-
-    const diffsInHours = []
-    for (const listing of listings7d) {
-      const firstContactAt = firstContactByListing.get(String(listing.id))
-      if (!firstContactAt || !listing.created_at) continue
-      const diffMs = new Date(firstContactAt).getTime() - new Date(listing.created_at).getTime()
-      if (!Number.isFinite(diffMs) || diffMs < 0) continue
-      diffsInHours.push(diffMs / 36e5)
-    }
-
-    medianHoursToFirstContact = median(diffsInHours)
+    for (const row of listingMetaRows) listingMetaMap.set(String(row.id), row)
   }
+
+  const topListingsByViews = getTopListingsByViews(listingViews7d, listingMetaMap, 10)
+  const bikeOfWeek = topListingsByViews[0] || null
+  const top3ListingsByViews = topListingsByViews.slice(0, 3)
+
+  // Median time to first contact for listings created in last 14 days
+  const medianWindowStart = addDays(periodEnd, -CONTACT_MEDIAN_WINDOW_DAYS).toISOString()
+  const listingsMedianWindow = await fetchAllRows(() =>
+    supabase
+      .from('listings')
+      .select('id,created_at')
+      .gte('created_at', medianWindowStart)
+      .lte('created_at', periodEndIso)
+  )
+
+  const medianWindowListingIds = listingsMedianWindow.map((row) => String(row.id))
+  const contactsForMedian = await fetchContactsForListingIds(supabase, medianWindowListingIds)
+
+  const firstContactByListing = new Map()
+  for (const row of contactsForMedian) {
+    const listingId = String(row?.listing_id || '')
+    if (!listingId || firstContactByListing.has(listingId)) continue
+    firstContactByListing.set(listingId, row.created_at)
+  }
+
+  const diffsInHours = []
+  for (const listing of listingsMedianWindow) {
+    const firstContactAt = firstContactByListing.get(String(listing.id))
+    if (!firstContactAt || !listing.created_at) continue
+    const diffMs = new Date(firstContactAt).getTime() - new Date(listing.created_at).getTime()
+    if (!Number.isFinite(diffMs) || diffMs < 0) continue
+    diffsInHours.push(diffMs / 36e5)
+  }
+
+  const medianHoursToFirstContact = median(diffsInHours)
+
+  // Listings older than 7d (active/published) with zero contacts
+  const noContactCutoffIso = addDays(periodEnd, -LISTINGS_NO_CONTACT_AGE_DAYS).toISOString()
+  const oldActiveListings = await fetchAllRows(() =>
+    supabase
+      .from('listings')
+      .select('id')
+      .lte('created_at', noContactCutoffIso)
+      .is('archived_at', null)
+      .in('status', ['active', 'published'])
+  )
+
+  const oldListingIds = oldActiveListings.map((row) => String(row.id))
+  const contactsForOldListings = await fetchContactsForListingIds(supabase, oldListingIds)
+
+  const listingsWithContact = new Set(contactsForOldListings.map((row) => String(row?.listing_id || '')).filter(Boolean))
+  const listingsNoContact7dplus = oldListingIds.filter((id) => !listingsWithContact.has(id)).length
 
   return {
     weekKey,
@@ -198,16 +209,19 @@ async function getWeeklyKpis(options = {}) {
     weekEnd: toIsoDate(periodEnd),
     newListings7d: listings7d.length,
     contacts7d: contactEvents7d.length,
-    topListingsByViews,
-    topModelsByLikes,
     priceDrops7d: priceDropsOnly.length,
     medianHoursToFirstContact,
+    listingsNoContact7dplus,
+    bikeOfWeek,
+    topListingsByViews,
+    top3ListingsByViews,
     raw: {
       listingViewsCount: listingViews7d.length,
-      listingLikesCount: listingLikes7d.length,
       listingsCount: listings7d.length,
       contactEventsCount: contactEvents7d.length,
       priceAdjustmentsDropCount: priceDropsOnly.length,
+      noContactPoolSize: oldListingIds.length,
+      medianWindowListingsCount: medianWindowListingIds.length,
     },
   }
 }

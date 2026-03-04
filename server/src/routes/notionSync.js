@@ -38,70 +38,107 @@ function ensureSyncSecret(req, res, next) {
 }
 
 function buildInsightsFromKpis(kpis) {
-  const period = `${kpis.weekStart}..${kpis.weekEnd}`
+  const periodStart = kpis.weekStart
+  const periodEnd = kpis.weekEnd
   const source = 'Supabase'
+  const insights = []
 
-  const insights = [
-    {
-      insightKey: `new_listings_${kpis.weekKey}`,
-      payload: {
-        title: `Nuevos listings ${kpis.weekKey}`,
-        category: 'Supply',
-        metric: 'new_listings_7d',
-        value: kpis.newListings7d,
-        period,
-        source,
-      },
-    },
-    {
-      insightKey: `contacts_${kpis.weekKey}`,
-      payload: {
-        title: `Contactos 7d ${kpis.weekKey}`,
-        category: 'Demand',
-        metric: 'contacts_7d',
-        value: kpis.contacts7d,
-        period,
-        source,
-      },
-    },
-    {
-      insightKey: `price_drops_${kpis.weekKey}`,
-      payload: {
-        title: `Price drops ${kpis.weekKey}`,
-        category: 'Pricing',
-        metric: 'price_drops_7d',
-        value: kpis.priceDrops7d,
-        period,
-        source,
-      },
-    },
-    {
-      insightKey: `median_first_contact_hours_${kpis.weekKey}`,
-      payload: {
-        title: `Median time to first contact ${kpis.weekKey}`,
-        category: 'Funnel',
-        metric: 'median_hours_to_first_contact',
-        value: Number(kpis.medianHoursToFirstContact || 0),
-        period,
-        source,
-      },
-    },
-  ]
-
-  for (let i = 0; i < kpis.topModelsByLikes.length; i += 1) {
-    const item = kpis.topModelsByLikes[i]
+  if (kpis.bikeOfWeek) {
     insights.push({
-      insightKey: `top_model_likes_${i + 1}_${kpis.weekKey}`,
+      insightKey: `bike_of_week_views_7d:${kpis.weekKey}`,
       payload: {
-        title: `Top model likes #${i + 1} ${kpis.weekKey}`,
+        title: `Bike of the Week ${kpis.weekKey}`,
         category: 'Demand',
-        metric: item.model,
-        value: item.likes,
-        period,
+        metric: 'bike_of_week_views_7d',
+        value: `${kpis.bikeOfWeek.title} — ${kpis.bikeOfWeek.views} views`,
+        periodStart,
+        periodEnd,
         source,
       },
     })
   }
+
+  for (let i = 0; i < kpis.top3ListingsByViews.length; i += 1) {
+    const rank = i + 1
+    const item = kpis.top3ListingsByViews[i]
+    insights.push({
+      insightKey: `top_listing_views_rank_${rank}_7d:${kpis.weekKey}`,
+      payload: {
+        title: `Top listing by views #${rank} ${kpis.weekKey}`,
+        category: 'Demand',
+        metric: `top_listing_views_rank_${rank}_7d`,
+        value: `${item.title} — ${item.views} views`,
+        periodStart,
+        periodEnd,
+        source,
+      },
+    })
+  }
+
+  insights.push(
+    {
+      insightKey: `contacts_7d:${kpis.weekKey}`,
+      payload: {
+        title: `Contacts 7d ${kpis.weekKey}`,
+        category: 'Funnel',
+        metric: 'contacts_7d',
+        value: String(kpis.contacts7d),
+        periodStart,
+        periodEnd,
+        source,
+      },
+    },
+    {
+      insightKey: `new_listings_7d:${kpis.weekKey}`,
+      payload: {
+        title: `New listings 7d ${kpis.weekKey}`,
+        category: 'Supply',
+        metric: 'new_listings_7d',
+        value: String(kpis.newListings7d),
+        periodStart,
+        periodEnd,
+        source,
+      },
+    },
+    {
+      insightKey: `price_drops_7d:${kpis.weekKey}`,
+      payload: {
+        title: `Price drops 7d ${kpis.weekKey}`,
+        category: 'Pricing',
+        metric: 'price_drops_7d',
+        value: String(kpis.priceDrops7d),
+        periodStart,
+        periodEnd,
+        source,
+      },
+    },
+    {
+      insightKey: `median_hours_to_first_contact:${kpis.weekKey}`,
+      payload: {
+        title: `Median time to first contact ${kpis.weekKey}`,
+        category: 'Funnel',
+        metric: 'median_hours_to_first_contact',
+        value: Number.isFinite(kpis.medianHoursToFirstContact)
+          ? Number(kpis.medianHoursToFirstContact).toFixed(2)
+          : 'N/A',
+        periodStart,
+        periodEnd,
+        source,
+      },
+    },
+    {
+      insightKey: `listings_no_contact_7dplus:${kpis.weekKey}`,
+      payload: {
+        title: `Listings without contact (+7d) ${kpis.weekKey}`,
+        category: 'Supply',
+        metric: 'listings_no_contact_7dplus',
+        value: String(kpis.listingsNoContact7dplus),
+        periodStart,
+        periodEnd,
+        source,
+      },
+    }
+  )
 
   return insights
 }
@@ -116,37 +153,27 @@ function buildWeeklyTasks(kpis) {
       priority: 'High',
       status: 'Todo',
       owner: 'Growth',
-      notes: `Revisar variaciones semanales y publicar resumen ejecutivo (${kpis.weekStart}..${kpis.weekEnd}).`,
+      notes: `Publicar resumen semanal y destacar Bike of the Week (${kpis.weekStart}..${kpis.weekEnd}).`,
       taskKey: `weekly_report_publish_${key}`,
     },
     {
-      task: `Analizar top listings por views ${key}`,
-      type: 'Analysis',
+      task: `Optimizar listings sin contacto (+7d) ${key}`,
+      type: 'Ops',
       day: 'Tuesday',
-      priority: 'Medium',
-      status: 'Todo',
-      owner: 'Ops',
-      notes: 'Detectar patrones de precio/fotos/titulos para replicar en nuevos listings.',
-      taskKey: `weekly_top_views_analysis_${key}`,
-    },
-    {
-      task: `Diseñar 2 contenidos desde insights ${key}`,
-      type: 'Content',
-      day: 'Wednesday',
       priority: 'High',
       status: 'Todo',
-      owner: 'Marketing',
-      notes: 'Transformar insights en contenido (blog/IG/WhatsApp).',
-      taskKey: `weekly_content_plan_${key}`,
+      owner: 'Ops',
+      notes: 'Aplicar playbook de precio/fotos/titulo para recuperar demanda.',
+      taskKey: `weekly_no_contact_ops_${key}`,
     },
     {
-      task: `Proponer acciones de pricing ${key}`,
+      task: `Acciones de pricing por price drops ${key}`,
       type: 'Pricing',
-      day: 'Thursday',
+      day: 'Wednesday',
       priority: 'Medium',
       status: 'Todo',
       owner: 'Growth',
-      notes: 'Revisar price drops y recomendar ajustes por categoría/modelo.',
+      notes: 'Revisar señales de price_drops_7d y sugerir rangos de precio.',
       taskKey: `weekly_pricing_actions_${key}`,
     },
   ]
@@ -168,13 +195,15 @@ router.post('/api/notion/sync-weekly', ensureSyncSecret, async (req, res) => {
       periodEnd: payload.periodEnd,
     })
 
+    const plannedInsights = buildInsightsFromKpis(kpis)
+
     if (payload.dryRun) {
       return res.json({
         ok: true,
         dryRun: true,
         weekKey: kpis.weekKey,
         kpis,
-        plannedInsights: buildInsightsFromKpis(kpis).map((x) => x.insightKey),
+        plannedInsights: plannedInsights.map((x) => x.insightKey),
         plannedTasks: payload.includeTasks ? buildWeeklyTasks(kpis).map((x) => x.taskKey) : [],
       })
     }
@@ -182,7 +211,7 @@ router.post('/api/notion/sync-weekly', ensureSyncSecret, async (req, res) => {
     const reportResult = await createWeeklyReport(kpis)
 
     const insightResults = []
-    for (const item of buildInsightsFromKpis(kpis)) {
+    for (const item of plannedInsights) {
       const result = await upsertInsight(item.insightKey, item.payload)
       insightResults.push(result)
     }
@@ -204,7 +233,7 @@ router.post('/api/notion/sync-weekly', ensureSyncSecret, async (req, res) => {
         weekKey: kpis.weekKey,
         elapsedMs,
         reportMode: reportResult.mode,
-        insightsUpserted: insightResults.length,
+        insightsProcessed: insightResults.length,
         tasksProcessed: taskResults.length,
       })
     )

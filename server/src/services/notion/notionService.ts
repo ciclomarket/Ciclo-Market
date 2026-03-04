@@ -9,16 +9,18 @@ export type WeeklyKpis = {
   contacts7d: number
   priceDrops7d: number
   medianHoursToFirstContact: number | null
+  listingsNoContact7dplus: number
+  bikeOfWeek: { listingId: string; title: string; views: number } | null
   topListingsByViews: Array<{ listingId: string; title: string; views: number }>
-  topModelsByLikes: Array<{ model: string; likes: number }>
 }
 
 export type InsightPayload = {
   title: string
-  category: string
+  category: 'Demand' | 'Supply' | 'Funnel' | 'Pricing'
   metric: string
-  value: number
-  period: string
+  value: string | number
+  periodStart: string
+  periodEnd: string
   source?: string
 }
 
@@ -41,16 +43,18 @@ const reportSchema = z.object({
   contacts7d: z.number().int().nonnegative(),
   priceDrops7d: z.number().int().nonnegative(),
   medianHoursToFirstContact: z.number().nonnegative().nullable(),
+  listingsNoContact7dplus: z.number().int().nonnegative(),
   topListingsByViews: z.array(z.object({ listingId: z.string(), title: z.string(), views: z.number().int().nonnegative() })),
-  topModelsByLikes: z.array(z.object({ model: z.string(), likes: z.number().int().nonnegative() })),
+  bikeOfWeek: z.object({ listingId: z.string(), title: z.string(), views: z.number().int().nonnegative() }).nullable(),
 })
 
 const insightSchema = z.object({
   title: z.string().min(3),
-  category: z.string().min(2),
+  category: z.enum(['Demand', 'Supply', 'Funnel', 'Pricing']),
   metric: z.string().min(2),
-  value: z.number(),
-  period: z.string().min(2),
+  value: z.union([z.string(), z.number()]),
+  periodStart: z.string().min(8),
+  periodEnd: z.string().min(8),
   source: z.string().min(2).default('Supabase'),
 })
 
@@ -89,24 +93,24 @@ function buildReportNotes(kpis: WeeklyKpis): string {
     ? `${Number(kpis.medianHoursToFirstContact).toFixed(2)}h`
     : 'N/A'
 
+  const bikeOfWeekText = kpis.bikeOfWeek
+    ? `${kpis.bikeOfWeek.title} (${kpis.bikeOfWeek.views} views)`
+    : 'sin datos'
+
   const topListings = kpis.topListingsByViews
     .slice(0, 5)
     .map((item, idx) => `${idx + 1}. ${item.title} (${item.views} views)`)
     .join(' | ')
 
-  const topModels = kpis.topModelsByLikes
-    .slice(0, 5)
-    .map((item, idx) => `${idx + 1}. ${item.model} (${item.likes} likes)`)
-    .join(' | ')
-
   return [
     `Periodo: ${kpis.weekStart} -> ${kpis.weekEnd}`,
+    `Bike of the week: ${bikeOfWeekText}`,
     `New listings (7d): ${kpis.newListings7d}`,
     `Contacts (7d): ${kpis.contacts7d}`,
     `Price drops (7d): ${kpis.priceDrops7d}`,
-    `Median time to first contact: ${medianText}`,
+    `Median time to first contact (14d): ${medianText}`,
+    `Listings no contact (+7d): ${kpis.listingsNoContact7dplus}`,
     `Top listings by views: ${topListings || 'sin datos'}`,
-    `Top models by likes: ${topModels || 'sin datos'}`,
   ].join('\n')
 }
 
@@ -125,15 +129,15 @@ async function findPageByUrl(databaseId: string, url: string) {
   return response.results?.[0] || null
 }
 
-async function findPageByUniqueKey(databaseId: string, uniqueKey: string) {
+async function findInsightByKey(databaseId: string, insightKey: string) {
   const notion = getNotionClient()
-  const response = await notionRequest('databases.query.findPageByUniqueKey', () =>
+  const response = await notionRequest('databases.query.findInsightByKey', () =>
     notion.databases.query({
       database_id: databaseId,
       page_size: 1,
       filter: {
-        property: 'UniqueKey',
-        rich_text: { contains: uniqueKey },
+        property: 'InsightKey',
+        rich_text: { contains: insightKey },
       },
     })
   )
@@ -194,16 +198,16 @@ export async function upsertInsight(insightKey: string, rawPayload: InsightPaylo
   const notion = getNotionClient()
   const dbInsights = requireDbId('NOTION_DB_INSIGHTS')
 
-  const existing = await findPageByUniqueKey(dbInsights, insightKey)
+  const existing = await findInsightByKey(dbInsights, insightKey)
 
   const properties = {
     Title: { title: [{ text: { content: payload.title } }] },
     Category: { select: { name: payload.category } },
     Metric: { rich_text: toRichText(payload.metric) },
-    Value: { number: payload.value },
-    Period: { rich_text: toRichText(payload.period) },
-    Source: { select: { name: payload.source || 'Supabase' } },
-    UniqueKey: { rich_text: toRichText(insightKey) },
+    Value: { rich_text: toRichText(payload.value) },
+    Period: { date: { start: payload.periodStart, end: payload.periodEnd } },
+    Source: { rich_text: toRichText(payload.source || 'Supabase') },
+    InsightKey: { rich_text: toRichText(insightKey) },
   }
 
   if (existing?.id) {
@@ -225,9 +229,7 @@ export async function createTask(rawPayload: TaskPayload) {
 
   if (payload.taskKey) {
     const existing = await findTaskByTaskKey(dbTasks, payload.taskKey)
-    if (existing?.id) {
-      return { mode: 'skipped_existing', pageId: existing.id, taskKey: payload.taskKey }
-    }
+    if (existing?.id) return { mode: 'skipped_existing', pageId: existing.id, taskKey: payload.taskKey }
   }
 
   const notes = payload.taskKey ? `${payload.notes}\n[taskKey:${payload.taskKey}]` : payload.notes
