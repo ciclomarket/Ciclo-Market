@@ -23,8 +23,8 @@ const BRAND = {
   instagram: '@ciclomarket.ar',
   instagramUrl: 'https://instagram.com/ciclomarket.ar',
   logoUrl: 'https://www.ciclomarket.ar/site-logo.png',
-  footerAvatarUrl: 'https://jmtsgywgeysagnfgdovr.supabase.co/storage/v1/object/public/emails/ciclo-avatar.png',
-  instagramIconUrl: 'https://jmtsgywgeysagnfgdovr.supabase.co/storage/v1/object/public/emails/instagram.png',
+  footerAvatarUrl: 'https://www.ciclomarket.ar/favicon-96x96.png',
+  instagramIconUrl: 'https://www.ciclomarket.ar/icons/instagram.svg',
   colors: {
     black: '#000000',
     white: '#ffffff',

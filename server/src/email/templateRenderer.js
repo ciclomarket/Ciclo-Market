@@ -21,11 +21,11 @@ function buildListingCard(item, baseFront) {
   const link = toAbsoluteUrl(item.link || `${baseFront}/listing/${encodeURIComponent(item.slug || item.id || '')}`, baseFront)
 
   return `
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #e5e5e5;border-radius:12px;overflow:hidden;background:#ffffff;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #e5e5e5;border-radius:12px;overflow:hidden;background:#ffffff;max-width:520px;margin:0 auto;">
     <tr>
       <td>
         <a href="${link}" target="_blank">
-          <img src="${image}" alt="${title}" style="width:100%;height:180px;object-fit:cover;display:block;">
+          <img src="${image}" alt="${title}" width="420" height="420" style="width:100%;max-width:420px;aspect-ratio:1/1;height:auto;object-fit:cover;display:block;margin:0 auto;">
         </a>
       </td>
     </tr>

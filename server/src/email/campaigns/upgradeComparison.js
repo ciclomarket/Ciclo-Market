@@ -94,22 +94,38 @@ function pickLowPerformer(listings, engagementMap, contactsMap) {
 }
 
 function pickBenchmark(target, allListings, engagementMap, contactsMap) {
+  const targetEngagement = engagementMap.get(String(target.id)) || { views7d: 0, waClicks7d: 0 }
+  const targetContacts = Number(contactsMap.get(String(target.id)) || 0)
+  const targetScore = (targetEngagement.views7d * 1) + (targetContacts * 3) + (targetEngagement.waClicks7d * 2)
+  const isPaidPlan = (listing) => {
+    const tiers = [listing?.plan, listing?.plan_code, listing?.seller_plan].map((v) => String(v || '').toLowerCase())
+    return tiers.includes('premium') || tiers.includes('pro')
+  }
+
   const minPrice = Number(target.price || 0) * 0.85
   const maxPrice = Number(target.price || 0) * 1.15
-  const sameCategory = allListings.filter((l) => {
+  const sameCategoryPaid = allListings.filter((l) => {
     if (String(l.id) === String(target.id)) return false
     const categoryMatch = String(l.category || '').toLowerCase() === String(target.category || '').toLowerCase()
     const price = Number(l.price || 0)
     const priceMatch = Number.isFinite(price) && price >= minPrice && price <= maxPrice
-    return categoryMatch && priceMatch
+    return categoryMatch && priceMatch && isPaidPlan(l)
   })
 
-  const pool = sameCategory.length ? sameCategory : allListings.filter((l) => {
+  const sameCategoryAnyPaid = allListings.filter((l) => {
     if (String(l.id) === String(target.id)) return false
-    const tier = [l.plan, l.plan_code, l.seller_plan].map((v) => String(v || '').toLowerCase())
-    return tier.includes('premium') || tier.includes('pro')
+    const categoryMatch = String(l.category || '').toLowerCase() === String(target.category || '').toLowerCase()
+    return categoryMatch && isPaidPlan(l)
   })
 
+  const anyPaid = allListings.filter((l) => {
+    if (String(l.id) === String(target.id)) return false
+    return isPaidPlan(l)
+  })
+
+  const pool = sameCategoryPaid.length
+    ? sameCategoryPaid
+    : (sameCategoryAnyPaid.length ? sameCategoryAnyPaid : anyPaid)
   if (!pool.length) return null
 
   const scored = pool.map((l) => {
@@ -117,7 +133,13 @@ function pickBenchmark(target, allListings, engagementMap, contactsMap) {
     const contacts7d = Number(contactsMap.get(String(l.id)) || 0)
     const score = (e.views7d * 1) + (contacts7d * 3) + (e.waClicks7d * 2)
     return { ...l, views7d: e.views7d, contacts7d, waClicks7d: e.waClicks7d, score }
-  }).sort((a, b) => b.score - a.score)
+  })
+    .filter((candidate) => candidate.views7d > Number(targetEngagement.views7d || 0))
+    .filter((candidate) => candidate.score > targetScore)
+    .sort((a, b) => {
+      if (b.views7d !== a.views7d) return b.views7d - a.views7d
+      return b.score - a.score
+    })
 
   return scored[0] || null
 }
