@@ -34,14 +34,14 @@ function buildListingCard(item, baseFront, { compact = false, viewsOnly = false 
   if (!viewsOnly && Number.isFinite(Number(item.waClicks7d))) stats.push(`${Number(item.waClicks7d)} clics WA`)
 
   const link = toAbsoluteUrl(item.link || `${baseFront}/listing/${encodeURIComponent(item.slug || item.id || '')}`, baseFront)
-  const imageHeight = compact ? 140 : 160
+  const imageSize = compact ? 240 : 300
 
   return `
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #e5e7eb;border-radius:14px;overflow:hidden;background:#ffffff;">
     <tr>
       <td>
         <a href="${link}" target="_blank" style="text-decoration:none;display:block;">
-          <img src="${image}" alt="${title}" width="100%" height="${imageHeight}" style="width:100%;height:${imageHeight}px;object-fit:cover;display:block;background:#f3f4f6;">
+          <img src="${image}" alt="${title}" width="${imageSize}" height="${imageSize}" style="display:block;width:100%;max-width:${imageSize}px;height:${imageSize}px;object-fit:cover;object-position:center;margin:0 auto;background:#f3f4f6;">
         </a>
       </td>
     </tr>
@@ -86,8 +86,8 @@ function buildCardsSection(cards = [], baseFront, options = {}) {
     const right = maxCards[i + 1]
     rows.push(`
     <tr>
-      <td class="mj-column-per-50" style="width:50%;max-width:50%;vertical-align:top;padding:0 6px 12px 0;">${buildListingCard(left, baseFront, { ...options, compact: true })}</td>
-      <td class="mj-column-per-50" style="width:50%;max-width:50%;vertical-align:top;padding:0 0 12px 6px;">${right ? buildListingCard(right, baseFront, { ...options, compact: true }) : ''}</td>
+      <td class="mj-column-per-50 stack-col" style="width:50%;max-width:50%;vertical-align:top;padding:0 6px 12px 6px;">${buildListingCard(left, baseFront, { ...options, compact: true })}</td>
+      <td class="mj-column-per-50 stack-col" style="width:50%;max-width:50%;vertical-align:top;padding:0 6px 12px 6px;">${right ? buildListingCard(right, baseFront, { ...options, compact: true }) : ''}</td>
     </tr>`)
   }
 
@@ -103,8 +103,8 @@ function buildComparisonSection(comparison, baseFront) {
     `<p style="margin:0 0 8px;font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#64748b;">Vistas de los últimos 7 días</p>
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
       <tr>
-        <td class="mj-column-per-50" style="width:50%;max-width:50%;vertical-align:top;padding:0 6px 10px 0;"><div style="font-family:Helvetica,Arial,sans-serif;font-size:12px;color:#64748b;margin:0 0 6px;">Tu publicación</div>${current}</td>
-        <td class="mj-column-per-50" style="width:50%;max-width:50%;vertical-align:top;padding:0 0 10px 6px;"><div style="font-family:Helvetica,Arial,sans-serif;font-size:12px;color:#64748b;margin:0 0 6px;">Referencia con más tracción</div>${benchmark}</td>
+        <td class="mj-column-per-50 stack-col" style="width:50%;max-width:50%;vertical-align:top;padding:0 6px 10px 6px;"><div style="font-family:Helvetica,Arial,sans-serif;font-size:12px;color:#64748b;margin:0 0 6px;">Tu publicación</div>${current}</td>
+        <td class="mj-column-per-50 stack-col" style="width:50%;max-width:50%;vertical-align:top;padding:0 6px 10px 6px;"><div style="font-family:Helvetica,Arial,sans-serif;font-size:12px;color:#64748b;margin:0 0 6px;">Referencia con más tracción</div>${benchmark}</td>
       </tr>
     </table>`
   )
@@ -130,7 +130,7 @@ function buildPlanOffers(planOffers = [], baseFront) {
     const url = toAbsoluteUrl(offer.url, baseFront)
     const buttonColor = idx === 0 ? '#0ea5e9' : '#16a34a'
     return `
-    <td class="mj-column-per-50" style="width:50%;max-width:50%;vertical-align:top;padding:${idx === 0 ? '0 6px 0 0' : '0 0 0 6px'};">
+    <td class="mj-column-per-50 stack-col" style="width:50%;max-width:50%;vertical-align:top;padding:0 6px 10px 6px;">
       <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #e5e7eb;border-radius:12px;">
         <tr><td style="padding:12px;">
           <div style="font-family:Helvetica,Arial,sans-serif;font-size:16px;font-weight:800;color:#111827;margin:0 0 6px;">${title}</div>
@@ -154,8 +154,8 @@ function buildCtaRow(ctas = [], baseFront) {
   return wrapSection('', `
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
     <tr>
-      <td class="mj-column-per-50" style="width:50%;max-width:50%;vertical-align:top;padding:0 6px 0 0;" align="center">${buildSingleCta(safe[0].text, safe[0].url)}</td>
-      <td class="mj-column-per-50" style="width:50%;max-width:50%;vertical-align:top;padding:0 0 0 6px;" align="center">${buildSingleCta(safe[1].text, safe[1].url)}</td>
+      <td class="mj-column-per-50 stack-col" style="width:50%;max-width:50%;vertical-align:top;padding:0 6px 0 6px;" align="center">${buildSingleCta(safe[0].text, safe[0].url)}</td>
+      <td class="mj-column-per-50 stack-col" style="width:50%;max-width:50%;vertical-align:top;padding:0 6px 0 6px;" align="center">${buildSingleCta(safe[1].text, safe[1].url)}</td>
     </tr>
   </table>`)
 }

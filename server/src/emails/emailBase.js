@@ -137,6 +137,7 @@ function buildBaseLayout({ title, content, baseFront, unsubscribeUrl, userEmail,
     /* Mobile */
     @media only screen and (max-width:599px) {
       .mj-column-per-50 { width: 100% !important; max-width: 100%; }
+      .stack-col { display:block !important; width:100% !important; max-width:100% !important; padding-left:0 !important; padding-right:0 !important; }
       .col-product { width: 100% !important; float: none !important; }
       .nav-text { font-size: 14px !important; }
       .header-headline { font-size: 32px !important; }
