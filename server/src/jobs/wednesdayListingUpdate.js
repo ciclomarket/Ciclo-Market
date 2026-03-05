@@ -25,7 +25,7 @@ const {
 
 const AUTOMATION_TYPE = 'wednesday_update'
 const DEFAULT_CRON = '0 10 * * 3' // Miércoles 10am
-const DEFAULT_BATCH_LIMIT = 200
+const DEFAULT_BATCH_LIMIT = 100 // Límite de Resend gratis
 const TOP_LISTINGS_COUNT = 3
 const COOLDOWN_DAYS = 7
 
@@ -373,6 +373,11 @@ async function sendWednesdayEmails({ dryRun = false, limit = DEFAULT_BATCH_LIMIT
   }
   
   const sellers = allSellers.slice(calculatedOffset, calculatedOffset + calculatedLimit)
+  
+  if (!sellers.length) {
+    console.info(`[${AUTOMATION_TYPE}] Batch ${dayOffset + 1} sin usuarios (offset=${calculatedOffset}, total=${allSellers.length}, limit=${calculatedLimit})`)
+    return { sent: 0, recipients: [], dryRun }
+  }
   
   console.info(`[${AUTOMATION_TYPE}] Batch ${dayOffset + 1}: usuarios ${calculatedOffset + 1}-${calculatedOffset + sellers.length}`)
   

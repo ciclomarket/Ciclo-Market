@@ -54,7 +54,7 @@ router.get('/cron/health', (req, res) => {
 router.post('/cron/monday-new-arrivals', ensureCronSecret, async (req, res) => {
   try {
     const dryRun = req.body?.dryRun === true || req.query?.dry === 'true'
-    const limit = Number(req.body?.limit || req.query?.limit || 200)
+    const limit = Number(req.body?.limit || req.query?.limit || 100)
     const force = req.body?.force === true || req.query?.force === 'true'
     
     console.info(`[emailCron] monday-new-arrivals triggered`, { dryRun, limit, force })
@@ -83,7 +83,7 @@ router.post('/cron/monday-new-arrivals', ensureCronSecret, async (req, res) => {
 router.post('/cron/wednesday-listing-update', ensureCronSecret, async (req, res) => {
   try {
     const dryRun = req.body?.dryRun === true || req.query?.dry === 'true'
-    const limit = Number(req.body?.limit || req.query?.limit || 200)
+    const limit = Number(req.body?.limit || req.query?.limit || 100)
     const force = req.body?.force === true || req.query?.force === 'true'
     
     console.info(`[emailCron] wednesday-listing-update triggered`, { dryRun, limit, force })
@@ -117,7 +117,7 @@ router.post('/cron/wednesday-listing-update', ensureCronSecret, async (req, res)
 router.post('/cron/friday-upgrade-offer', ensureCronSecret, async (req, res) => {
   try {
     const dryRun = req.body?.dryRun === true || req.query?.dry === 'true'
-    const limit = Number(req.body?.limit || req.query?.limit || 200)
+    const limit = Number(req.body?.limit || req.query?.limit || 100)
     const force = req.body?.force === true || req.query?.force === 'true'
     
     console.info(`[emailCron] friday-upgrade-offer triggered`, { dryRun, limit, force })

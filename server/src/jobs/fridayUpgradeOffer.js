@@ -26,7 +26,7 @@ const {
 
 const AUTOMATION_TYPE = 'friday_upgrade'
 const DEFAULT_CRON = '0 11 * * 5' // Viernes 11am
-const DEFAULT_BATCH_LIMIT = 200
+const DEFAULT_BATCH_LIMIT = 100 // Límite de Resend gratis
 const COOLDOWN_DAYS = 14 // No spamear, 14 días entre envíos
 
 // Planes y beneficios detallados
@@ -394,6 +394,11 @@ async function sendFridayEmails({ dryRun = false, limit = DEFAULT_BATCH_LIMIT, f
   }
   
   const sellers = allSellers.slice(calculatedOffset, calculatedOffset + calculatedLimit)
+  
+  if (!sellers.length) {
+    console.info(`[${AUTOMATION_TYPE}] Batch ${dayOffset + 1} sin usuarios (offset=${calculatedOffset}, total=${allSellers.length}, limit=${calculatedLimit})`)
+    return { sent: 0, recipients: [], dryRun }
+  }
   
   console.info(`[${AUTOMATION_TYPE}] Batch ${dayOffset + 1}: usuarios ${calculatedOffset + 1}-${calculatedOffset + sellers.length}`)
   
