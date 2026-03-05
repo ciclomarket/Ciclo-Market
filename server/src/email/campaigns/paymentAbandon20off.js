@@ -32,6 +32,16 @@ function inferPlanCode(payment) {
   return null
 }
 
+function isListingFreeStrict(listing) {
+  const plan = String(listing?.plan || '').toLowerCase()
+  const planCode = String(listing?.plan_code || '').toLowerCase()
+  const sellerPlan = String(listing?.seller_plan || '').toLowerCase()
+  if (plan && plan !== 'free') return false
+  if (planCode && planCode !== 'free') return false
+  if (sellerPlan && sellerPlan !== 'free') return false
+  return plan === 'free' || planCode === 'free' || sellerPlan === 'free'
+}
+
 function buildIdempotencyKey(email, paymentId) {
   return `payment_abandon:${email}:${paymentId}`
 }
@@ -83,7 +93,7 @@ async function buildCandidates({ supabase, dateCtx, baseFront, serverBase }) {
       ? supabase.from('users').select('id,email,full_name').in('id', userIds)
       : Promise.resolve({ data: [] }),
     listingIds.length
-      ? supabase.from('listings').select('id,slug,seller_id,title,images,price,price_currency,plan,status').in('id', listingIds)
+      ? supabase.from('listings').select('id,slug,seller_id,title,images,price,price_currency,plan,plan_code,seller_plan,status').in('id', listingIds)
       : Promise.resolve({ data: [] }),
   ])
 
@@ -99,7 +109,7 @@ async function buildCandidates({ supabase, dateCtx, baseFront, serverBase }) {
     const listing = listingMap.get(String(listingId))
     if (!listing) continue
     if (!['active', 'published'].includes(String(listing.status || '').toLowerCase())) continue
-    if (String(listing.plan || '').toLowerCase() !== 'free') continue
+    if (!isListingFreeStrict(listing)) continue
 
     const user = usersMap.get(String(sellerId))
     const email = String(user?.email || payment?.email || '').trim().toLowerCase()

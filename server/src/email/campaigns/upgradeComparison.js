@@ -256,10 +256,7 @@ async function buildCandidates({ supabase, dateCtx, baseFront, serverBase }) {
             url: `${serverBase}/api/checkout/listing-upgrade?token=${encodeURIComponent(proToken)}`,
           },
         ],
-        ctas: [
-          { text: 'Hacer upgrade a Premium', url: `${serverBase}/api/checkout/listing-upgrade?token=${encodeURIComponent(premiumToken)}` },
-          { text: 'Hacer upgrade a Pro', url: `${serverBase}/api/checkout/listing-upgrade?token=${encodeURIComponent(proToken)}` },
-        ],
+        ctas: [],
       },
     })
   }

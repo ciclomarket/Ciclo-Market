@@ -227,6 +227,16 @@ function dedupeByPriority(candidates) {
   return [...byRecipient.values()]
 }
 
+function isFreeListingSnapshot(row) {
+  const plan = String(row?.plan || '').toLowerCase()
+  const planCode = String(row?.plan_code || '').toLowerCase()
+  const sellerPlan = String(row?.seller_plan || '').toLowerCase()
+  if (plan && plan !== 'free') return false
+  if (planCode && planCode !== 'free') return false
+  if (sellerPlan && sellerPlan !== 'free') return false
+  return plan === 'free' || planCode === 'free' || sellerPlan === 'free'
+}
+
 async function runEmailOrchestrator({ dryRun = false, campaigns = null, dateOverride = null, forceWeekly = false } = {}) {
   const supabase = getServerSupabaseClient()
   const flags = await getFeatureFlags(supabase)
@@ -327,11 +337,10 @@ async function runEmailOrchestrator({ dryRun = false, campaigns = null, dateOver
     if ((candidate.campaign === 'upgrade_comparison' || candidate.campaign === 'payment_abandon_20off') && candidate.listingId) {
       const { data: listingRow, error: listingErr } = await supabase
         .from('listings')
-        .select('id,plan')
+        .select('id,plan,plan_code,seller_plan')
         .eq('id', candidate.listingId)
         .maybeSingle()
-      const plan = String(listingRow?.plan || '').toLowerCase()
-      if (listingErr || !listingRow?.id || plan !== 'free') {
+      if (listingErr || !listingRow?.id || !isFreeListingSnapshot(listingRow)) {
         summary.totals.skipped += 1
         campaignBucket.skipped += 1
         summary.skipped.push({ campaign: candidate.campaign, email, reason: 'target_not_free' })

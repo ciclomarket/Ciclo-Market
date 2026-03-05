@@ -49,8 +49,9 @@ function buildListingCard(item, baseFront, { compact = false, viewsOnly = false 
       <td style="padding:10px 12px;">
         ${planBadge ? `<div style="margin:0 0 6px;"><span style="display:inline-block;padding:3px 8px;border-radius:999px;background:#eaf2ff;color:#1d4ed8;font-family:Helvetica,Arial,sans-serif;font-size:11px;font-weight:700;">${escapeHtml(planBadge)}</span></div>` : ''}
         <p style="margin:0 0 6px;font-family:Helvetica,Arial,sans-serif;font-size:14px;font-weight:700;line-height:130%;color:#0f172a;min-height:36px;">${title}</p>
-        ${price ? `<p style="margin:0 0 4px;font-family:Helvetica,Arial,sans-serif;font-size:18px;font-weight:800;color:#111827;">${price}</p>` : ''}
-        ${location ? `<p style="margin:0 0 5px;font-family:Helvetica,Arial,sans-serif;font-size:12px;color:#64748b;">${location}</p>` : ''}
+        ${price ? `<p style="margin:0 0 2px;font-family:Helvetica,Arial,sans-serif;font-size:18px;font-weight:800;color:#111827;">${price}</p>` : ''}
+        ${(price || location) ? `<div style="height:1px;background:#e5e7eb;margin:5px 0;"></div>` : ''}
+        ${location ? `<p style="margin:0 0 4px;font-family:Helvetica,Arial,sans-serif;font-size:12px;color:#64748b;">${location}</p>` : ''}
         ${stats.length ? `<p style="margin:0;font-family:Helvetica,Arial,sans-serif;font-size:12px;color:#475569;">${escapeHtml(stats.join(' · '))}</p>` : ''}
       </td>
     </tr>
@@ -178,7 +179,8 @@ function renderEmailTemplate({ campaign, baseFront, recipient, payload }) {
   const features = buildFeatureChecklist(payload.features || [])
   const actions = buildRecommendedActions(payload.recommendedActions || [])
   const offers = buildPlanOffers(payload.planOffers || [], cleanFront)
-  const ctaRow = buildCtaRow(Array.isArray(payload.ctas) ? payload.ctas : [], cleanFront)
+  const hasPlanOffers = Array.isArray(payload.planOffers) && payload.planOffers.length > 0
+  const ctaRow = hasPlanOffers ? '' : buildCtaRow(Array.isArray(payload.ctas) ? payload.ctas : [], cleanFront)
 
   const content = `${hero}${intro ? wrapSection('', intro) : ''}${comparison}${cards}${features}${actions}${offers}${ctaRow}`
 
