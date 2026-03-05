@@ -11,6 +11,7 @@ import { parseBlogHtmlMeta } from '../../utils/blogContent'
 import { supabaseEnabled } from '../../services/supabase'
 import SeoHead from '../../components/SeoHead'
 import { resolveSiteOrigin } from '../../utils/seo'
+import BlogContentRenderer from '../../components/blog/BlogContentRenderer'
 
 const dateFormatter = new Intl.DateTimeFormat('es-AR', {
   day: 'numeric',
@@ -272,10 +273,7 @@ export default function BlogPostDetail() {
 
         {!loading && post && (
           <article className="rounded-3xl border border-gray-200 bg-white/95 p-6 shadow-xl sm:p-10">
-            <div
-              className="blog-content"
-              dangerouslySetInnerHTML={{ __html: sanitizedContent }}
-            />
+            <BlogContentRenderer htmlContent={sanitizedContent} />
             {post.tags.length > 0 && (
               <div className="mt-10 flex flex-wrap gap-3">
                 {post.tags.map((tag) => (

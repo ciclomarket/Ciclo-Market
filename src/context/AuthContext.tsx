@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useState } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { supabaseEnabled, getSupabaseClient } from '../services/supabase'
 import { syncProfileFromAuthUser } from '../utils/authProfile'
+import { identifyPostHogUser, resetPostHogUser } from '../analytics/posthog'
 
 interface Ctx {
   user: User | null
@@ -99,12 +100,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+  useEffect(() => {
+    if (user?.id) {
+      identifyPostHogUser(user.id, user.email ?? null)
+      return
+    }
+    resetPostHogUser()
+  }, [user?.id, user?.email])
+
   const logout = async () => {
     if (supabaseEnabled) {
       const client = getSupabaseClient()
       await client.auth.signOut()
       setUser(null)
       setRole('user')
+      resetPostHogUser()
     }
   }
 

@@ -1761,7 +1761,13 @@ app.listen(PORT, '0.0.0.0', () => {
       console.warn('[extendExpired90d] cron not started:', err?.message || err)
     }
   }
-  // Pricing scraper jobs
+  // Pricing scraper jobs - DESHABILITADO temporalmente
+  // Problemas: 
+  // 1. Columna price_listings.last_verified_at no existe
+  // 2. Error UPDATE sin WHERE en recalculateMarketPrices
+  // 3. Error de relación listings-users en scraper
+  // Para reactivar: arreglar schema.sql y setear PRICING_SCRAPER_ENABLED=true
+  /*
   if (process.env.PRICING_SCRAPER_ENABLED === 'true') {
     try {
       const pricingJobs = require('./jobs/pricingJobs')
@@ -1779,6 +1785,8 @@ app.listen(PORT, '0.0.0.0', () => {
   } else {
     console.info('[pricingJobs] disabled (PRICING_SCRAPER_ENABLED != "true")')
   }
+  */
+  console.info('[pricingJobs] DISABLED - schema issues need to be fixed first (last_verified_at column missing, UPDATE without WHERE, etc.)')
 })
 /* ----------------------------- Auth helper -------------------------------- */
 async function getAuthUser(req, supabase) {

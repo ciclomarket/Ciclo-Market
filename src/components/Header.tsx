@@ -12,6 +12,7 @@ import { fetchMyCredits } from '../services/credits'
 import { useToast } from '../context/ToastContext'
 import { SocialAuthButtons } from './SocialAuthButtons'
 import { deriveProfileSlug, pickDiscipline } from '../utils/user'
+import { captureSearchPerformed } from '../analytics/posthog'
 
 type MegaCol = { title: string; links: Array<{ label: string; to: string }> }
 type MegaItem = { label: string; cols: MegaCol[] }
@@ -148,7 +149,13 @@ function SearchBar() {
   }, [q])
 
   const goSearch = (term: string) => {
-    nav(`/marketplace?q=${encodeURIComponent(term)}`)
+    const cleanTerm = String(term || '').trim()
+    nav(`/marketplace?q=${encodeURIComponent(cleanTerm)}`)
+    captureSearchPerformed({
+      query: cleanTerm,
+      filters: {},
+      source: 'header',
+    })
     setOpen(false)
   }
 

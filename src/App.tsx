@@ -78,6 +78,7 @@ import GlobalJsonLd from './components/GlobalJsonLd'
 import Breadcrumbs from './components/Breadcrumbs'
 import { useRef } from 'react'
 import { trackMetaPixel } from './lib/metaPixel'
+import PostHogPageviewTracker from './components/PostHogPageviewTracker'
 const MyListingsPage = lazyWithRetry(() => import('./pages/MyListings'))
 const MercadoLibreImportPOC = lazyWithRetry(() => import('./pages/Dev/MercadoLibreImportPOC'))
 
@@ -511,6 +512,7 @@ export default function App() {
                   <GlobalJsonLd />
                   {!isInstagramLanding && <Header />}
                   <Breadcrumbs />
+                  <PostHogPageviewTracker />
                   <ScrollToTop />
 
                   <main className="flex-1">

@@ -1,6 +1,7 @@
 const { MercadoPagoConfig, Payment } = require('mercadopago')
 const { getServerSupabaseClient } = require('../lib/supabaseClient')
 const { sendMail } = require('../lib/mail')
+const { captureServerEvent } = require('../lib/posthog')
 
 const mpClient = (() => {
   const token = String(process.env.MERCADOPAGO_ACCESS_TOKEN || '').trim()
@@ -299,6 +300,22 @@ async function processPayment(paymentIdRaw) {
     if (!alreadyApplied) {
       const justApplied = await markPaymentAppliedOnce(supabase, paymentId)
       if (!justApplied) return { ok: true, status: 'already_applied' }
+
+      captureServerEvent({
+        distinctId: userId || listingRow.seller_id || listingId,
+        event: 'payment_succeeded',
+        properties: {
+          user_id: userId || null,
+          listing_id: listingId,
+          seller_id: listingRow.seller_id || null,
+          plan: planCode,
+          amount: extracted.amount,
+          currency: extracted.currency,
+          provider: 'mercadopago',
+          payment_id: paymentId,
+          source: 'server',
+        },
+      })
 
       try {
         await sendPaymentSuccessEmail({

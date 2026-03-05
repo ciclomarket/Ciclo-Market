@@ -6,6 +6,7 @@ const { resolveFrontendBaseUrl } = require('../lib/savedSearch')
 const { calculateBikePrice } = require('../utils/pricingAlgorithm')
 const { buildSellerFollowupSoldEmail } = require('../emails/sellerFollowupSoldEmail')
 const { buildStoreAnalyticsHTML } = require('../emails/storeAnalyticsEmail')
+const { captureServerEvent } = require('../lib/posthog')
 
 const router = express.Router()
 
@@ -334,6 +335,18 @@ router.post('/api/contacts/log', async (req, res) => {
       console.error('[api] contact_events insert failed', error)
       return res.status(500).json({ ok: false, error: 'insert_failed' })
     }
+
+    captureServerEvent({
+      distinctId: payload.buyer_id || payload.seller_id,
+      event: 'contact_created',
+      properties: {
+        listing_id: payload.listing_id,
+        seller_id: payload.seller_id,
+        buyer_id: payload.buyer_id,
+        contact_type: payload.type,
+        source: 'server',
+      },
+    })
     return res.json({ ok: true })
   } catch (err) {
     console.error('[api] contacts/log unexpected error', err)

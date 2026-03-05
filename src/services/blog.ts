@@ -158,15 +158,27 @@ export async function fetchBlogPostBySlug(slug: string): Promise<BlogPost | null
 }
 
 export async function incrementBlogPostViews(slug: string): Promise<number> {
-  if (!supabaseEnabled) return 0
-  const supabase = getSupabaseClient()
-  const { data, error } = await supabase.rpc('increment_blog_post_views', { p_slug: slug })
-  if (error) {
-    console.warn('[blog] incrementBlogPostViews failed', error)
+  console.log('[blog] incrementBlogPostViews called for slug:', slug)
+  if (!supabaseEnabled) {
+    console.log('[blog] incrementBlogPostViews: supabase not enabled')
     return 0
   }
-  const newViews = Array.isArray(data) && data.length > 0 ? data[0]?.views : 0
-  return typeof newViews === 'number' ? newViews : 0
+  const supabase = getSupabaseClient()
+  console.log('[blog] calling RPC increment_blog_post_views with slug:', slug)
+  const { data, error } = await supabase.rpc('increment_blog_post_views', { p_slug: slug })
+  console.log('[blog] RPC result:', { data, error })
+  if (error) {
+    console.error('[blog] incrementBlogPostViews failed:', error)
+    return 0
+  }
+  // La función retorna SETOF integer, por lo que data es un array de números como [123]
+  if (Array.isArray(data) && data.length > 0) {
+    const views = data[0]
+    console.log('[blog] incrementBlogPostViews success. New views:', views)
+    return typeof views === 'number' ? views : 0
+  }
+  console.log('[blog] incrementBlogPostViews: unexpected data format:', data)
+  return 0
 }
 
 export async function fetchRelatedBlogPosts(
@@ -364,5 +376,66 @@ export async function deleteBlogPost(id: string): Promise<void> {
   if (error) {
     console.error('[blog] deleteBlogPost error', error)
     throw error
+  }
+}
+
+// Función para obtener datos de un listing para mostrar en cards del blog
+export async function fetchBlogListingCard(listingId: string): Promise<{
+  id: string
+  title: string
+  price: number
+  price_currency: string
+  brand?: string
+  model?: string
+  year?: number
+  category?: string
+  location?: string
+  image_url?: string
+  slug: string
+  views?: number
+} | null> {
+  if (!supabaseEnabled) return null
+  const supabase = getSupabaseClient()
+  
+  const { data, error } = await supabase
+    .from('listings')
+    .select(`
+      id,
+      title,
+      price,
+      price_currency,
+      brand,
+      model,
+      year,
+      category,
+      location,
+      images,
+      slug,
+      view_count
+    `)
+    .eq('id', listingId)
+    .in('status', ['active', 'published', 'sold'])
+    .maybeSingle()
+  
+  if (error) {
+    console.error('[blog] fetchBlogListingCard error', error)
+    return null
+  }
+  
+  if (!data) return null
+  
+  return {
+    id: data.id,
+    title: data.title,
+    price: data.price,
+    price_currency: data.price_currency,
+    brand: data.brand,
+    model: data.model,
+    year: data.year,
+    category: data.category,
+    location: data.location,
+    image_url: data.images?.[0] || undefined,
+    slug: data.slug,
+    views: data.view_count,
   }
 }

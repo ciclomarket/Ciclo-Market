@@ -37,6 +37,7 @@
     "mercadopago": "^2.9.0",
     "node-cron": "^3.0.3",
     "nodemailer": "^6.9.14",
+    "posthog-node": "^5.13.2",
     "pino": "^9.9.0",
     "zod": "^4.3.6"
   }

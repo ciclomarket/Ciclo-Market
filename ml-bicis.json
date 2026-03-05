@@ -1,0 +1,26 @@
+[
+  {
+    "Tiempo": "2026-03-04T17:38:52.482Z",
+    "Moneda": "ARS $",
+    "Envio": "Llega mañana",
+    "highlight": "",
+    "disponibleEn": "",
+    "esCompraIternacional": false,
+    "envioDesde": "",
+    "articuloTitulo": "Bicicleta Specialized Tarmac Sl6 Disco Hidráulico Ruta",
+    "nuevoPrecio": "3240000",
+    "precioAnterior": "",
+    "precioDiscount": "",
+    "promociones": "",
+    "installments": "6 cuotas de 758700",
+    "imgDireccion": "https://http2.mlstatic.com/D_Q_NP_2X_626291-MLA107178020051_022026-E.webp",
+    "productoMarca": "",
+    "produtoCategoryID": "MLA6143",
+    "produtoDomainID": "MLA-BICYCLES",
+    "produtoReviews": "",
+    "zdireccion": "https://www.mercadolibre.com.ar/bicicleta-specialized-tarmac-sl6-disco-hidraulico-ruta/up/MLAU3794386914",
+    "SKU": "MLA1676219143",
+    "Vendedor": "dmore bikes"
+  },
+  ... (resto de tu JSON)
+]

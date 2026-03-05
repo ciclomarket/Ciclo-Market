@@ -12,6 +12,7 @@ import { getSupabaseClient, supabaseEnabled } from '@/services/supabase'
 import { fetchUserProfile, upsertUserProfile } from '@/services/users'
 import useUpload from '@/hooks/useUpload'
 import { parseMoneyInput } from '@/utils/money'
+import { captureListingCreatedCompleted, captureListingCreatedStarted } from '@/analytics/posthog'
 
 const CONDITION_OPTIONS = ['Nuevo', 'Como nuevo', 'Usado'] as const
 
@@ -259,6 +260,11 @@ export default function CreateListing() {
     return id || null
   }, [sp])
   const isEdit = Boolean(editId)
+
+  useEffect(() => {
+    if (isEdit) return
+    captureListingCreatedStarted({ source: 'publish_wizard' })
+  }, [isEdit])
 
   const mainCategoryFromUrl = useMemo<MainCategory>(() => {
     const t = (sp.get('type') || '').toLowerCase()
@@ -886,6 +892,14 @@ export default function CreateListing() {
     }
 
     const slug = (data as any)?.slug || (data as any)?.id
+    if (!isEdit && (data as any)?.id) {
+      captureListingCreatedCompleted({
+        listingId: String((data as any).id),
+        category: categoryField || null,
+        price,
+        currency: formData.priceCurrency,
+      })
+    }
     if (slug) {
       navigate(isEdit ? `/listing/${slug}` : `/listing/${slug}?post_publish=1`)
     } else {
