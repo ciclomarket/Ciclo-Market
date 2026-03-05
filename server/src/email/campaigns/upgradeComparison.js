@@ -4,19 +4,24 @@ const CAMPAIGN = 'upgrade_comparison'
 const PRIORITY = 2
 
 function isFreePlan(row) {
-  const values = [row?.plan, row?.plan_code, row?.seller_plan].map((v) => String(v || '').toLowerCase())
-  return values.includes('free') || values.includes('gratis')
+  return String(row?.plan || '').toLowerCase() === 'free'
+}
+
+function isPaidPlan(row) {
+  const plan = String(row?.plan || '').toLowerCase()
+  return plan === 'premium' || plan === 'pro'
 }
 
 function buildIdempotencyKey(userId, listingId, isoYear, isoWeek) {
   return `${CAMPAIGN}:${userId}:${listingId}:${isoYear}-${isoWeek}`
 }
 
-async function fetchFreeListings(supabase) {
+async function fetchTargetsFreeListings(supabase) {
   const { data, error } = await supabase
     .from('listings')
-    .select('id,seller_id,title,slug,price,price_currency,category,images,created_at,updated_at,status,plan,plan_code,seller_plan')
+    .select('id,seller_id,title,slug,price,price_currency,category,images,created_at,updated_at,status,plan')
     .in('status', ['active', 'published'])
+    .eq('plan', 'free')
     .order('created_at', { ascending: true })
     .limit(1200)
   if (error) {
@@ -24,6 +29,21 @@ async function fetchFreeListings(supabase) {
     return []
   }
   return (data || []).filter(isFreePlan).filter((l) => l.seller_id)
+}
+
+async function fetchBenchmarkListingsPaid(supabase) {
+  const { data, error } = await supabase
+    .from('listings')
+    .select('id,seller_id,title,slug,price,price_currency,category,images,created_at,updated_at,status,plan')
+    .in('status', ['active', 'published'])
+    .in('plan', ['premium', 'pro'])
+    .order('created_at', { ascending: false })
+    .limit(2000)
+  if (error) {
+    console.warn(`[${CAMPAIGN}] benchmark listings error`, error.message)
+    return []
+  }
+  return (data || []).filter(isPaidPlan).filter((l) => l.seller_id)
 }
 
 async function fetchEngagementMap(supabase, listingIds) {
@@ -97,10 +117,6 @@ function pickBenchmark(target, allListings, engagementMap, contactsMap) {
   const targetEngagement = engagementMap.get(String(target.id)) || { views7d: 0, waClicks7d: 0 }
   const targetContacts = Number(contactsMap.get(String(target.id)) || 0)
   const targetScore = (targetEngagement.views7d * 1) + (targetContacts * 3) + (targetEngagement.waClicks7d * 2)
-  const isPaidPlan = (listing) => {
-    const tiers = [listing?.plan, listing?.plan_code, listing?.seller_plan].map((v) => String(v || '').toLowerCase())
-    return tiers.includes('premium') || tiers.includes('pro')
-  }
 
   const minPrice = Number(target.price || 0) * 0.85
   const maxPrice = Number(target.price || 0) * 1.15
@@ -145,11 +161,13 @@ function pickBenchmark(target, allListings, engagementMap, contactsMap) {
 }
 
 async function buildCandidates({ supabase, dateCtx, baseFront, serverBase }) {
-  const freeListings = await fetchFreeListings(supabase)
-  if (!freeListings.length) return []
+  const targets = await fetchTargetsFreeListings(supabase)
+  if (!targets.length) return []
+  const benchmarkPool = await fetchBenchmarkListingsPaid(supabase)
+  if (!benchmarkPool.length) return []
 
-  const listingIds = freeListings.map((l) => l.id)
-  const sellers = [...new Set(freeListings.map((l) => String(l.seller_id)))]
+  const listingIds = [...new Set([...targets, ...benchmarkPool].map((l) => l.id))]
+  const sellers = [...new Set(targets.map((l) => String(l.seller_id)))]
 
   const [engagementMap, contactsMap, usersMap] = await Promise.all([
     fetchEngagementMap(supabase, listingIds),
@@ -158,7 +176,7 @@ async function buildCandidates({ supabase, dateCtx, baseFront, serverBase }) {
   ])
 
   const bySeller = new Map()
-  for (const row of freeListings) {
+  for (const row of targets) {
     const key = String(row.seller_id)
     if (!bySeller.has(key)) bySeller.set(key, [])
     bySeller.get(key).push(row)
@@ -172,8 +190,9 @@ async function buildCandidates({ supabase, dateCtx, baseFront, serverBase }) {
     const target = pickLowPerformer(listings, engagementMap, contactsMap)
     if (!target) continue
 
-    const benchmark = pickBenchmark(target, freeListings, engagementMap, contactsMap)
+    const benchmark = pickBenchmark(target, benchmarkPool, engagementMap, contactsMap)
     if (!benchmark) continue
+    if (String(target.plan || '').toLowerCase() !== 'free') continue
 
     const premiumToken = createUpgradeToken({ userId: sellerId, listingId: target.id, planCode: 'premium', campaign: CAMPAIGN, exp: Date.now() + 7 * 24 * 60 * 60 * 1000 })
     const proToken = createUpgradeToken({ userId: sellerId, listingId: target.id, planCode: 'pro', campaign: CAMPAIGN, exp: Date.now() + 7 * 24 * 60 * 60 * 1000 })

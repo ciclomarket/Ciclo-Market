@@ -316,6 +316,39 @@ async function runEmailOrchestrator({ dryRun = false, campaigns = null, dateOver
       exp: Date.now() + 180 * 24 * 60 * 60 * 1000,
     })
 
+    if (candidate.campaign === 'upgrade_comparison' && candidate.listingId) {
+      const { data: listingRow, error: listingErr } = await supabase
+        .from('listings')
+        .select('id,plan')
+        .eq('id', candidate.listingId)
+        .maybeSingle()
+      const plan = String(listingRow?.plan || '').toLowerCase()
+      if (listingErr || !listingRow?.id || plan !== 'free') {
+        summary.totals.skipped += 1
+        campaignBucket.skipped += 1
+        summary.skipped.push({ campaign: candidate.campaign, email, reason: 'target_not_free' })
+        summary.byCampaign[candidate.campaign] = campaignBucket
+        await logEmail(supabase, {
+          campaign: candidate.campaign,
+          priority: candidate.priority,
+          user_id: userId,
+          lead_email: candidate.leadEmail || null,
+          email_to: email,
+          listing_id: candidate.listingId || null,
+          payment_id: candidate.paymentId || null,
+          idempotency_key: candidate.idempotencyKey,
+          iso_year: dateCtx.isoYear,
+          iso_week: dateCtx.isoWeek,
+          status: 'skipped',
+          skip_reason: 'target_not_free',
+          provider: 'smtp',
+          subject: candidate.payload?.subject || null,
+          metadata: candidate.payload || {},
+        })
+        continue
+      }
+    }
+
     const rendered = renderEmailTemplate({
       campaign: candidate.campaign,
       baseFront,
