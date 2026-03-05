@@ -26,6 +26,14 @@ function getTimeZone() {
   return String(process.env.EMAIL_TZ || 'America/Argentina/Buenos_Aires')
 }
 
+function resolvePublicFrontendUrl() {
+  const raw = String(process.env.FRONTEND_URL || '').trim()
+  const parts = raw.split(',').map((s) => s.trim()).filter(Boolean)
+  if (!parts.length) return 'https://www.ciclomarket.ar'
+  const preferred = parts.find((url) => /https:\/\/www\.ciclomarket\.ar/i.test(url))
+  return (preferred || parts[0]).replace(/\/$/, '')
+}
+
 function getDatePartsInTz(date, timeZone) {
   const formatter = new Intl.DateTimeFormat('en-CA', {
     timeZone,
@@ -224,7 +232,7 @@ async function runEmailOrchestrator({ dryRun = false, campaigns = null, dateOver
   const flags = await getFeatureFlags(supabase)
   const dateCtx = buildDateContext(dateOverride)
 
-  const baseFront = String(process.env.FRONTEND_URL || 'https://www.ciclomarket.ar').split(',')[0].trim().replace(/\/$/, '')
+  const baseFront = resolvePublicFrontendUrl()
   const serverBase = String(process.env.SERVER_BASE_URL || process.env.PUBLIC_BASE_URL || 'https://ciclo-market.onrender.com').trim().replace(/\/$/, '')
 
   const summary = {
@@ -316,7 +324,7 @@ async function runEmailOrchestrator({ dryRun = false, campaigns = null, dateOver
       exp: Date.now() + 180 * 24 * 60 * 60 * 1000,
     })
 
-    if (candidate.campaign === 'upgrade_comparison' && candidate.listingId) {
+    if ((candidate.campaign === 'upgrade_comparison' || candidate.campaign === 'payment_abandon_20off') && candidate.listingId) {
       const { data: listingRow, error: listingErr } = await supabase
         .from('listings')
         .select('id,plan')

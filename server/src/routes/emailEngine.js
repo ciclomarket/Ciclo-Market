@@ -24,6 +24,14 @@ function extractBearer(req) {
   return value
 }
 
+function resolvePublicFrontendUrl() {
+  const raw = String(process.env.FRONTEND_URL || '').trim()
+  const parts = raw.split(',').map((s) => s.trim()).filter(Boolean)
+  if (!parts.length) return 'https://www.ciclomarket.ar'
+  const preferred = parts.find((url) => /https:\/\/www\.ciclomarket\.ar/i.test(url))
+  return (preferred || parts[0]).replace(/\/$/, '')
+}
+
 function ensureCronSecret(req, res, next) {
   const provided = extractBearer(req)
   const expected = process.env.CRON_SECRET
@@ -129,6 +137,16 @@ async function handleListingUpgradeCheckout(req, res, { redirect = false } = {})
         currency: 'ARS',
         status: 'pending',
         providerRef: result.checkoutRef,
+        planCode,
+        email: userEmail || null,
+        sellerId: userId,
+        metadata: {
+          listingSlug: listing.slug || null,
+          campaign,
+          discountPct,
+          preferenceId: result.preferenceId || null,
+          source: 'email_engine_checkout',
+        },
       })
     } catch (err) {
       console.warn('[emailEngine] recordPaymentIntent failed', err?.message || err)
@@ -232,6 +250,34 @@ router.post('/api/cron/email-orchestrator', ensureCronSecret, async (req, res) =
   } catch (err) {
     console.error('[emailEngine] orchestrator failed', err)
     return res.status(500).json({ ok: false, error: err?.message || 'orchestrator_failed' })
+  }
+})
+
+router.post('/api/dev/email-preview', async (req, res) => {
+  if (String(process.env.ENABLE_DEV_ENDPOINTS || '').toLowerCase() !== 'true') {
+    return res.status(404).json({ ok: false })
+  }
+  const { renderEmailTemplate } = require('../email/templateRenderer')
+  const campaign = String(req.body?.campaign || 'new_arrivals_weekly')
+  const email = String(req.body?.email || 'dev@ciclomarket.ar')
+  const payload = req.body?.payload || {}
+  const baseFront = resolvePublicFrontendUrl()
+  try {
+    const rendered = renderEmailTemplate({
+      campaign,
+      baseFront,
+      recipient: { email, userId: null },
+      payload: {
+        ...payload,
+        subject: payload.subject || 'Preview Email',
+        title: payload.title || 'Preview',
+        subtitle: payload.subtitle || 'Template preview',
+        unsubscribeUrl: payload.unsubscribeUrl || `${String(process.env.SERVER_BASE_URL || process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '')}/unsubscribe?token=preview`,
+      },
+    })
+    return res.json({ ok: true, subject: rendered.subject, html: rendered.html, text: rendered.text })
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err?.message || 'preview_failed' })
   }
 })
 

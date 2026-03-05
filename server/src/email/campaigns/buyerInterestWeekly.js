@@ -55,12 +55,12 @@ async function upsertInterests(supabase, map) {
 async function fetchListingsForCategory(supabase, category, sinceIso) {
   const { data } = await supabase
     .from('listings')
-    .select('id,slug,title,images,price,price_currency,category,created_at')
+    .select('id,slug,title,images,price,price_currency,category,location,seller_location,created_at')
     .in('status', ['active', 'published'])
     .eq('category', category)
     .gte('created_at', sinceIso)
     .order('created_at', { ascending: false })
-    .limit(12)
+    .limit(8)
   return data || []
 }
 
@@ -96,14 +96,17 @@ async function buildCandidates({ supabase, dateCtx, baseFront, forceWeekly = fal
       payload: {
         subject: 'Bicis nuevas según tu interés',
         title: 'Bicis nuevas según tu interés',
-        subtitle: 'Basado en las bicis con las que te contactaste.',
-        cards: listings.map((l) => ({
+        subtitle: `Basado en las bicis con las que te contactaste: ${category}.`,
+        intro: 'Seleccionamos publicaciones recientes que coinciden con tu interés para que no te pierdas oportunidades.',
+        cards: listings.slice(0, 8).map((l) => ({
           id: l.id,
           slug: l.slug,
           title: l.title,
           image: l.images?.[0],
           price: l.price,
           price_currency: l.price_currency,
+          location: l.location || l.seller_location || null,
+          category: l.category || null,
           link: `${baseFront}/listing/${encodeURIComponent(l.slug || l.id)}`,
         })),
         ctas: [{ text: 'Ver más de esta categoría', url: `${baseFront}/marketplace?cat=${encodeURIComponent(category)}` }],

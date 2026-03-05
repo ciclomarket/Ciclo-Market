@@ -94,9 +94,23 @@ async function upsertPaymentRecord(supabase, payload) {
     provider_ref: providerRef,
   }
 
+  // Optional columns can be missing in old schemas; keep base insert/update resilient.
+  const optional = {
+    plan_code: payload.plan_code || null,
+    metadata: payload.metadata || null,
+    email: payload.email || null,
+    seller_id: payload.seller_id || null,
+  }
+
   if (existing?.id) {
     const { error: updErr } = await supabase.from('payments').update(row).eq('id', existing.id)
     if (updErr) throw updErr
+    for (const [key, value] of Object.entries(optional)) {
+      if (value == null) continue
+      try {
+        await supabase.from('payments').update({ [key]: value }).eq('id', existing.id)
+      } catch {}
+    }
     return { id: existing.id, applied: Boolean(existing.applied), status: existing.status }
   }
 
@@ -113,6 +127,12 @@ async function upsertPaymentRecord(supabase, payload) {
     if (byExternal?.id) {
       const { error: updErr } = await supabase.from('payments').update(row).eq('id', byExternal.id)
       if (updErr) throw updErr
+      for (const [key, value] of Object.entries(optional)) {
+        if (value == null) continue
+        try {
+          await supabase.from('payments').update({ [key]: value }).eq('id', byExternal.id)
+        } catch {}
+      }
       return { id: byExternal.id, applied: Boolean(byExternal.applied), status: row.status }
     }
   }
@@ -123,6 +143,12 @@ async function upsertPaymentRecord(supabase, payload) {
     .select('id,applied,status')
     .maybeSingle()
   if (insErr) throw insErr
+  for (const [key, value] of Object.entries(optional)) {
+    if (value == null || !inserted?.id) continue
+    try {
+      await supabase.from('payments').update({ [key]: value }).eq('id', inserted.id)
+    } catch {}
+  }
   return { id: inserted?.id || null, applied: Boolean(inserted?.applied), status: inserted?.status || null }
 }
 
@@ -210,6 +236,13 @@ async function processPayment(paymentIdRaw) {
       status: extracted.status,
       provider_ref: paymentId,
       external_reference: extracted.externalReference,
+      plan_code: extracted.planCode,
+      metadata: {
+        ...(mpPayment?.metadata && typeof mpPayment.metadata === 'object' ? mpPayment.metadata : {}),
+        listingId: extracted.listingId || null,
+        planCode: extracted.planCode || null,
+        userId: extracted.userId || null,
+      },
     })
 
     if (extracted.status !== 'succeeded') return { ok: true, status: extracted.status }
@@ -340,7 +373,18 @@ async function processPayment(paymentIdRaw) {
   }
 }
 
-async function recordPaymentIntent({ userId, listingId, amount, currency = 'ARS', providerRef, status = 'pending' }) {
+async function recordPaymentIntent({
+  userId,
+  listingId,
+  amount,
+  currency = 'ARS',
+  providerRef,
+  status = 'pending',
+  planCode = null,
+  email = null,
+  sellerId = null,
+  metadata = {},
+}) {
   const supabase = getServerSupabaseClient()
   try {
     await upsertPaymentRecord(supabase, {
@@ -350,6 +394,15 @@ async function recordPaymentIntent({ userId, listingId, amount, currency = 'ARS'
       currency,
       status,
       provider_ref: providerRef,
+      plan_code: normalizePlanCode(planCode),
+      email: email || null,
+      seller_id: sellerId || userId || null,
+      metadata: {
+        ...(metadata && typeof metadata === 'object' ? metadata : {}),
+        listingId: listingId || null,
+        planCode: normalizePlanCode(planCode),
+        userId: userId || null,
+      },
     })
     return { ok: true }
   } catch (err) {

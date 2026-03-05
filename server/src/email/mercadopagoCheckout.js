@@ -17,10 +17,25 @@ function parseAvailablePlans() {
   try {
     const normalized = raw.replace(/^['"]|['"]$/g, '').replace(/\\n/g, '\n')
     const parsed = JSON.parse(normalized)
-    return Array.isArray(parsed) ? parsed : []
+    if (Array.isArray(parsed)) return parsed
+    if (parsed && typeof parsed === 'object') {
+      const values = Object.values(parsed)
+      if (values.every((v) => v && typeof v === 'object')) {
+        return values.map((v, idx) => ({ id: Object.keys(parsed)[idx], ...(v || {}) }))
+      }
+    }
+    return []
   } catch {
     return []
   }
+}
+
+function resolvePublicFrontendUrl() {
+  const raw = String(process.env.FRONTEND_URL || '').trim()
+  const parts = raw.split(',').map((s) => s.trim()).filter(Boolean)
+  if (!parts.length) return 'https://www.ciclomarket.ar'
+  const preferred = parts.find((url) => /https:\/\/www\.ciclomarket\.ar/i.test(url))
+  return (preferred || parts[0]).replace(/\/$/, '')
 }
 
 function fallbackPrice(planCode) {
@@ -86,7 +101,7 @@ async function createListingUpgradePreference({
     ? `mb_${crypto.randomUUID()}`
     : `mb_${Date.now()}_${Math.random().toString(16).slice(2)}`
 
-  const front = String(process.env.FRONTEND_URL || 'https://www.ciclomarket.ar').split(',')[0].trim().replace(/\/$/, '')
+  const front = resolvePublicFrontendUrl()
   const publicBase = String(process.env.PUBLIC_BASE_URL || process.env.SERVER_BASE_URL || '').trim().replace(/\/$/, '')
 
   const pref = new Preference(mpClient)

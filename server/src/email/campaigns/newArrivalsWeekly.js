@@ -12,7 +12,7 @@ function shouldRunToday(dateCtx) {
 async function fetchRecentListings(supabase, sinceIso) {
   const { data, error } = await supabase
     .from('listings')
-    .select('id,slug,title,images,price,price_currency,created_at,status,category')
+    .select('id,slug,title,images,price,price_currency,location,seller_location,created_at,status,category')
     .in('status', ['active', 'published'])
     .gte('created_at', sinceIso)
     .order('created_at', { ascending: false })
@@ -59,13 +59,15 @@ async function buildCandidates({ supabase, dateCtx, baseFront, forceWeekly = fal
   const users = await fetchRecipients(supabase)
   if (!users.length) return []
 
-  const cards = listings.slice(0, 10).map((l) => ({
+  const cards = listings.slice(0, 8).map((l) => ({
     id: l.id,
     slug: l.slug,
     title: l.title,
     image: l.images?.[0],
     price: l.price,
     price_currency: l.price_currency,
+    location: l.location || l.seller_location || null,
+    category: l.category || null,
     link: `${baseFront}/listing/${encodeURIComponent(l.slug || l.id)}`,
   }))
 
@@ -75,14 +77,15 @@ async function buildCandidates({ supabase, dateCtx, baseFront, forceWeekly = fal
     userId: user.id,
     email: user.email,
     idempotencyKey: buildIdempotencyKey(user.id, dateCtx.isoYear, dateCtx.isoWeek),
-    payload: {
-      subject: 'Nuevos ingresos de esta semana',
-      title: 'Nuevos ingresos de esta semana',
-      subtitle: 'Bicis recién publicadas en Ciclo Market.',
-      cards,
-      ctas: [{ text: 'Ver todas', url: `${baseFront}/marketplace` }],
-    },
-  }))
+      payload: {
+        subject: 'Nuevos ingresos de esta semana',
+        title: 'Nuevos ingresos de esta semana',
+        subtitle: `Ingresaron ${cards.length} bicis esta semana en Ciclo Market.`,
+        intro: 'El marketplace de bicis más grande de Argentina. Encontrá nuevas oportunidades antes que nadie.',
+        cards,
+        ctas: [{ text: 'Ver más bicicletas', url: `${baseFront}/marketplace` }],
+      },
+    }))
 }
 
 module.exports = {

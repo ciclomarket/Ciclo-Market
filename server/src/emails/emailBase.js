@@ -222,7 +222,7 @@ function buildBaseLayout({ title, content, baseFront, unsubscribeUrl, userEmail,
           <table border="0" cellpadding="0" cellspacing="0" role="presentation" width="100%">
             <tr>
               <td align="center" style="padding:10px 0;">
-                <img src="${BRAND.footerAvatarUrl}" alt="${BRAND.name}" style="width:80px;height:80px;border-radius:50%;">
+                <div style="display:inline-block;padding:8px 14px;border:1px solid #ffffff;border-radius:999px;color:#ffffff;font-family:Helvetica,Arial,sans-serif;font-size:12px;">Ciclo Market</div>
               </td>
             </tr>
           </table>
@@ -292,15 +292,7 @@ function buildBaseLayout({ title, content, baseFront, unsubscribeUrl, userEmail,
   <table align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;background:#F8F7F3;">
     <tr>
       <td style="padding:30px 20px;">
-        <table border="0" cellpadding="0" cellspacing="0" role="presentation">
-          <tr>
-            <td style="padding:0 10px;">
-              <a href="${BRAND.instagramUrl}" target="_blank">
-                <img src="${BRAND.instagramIconUrl}" alt="Instagram" width="24" height="24" style="display:block;">
-              </a>
-            </td>
-          </tr>
-        </table>
+        <a href="${BRAND.instagramUrl}" target="_blank" style="font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#000000;text-decoration:underline;">Instagram ${BRAND.instagram}</a>
       </td>
     </tr>
     <tr>

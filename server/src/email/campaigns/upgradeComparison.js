@@ -16,6 +16,16 @@ function buildIdempotencyKey(userId, listingId, isoYear, isoWeek) {
   return `${CAMPAIGN}:${userId}:${listingId}:${isoYear}-${isoWeek}`
 }
 
+function buildFeatureChecklist() {
+  return [
+    'WhatsApp habilitado para responder más rápido',
+    'Mayor visibilidad en resultados',
+    'Tu aviso aparece antes que los gratuitos',
+    'Más chances de conversión en la semana',
+    'Mejor presencia para ventas constantes',
+  ]
+}
+
 async function fetchTargetsFreeListings(supabase) {
   const { data, error } = await supabase
     .from('listings')
@@ -205,9 +215,10 @@ async function buildCandidates({ supabase, dateCtx, baseFront, serverBase }) {
       listingId: target.id,
       idempotencyKey: buildIdempotencyKey(sellerId, target.id, dateCtx.isoYear, dateCtx.isoWeek),
       payload: {
-        subject: 'Estás dejando clicks sobre la mesa',
-        title: 'Estás dejando clicks sobre la mesa',
-        subtitle: 'Podrías recibir más visitas y contactos con Premium o Pro.',
+        subject: 'Mejorá tu publicación',
+        title: 'Mejorá tu publicación',
+        subtitle: 'Aumentá tu tasa de conversión x3 habilitando WhatsApp y mejor posición.',
+        intro: 'Vistas de los últimos 7 días. Esta mejora está pensada para ventas esporádicas pero constantes.',
         comparison: {
           current: {
             id: target.id,
@@ -217,8 +228,7 @@ async function buildCandidates({ supabase, dateCtx, baseFront, serverBase }) {
             price: target.price,
             price_currency: target.price_currency,
             views7d: Number((engagementMap.get(String(target.id)) || {}).views7d || 0),
-            contacts7d: Number(contactsMap.get(String(target.id)) || 0),
-            waClicks7d: Number((engagementMap.get(String(target.id)) || {}).waClicks7d || 0),
+            statsLabel: 'Vistas últimos 7 días',
             link: `${baseFront}/listing/${encodeURIComponent(target.slug || target.id)}`,
           },
           benchmark: {
@@ -229,11 +239,23 @@ async function buildCandidates({ supabase, dateCtx, baseFront, serverBase }) {
             price: benchmark.price,
             price_currency: benchmark.price_currency,
             views7d: Number(benchmark.views7d || 0),
-            contacts7d: Number(benchmark.contacts7d || 0),
-            waClicks7d: Number(benchmark.waClicks7d || 0),
+            statsLabel: 'Vistas últimos 7 días',
             link: `${baseFront}/listing/${encodeURIComponent(benchmark.slug || benchmark.id)}`,
           },
         },
+        features: buildFeatureChecklist(),
+        planOffers: [
+          {
+            planCode: 'premium',
+            title: 'Premium',
+            url: `${serverBase}/api/checkout/listing-upgrade?token=${encodeURIComponent(premiumToken)}`,
+          },
+          {
+            planCode: 'pro',
+            title: 'Pro',
+            url: `${serverBase}/api/checkout/listing-upgrade?token=${encodeURIComponent(proToken)}`,
+          },
+        ],
         ctas: [
           { text: 'Hacer upgrade a Premium', url: `${serverBase}/api/checkout/listing-upgrade?token=${encodeURIComponent(premiumToken)}` },
           { text: 'Hacer upgrade a Pro', url: `${serverBase}/api/checkout/listing-upgrade?token=${encodeURIComponent(proToken)}` },

@@ -12,7 +12,7 @@ function buildIdempotencyKey(userId, isoYear, isoWeek) {
 async function fetchSellerListings(supabase) {
   const { data, error } = await supabase
     .from('listings')
-    .select('id,seller_id,title,slug,images,price,price_currency,status')
+    .select('id,seller_id,title,slug,images,price,price_currency,status,location,seller_location')
     .in('status', ['active', 'published'])
     .limit(2000)
   if (error) return []
@@ -108,6 +108,14 @@ async function buildCandidates({ supabase, dateCtx, baseFront, forceWeekly = fal
       return acc
     }, { views: 0, contacts: 0, likes: 0 })
 
+    const recommendedActions = []
+    if (totals.views < 20) recommendedActions.push('Mejorá fotos y portada para aumentar clics')
+    if (totals.contacts < 3) recommendedActions.push('Completá descripción y especificaciones clave')
+    if (enriched.some((x) => Number(x.likes7d || 0) > 0 && Number(x.contacts7d || 0) === 0)) {
+      recommendedActions.push('Revisá el precio para convertir favoritos en consultas')
+    }
+    if (!recommendedActions.length) recommendedActions.push('Mantené tus publicaciones actualizadas para sostener el rendimiento')
+
     candidates.push({
       campaign: CAMPAIGN,
       priority: PRIORITY,
@@ -118,6 +126,7 @@ async function buildCandidates({ supabase, dateCtx, baseFront, forceWeekly = fal
         subject: 'Resumen semanal de tus publicaciones',
         title: 'Tu semana en Ciclo Market',
         subtitle: `Lograste ${totals.views} visitas, ${totals.contacts} contactos y ${totals.likes} favoritos en 7 días.`,
+        intro: 'Mirá tus publicaciones con mejor rendimiento y aplicá mejoras rápidas desde el dashboard.',
         cards: enriched.slice(0, 4).map((l) => ({
           id: l.id,
           slug: l.slug,
@@ -125,13 +134,16 @@ async function buildCandidates({ supabase, dateCtx, baseFront, forceWeekly = fal
           image: l.images?.[0],
           price: l.price,
           price_currency: l.price_currency,
+          location: l.location || l.seller_location || null,
           views7d: l.views7d,
-          contacts7d: l.contacts7d,
+          likes7d: l.likes7d,
+          statsLabel: 'Vistas últimos 7 días',
           link: `${baseFront}/listing/${encodeURIComponent(l.slug || l.id)}`,
         })),
+        recommendedActions,
         ctas: [
           { text: 'Ir a mi dashboard', url: `${baseFront}/dashboard` },
-          { text: 'Mejorar mi anuncio', url: `${baseFront}/publicar` },
+          { text: 'Editar publicación', url: `${baseFront}/dashboard?tab=listings` },
         ],
       },
     })
