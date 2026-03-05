@@ -368,7 +368,7 @@ async function executeCicloMarketSync(job) {
       created_at,
       status,
       bike_model_id,
-      sellers:users(full_name)
+      seller_id
     `)
     .eq('status', 'active')
     .gt('price', 0)
@@ -567,12 +567,75 @@ async function scheduleRecurringJobs() {
 }
 
 /**
- * Recalcula market prices (wrapper para la función SQL)
+ * Recalcula market prices
+ * Versión sin RPC - calcula directamente desde price_listings
  */
 async function recalculateMarketPrices() {
-  const { error } = await supabase.rpc('recalculate_market_prices_enhanced')
-  if (error) throw error
-  console.log('[Scraper] Market prices recalculated')
+  console.log('[Scraper] Recalculating market prices...')
+  
+  try {
+    // Obtener todos los modelos activos con precios
+    const { data: listings, error: fetchError } = await supabase
+      .from('price_listings')
+      .select('bike_model_id, price, currency, condition, year, country')
+      .eq('status', 'active')
+      .gt('listed_at', new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString())
+      .not('bike_model_id', 'is', null)
+    
+    if (fetchError) throw fetchError
+    
+    // Agrupar por modelo y calcular estadísticas
+    const grouped = {}
+    for (const listing of listings || []) {
+      const key = `${listing.bike_model_id}_${listing.country}_${listing.currency}_${listing.condition}_${listing.year}`
+      if (!grouped[key]) {
+        grouped[key] = {
+          bike_model_id: listing.bike_model_id,
+          country: listing.country,
+          currency: listing.currency,
+          condition: listing.condition,
+          year: listing.year,
+          prices: []
+        }
+      }
+      grouped[key].prices.push(listing.price)
+    }
+    
+    // Calcular promedio y mediana para cada grupo
+    for (const key in grouped) {
+      const group = grouped[key]
+      const prices = group.prices.sort((a, b) => a - b)
+      const avg = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length)
+      const mid = Math.floor(prices.length / 2)
+      const median = prices.length % 2 ? prices[mid] : Math.round((prices[mid - 1] + prices[mid]) / 2)
+      
+      // Upsert a market_prices
+      const { error: upsertError } = await supabase
+        .from('market_prices')
+        .upsert({
+          bike_model_id: group.bike_model_id,
+          country: group.country,
+          currency: group.currency,
+          condition: group.condition,
+          year: group.year,
+          avg_price: avg,
+          median_price: median,
+          sample_size: prices.length,
+          calculated_at: new Date().toISOString()
+        }, {
+          onConflict: 'bike_model_id,country,currency,condition,year'
+        })
+      
+      if (upsertError) {
+        console.warn('[Scraper] Failed to upsert market price for', key, upsertError.message)
+      }
+    }
+    
+    console.log(`[Scraper] Market prices recalculated for ${Object.keys(grouped).length} groups`)
+  } catch (err) {
+    console.error('[Scraper] Error recalculating market prices:', err)
+    throw err
+  }
 }
 
 module.exports = {
