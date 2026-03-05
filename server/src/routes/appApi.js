@@ -1236,35 +1236,18 @@ router.get('/api/newsletter/unsubscribe', async (req, res) => {
     if (!validateEmail(email) || !token) {
       return res.status(400).send('Solicitud inválida.')
     }
-    const secret = String(process.env.NEWSLETTER_UNSUB_SECRET || process.env.CRON_SECRET || '')
-    if (!secret) {
-      return res.status(500).send('Servicio no configurado.')
-    }
-    const expected = crypto.createHmac('sha256', secret).update(email).digest('base64url')
-    if (expected !== token) {
+    const {
+      verifyLegacyUnsubscribe,
+      applySuppression,
+      renderUnsubscribeHtml,
+    } = require('../email/unsubscribe')
+
+    if (!verifyLegacyUnsubscribe(email, token)) {
       return res.status(401).send('Token inválido.')
     }
-    const apiKey = process.env.RESEND_API_KEY
-    const audienceId = process.env.RESEND_AUDIENCE_GENERAL_ID
-    if (!apiKey || !audienceId) {
-      return res.status(500).send('Servicio no configurado.')
-    }
-
-    try {
-      await upsertAudienceContact({
-        apiKey,
-        audienceId,
-        email,
-        unsubscribed: true,
-      })
-    } catch (err) {
-      console.error('[api] newsletter unsubscribe failed', err)
-      return res.status(500).send('No pudimos procesar la baja.')
-    }
-
-    return res.send(
-      `<html><body style="font-family:system-ui;padding:2rem;"><h1>Te desuscribimos correctamente</h1><p>${email} ya no recibirá el newsletter de Ciclo Market.</p><p><a href="https://ciclomarket.ar">Volver al sitio</a></p></body></html>`,
-    )
+    const supabase = getServerSupabaseClient()
+    await applySuppression(supabase, { email, source: 'legacy_unsubscribe', reason: 'unsubscribe' })
+    return res.send(renderUnsubscribeHtml(email))
   } catch (err) {
     console.error('[api] newsletter unsubscribe unexpected error', err)
     return res.status(500).send('Ocurrió un error. Intentá nuevamente más tarde.')

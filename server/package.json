@@ -20,6 +20,8 @@
     "email:wednesday:dry": "node -e \"require('./src/jobs/wednesdayListingUpdate').sendWednesdayEmails({dryRun:true,limit:5}).then(r=>{console.log(JSON.stringify(r,null,2));process.exit(0)}).catch(e=>{console.error(e);process.exit(1)})\"",
     "email:friday:once": "node -e \"require('./src/jobs/fridayUpgradeOffer').sendFridayEmails({dryRun:false}).then(r=>{console.log(r);process.exit(0)}).catch(e=>{console.error(e);process.exit(1)})\"",
     "email:friday:dry": "node -e \"require('./src/jobs/fridayUpgradeOffer').sendFridayEmails({dryRun:true,limit:5}).then(r=>{console.log(JSON.stringify(r,null,2));process.exit(0)}).catch(e=>{console.error(e);process.exit(1)})\"",
+    "email:orchestrator:once": "node -e \"require('./src/email/orchestrator').runEmailOrchestrator({dryRun:false}).then(r=>{console.log(JSON.stringify(r,null,2));process.exit(0)}).catch(e=>{console.error(e);process.exit(1)})\"",
+    "email:orchestrator:dry": "node -e \"require('./src/email/orchestrator').runEmailOrchestrator({dryRun:true,forceWeekly:true}).then(r=>{console.log(JSON.stringify(r,null,2));process.exit(0)}).catch(e=>{console.error(e);process.exit(1)})\"",
     "email:test": "node ./scripts/sendTestEmail.js",
     "pricing:admin": "node ./scripts/pricing-admin.js",
     "pricing:sync:ciclomarket": "node -e \"const s=require('./src/services/pricingScraperService'); s.processPendingJobs({limit:1}).then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})\"",

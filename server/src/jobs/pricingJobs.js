@@ -144,6 +144,7 @@ async function cleanupOldLogs() {
 
 /**
  * Scheduler principal - ejecuta jobs según su horario
+ * Todos los jobs son semanales (domingos) para optimizar recursos
  */
 async function runScheduledJobs() {
   const now = new Date()
@@ -151,24 +152,27 @@ async function runScheduledJobs() {
   const minute = now.getMinutes()
   const dayOfWeek = now.getDay() // 0 = domingo
   
-  // Cada 5 minutos: procesar jobs pendientes
-  if (minute % 5 === 0) {
-    await processScrapingJobs()
-  }
+  // Solo ejecutar jobs los domingos
+  if (dayOfWeek !== 0) return
   
-  // 2:00 AM: recalcular precios
+  // Domingo 2:00 AM: recalcular precios de mercado
   if (hour === 2 && minute === 0) {
     await recalculateMarketPrices()
   }
   
-  // 12:00 PM y 12:00 AM: detectar expirados
-  if ((hour === 12 || hour === 0) && minute === 0) {
-    await detectExpiredListings()
+  // Domingo 3:00 AM: limpieza de logs
+  if (hour === 3 && minute === 0) {
+    await cleanupOldLogs()
   }
   
-  // Domingo 3:00 AM: limpieza
-  if (dayOfWeek === 0 && hour === 3 && minute === 0) {
-    await cleanupOldLogs()
+  // Domingo 4:00 AM: scraping semanal de precios
+  if (hour === 4 && minute === 0) {
+    await processScrapingJobs()
+  }
+  
+  // Domingo 5:00 AM: detectar expirados
+  if (hour === 5 && minute === 0) {
+    await detectExpiredListings()
   }
 }
 

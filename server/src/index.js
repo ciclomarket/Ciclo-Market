@@ -61,6 +61,8 @@ const { whatsappRouter } = require('./routes/whatsapp')
 const emailCronRouter = require('./routes/emailCron')
 const pricingApiRouter = require('./routes/pricingApi')
 const notionSyncRouter = require('./routes/notionSync')
+const { emailEngineRouter } = require('./routes/emailEngine')
+const { startEmailOrchestratorJob } = require('./email/orchestrator')
 // Sweepstake feature removed
 const path = require('path')
 // const https = require('https') // removed: used only for Google rating proxy
@@ -375,6 +377,7 @@ app.use(emailCronRouter)
 
 // Notion Growth OS sync (protected endpoint)
 app.use(notionSyncRouter)
+app.use(emailEngineRouter)
 
 // Pricing API routes (ingesta de precios, sugerencias, analytics)
 app.use('/api/v1/pricing', pricingApiRouter)
@@ -390,6 +393,7 @@ try { startDeletedPurgerJob && startDeletedPurgerJob() } catch {}
 try { startMondayNewArrivalsJob && startMondayNewArrivalsJob() } catch {}
 try { startWednesdayListingUpdateJob && startWednesdayListingUpdateJob() } catch {}
 try { startFridayUpgradeOfferJob && startFridayUpgradeOfferJob() } catch {}
+try { startEmailOrchestratorJob && startEmailOrchestratorJob() } catch {}
 
 /* Google Reviews endpoints removed */
 
@@ -1767,9 +1771,10 @@ app.listen(PORT, '0.0.0.0', () => {
       const pricingJobs = require('./jobs/pricingJobs')
       pricingJobs.initializeRecurringJobs()
       
-      // Scheduler cada minuto para jobs de scraping
+      // Scheduler cada hora para revisar jobs programados
+      // (Los jobs ahora son diarios/semanales, no necesitamos revisar cada minuto)
       const cron = require('node-cron')
-      cron.schedule('* * * * *', () => {
+      cron.schedule('0 * * * *', () => {
         pricingJobs.runScheduledJobs().catch((e) => console.warn('[pricingJobs] cron error', e?.message || e))
       })
       console.info('[pricingJobs] scheduler started')

@@ -23,6 +23,8 @@ const BRAND = {
   instagram: '@ciclomarket.ar',
   instagramUrl: 'https://instagram.com/ciclomarket.ar',
   logoUrl: 'https://www.ciclomarket.ar/site-logo.png',
+  footerAvatarUrl: 'https://jmtsgywgeysagnfgdovr.supabase.co/storage/v1/object/public/emails/ciclo-avatar.png',
+  instagramIconUrl: 'https://jmtsgywgeysagnfgdovr.supabase.co/storage/v1/object/public/emails/instagram.png',
   colors: {
     black: '#000000',
     white: '#ffffff',
@@ -220,7 +222,7 @@ function buildBaseLayout({ title, content, baseFront, unsubscribeUrl, userEmail,
           <table border="0" cellpadding="0" cellspacing="0" role="presentation" width="100%">
             <tr>
               <td align="center" style="padding:10px 0;">
-                <img src="${baseFront}/favicon-96x96.png" alt="${BRAND.name}" style="width:80px;height:80px;border-radius:50%;">
+                <img src="${BRAND.footerAvatarUrl}" alt="${BRAND.name}" style="width:80px;height:80px;border-radius:50%;">
               </td>
             </tr>
           </table>
@@ -294,7 +296,7 @@ function buildBaseLayout({ title, content, baseFront, unsubscribeUrl, userEmail,
           <tr>
             <td style="padding:0 10px;">
               <a href="${BRAND.instagramUrl}" target="_blank">
-                <img src="${baseFront}/icons/instagram.svg" alt="Instagram" width="24" height="24" style="display:block;">
+                <img src="${BRAND.instagramIconUrl}" alt="Instagram" width="24" height="24" style="display:block;">
               </a>
             </td>
           </tr>

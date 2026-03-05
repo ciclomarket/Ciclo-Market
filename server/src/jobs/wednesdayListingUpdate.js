@@ -333,6 +333,17 @@ function buildWednesdayEmail({ seller, stats, baseFront }) {
   }
 }
 
+function buildWednesdayTemplateBase({ title, content, baseFront, unsubscribeUrl, userEmail, preheader }) {
+  return buildBaseLayout({
+    title,
+    content,
+    baseFront,
+    unsubscribeUrl,
+    userEmail,
+    preheader,
+  })
+}
+
 // ============================================================================
 // CORE FUNCTIONS
 // ============================================================================
@@ -480,5 +491,6 @@ module.exports = {
   sendWednesdayEmails,
   fetchUserListingsWithStats,
   buildWednesdayEmail,
+  buildWednesdayTemplateBase,
   AUTOMATION_TYPE,
 }
