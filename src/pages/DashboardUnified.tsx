@@ -54,9 +54,43 @@ import {
   Zap,
   CheckCircle,
   MoreVertical,
-  Star
+  Star,
+  Eye,
+  Store,
+  MapPin,
+  Clock,
+  Globe,
+  Phone,
+  Smartphone,
+  Image,
+  LayoutTemplate
 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+
+// ============================================
+// CONFIGURACIÓN DE PAÍSES
+// ============================================
+interface CountryCode {
+  code: string
+  name: string
+  flag: string
+  dial: string
+}
+
+const COUNTRY_CODES: CountryCode[] = [
+  { code: 'AR', name: 'Argentina', flag: '🇦🇷', dial: '+54' },
+  { code: 'CL', name: 'Chile', flag: '🇨🇱', dial: '+56' },
+  { code: 'UY', name: 'Uruguay', flag: '🇺🇾', dial: '+598' },
+  { code: 'BR', name: 'Brasil', flag: '🇧🇷', dial: '+55' },
+  { code: 'PY', name: 'Paraguay', flag: '🇵🇾', dial: '+595' },
+  { code: 'BO', name: 'Bolivia', flag: '🇧🇴', dial: '+591' },
+  { code: 'PE', name: 'Perú', flag: '🇵🇪', dial: '+51' },
+  { code: 'CO', name: 'Colombia', flag: '🇨🇴', dial: '+57' },
+  { code: 'EC', name: 'Ecuador', flag: '🇪🇨', dial: '+593' },
+  { code: 'VE', name: 'Venezuela', flag: '🇻🇪', dial: '+58' },
+]
+
+const DEFAULT_COUNTRY = COUNTRY_CODES[0] // Argentina
 
 // ============================================
 // TIPOS
@@ -2716,9 +2750,10 @@ function SettingsSection({ profile, onProfileUpdate, accountVerification, onVeri
   const { user } = useAuth()
   const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState<'profile' | 'store' | 'verification' | 'password'>(() => {
-    // Recuperar tab guardado o usar 'profile' por defecto
+    // Si es tienda, no usar tabs (el componente StoreEditor maneja todo)
+    // Solo usar tabs para usuarios normales
     const saved = localStorage.getItem('dashboard_active_tab')
-    if (saved === 'store' || saved === 'verification' || saved === 'password') return saved
+    if (saved === 'verification' || saved === 'password') return saved
     return 'profile'
   })
 
@@ -2743,11 +2778,19 @@ function SettingsSection({ profile, onProfileUpdate, accountVerification, onVeri
     store_name: '',
     store_slug: '',
     store_phone: '',
+    store_phone_country: 'AR',
+    whatsapp_country: 'AR',
     store_address: '',
     store_website: '',
     store_instagram: '',
+    store_facebook: '',
     store_hours: '',
+    store_banner_position_y: 50,
   })
+  
+  // Estado para preview del banner
+  const [bannerPreview, setBannerPreview] = useState<string | null>(null)
+  const [bannerPosition, setBannerPosition] = useState(50)
 
   useEffect(() => {
     if (profile) {
@@ -2764,11 +2807,21 @@ function SettingsSection({ profile, onProfileUpdate, accountVerification, onVeri
         store_name: profile.store_name || '',
         store_slug: profile.store_slug || '',
         store_phone: profile.store_phone || '',
+        store_phone_country: 'AR',
+        whatsapp_country: 'AR',
         store_address: profile.store_address || '',
         store_website: profile.store_website || '',
         store_instagram: profile.store_instagram || '',
+        store_facebook: profile.store_facebook || '',
         store_hours: profile.store_hours || '',
+        store_banner_position_y: profile.store_banner_position_y ?? 50,
       })
+      
+      // Cargar preview del banner
+      if (profile.store_banner_url) {
+        setBannerPreview(profile.store_banner_url)
+      }
+      setBannerPosition(profile.store_banner_position_y ?? 50)
     }
   }, [profile])
 
@@ -2802,7 +2855,10 @@ function SettingsSection({ profile, onProfileUpdate, accountVerification, onVeri
         updateData.province = formData.province
         updateData.store_website = formData.store_website
         updateData.store_instagram = formData.store_instagram
+        updateData.store_facebook = formData.store_facebook
         updateData.store_hours = formData.store_hours
+        updateData.store_banner_position_y = bannerPosition
+        updateData.bio = formData.bio
       }
 
       const { error } = await supabase
@@ -2918,66 +2974,73 @@ function SettingsSection({ profile, onProfileUpdate, accountVerification, onVeri
     <div className="space-y-6">
       <h2 className="text-lg font-semibold text-gray-900">Configuración</h2>
       
-      {/* Tabs */}
-      <div className="flex gap-2 border-b border-gray-200">
-        <button
-          onClick={() => handleTabChange('profile')}
-          className={`px-4 py-2 text-sm font-medium transition-colors ${
-            activeTab === 'profile'
-              ? 'text-blue-600 border-b-2 border-blue-600'
-              : 'text-gray-600 hover:text-gray-900'
-          }`}
-        >
-          Perfil
-        </button>
-        {profile?.store_enabled && (
-          <button
-            onClick={() => handleTabChange('store')}
-            className={`px-4 py-2 text-sm font-medium transition-colors ${
-              activeTab === 'store'
-                ? 'text-blue-600 border-b-2 border-blue-600'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            Tienda
-          </button>
-        )}
-        <button
-          onClick={() => handleTabChange('verification')}
-          className={`px-4 py-2 text-sm font-medium transition-colors ${
-            activeTab === 'verification'
-              ? 'text-blue-600 border-b-2 border-blue-600'
-              : 'text-gray-600 hover:text-gray-900'
-          }`}
-        >
-          Verificación
-        </button>
-      </div>
-
-      {/* Avatar */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
-        <h3 className="font-medium text-gray-900 mb-4">Foto de perfil</h3>
-        <div className="flex items-center gap-4">
-          <img 
-            src={buildPublicUrlSafe(profile?.avatar_url) || '/avatar-placeholder.png'}
-            alt=""
-            className="w-20 h-20 rounded-full object-cover bg-gray-200"
-          />
-          <div>
-            <label className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors cursor-pointer">
-              <Upload className="w-4 h-4" />
-              Cambiar foto
-              <input 
-                type="file" 
-                accept="image/*" 
-                className="hidden" 
-                onChange={handleAvatarUpload}
-              />
-            </label>
-            <p className="text-xs text-gray-500 mt-2">JPG, PNG. Máx 2MB</p>
+      {/* MODO TIENDA: Interfaz dedicada */}
+      {profile?.store_enabled ? (
+        <StoreEditor 
+          formData={formData}
+          setFormData={setFormData}
+          profile={profile}
+          bannerPreview={bannerPreview}
+          setBannerPreview={setBannerPreview}
+          bannerPosition={bannerPosition}
+          setBannerPosition={setBannerPosition}
+          onAvatarUpload={handleStoreAvatarUpload}
+          onBannerUpload={handleStoreBannerUpload}
+          onSave={handleSave}
+          saving={saving}
+        />
+      ) : (
+        <>
+          {/* Tabs - Solo para usuarios normales */}
+          <div className="flex gap-2 border-b border-gray-200">
+            <button
+              onClick={() => handleTabChange('profile')}
+              className={`px-4 py-2 text-sm font-medium transition-colors ${
+                activeTab === 'profile'
+                  ? 'text-blue-600 border-b-2 border-blue-600'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Perfil
+            </button>
+            <button
+              onClick={() => handleTabChange('verification')}
+              className={`px-4 py-2 text-sm font-medium transition-colors ${
+                activeTab === 'verification'
+                  ? 'text-blue-600 border-b-2 border-blue-600'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Verificación
+            </button>
           </div>
-        </div>
-      </div>
+
+          {/* Avatar */}
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+            <h3 className="font-medium text-gray-900 mb-4">Foto de perfil</h3>
+            <div className="flex items-center gap-4">
+              <img 
+                src={buildPublicUrlSafe(profile?.avatar_url) || '/avatar-placeholder.png'}
+                alt=""
+                className="w-20 h-20 rounded-full object-cover bg-gray-200"
+              />
+              <div>
+                <label className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors cursor-pointer">
+                  <Upload className="w-4 h-4" />
+                  Cambiar foto
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    className="hidden" 
+                    onChange={handleAvatarUpload}
+                  />
+                </label>
+                <p className="text-xs text-gray-500 mt-2">JPG, PNG. Máx 2MB</p>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Formulario de Perfil */}
       {activeTab === 'profile' && (
@@ -3099,134 +3162,32 @@ function SettingsSection({ profile, onProfileUpdate, accountVerification, onVeri
         </div>
       )}
 
-      {/* Formulario de Tienda */}
-      {activeTab === 'store' && profile?.store_enabled && (
+      {/* Formulario de Perfil (solo usuarios normales) */}
+      {activeTab === 'profile' && !profile?.store_enabled && (
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 space-y-4">
-          <h3 className="font-medium text-gray-900 mb-4">Datos de la tienda</h3>
-          
-          {/* Logo y Banner de tienda */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-4 border-b border-gray-100">
-            <div>
-              <h4 className="text-sm font-medium text-gray-900 mb-3">Logo de la tienda</h4>
-              <div className="flex items-center gap-4">
-                <img 
-                  src={buildPublicUrlSafe(profile?.store_avatar_url) || '/avatar-placeholder.png'}
-                  alt=""
-                  className="w-20 h-20 rounded-full object-cover bg-gray-200"
-                />
-                <div>
-                  <label className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors cursor-pointer">
-                    <Upload className="w-4 h-4" />
-                    Cambiar logo
-                    <input 
-                      type="file" 
-                      accept="image/*" 
-                      className="hidden" 
-                      onChange={handleStoreAvatarUpload}
-                    />
-                  </label>
-                  <p className="text-xs text-gray-500 mt-2">JPG, PNG. Máx 2MB</p>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <h4 className="text-sm font-medium text-gray-900 mb-3">Banner de la tienda</h4>
-              <div className="space-y-3">
-                <div className="w-full h-24 rounded-lg bg-gray-200 overflow-hidden">
-                  {profile?.store_banner_url ? (
-                    <img 
-                      src={buildPublicUrlSafe(profile?.store_banner_url)}
-                      alt=""
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">
-                      Sin banner
-                    </div>
-                  )}
-                </div>
-                <label className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors cursor-pointer">
-                  <Upload className="w-4 h-4" />
-                  Cambiar banner
-                  <input 
-                    type="file" 
-                    accept="image/*" 
-                    className="hidden" 
-                    onChange={handleStoreBannerUpload}
-                  />
-                </label>
-                <p className="text-xs text-gray-500">JPG, PNG. Máx 5MB. Recomendado: 1200x400px</p>
-              </div>
-            </div>
-          </div>
+          <h3 className="font-medium text-gray-900 mb-4">Datos personales</h3>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Nombre de la tienda</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Nombre completo</label>
               <input
                 type="text"
-                value={formData.store_name}
-                onChange={(e) => setFormData({ ...formData, store_name: e.target.value })}
+                value={formData.full_name}
+                onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
                 className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
               />
             </div>
             
             <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-sm font-medium text-gray-700">URL de la tienda (slug)</label>
-                {profile?.store_slug && (
-                  <a 
-                    href={`/tienda/${profile.store_slug}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
-                  >
-                    Ver tienda →
-                  </a>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-gray-500 text-sm whitespace-nowrap">ciclomarket.ar/store/</span>
-                <input
-                  type="text"
-                  value={formData.store_slug}
-                  onChange={(e) => {
-                    // Normalizar slug: minúsculas, reemplazar espacios por guiones, solo alfanumérico y guiones
-                    const normalized = e.target.value
-                      .toLowerCase()
-                      .replace(/\s+/g, '-')
-                      .replace(/[^a-z0-9-]/g, '')
-                      .replace(/-+/g, '-')
-                    setFormData({ ...formData, store_slug: normalized })
-                  }}
-                  className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
-                  placeholder="mi-tienda"
-                />
-              </div>
-              <p className="text-xs text-gray-500 mt-1">Solo letras minúsculas, números y guiones. Sin espacios.</p>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
+              <input
+                type="email"
+                value={formData.email}
+                disabled
+                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-gray-500"
+              />
             </div>
             
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Teléfono de la tienda</label>
-              <input
-                type="tel"
-                value={formData.store_phone}
-                onChange={(e) => setFormData({ ...formData, store_phone: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Dirección</label>
-              <input
-                type="text"
-                value={formData.store_address}
-                onChange={(e) => setFormData({ ...formData, store_address: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
-              />
-            </div>
-
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">WhatsApp</label>
               <input
@@ -3239,38 +3200,12 @@ function SettingsSection({ profile, onProfileUpdate, accountVerification, onVeri
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Sitio web</label>
-              <input
-                type="url"
-                value={formData.store_website}
-                onChange={(e) => setFormData({ ...formData, store_website: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
-                placeholder="https://mitienda.com"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Instagram</label>
-              <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">@</span>
-                <input
-                  type="text"
-                  value={formData.store_instagram}
-                  onChange={(e) => setFormData({ ...formData, store_instagram: e.target.value })}
-                  className="w-full pl-8 pr-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
-                  placeholder="mitienda"
-                />
-              </div>
-            </div>
-
-            <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Ciudad</label>
               <input
                 type="text"
                 value={formData.city}
                 onChange={(e) => setFormData({ ...formData, city: e.target.value })}
                 className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
-                placeholder="Posadas"
               />
             </div>
 
@@ -3287,22 +3222,23 @@ function SettingsSection({ profile, onProfileUpdate, accountVerification, onVeri
                 ))}
               </select>
             </div>
+          </div>
 
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Horarios de atención</label>
-              <input
-                type="text"
-                value={formData.store_hours}
-                onChange={(e) => setFormData({ ...formData, store_hours: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
-                placeholder="Lun-Vie 9-18hs, Sáb 9-13hs"
-              />
-            </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Sobre vos</label>
+            <textarea
+              value={formData.bio}
+              onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
+              rows={4}
+              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all resize-none"
+              placeholder="Contá un poco sobre vos..."
+            />
           </div>
         </div>
       )}
 
-      {activeTab === 'verification' && (
+      {/* Verificación (solo usuarios normales) */}
+      {activeTab === 'verification' && !profile?.store_enabled && (
         <AccountVerificationSection 
           verification={accountVerification} 
           onUpdate={onVerificationUpdate}
@@ -3310,7 +3246,8 @@ function SettingsSection({ profile, onProfileUpdate, accountVerification, onVeri
         />
       )}
 
-      {activeTab !== 'verification' && (
+      {/* Botón guardar (solo para usuarios normales en perfil) */}
+      {activeTab === 'profile' && !profile?.store_enabled && (
         <div className="flex justify-end">
           <button
             onClick={handleSave}
@@ -4019,5 +3956,535 @@ export default function DashboardUnified() {
         </div>
       </div>
     </>
+  )
+}
+
+// ============================================
+// COMPONENTE: STORE EDITOR (Modo Tienda Dedicado)
+// ============================================
+interface StoreEditorProps {
+  formData: any
+  setFormData: (data: any) => void
+  profile: UserProfileRecord | null
+  bannerPreview: string | null
+  setBannerPreview: (url: string | null) => void
+  bannerPosition: number
+  setBannerPosition: (pos: number) => void
+  onAvatarUpload: (e: React.ChangeEvent<HTMLInputElement>) => void
+  onBannerUpload: (e: React.ChangeEvent<HTMLInputElement>) => void
+  onSave: () => void
+  saving: boolean
+}
+
+function StoreEditor({
+  formData,
+  setFormData,
+  profile,
+  bannerPreview,
+  setBannerPreview,
+  bannerPosition,
+  setBannerPosition,
+  onAvatarUpload,
+  onBannerUpload,
+  onSave,
+  saving
+}: StoreEditorProps) {
+  const [activeSection, setActiveSection] = useState<'general' | 'visual' | 'contacto'>('general')
+  const [showPreview, setShowPreview] = useState(false)
+
+  // Helper para inputs de teléfono con país
+  const PhoneInput = ({ 
+    value, 
+    onChange, 
+    countryKey,
+    label 
+  }: { 
+    value: string
+    onChange: (val: string) => void
+    countryKey: 'store_phone_country' | 'whatsapp_country'
+    label: string
+  }) => {
+    const selectedCountry = COUNTRY_CODES.find(c => c.code === formData[countryKey]) || DEFAULT_COUNTRY
+    
+    return (
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1.5">{label}</label>
+        <div className="flex gap-2">
+          <select
+            value={formData[countryKey]}
+            onChange={(e) => setFormData({ ...formData, [countryKey]: e.target.value })}
+            className="w-28 px-2 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all bg-white text-sm"
+          >
+            {COUNTRY_CODES.map((country) => (
+              <option key={country.code} value={country.code}>
+                {country.flag} {country.dial}
+              </option>
+            ))}
+          </select>
+          <input
+            type="tel"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
+            placeholder="123456789"
+          />
+        </div>
+      </div>
+    )
+  }
+
+  // Sección de Información General
+  const GeneralSection = () => (
+    <div className="space-y-6">
+      {/* Nombre y Slug */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">
+            Nombre de la tienda <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="text"
+            value={formData.store_name}
+            onChange={(e) => setFormData({ ...formData, store_name: e.target.value })}
+            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
+            placeholder="Ej: BiciWorld"
+          />
+        </div>
+        
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="block text-sm font-medium text-gray-700">
+              URL de tu tienda <span className="text-red-500">*</span>
+            </label>
+            {profile?.store_slug && (
+              <a 
+                href={`/tienda/${profile.store_slug}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1 font-medium"
+              >
+                <Eye className="w-3 h-3" />
+                Ver tienda
+              </a>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-gray-500 text-sm whitespace-nowrap bg-gray-100 px-3 py-2.5 rounded-l-xl border border-r-0 border-gray-200">
+              ciclomarket.ar/tienda/
+            </span>
+            <input
+              type="text"
+              value={formData.store_slug}
+              onChange={(e) => {
+                const normalized = e.target.value
+                  .toLowerCase()
+                  .replace(/\s+/g, '-')
+                  .replace(/[^a-z0-9-]/g, '')
+                  .replace(/-+/g, '-')
+                setFormData({ ...formData, store_slug: normalized })
+              }}
+              className="flex-1 px-4 py-2.5 rounded-r-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
+              placeholder="mi-tienda"
+            />
+          </div>
+          <p className="text-xs text-gray-500 mt-1">
+            Solo minúsculas, números y guiones. Esta será tu dirección pública.
+          </p>
+        </div>
+      </div>
+
+      {/* Descripción de la tienda */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+          Descripción de la tienda
+        </label>
+        <textarea
+          value={formData.bio}
+          onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
+          rows={4}
+          className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all resize-none"
+          placeholder="Contá qué vendés, tu experiencia, qué te hace diferente..."
+        />
+        <p className="text-xs text-gray-500 mt-1">
+          Esta descripción aparecerá en tu perfil público. Sé breve y claro.
+        </p>
+      </div>
+
+      {/* Ubicación */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">
+            <MapPin className="w-4 h-4 inline mr-1" />
+            Dirección
+          </label>
+          <input
+            type="text"
+            value={formData.store_address}
+            onChange={(e) => setFormData({ ...formData, store_address: e.target.value })}
+            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
+            placeholder="Av. Siempre Viva 742"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Ciudad</label>
+          <input
+            type="text"
+            value={formData.city}
+            onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
+            placeholder="Posadas"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Provincia</label>
+          <select
+            value={formData.province}
+            onChange={(e) => setFormData({ ...formData, province: e.target.value })}
+            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all bg-white"
+          >
+            <option value="">Seleccionar provincia...</option>
+            {PROVINCES.map((p) => (
+              <option key={p.name} value={p.name}>{p.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">
+            <Clock className="w-4 h-4 inline mr-1" />
+            Horarios de atención
+          </label>
+          <input
+            type="text"
+            value={formData.store_hours}
+            onChange={(e) => setFormData({ ...formData, store_hours: e.target.value })}
+            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
+            placeholder="Lun a Vie: 9-18hs, Sáb: 9-13hs"
+          />
+        </div>
+      </div>
+    </div>
+  )
+
+  // Sección Visual (Logo y Banner)
+  const VisualSection = () => (
+    <div className="space-y-6">
+      {/* Logo */}
+      <div className="bg-gray-50 rounded-xl p-6">
+        <h4 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <Image className="w-4 h-4" />
+          Logo de la tienda
+        </h4>
+        <div className="flex items-start gap-6">
+          <div className="relative">
+            <img 
+              src={buildPublicUrlSafe(profile?.store_avatar_url) || '/avatar-placeholder.png'}
+              alt="Logo"
+              className="w-24 h-24 rounded-full object-cover bg-white border-2 border-gray-200"
+            />
+          </div>
+          <div className="flex-1 space-y-3">
+            <p className="text-sm text-gray-600">
+              Subí el logo de tu tienda. Se mostrará redondo en tu perfil.
+            </p>
+            <label className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors cursor-pointer text-sm font-medium">
+              <Upload className="w-4 h-4" />
+              Subir logo
+              <input 
+                type="file" 
+                accept="image/*" 
+                className="hidden" 
+                onChange={onAvatarUpload}
+              />
+            </label>
+            <p className="text-xs text-gray-500">JPG o PNG. Máximo 2MB.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Banner con Preview */}
+      <div className="bg-gray-50 rounded-xl p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h4 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+            <LayoutTemplate className="w-4 h-4" />
+            Banner de portada
+          </h4>
+          <button
+            onClick={() => setShowPreview(!showPreview)}
+            className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+          >
+            <Eye className="w-3 h-3" />
+            {showPreview ? 'Ocultar preview' : 'Ver preview'}
+          </button>
+        </div>
+
+        {/* Preview del banner */}
+        {showPreview && bannerPreview && (
+          <div className="mb-4 rounded-xl overflow-hidden border-2 border-blue-200 shadow-lg">
+            <div 
+              className="w-full h-48 bg-gray-200 relative"
+              style={{
+                backgroundImage: `url(${bannerPreview})`,
+                backgroundSize: 'cover',
+                backgroundPosition: `center ${bannerPosition}%`
+              }}
+            >
+              <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+              <div className="absolute bottom-4 left-4 flex items-center gap-3">
+                <img 
+                  src={buildPublicUrlSafe(profile?.store_avatar_url) || '/avatar-placeholder.png'}
+                  alt=""
+                  className="w-12 h-12 rounded-full border-2 border-white bg-white"
+                />
+                <div className="text-white">
+                  <p className="font-bold text-lg">{formData.store_name || 'Tu Tienda'}</p>
+                  <p className="text-sm opacity-90">{formData.city || 'Ciudad'}, {formData.province || 'Provincia'}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Upload y ajuste */}
+        <div className="space-y-4">
+          <div className="w-full h-32 rounded-lg bg-white border-2 border-dashed border-gray-300 flex flex-col items-center justify-center overflow-hidden relative">
+            {bannerPreview ? (
+              <img 
+                src={bannerPreview}
+                alt="Banner"
+                className="w-full h-full object-cover"
+                style={{ objectPosition: `center ${bannerPosition}%` }}
+              />
+            ) : (
+              <>
+                <Image className="w-8 h-8 text-gray-400 mb-2" />
+                <p className="text-sm text-gray-500">Sin banner cargado</p>
+              </>
+            )}
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <label className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors cursor-pointer text-sm font-medium">
+              <Upload className="w-4 h-4" />
+              {bannerPreview ? 'Cambiar banner' : 'Subir banner'}
+              <input 
+                type="file" 
+                accept="image/*" 
+                className="hidden" 
+                onChange={onBannerUpload}
+              />
+            </label>
+            {bannerPreview && (
+              <button
+                onClick={() => {
+                  setBannerPreview(null)
+                  setFormData({ ...formData, store_banner_url: '' })
+                }}
+                className="inline-flex items-center gap-2 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors text-sm font-medium"
+              >
+                <Trash2 className="w-4 h-4" />
+                Eliminar
+              </button>
+            )}
+          </div>
+
+          {bannerPreview && (
+            <div className="bg-white rounded-lg p-4 border border-gray-200">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Ajustar posición del banner
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={bannerPosition}
+                onChange={(e) => {
+                  const newPos = parseInt(e.target.value)
+                  setBannerPosition(newPos)
+                  setFormData({ ...formData, store_banner_position_y: newPos })
+                }}
+                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+              />
+              <div className="flex justify-between text-xs text-gray-500 mt-1">
+                <span>Arriba</span>
+                <span>Centro</span>
+                <span>Abajo</span>
+              </div>
+            </div>
+          )}
+
+          <p className="text-xs text-gray-500">
+            Recomendado: 1200×400 píxeles. JPG o PNG. Máximo 5MB.
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+
+  // Sección de Contacto
+  const ContactoSection = () => (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <PhoneInput 
+          label="Teléfono fijo"
+          value={formData.store_phone}
+          onChange={(val) => setFormData({ ...formData, store_phone: val })}
+          countryKey="store_phone_country"
+        />
+
+        <PhoneInput 
+          label="WhatsApp"
+          value={formData.whatsapp_number}
+          onChange={(val) => setFormData({ ...formData, whatsapp_number: val })}
+          countryKey="whatsapp_country"
+        />
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">
+            <Globe className="w-4 h-4 inline mr-1" />
+            Sitio web
+          </label>
+          <input
+            type="url"
+            value={formData.store_website}
+            onChange={(e) => setFormData({ ...formData, store_website: e.target.value })}
+            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
+            placeholder="https://www.mitienda.com"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">
+            Instagram
+          </label>
+          <input
+            type="text"
+            value={formData.store_instagram}
+            onChange={(e) => setFormData({ ...formData, store_instagram: e.target.value })}
+            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
+            placeholder="tu_usuario (sin @)"
+          />
+        </div>
+
+        <div className="md:col-span-2">
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">
+            Facebook
+          </label>
+          <input
+            type="text"
+            value={formData.store_facebook}
+            onChange={(e) => setFormData({ ...formData, store_facebook: e.target.value })}
+            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
+            placeholder="facebook.com/tutienda o tu_usuario"
+          />
+        </div>
+      </div>
+
+      <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
+        <p className="text-sm text-blue-800">
+          <strong>Consejo:</strong> Cuanta más información de contacto completes, más fácil será que los compradores te encuentren. El WhatsApp es el canal más utilizado.
+        </p>
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="space-y-6">
+      {/* Header de Tienda */}
+      <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl p-6 text-white">
+        <div className="flex items-start justify-between">
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <Store className="w-5 h-5" />
+              <span className="text-sm font-medium text-blue-100">Modo Tienda</span>
+            </div>
+            <h2 className="text-2xl font-bold">{formData.store_name || 'Configurá tu tienda'}</h2>
+            {profile?.store_slug && (
+              <a 
+                href={`/tienda/${profile.store_slug}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 mt-2 text-sm text-blue-100 hover:text-white transition-colors"
+              >
+                ciclomarket.ar/tienda/{profile.store_slug}
+                <Eye className="w-3 h-3" />
+              </a>
+            )}
+          </div>
+          <div className="flex gap-2">
+            {profile?.store_slug && (
+              <a
+                href={`/tienda/${profile.store_slug}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+              >
+                <Eye className="w-4 h-4" />
+                Ver tienda
+              </a>
+            )}
+            <button
+              onClick={onSave}
+              disabled={saving}
+              className="px-4 py-2 bg-white text-blue-600 rounded-lg text-sm font-medium hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+            >
+              {saving ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <Save className="w-4 h-4" />
+              )}
+              {saving ? 'Guardando...' : 'Guardar cambios'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Navegación de secciones */}
+      <div className="flex gap-1 p-1 bg-gray-100 rounded-xl">
+        {[
+          { id: 'general', label: 'Información general', icon: Store },
+          { id: 'visual', label: 'Logo y banner', icon: Image },
+          { id: 'contacto', label: 'Contacto', icon: Phone },
+        ].map((section) => (
+          <button
+            key={section.id}
+            onClick={() => setActiveSection(section.id as any)}
+            className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+              activeSection === section.id
+                ? 'bg-white text-blue-600 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <section.icon className="w-4 h-4" />
+            {section.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Contenido de la sección activa */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+        {activeSection === 'general' && <GeneralSection />}
+        {activeSection === 'visual' && <VisualSection />}
+        {activeSection === 'contacto' && <ContactoSection />}
+      </div>
+
+      {/* Botón guardar inferior */}
+      <div className="flex justify-end">
+        <button
+          onClick={onSave}
+          disabled={saving}
+          className="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+        >
+          {saving ? (
+            <RefreshCw className="w-4 h-4 animate-spin" />
+          ) : (
+            <Save className="w-4 h-4" />
+          )}
+          {saving ? 'Guardando cambios...' : 'Guardar todos los cambios'}
+        </button>
+      </div>
+    </div>
   )
 }
