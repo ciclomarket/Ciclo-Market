@@ -514,7 +514,7 @@ export default function Home() {
       className="relative isolate overflow-hidden text-gray-900"
     >
       {/* HERO */}
-      <HeroHome offerListing={heroOfferListing} storeListing={heroStoreListing} storeLogoUrl={heroStoreLogoUrl} />
+      <HeroHome />
 
       {belowFoldReady ? (
         <>

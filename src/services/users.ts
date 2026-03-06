@@ -226,6 +226,7 @@ export async function fetchStoreProfileBySlug(slug: string): Promise<UserProfile
       .select('*')
       .eq('store_slug', slug.toLowerCase())
       .eq('store_enabled', true)
+      .eq('is_demo_account', false)
       .maybeSingle()
     if (error || !data) return null
     return data as UserProfileRecord
@@ -258,6 +259,7 @@ export async function fetchStores(): Promise<StoreSummary[]> {
       .select('id, store_slug, store_name, store_avatar_url, store_banner_url, city, province, store_enabled, store_address, store_lat, store_lon, store_phone, store_website')
       .eq('store_enabled', true)
       .not('store_slug', 'is', null)
+      .eq('is_demo_account', false)
       .order('store_name', { ascending: true })
     if (error || !Array.isArray(data)) return []
     return data.filter((r: any) => r.store_slug).map((r: any) => ({

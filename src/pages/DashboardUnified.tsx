@@ -661,7 +661,7 @@ function SetupProgress({ profile, onCompleteStep }: { profile: any, onCompleteSt
   const steps = [
     { id: 'avatar', label: 'Foto de perfil', done: !!profile?.avatar_url, icon: User },
     { id: 'phone', label: 'Teléfono', done: !!(profile?.whatsapp_number || profile?.store_phone), icon: Phone },
-    { id: 'location', label: 'Ubicación', done: !!(profile?.city || profile?.store_city), icon: MapPin },
+    { id: 'location', label: 'Ubicación', done: !!(profile?.city), icon: MapPin },
     ...(profile?.store_enabled ? [
       { id: 'banner', label: 'Banner de tienda', done: !!profile?.store_banner_url, icon: Store },
       { id: 'bio', label: 'Descripción', done: !!(profile?.bio && profile.bio.length > 50), icon: MessageCircle },
@@ -2715,7 +2715,18 @@ function SettingsSection({ profile, onProfileUpdate, accountVerification, onVeri
   const { show: showToast } = useToast()
   const { user } = useAuth()
   const [saving, setSaving] = useState(false)
-  const [activeTab, setActiveTab] = useState<'profile' | 'store' | 'verification' | 'password'>('profile')
+  const [activeTab, setActiveTab] = useState<'profile' | 'store' | 'verification' | 'password'>(() => {
+    // Recuperar tab guardado o usar 'profile' por defecto
+    const saved = localStorage.getItem('dashboard_active_tab')
+    if (saved === 'store' || saved === 'verification' || saved === 'password') return saved
+    return 'profile'
+  })
+
+  // Guardar tab cuando cambie
+  const handleTabChange = (tab: 'profile' | 'store' | 'verification' | 'password') => {
+    setActiveTab(tab)
+    localStorage.setItem('dashboard_active_tab', tab)
+  }
   
   const [formData, setFormData] = useState({
     full_name: '',
@@ -2730,14 +2741,12 @@ function SettingsSection({ profile, onProfileUpdate, accountVerification, onVeri
     website_url: '',
     // Store fields
     store_name: '',
+    store_slug: '',
     store_phone: '',
-    store_whatsapp: '',
     store_address: '',
-    store_city: '',
-    store_province: '',
     store_website: '',
     store_instagram: '',
-    business_hours: '',
+    store_hours: '',
   })
 
   useEffect(() => {
@@ -2753,14 +2762,12 @@ function SettingsSection({ profile, onProfileUpdate, accountVerification, onVeri
         facebook_handle: profile.facebook_handle || '',
         website_url: profile.website_url || '',
         store_name: profile.store_name || '',
+        store_slug: profile.store_slug || '',
         store_phone: profile.store_phone || '',
-        store_whatsapp: profile.store_whatsapp || '',
         store_address: profile.store_address || '',
-        store_city: profile.store_city || '',
-        store_province: profile.store_province || '',
         store_website: profile.store_website || '',
         store_instagram: profile.store_instagram || '',
-        business_hours: profile.business_hours || '',
+        store_hours: profile.store_hours || '',
       })
     }
   }, [profile])
@@ -2787,14 +2794,15 @@ function SettingsSection({ profile, onProfileUpdate, accountVerification, onVeri
       // Solo actualizar campos de tienda si es tienda
       if (profile?.store_enabled) {
         updateData.store_name = formData.store_name
+        updateData.store_slug = formData.store_slug || null
         updateData.store_phone = formData.store_phone
-        updateData.store_whatsapp = formData.store_whatsapp
+        updateData.whatsapp_number = formData.whatsapp_number
         updateData.store_address = formData.store_address
-        updateData.store_city = formData.store_city
-        updateData.store_province = formData.store_province
+        updateData.city = formData.city
+        updateData.province = formData.province
         updateData.store_website = formData.store_website
         updateData.store_instagram = formData.store_instagram
-        updateData.business_hours = formData.business_hours
+        updateData.store_hours = formData.store_hours
       }
 
       const { error } = await supabase
@@ -2846,6 +2854,66 @@ function SettingsSection({ profile, onProfileUpdate, accountVerification, onVeri
     }
   }
 
+  const handleStoreAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !user?.id) return
+
+    try {
+      const supabase = getSupabaseClient()
+      const fileName = `store-avatar-${user.id}-${Date.now()}.${file.name.split('.').pop()}`
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, file, { upsert: true })
+
+      if (uploadError) throw uploadError
+
+      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName)
+      
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ store_avatar_url: publicUrl })
+        .eq('id', user.id)
+
+      if (updateError) throw updateError
+
+      showToast('Logo de tienda actualizado', { variant: 'success' })
+      onProfileUpdate()
+    } catch (error) {
+      console.error('Error uploading store avatar:', error)
+      showToast('Error al subir el logo', { variant: 'error' })
+    }
+  }
+
+  const handleStoreBannerUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !user?.id) return
+
+    try {
+      const supabase = getSupabaseClient()
+      const fileName = `store-banner-${user.id}-${Date.now()}.${file.name.split('.').pop()}`
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, file, { upsert: true })
+
+      if (uploadError) throw uploadError
+
+      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName)
+      
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ store_banner_url: publicUrl })
+        .eq('id', user.id)
+
+      if (updateError) throw updateError
+
+      showToast('Banner de tienda actualizado', { variant: 'success' })
+      onProfileUpdate()
+    } catch (error) {
+      console.error('Error uploading store banner:', error)
+      showToast('Error al subir el banner', { variant: 'error' })
+    }
+  }
+
   return (
     <div className="space-y-6">
       <h2 className="text-lg font-semibold text-gray-900">Configuración</h2>
@@ -2853,7 +2921,7 @@ function SettingsSection({ profile, onProfileUpdate, accountVerification, onVeri
       {/* Tabs */}
       <div className="flex gap-2 border-b border-gray-200">
         <button
-          onClick={() => setActiveTab('profile')}
+          onClick={() => handleTabChange('profile')}
           className={`px-4 py-2 text-sm font-medium transition-colors ${
             activeTab === 'profile'
               ? 'text-blue-600 border-b-2 border-blue-600'
@@ -2864,7 +2932,7 @@ function SettingsSection({ profile, onProfileUpdate, accountVerification, onVeri
         </button>
         {profile?.store_enabled && (
           <button
-            onClick={() => setActiveTab('store')}
+            onClick={() => handleTabChange('store')}
             className={`px-4 py-2 text-sm font-medium transition-colors ${
               activeTab === 'store'
                 ? 'text-blue-600 border-b-2 border-blue-600'
@@ -2875,7 +2943,7 @@ function SettingsSection({ profile, onProfileUpdate, accountVerification, onVeri
           </button>
         )}
         <button
-          onClick={() => setActiveTab('verification')}
+          onClick={() => handleTabChange('verification')}
           className={`px-4 py-2 text-sm font-medium transition-colors ${
             activeTab === 'verification'
               ? 'text-blue-600 border-b-2 border-blue-600'
@@ -3036,6 +3104,63 @@ function SettingsSection({ profile, onProfileUpdate, accountVerification, onVeri
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 space-y-4">
           <h3 className="font-medium text-gray-900 mb-4">Datos de la tienda</h3>
           
+          {/* Logo y Banner de tienda */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-4 border-b border-gray-100">
+            <div>
+              <h4 className="text-sm font-medium text-gray-900 mb-3">Logo de la tienda</h4>
+              <div className="flex items-center gap-4">
+                <img 
+                  src={buildPublicUrlSafe(profile?.store_avatar_url) || '/avatar-placeholder.png'}
+                  alt=""
+                  className="w-20 h-20 rounded-full object-cover bg-gray-200"
+                />
+                <div>
+                  <label className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors cursor-pointer">
+                    <Upload className="w-4 h-4" />
+                    Cambiar logo
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      className="hidden" 
+                      onChange={handleStoreAvatarUpload}
+                    />
+                  </label>
+                  <p className="text-xs text-gray-500 mt-2">JPG, PNG. Máx 2MB</p>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h4 className="text-sm font-medium text-gray-900 mb-3">Banner de la tienda</h4>
+              <div className="space-y-3">
+                <div className="w-full h-24 rounded-lg bg-gray-200 overflow-hidden">
+                  {profile?.store_banner_url ? (
+                    <img 
+                      src={buildPublicUrlSafe(profile?.store_banner_url)}
+                      alt=""
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">
+                      Sin banner
+                    </div>
+                  )}
+                </div>
+                <label className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors cursor-pointer">
+                  <Upload className="w-4 h-4" />
+                  Cambiar banner
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    className="hidden" 
+                    onChange={handleStoreBannerUpload}
+                  />
+                </label>
+                <p className="text-xs text-gray-500">JPG, PNG. Máx 5MB. Recomendado: 1200x400px</p>
+              </div>
+            </div>
+          </div>
+          
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Nombre de la tienda</label>
@@ -3048,23 +3173,47 @@ function SettingsSection({ profile, onProfileUpdate, accountVerification, onVeri
             </div>
             
             <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-sm font-medium text-gray-700">URL de la tienda (slug)</label>
+                {profile?.store_slug && (
+                  <a 
+                    href={`/tienda/${profile.store_slug}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                  >
+                    Ver tienda →
+                  </a>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-gray-500 text-sm whitespace-nowrap">ciclomarket.ar/store/</span>
+                <input
+                  type="text"
+                  value={formData.store_slug}
+                  onChange={(e) => {
+                    // Normalizar slug: minúsculas, reemplazar espacios por guiones, solo alfanumérico y guiones
+                    const normalized = e.target.value
+                      .toLowerCase()
+                      .replace(/\s+/g, '-')
+                      .replace(/[^a-z0-9-]/g, '')
+                      .replace(/-+/g, '-')
+                    setFormData({ ...formData, store_slug: normalized })
+                  }}
+                  className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
+                  placeholder="mi-tienda"
+                />
+              </div>
+              <p className="text-xs text-gray-500 mt-1">Solo letras minúsculas, números y guiones. Sin espacios.</p>
+            </div>
+            
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Teléfono de la tienda</label>
               <input
                 type="tel"
                 value={formData.store_phone}
                 onChange={(e) => setFormData({ ...formData, store_phone: e.target.value })}
                 className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">WhatsApp</label>
-              <input
-                type="tel"
-                value={formData.store_whatsapp}
-                onChange={(e) => setFormData({ ...formData, store_whatsapp: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
-                placeholder="5491123456789"
               />
             </div>
 
@@ -3079,27 +3228,14 @@ function SettingsSection({ profile, onProfileUpdate, accountVerification, onVeri
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Ciudad</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">WhatsApp</label>
               <input
-                type="text"
-                value={formData.store_city}
-                onChange={(e) => setFormData({ ...formData, store_city: e.target.value })}
+                type="tel"
+                value={formData.whatsapp_number}
+                onChange={(e) => setFormData({ ...formData, whatsapp_number: e.target.value })}
                 className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
+                placeholder="5491123456789"
               />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Provincia</label>
-              <select
-                value={formData.store_province}
-                onChange={(e) => setFormData({ ...formData, store_province: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all bg-white"
-              >
-                <option value="">Seleccionar...</option>
-                {PROVINCES.map((p) => (
-                  <option key={p.name} value={p.name}>{p.name}</option>
-                ))}
-              </select>
             </div>
 
             <div>
@@ -3127,12 +3263,37 @@ function SettingsSection({ profile, onProfileUpdate, accountVerification, onVeri
               </div>
             </div>
 
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Ciudad</label>
+              <input
+                type="text"
+                value={formData.city}
+                onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
+                placeholder="Posadas"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Provincia</label>
+              <select
+                value={formData.province}
+                onChange={(e) => setFormData({ ...formData, province: e.target.value })}
+                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all bg-white"
+              >
+                <option value="">Seleccionar...</option>
+                {PROVINCES.map((p) => (
+                  <option key={p.name} value={p.name}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Horarios de atención</label>
               <input
                 type="text"
-                value={formData.business_hours}
-                onChange={(e) => setFormData({ ...formData, business_hours: e.target.value })}
+                value={formData.store_hours}
+                onChange={(e) => setFormData({ ...formData, store_hours: e.target.value })}
                 className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
                 placeholder="Lun-Vie 9-18hs, Sáb 9-13hs"
               />
