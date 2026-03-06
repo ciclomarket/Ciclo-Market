@@ -55,7 +55,6 @@ import {
   CheckCircle,
   MoreVertical,
   Star,
-  Eye,
   Store,
   MapPin,
   Clock,
