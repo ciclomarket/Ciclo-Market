@@ -217,18 +217,29 @@ export async function fetchUserProfile(id: string): Promise<UserProfileRecord | 
   }
 }
 
-export async function fetchStoreProfileBySlug(slug: string): Promise<UserProfileRecord | null> {
+export async function fetchStoreProfileBySlug(slug: string, currentUserId?: string): Promise<UserProfileRecord | null> {
   if (!supabaseEnabled) return null
   try {
     const supabase = getSupabaseClient()
+    
+    // Primero buscamos la tienda por slug (sin filtro de demo para permitir que el dueño la vea)
     const { data, error } = await supabase
       .from('users')
       .select('*')
       .eq('store_slug', slug.toLowerCase())
       .eq('store_enabled', true)
-      .eq('is_demo_account', false)
       .maybeSingle()
+    
     if (error || !data) return null
+    
+    // Si es una cuenta demo, solo permitir verla si el usuario actual es el dueño
+    if (data.is_demo_account === true) {
+      // Si no hay usuario logueado o no es el dueño, no mostrar la tienda demo
+      if (!currentUserId || data.id !== currentUserId) {
+        return null
+      }
+    }
+    
     return data as UserProfileRecord
   } catch {
     return null

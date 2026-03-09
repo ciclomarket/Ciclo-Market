@@ -2127,42 +2127,9 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
         </Container>
       </section>
 
-      <section id="listings" className="relative isolate overflow-hidden bg-gray-50 text-gray-900">
+      <section id="listings" className="bg-gray-50 text-gray-900">
         <Container className="!py-0">
           <div className="pt-4 pb-6 space-y-4">
-
-            <div className="sm:hidden">
-              <div className="flex w-full overflow-hidden rounded-2xl bg-white text-[#14212e] shadow">
-                <button
-                  type="button"
-                  onClick={() => setMobileFiltersOpen(true)}
-                  className="flex-1 px-4 py-3 text-sm font-semibold uppercase tracking-wide"
-                >
-                  Filtros
-                </button>
-                <div className="w-px bg-[#14212e]/10" />
-                <button
-                  type="button"
-                  onClick={() => setMobileSortOpen(true)}
-                  className="flex-1 px-4 py-3 text-sm font-semibold uppercase tracking-wide"
-                >
-                  {sortSummary}
-                </button>
-              </div>
-            </div>
-
-            <div className="sm:hidden text-xs text-gray-600">{(serverMode && serverTotal != null) ? serverTotal : filtered.length} resultados</div>
-            {user ? (
-              <div className="sm:hidden mt-2">
-                <button
-                  type="button"
-                  onClick={handleSaveSearch}
-                  className="w-full rounded-full bg-white px-4 py-2 text-center text-sm font-semibold text-[#14212e] shadow hover:bg-white/95"
-                >
-                  Guardar búsqueda
-                </button>
-              </div>
-            ) : null}
 
             <div className="space-y-4">
               {breadcrumbs && breadcrumbs.length ? (
@@ -2184,131 +2151,108 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
               {headingTitle ? (
                 <h2 className="text-xl font-semibold">{headingTitle}</h2>
               ) : null}
-              <div className="hidden sm:block sticky top-[var(--header-h)] z-30">
-                <div className="bg-white border-b border-gray-200 shadow-sm">
-                  <div className="flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
-                    <div className="text-sm text-gray-600">{(serverMode && serverTotal != null) ? serverTotal : filtered.length} resultados</div>
-                    <div className="flex items-center gap-2 text-sm">
-                      <span className="text-gray-500">Ordenar</span>
-                      <select
-                        value={sortMode}
-                        onChange={(event) => setSortMode(event.target.value as 'relevance' | 'newest' | 'asc' | 'desc')}
-                        className="input w-48 rounded-full border border-gray-200 bg-white text-sm text-gray-900"
+            </div>
+
+            <div className="mt-2 flex flex-col gap-6 lg:flex-row lg:items-start">
+              <aside className="hidden lg:block w-64 flex-shrink-0 sticky top-40">
+                <div className="max-h-[calc(100vh-120px)] overflow-y-auto pr-2 pb-4 space-y-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-semibold text-gray-900">Filtros</h3>
+                    {hasActiveFilters ? (
+                      <button
+                        type="button"
+                        onClick={handleClearFilters}
+                        className="text-xs text-mb-primary hover:text-mb-primary/80 font-medium"
                       >
-                        <option value="relevance">Relevancia</option>
-                        <option value="newest">Más recientes</option>
-                        <option value="desc">Precio: mayor a menor</option>
-                        <option value="asc">Precio: menor a mayor</option>
-                      </select>
-                      {user ? (
-                        <button
-                          type="button"
-                          onClick={handleSaveSearch}
-                          className="btn ml-2 rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50"
-                          title="Guardá esta búsqueda para volver rápido"
-                        >
-                          Guardar búsqueda
-                        </button>
-                      ) : null}
-                    </div>
+                        Limpiar
+                      </button>
+                    ) : null}
                   </div>
-                  <div className="border-t border-gray-200 px-4 py-3">
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-                      {forcedCat || (allowedCats && allowedCats.length) ? null : (
-                        <FilterDropdown label="Categoría" summary={filters.cat} tone="light" variant="pill">
-                          {({ close }) => (
-                            <div className="flex flex-col gap-1 text-sm">
-                              {CAT_VALUES.map((cat) => {
-                                const isActive = filters.cat === cat
-                                return (
-                                  <button
-                                    key={cat}
-                                    type="button"
-                                    onClick={() => {
-                                      setFilters({ cat, bikes: undefined })
-                                      close()
-                                    }}
-                                    className={`flex items-center justify-between rounded-xl px-3 py-2 transition hover:bg-gray-50 ${
-                                      isActive ? 'bg-gray-50 text-gray-900' : 'text-gray-700'
-                                    }`}
-                                  >
-                                    <span>{cat}</span>
-                                    {isActive ? (
-                                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2}>
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="m5 13 4 4L19 7" />
-                                      </svg>
-                                    ) : null}
-                                  </button>
-                                )
-                              })}
-                            </div>
-                          )}
-                        </FilterDropdown>
-                      )}
 
-                      {UI_FILTERS_BEFORE_PRICE.map((key) => {
-                        const rawOptions = facetsData.options[key]
-                        const options = Array.from(new Set([...rawOptions, ...filters[key]]))
-                        return (
-                          <FilterDropdown
-                            key={key}
-                            label={MULTI_FILTER_LABELS[key]}
-                            summary={summaryFor(key)}
-                            disabled={key === 'size' ? false : !options.length}
-                            tone="light"
-                            variant="pill"
-                          >
-                            {({ close }) => (
-                              key === 'size' ? (
-                                <SizeSelectContent
-                                  options={options}
-                                  selected={filters.size}
-                                  onChange={(next) => setFilters({ size: next })}
-                                  close={close}
-                                />
-                              ) : (
-                                <MultiSelectContent
-                                  options={options}
-                                  selected={filters[key]}
-                                  onChange={(next) => setFilters({ [key]: next } as Partial<FiltersState>)}
-                                  close={close}
-                                  placeholder={`Buscar ${MULTI_FILTER_LABELS[key].toLowerCase()}`}
-                                />
-                              )
-                            )}
-                          </FilterDropdown>
-                        )
-                      })}
+                  <div className="text-sm text-gray-600 pb-3 border-b border-gray-200">
+                    {(serverMode && serverTotal != null) ? serverTotal : filtered.length} resultados
+                  </div>
 
-                      <FilterDropdown label="Precio" summary={priceSummary} tone="light" variant="pill">
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Ordenar</label>
+                    <select
+                      className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:border-mb-primary focus:ring-1 focus:ring-mb-primary"
+                      value={sortMode}
+                      onChange={(event) => setSortMode(event.target.value as 'relevance' | 'newest' | 'asc' | 'desc')}
+                    >
+                      <option value="relevance">Relevancia</option>
+                      <option value="newest">Más recientes</option>
+                      <option value="desc">Precio: mayor a menor</option>
+                      <option value="asc">Precio: menor a mayor</option>
+                    </select>
+                  </div>
+
+                  {user ? (
+                    <button
+                      type="button"
+                      onClick={handleSaveSearch}
+                      className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50"
+                      title="Guardá esta búsqueda para volver rápido"
+                    >
+                      Guardar búsqueda
+                    </button>
+                  ) : null}
+
+                  {forcedCat || (allowedCats && allowedCats.length) ? null : (
+                    <div className="border-t border-gray-200 pt-3">
+                      <FilterDropdown label="Categoría" summary={filters.cat} tone="light" variant="inline">
                         {({ close }) => (
-                          <PriceFilterContent
-                            min={filters.priceMin}
-                            max={filters.priceMax}
-                            bounds={facetsData.priceRange}
-                            currency={filters.priceCur}
-                            boundsByCur={facetsData.priceRangeByCur}
-                            onCurrencyChange={(cur) => setFilters({ priceCur: cur })}
-                            onApply={({ min, max }) => setFilters({ priceMin: min, priceMax: max })}
-                            onClear={() => setFilters({ priceMin: undefined, priceMax: undefined })}
-                            close={close}
-                          />
+                          <div className="flex flex-col gap-1 text-sm">
+                            {CAT_VALUES.map((cat) => {
+                              const isActive = filters.cat === cat
+                              return (
+                                <button
+                                  key={cat}
+                                  type="button"
+                                  onClick={() => {
+                                    setFilters({ cat, bikes: undefined })
+                                    close()
+                                  }}
+                                  className={`flex items-center justify-between rounded-xl px-3 py-2 transition hover:bg-gray-50 ${
+                                    isActive ? 'bg-gray-50 text-gray-900' : 'text-gray-700'
+                                  }`}
+                                >
+                                  <span>{cat}</span>
+                                  {isActive ? (
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="m5 13 4 4L19 7" />
+                                    </svg>
+                                  ) : null}
+                                </button>
+                              )
+                            })}
+                          </div>
                         )}
                       </FilterDropdown>
+                    </div>
+                  )}
 
-                      {UI_FILTERS_AFTER_PRICE.map((key) => {
-                        const rawOptions = facetsData.options[key]
-                        const options = Array.from(new Set([...rawOptions, ...filters[key]]))
-                        return (
-                          <FilterDropdown
-                            key={key}
-                            label={MULTI_FILTER_LABELS[key]}
-                            summary={summaryFor(key)}
-                            disabled={!options.length}
-                            tone="light"
-                            variant="pill"
-                          >
-                            {({ close }) => (
+                  {UI_FILTERS_BEFORE_PRICE.map((key) => {
+                    const rawOptions = facetsData.options[key]
+                    const options = Array.from(new Set([...rawOptions, ...filters[key]]))
+                    return (
+                      <div key={key} className="border-t border-gray-200 pt-3">
+                        <FilterDropdown
+                          label={MULTI_FILTER_LABELS[key]}
+                          summary={summaryFor(key)}
+                          disabled={key === 'size' ? false : !options.length}
+                          tone="light"
+                          variant="inline"
+                        >
+                          {({ close }) => (
+                            key === 'size' ? (
+                              <SizeSelectContent
+                                options={options}
+                                selected={filters.size}
+                                onChange={(next) => setFilters({ size: next })}
+                                close={close}
+                              />
+                            ) : (
                               <MultiSelectContent
                                 options={options}
                                 selected={filters[key]}
@@ -2316,100 +2260,213 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
                                 close={close}
                                 placeholder={`Buscar ${MULTI_FILTER_LABELS[key].toLowerCase()}`}
                               />
-                            )}
-                          </FilterDropdown>
-                        )
-                      })}
+                            )
+                          )}
+                        </FilterDropdown>
+                      </div>
+                    )
+                  })}
 
-                      <FilterDropdown label="Promos" summary={effectiveDeal === '1' ? 'Activas' : 'Todas'} tone="light" variant="pill">
-                        {({ close }) => (
-                          <DealFilterContent
-                            active={effectiveDeal === '1'}
-                            onToggle={(active) => { if (!forcedDeal) setFilters({ deal: active ? '1' : undefined }) }}
-                            close={close}
-                          />
-                        )}
-                      </FilterDropdown>
+                  <div className="border-t border-gray-200 pt-3">
+                    <FilterDropdown label="Precio" summary={priceSummary} tone="light" variant="inline">
+                      {({ close }) => (
+                        <PriceFilterContent
+                          min={filters.priceMin}
+                          max={filters.priceMax}
+                          bounds={facetsData.priceRange}
+                          currency={filters.priceCur}
+                          boundsByCur={facetsData.priceRangeByCur}
+                          onCurrencyChange={(cur) => setFilters({ priceCur: cur })}
+                          onApply={({ min, max }) => setFilters({ priceMin: min, priceMax: max })}
+                          onClear={() => setFilters({ priceMin: undefined, priceMax: undefined })}
+                          close={close}
+                        />
+                      )}
+                    </FilterDropdown>
+                  </div>
 
-                      <FilterDropdown label="Tiendas oficiales" summary={filters.store === '1' ? 'Solo tiendas' : 'Todas'} tone="light" variant="pill">
-                        {({ close }) => (
-                          <StoreFilterContent
-                            active={filters.store === '1'}
-                            onToggle={(active) => setFilters({ store: active ? '1' : undefined })}
-                            close={close}
-                          />
-                        )}
-                      </FilterDropdown>
+                  {UI_FILTERS_AFTER_PRICE.map((key) => {
+                    const rawOptions = facetsData.options[key]
+                    const options = Array.from(new Set([...rawOptions, ...filters[key]]))
+                    return (
+                      <div key={key} className="border-t border-gray-200 pt-3">
+                        <FilterDropdown
+                          label={MULTI_FILTER_LABELS[key]}
+                          summary={summaryFor(key)}
+                          disabled={!options.length}
+                          tone="light"
+                          variant="inline"
+                        >
+                          {({ close }) => (
+                            <MultiSelectContent
+                              options={options}
+                              selected={filters[key]}
+                              onChange={(next) => setFilters({ [key]: next } as Partial<FiltersState>)}
+                              close={close}
+                              placeholder={`Buscar ${MULTI_FILTER_LABELS[key].toLowerCase()}`}
+                            />
+                          )}
+                        </FilterDropdown>
+                      </div>
+                    )
+                  })}
+
+                  <div className="border-t border-gray-200 pt-3">
+                    <FilterDropdown label="Promos" summary={effectiveDeal === '1' ? 'Activas' : 'Todas'} tone="light" variant="inline">
+                      {({ close }) => (
+                        <DealFilterContent
+                          active={effectiveDeal === '1'}
+                          onToggle={(active) => { if (!forcedDeal) setFilters({ deal: active ? '1' : undefined }) }}
+                          close={close}
+                        />
+                      )}
+                    </FilterDropdown>
+                  </div>
+
+                  <div className="border-t border-gray-200 pt-3">
+                    <FilterDropdown label="Tiendas oficiales" summary={filters.store === '1' ? 'Solo tiendas' : 'Todas'} tone="light" variant="inline">
+                      {({ close }) => (
+                        <StoreFilterContent
+                          active={filters.store === '1'}
+                          onToggle={(active) => setFilters({ store: active ? '1' : undefined })}
+                          close={close}
+                        />
+                      )}
+                    </FilterDropdown>
+                  </div>
+                </div>
+              </aside>
+
+              <div className="flex-1 min-w-0 space-y-4">
+                <div className="sm:hidden">
+                  <div className="flex w-full overflow-hidden rounded-2xl bg-white text-[#14212e] shadow">
+                    <button
+                      type="button"
+                      onClick={() => setMobileFiltersOpen(true)}
+                      className="flex-1 px-4 py-3 text-sm font-semibold uppercase tracking-wide"
+                    >
+                      Filtros
+                    </button>
+                    <div className="w-px bg-[#14212e]/10" />
+                    <button
+                      type="button"
+                      onClick={() => setMobileSortOpen(true)}
+                      className="flex-1 px-4 py-3 text-sm font-semibold uppercase tracking-wide"
+                    >
+                      {sortSummary}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="sm:hidden text-xs text-gray-600">{(serverMode && serverTotal != null) ? serverTotal : filtered.length} resultados</div>
+                {user ? (
+                  <div className="sm:hidden mt-2">
+                    <button
+                      type="button"
+                      onClick={handleSaveSearch}
+                      className="w-full rounded-full bg-white px-4 py-2 text-center text-sm font-semibold text-[#14212e] shadow hover:bg-white/95"
+                    >
+                      Guardar búsqueda
+                    </button>
+                  </div>
+                ) : null}
+
+                <div className="hidden sm:block lg:hidden sticky top-24 z-30">
+                  <div className="bg-white border-b border-gray-200 shadow-sm">
+                    <div className="flex flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between">
+                      <div className="text-sm text-gray-600">{(serverMode && serverTotal != null) ? serverTotal : filtered.length} resultados</div>
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="text-gray-500">Ordenar</span>
+                        <select
+                          value={sortMode}
+                          onChange={(event) => setSortMode(event.target.value as 'relevance' | 'newest' | 'asc' | 'desc')}
+                          className="input w-48 rounded-full border border-gray-200 bg-white text-sm text-gray-900"
+                        >
+                          <option value="relevance">Relevancia</option>
+                          <option value="newest">Más recientes</option>
+                          <option value="desc">Precio: mayor a menor</option>
+                          <option value="asc">Precio: menor a mayor</option>
+                        </select>
+                        {user ? (
+                          <button
+                            type="button"
+                            onClick={handleSaveSearch}
+                            className="btn ml-2 rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50"
+                            title="Guardá esta búsqueda para volver rápido"
+                          >
+                            Guardar búsqueda
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
-
                     {hasActiveFilters ? (
-                      <div className="mt-2 text-xs text-gray-600">
+                      <div className="border-t border-gray-200 px-4 py-2 text-xs text-gray-600">
                         Filtros activos: {activeFilterChips.map((c) => c.label).join(', ')}{' '}
                         <button type="button" onClick={handleClearFilters} className="underline hover:text-gray-900">Limpiar</button>
                       </div>
                     ) : null}
                   </div>
                 </div>
+
+                {loading ? (
+                  <div className="flex flex-col gap-4 sm:grid sm:grid-cols-2 sm:gap-6 xl:grid-cols-3 lg:gap-8">
+                    {Array.from({ length: 6 }).map((_, idx) => (
+                      <div key={`skeleton-${idx}`} className="sm:p-0">
+                        <SkeletonCard />
+                      </div>
+                    ))}
+                  </div>
+                ) : visible.length ? (
+                  <>
+                    <div className="flex flex-col sm:grid sm:grid-cols-2 sm:gap-6 xl:grid-cols-3 lg:gap-8" style={{ overflowAnchor: 'none' } as any}>
+                      {visible.map((listing, idx) => (
+                        <div
+                          key={listing.id}
+                          className="sm:p-0"
+                          data-listing-id={listing.id}
+                        >
+                          <ListingCard
+                            l={listing}
+                            storeLogoUrl={storeLogos[listing.sellerId] || null}
+                            priority={idx < 4}
+                            likeCount={likeCounts[listing.id]}
+                            variant={isMobile ? 'list' : 'grid'}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    <div ref={sentinelRef} className="h-12" />
+                    {serverMode && (serverTotal == null || listings.length < serverTotal) ? (
+                      <div ref={loadMoreRef} className="flex justify-center">
+                        <button
+                          onClick={handleLoadMoreServer}
+                          className="btn mt-4 bg-white text-[#14212e] hover:bg-white/90"
+                        >
+                          Cargar más
+                        </button>
+                      </div>
+                    ) : null}
+                    {!serverMode && visible.length < filtered.length ? (
+                      <div ref={loadMoreRef} className="flex justify-center">
+                        <button
+                          onClick={handleLoadMoreClient}
+                          className="btn mt-4 bg-white text-[#14212e] hover:bg-white/90"
+                        >
+                          Cargar más
+                        </button>
+                      </div>
+                    ) : null}
+                  </>
+                ) : (
+                  <div className="mt-10">
+                    <EmptyState
+                      title="No encontramos bicis con esos filtros"
+                      subtitle="Ajustá los filtros o revisá más adelante."
+                    />
+                  </div>
+                )}
               </div>
             </div>
-
-            {loading ? (
-              <div className="flex flex-col gap-4 sm:grid sm:grid-cols-2 sm:gap-6 lg:grid-cols-3 lg:gap-8">
-                {Array.from({ length: 6 }).map((_, idx) => (
-                  <div key={`skeleton-${idx}`} className="sm:p-0">
-                    <SkeletonCard />
-                  </div>
-                ))}
-              </div>
-            ) : visible.length ? (
-              <>
-                <div className="flex flex-col sm:grid sm:grid-cols-2 sm:gap-6 lg:grid-cols-3 lg:gap-8" style={{ overflowAnchor: 'none' } as any}>
-                  {visible.map((listing, idx) => (
-                    <div
-                      key={listing.id}
-                      className="sm:p-0"
-                      data-listing-id={listing.id}
-                    >
-                      <ListingCard
-                        l={listing}
-                        storeLogoUrl={storeLogos[listing.sellerId] || null}
-                        priority={idx < 4}
-                        likeCount={likeCounts[listing.id]}
-                        variant={isMobile ? 'list' : 'grid'}
-                      />
-                    </div>
-                  ))}
-                </div>
-                <div ref={sentinelRef} className="h-12" />
-                {serverMode && (serverTotal == null || listings.length < serverTotal) ? (
-                  <div ref={loadMoreRef} className="flex justify-center">
-                    <button
-                      onClick={handleLoadMoreServer}
-                      className="btn mt-4 bg-white text-[#14212e] hover:bg-white/90"
-                    >
-                      Cargar más
-                    </button>
-                  </div>
-                ) : null}
-                {!serverMode && visible.length < filtered.length ? (
-                  <div ref={loadMoreRef} className="flex justify-center">
-                    <button
-                      onClick={handleLoadMoreClient}
-                      className="btn mt-4 bg-white text-[#14212e] hover:bg-white/90"
-                    >
-                      Cargar más
-                    </button>
-                  </div>
-                ) : null}
-              </>
-            ) : (
-              <div className="mt-10">
-                <EmptyState
-                  title="No encontramos bicis con esos filtros"
-                  subtitle="Ajustá los filtros o revisá más adelante."
-                />
-              </div>
-            )}
           </div>
           {seoDetailsCopy ? (
             <details className="seo-details mt-12">

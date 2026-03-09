@@ -55,14 +55,12 @@ import {
   CheckCircle,
   MoreVertical,
   Star,
-  Store,
-  MapPin,
   Clock,
-  Globe,
-  Phone,
   Smartphone,
   Image,
-  LayoutTemplate
+  LayoutTemplate,
+  AlertTriangle,
+  Database
 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
@@ -3975,6 +3973,51 @@ interface StoreEditorProps {
   saving: boolean
 }
 
+// Helper para inputs de teléfono con país (definido fuera del componente)
+function PhoneInput({ 
+  value, 
+  onChange, 
+  countryKey,
+  label,
+  formData,
+  setFormData
+}: { 
+  value: string
+  onChange: (val: string) => void
+  countryKey: 'store_phone_country' | 'whatsapp_country'
+  label: string
+  formData: any
+  setFormData: (data: any) => void
+}) {
+  const selectedCountry = COUNTRY_CODES.find(c => c.code === formData[countryKey]) || DEFAULT_COUNTRY
+  
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1.5">{label}</label>
+      <div className="flex gap-2">
+        <select
+          value={formData[countryKey]}
+          onChange={(e) => setFormData({ ...formData, [countryKey]: e.target.value })}
+          className="w-28 px-2 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all bg-white text-sm"
+        >
+          {COUNTRY_CODES.map((country) => (
+            <option key={country.code} value={country.code}>
+              {country.flag} {country.dial}
+            </option>
+          ))}
+        </select>
+        <input
+          type="tel"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
+          placeholder="123456789"
+        />
+      </div>
+    </div>
+  )
+}
+
 function StoreEditor({
   formData,
   setFormData,
@@ -3990,404 +4033,6 @@ function StoreEditor({
 }: StoreEditorProps) {
   const [activeSection, setActiveSection] = useState<'general' | 'visual' | 'contacto'>('general')
   const [showPreview, setShowPreview] = useState(false)
-
-  // Helper para inputs de teléfono con país
-  const PhoneInput = ({ 
-    value, 
-    onChange, 
-    countryKey,
-    label 
-  }: { 
-    value: string
-    onChange: (val: string) => void
-    countryKey: 'store_phone_country' | 'whatsapp_country'
-    label: string
-  }) => {
-    const selectedCountry = COUNTRY_CODES.find(c => c.code === formData[countryKey]) || DEFAULT_COUNTRY
-    
-    return (
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1.5">{label}</label>
-        <div className="flex gap-2">
-          <select
-            value={formData[countryKey]}
-            onChange={(e) => setFormData({ ...formData, [countryKey]: e.target.value })}
-            className="w-28 px-2 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all bg-white text-sm"
-          >
-            {COUNTRY_CODES.map((country) => (
-              <option key={country.code} value={country.code}>
-                {country.flag} {country.dial}
-              </option>
-            ))}
-          </select>
-          <input
-            type="tel"
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
-            placeholder="123456789"
-          />
-        </div>
-      </div>
-    )
-  }
-
-  // Sección de Información General
-  const GeneralSection = () => (
-    <div className="space-y-6">
-      {/* Nombre y Slug */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">
-            Nombre de la tienda <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-            value={formData.store_name}
-            onChange={(e) => setFormData({ ...formData, store_name: e.target.value })}
-            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
-            placeholder="Ej: BiciWorld"
-          />
-        </div>
-        
-        <div>
-          <div className="flex items-center justify-between mb-1.5">
-            <label className="block text-sm font-medium text-gray-700">
-              URL de tu tienda <span className="text-red-500">*</span>
-            </label>
-            {profile?.store_slug && (
-              <a 
-                href={`/tienda/${profile.store_slug}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1 font-medium"
-              >
-                <Eye className="w-3 h-3" />
-                Ver tienda
-              </a>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-gray-500 text-sm whitespace-nowrap bg-gray-100 px-3 py-2.5 rounded-l-xl border border-r-0 border-gray-200">
-              ciclomarket.ar/tienda/
-            </span>
-            <input
-              type="text"
-              value={formData.store_slug}
-              onChange={(e) => {
-                const normalized = e.target.value
-                  .toLowerCase()
-                  .replace(/\s+/g, '-')
-                  .replace(/[^a-z0-9-]/g, '')
-                  .replace(/-+/g, '-')
-                setFormData({ ...formData, store_slug: normalized })
-              }}
-              className="flex-1 px-4 py-2.5 rounded-r-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
-              placeholder="mi-tienda"
-            />
-          </div>
-          <p className="text-xs text-gray-500 mt-1">
-            Solo minúsculas, números y guiones. Esta será tu dirección pública.
-          </p>
-        </div>
-      </div>
-
-      {/* Descripción de la tienda */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1.5">
-          Descripción de la tienda
-        </label>
-        <textarea
-          value={formData.bio}
-          onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
-          rows={4}
-          className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all resize-none"
-          placeholder="Contá qué vendés, tu experiencia, qué te hace diferente..."
-        />
-        <p className="text-xs text-gray-500 mt-1">
-          Esta descripción aparecerá en tu perfil público. Sé breve y claro.
-        </p>
-      </div>
-
-      {/* Ubicación */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">
-            <MapPin className="w-4 h-4 inline mr-1" />
-            Dirección
-          </label>
-          <input
-            type="text"
-            value={formData.store_address}
-            onChange={(e) => setFormData({ ...formData, store_address: e.target.value })}
-            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
-            placeholder="Av. Siempre Viva 742"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Ciudad</label>
-          <input
-            type="text"
-            value={formData.city}
-            onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
-            placeholder="Posadas"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Provincia</label>
-          <select
-            value={formData.province}
-            onChange={(e) => setFormData({ ...formData, province: e.target.value })}
-            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all bg-white"
-          >
-            <option value="">Seleccionar provincia...</option>
-            {PROVINCES.map((p) => (
-              <option key={p.name} value={p.name}>{p.name}</option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">
-            <Clock className="w-4 h-4 inline mr-1" />
-            Horarios de atención
-          </label>
-          <input
-            type="text"
-            value={formData.store_hours}
-            onChange={(e) => setFormData({ ...formData, store_hours: e.target.value })}
-            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
-            placeholder="Lun a Vie: 9-18hs, Sáb: 9-13hs"
-          />
-        </div>
-      </div>
-    </div>
-  )
-
-  // Sección Visual (Logo y Banner)
-  const VisualSection = () => (
-    <div className="space-y-6">
-      {/* Logo */}
-      <div className="bg-gray-50 rounded-xl p-6">
-        <h4 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-          <Image className="w-4 h-4" />
-          Logo de la tienda
-        </h4>
-        <div className="flex items-start gap-6">
-          <div className="relative">
-            <img 
-              src={buildPublicUrlSafe(profile?.store_avatar_url) || '/avatar-placeholder.png'}
-              alt="Logo"
-              className="w-24 h-24 rounded-full object-cover bg-white border-2 border-gray-200"
-            />
-          </div>
-          <div className="flex-1 space-y-3">
-            <p className="text-sm text-gray-600">
-              Subí el logo de tu tienda. Se mostrará redondo en tu perfil.
-            </p>
-            <label className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors cursor-pointer text-sm font-medium">
-              <Upload className="w-4 h-4" />
-              Subir logo
-              <input 
-                type="file" 
-                accept="image/*" 
-                className="hidden" 
-                onChange={onAvatarUpload}
-              />
-            </label>
-            <p className="text-xs text-gray-500">JPG o PNG. Máximo 2MB.</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Banner con Preview */}
-      <div className="bg-gray-50 rounded-xl p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h4 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-            <LayoutTemplate className="w-4 h-4" />
-            Banner de portada
-          </h4>
-          <button
-            onClick={() => setShowPreview(!showPreview)}
-            className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
-          >
-            <Eye className="w-3 h-3" />
-            {showPreview ? 'Ocultar preview' : 'Ver preview'}
-          </button>
-        </div>
-
-        {/* Preview del banner */}
-        {showPreview && bannerPreview && (
-          <div className="mb-4 rounded-xl overflow-hidden border-2 border-blue-200 shadow-lg">
-            <div 
-              className="w-full h-48 bg-gray-200 relative"
-              style={{
-                backgroundImage: `url(${bannerPreview})`,
-                backgroundSize: 'cover',
-                backgroundPosition: `center ${bannerPosition}%`
-              }}
-            >
-              <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
-              <div className="absolute bottom-4 left-4 flex items-center gap-3">
-                <img 
-                  src={buildPublicUrlSafe(profile?.store_avatar_url) || '/avatar-placeholder.png'}
-                  alt=""
-                  className="w-12 h-12 rounded-full border-2 border-white bg-white"
-                />
-                <div className="text-white">
-                  <p className="font-bold text-lg">{formData.store_name || 'Tu Tienda'}</p>
-                  <p className="text-sm opacity-90">{formData.city || 'Ciudad'}, {formData.province || 'Provincia'}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Upload y ajuste */}
-        <div className="space-y-4">
-          <div className="w-full h-32 rounded-lg bg-white border-2 border-dashed border-gray-300 flex flex-col items-center justify-center overflow-hidden relative">
-            {bannerPreview ? (
-              <img 
-                src={bannerPreview}
-                alt="Banner"
-                className="w-full h-full object-cover"
-                style={{ objectPosition: `center ${bannerPosition}%` }}
-              />
-            ) : (
-              <>
-                <Image className="w-8 h-8 text-gray-400 mb-2" />
-                <p className="text-sm text-gray-500">Sin banner cargado</p>
-              </>
-            )}
-          </div>
-
-          <div className="flex flex-wrap gap-3">
-            <label className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors cursor-pointer text-sm font-medium">
-              <Upload className="w-4 h-4" />
-              {bannerPreview ? 'Cambiar banner' : 'Subir banner'}
-              <input 
-                type="file" 
-                accept="image/*" 
-                className="hidden" 
-                onChange={onBannerUpload}
-              />
-            </label>
-            {bannerPreview && (
-              <button
-                onClick={() => {
-                  setBannerPreview(null)
-                  setFormData({ ...formData, store_banner_url: '' })
-                }}
-                className="inline-flex items-center gap-2 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors text-sm font-medium"
-              >
-                <Trash2 className="w-4 h-4" />
-                Eliminar
-              </button>
-            )}
-          </div>
-
-          {bannerPreview && (
-            <div className="bg-white rounded-lg p-4 border border-gray-200">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Ajustar posición del banner
-              </label>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={bannerPosition}
-                onChange={(e) => {
-                  const newPos = parseInt(e.target.value)
-                  setBannerPosition(newPos)
-                  setFormData({ ...formData, store_banner_position_y: newPos })
-                }}
-                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-              />
-              <div className="flex justify-between text-xs text-gray-500 mt-1">
-                <span>Arriba</span>
-                <span>Centro</span>
-                <span>Abajo</span>
-              </div>
-            </div>
-          )}
-
-          <p className="text-xs text-gray-500">
-            Recomendado: 1200×400 píxeles. JPG o PNG. Máximo 5MB.
-          </p>
-        </div>
-      </div>
-    </div>
-  )
-
-  // Sección de Contacto
-  const ContactoSection = () => (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <PhoneInput 
-          label="Teléfono fijo"
-          value={formData.store_phone}
-          onChange={(val) => setFormData({ ...formData, store_phone: val })}
-          countryKey="store_phone_country"
-        />
-
-        <PhoneInput 
-          label="WhatsApp"
-          value={formData.whatsapp_number}
-          onChange={(val) => setFormData({ ...formData, whatsapp_number: val })}
-          countryKey="whatsapp_country"
-        />
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">
-            <Globe className="w-4 h-4 inline mr-1" />
-            Sitio web
-          </label>
-          <input
-            type="url"
-            value={formData.store_website}
-            onChange={(e) => setFormData({ ...formData, store_website: e.target.value })}
-            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
-            placeholder="https://www.mitienda.com"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">
-            Instagram
-          </label>
-          <input
-            type="text"
-            value={formData.store_instagram}
-            onChange={(e) => setFormData({ ...formData, store_instagram: e.target.value })}
-            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
-            placeholder="tu_usuario (sin @)"
-          />
-        </div>
-
-        <div className="md:col-span-2">
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">
-            Facebook
-          </label>
-          <input
-            type="text"
-            value={formData.store_facebook}
-            onChange={(e) => setFormData({ ...formData, store_facebook: e.target.value })}
-            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
-            placeholder="facebook.com/tutienda o tu_usuario"
-          />
-        </div>
-      </div>
-
-      <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
-        <p className="text-sm text-blue-800">
-          <strong>Consejo:</strong> Cuanta más información de contacto completes, más fácil será que los compradores te encuentren. El WhatsApp es el canal más utilizado.
-        </p>
-      </div>
-    </div>
-  )
 
   return (
     <div className="space-y-6">
@@ -4462,11 +4107,365 @@ function StoreEditor({
         ))}
       </div>
 
-      {/* Contenido de la sección activa */}
+      {/* Contenido de la sección activa - Inline sin sub-componentes */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-        {activeSection === 'general' && <GeneralSection />}
-        {activeSection === 'visual' && <VisualSection />}
-        {activeSection === 'contacto' && <ContactoSection />}
+        {activeSection === 'general' && (
+          <div className="space-y-6">
+            {/* Nombre y Slug */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Nombre de la tienda <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.store_name}
+                  onChange={(e) => setFormData({ ...formData, store_name: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
+                  placeholder="Ej: BiciWorld"
+                />
+              </div>
+              
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-sm font-medium text-gray-700">
+                    URL de tu tienda <span className="text-red-500">*</span>
+                  </label>
+                  {profile?.store_slug && (
+                    <a 
+                      href={`/tienda/${profile.store_slug}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1 font-medium"
+                    >
+                      <Eye className="w-3 h-3" />
+                      Ver tienda
+                    </a>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-500 text-sm whitespace-nowrap bg-gray-100 px-3 py-2.5 rounded-l-xl border border-r-0 border-gray-200">
+                    ciclomarket.ar/tienda/
+                  </span>
+                  <input
+                    type="text"
+                    value={formData.store_slug}
+                    onChange={(e) => {
+                      const normalized = e.target.value
+                        .toLowerCase()
+                        .replace(/\s+/g, '-')
+                        .replace(/[^a-z0-9-]/g, '')
+                        .replace(/-+/g, '-')
+                      setFormData({ ...formData, store_slug: normalized })
+                    }}
+                    className="flex-1 px-4 py-2.5 rounded-r-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
+                    placeholder="mi-tienda"
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Solo minúsculas, números y guiones. Esta será tu dirección pública.
+                </p>
+              </div>
+            </div>
+
+            {/* Descripción de la tienda */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Descripción de la tienda
+              </label>
+              <textarea
+                value={formData.bio}
+                onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
+                rows={4}
+                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all resize-none"
+                placeholder="Contá qué vendés, tu experiencia, qué te hace diferente..."
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Esta descripción aparecerá en tu perfil público. Sé breve y claro.
+              </p>
+            </div>
+
+            {/* Ubicación */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  <MapPin className="w-4 h-4 inline mr-1" />
+                  Dirección
+                </label>
+                <input
+                  type="text"
+                  value={formData.store_address}
+                  onChange={(e) => setFormData({ ...formData, store_address: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
+                  placeholder="Av. Siempre Viva 742"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Ciudad</label>
+                <input
+                  type="text"
+                  value={formData.city}
+                  onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
+                  placeholder="Posadas"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Provincia</label>
+                <select
+                  value={formData.province}
+                  onChange={(e) => setFormData({ ...formData, province: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all bg-white"
+                >
+                  <option value="">Seleccionar provincia...</option>
+                  {PROVINCES.map((p) => (
+                    <option key={p.name} value={p.name}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  <Clock className="w-4 h-4 inline mr-1" />
+                  Horarios de atención
+                </label>
+                <input
+                  type="text"
+                  value={formData.store_hours}
+                  onChange={(e) => setFormData({ ...formData, store_hours: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
+                  placeholder="Lun a Vie: 9-18hs, Sáb: 9-13hs"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeSection === 'visual' && (
+          <div className="space-y-6">
+            {/* Logo */}
+            <div className="bg-gray-50 rounded-xl p-6">
+              <h4 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <Image className="w-4 h-4" />
+                Logo de la tienda
+              </h4>
+              <div className="flex items-start gap-6">
+                <div className="relative">
+                  <img 
+                    src={buildPublicUrlSafe(profile?.store_avatar_url) || '/avatar-placeholder.png'}
+                    alt="Logo"
+                    className="w-24 h-24 rounded-full object-cover bg-white border-2 border-gray-200"
+                  />
+                </div>
+                <div className="flex-1 space-y-3">
+                  <p className="text-sm text-gray-600">
+                    Subí el logo de tu tienda. Se mostrará redondo en tu perfil.
+                  </p>
+                  <label className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors cursor-pointer text-sm font-medium">
+                    <Upload className="w-4 h-4" />
+                    Subir logo
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      className="hidden" 
+                      onChange={onAvatarUpload}
+                    />
+                  </label>
+                  <p className="text-xs text-gray-500">JPG o PNG. Máximo 2MB.</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Banner con Preview */}
+            <div className="bg-gray-50 rounded-xl p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                  <LayoutTemplate className="w-4 h-4" />
+                  Banner de portada
+                </h4>
+                <button
+                  onClick={() => setShowPreview(!showPreview)}
+                  className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+                >
+                  <Eye className="w-3 h-3" />
+                  {showPreview ? 'Ocultar preview' : 'Ver preview'}
+                </button>
+              </div>
+
+              {/* Preview del banner */}
+              {showPreview && bannerPreview && (
+                <div className="mb-4 rounded-xl overflow-hidden border-2 border-blue-200 shadow-lg">
+                  <div 
+                    className="w-full h-48 bg-gray-200 relative"
+                    style={{
+                      backgroundImage: `url(${bannerPreview})`,
+                      backgroundSize: 'cover',
+                      backgroundPosition: `center ${bannerPosition}%`
+                    }}
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+                    <div className="absolute bottom-4 left-4 flex items-center gap-3">
+                      <img 
+                        src={buildPublicUrlSafe(profile?.store_avatar_url) || '/avatar-placeholder.png'}
+                        alt=""
+                        className="w-12 h-12 rounded-full border-2 border-white bg-white"
+                      />
+                      <div className="text-white">
+                        <p className="font-bold text-lg">{formData.store_name || 'Tu Tienda'}</p>
+                        <p className="text-sm opacity-90">{formData.city || 'Ciudad'}, {formData.province || 'Provincia'}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Upload y ajuste */}
+              <div className="space-y-4">
+                <div className="w-full h-32 rounded-lg bg-white border-2 border-dashed border-gray-300 flex flex-col items-center justify-center overflow-hidden relative">
+                  {bannerPreview ? (
+                    <img 
+                      src={bannerPreview}
+                      alt="Banner"
+                      className="w-full h-full object-cover"
+                      style={{ objectPosition: `center ${bannerPosition}%` }}
+                    />
+                  ) : (
+                    <>
+                      <Image className="w-8 h-8 text-gray-400 mb-2" />
+                      <p className="text-sm text-gray-500">Sin banner cargado</p>
+                    </>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap gap-3">
+                  <label className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors cursor-pointer text-sm font-medium">
+                    <Upload className="w-4 h-4" />
+                    {bannerPreview ? 'Cambiar banner' : 'Subir banner'}
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      className="hidden" 
+                      onChange={onBannerUpload}
+                    />
+                  </label>
+                  {bannerPreview && (
+                    <button
+                      onClick={() => {
+                        setBannerPreview(null)
+                        setFormData({ ...formData, store_banner_url: '' })
+                      }}
+                      className="inline-flex items-center gap-2 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors text-sm font-medium"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Eliminar
+                    </button>
+                  )}
+                </div>
+
+                {bannerPreview && (
+                  <div className="bg-white rounded-lg p-4 border border-gray-200">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Ajustar posición del banner
+                    </label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={bannerPosition}
+                      onChange={(e) => {
+                        const newPos = parseInt(e.target.value)
+                        setBannerPosition(newPos)
+                        setFormData({ ...formData, store_banner_position_y: newPos })
+                      }}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    />
+                    <div className="flex justify-between text-xs text-gray-500 mt-1">
+                      <span>Arriba</span>
+                      <span>Centro</span>
+                      <span>Abajo</span>
+                    </div>
+                  </div>
+                )}
+
+                <p className="text-xs text-gray-500">
+                  Recomendado: 1200×400 píxeles. JPG o PNG. Máximo 5MB.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeSection === 'contacto' && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <PhoneInput 
+                label="Teléfono fijo"
+                value={formData.store_phone}
+                onChange={(val) => setFormData({ ...formData, store_phone: val })}
+                countryKey="store_phone_country"
+                formData={formData}
+                setFormData={setFormData}
+              />
+
+              <PhoneInput 
+                label="WhatsApp"
+                value={formData.whatsapp_number}
+                onChange={(val) => setFormData({ ...formData, whatsapp_number: val })}
+                countryKey="whatsapp_country"
+                formData={formData}
+                setFormData={setFormData}
+              />
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  <Globe className="w-4 h-4 inline mr-1" />
+                  Sitio web
+                </label>
+                <input
+                  type="url"
+                  value={formData.store_website}
+                  onChange={(e) => setFormData({ ...formData, store_website: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
+                  placeholder="https://www.mitienda.com"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Instagram
+                </label>
+                <input
+                  type="text"
+                  value={formData.store_instagram}
+                  onChange={(e) => setFormData({ ...formData, store_instagram: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
+                  placeholder="tu_usuario (sin @)"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Facebook
+                </label>
+                <input
+                  type="text"
+                  value={formData.store_facebook}
+                  onChange={(e) => setFormData({ ...formData, store_facebook: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
+                  placeholder="facebook.com/tutienda o tu_usuario"
+                />
+              </div>
+            </div>
+
+            <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
+              <p className="text-sm text-blue-800">
+                <strong>Consejo:</strong> Cuanta más información de contacto completes, más fácil será que los compradores te encuentren. El WhatsApp es el canal más utilizado.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Botón guardar inferior */}

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { CalendarDays, Globe, Instagram, MapPin, Package, MessageCircle, Star, CheckCircle2, Phone } from 'lucide-react'
+import { Globe, Instagram, MapPin, MessageCircle, Phone } from 'lucide-react'
 import Container from '../components/Container'
 import SeoHead, { type SeoHeadProps } from '../components/SeoHead'
 import FilterDropdown from '../components/FilterDropdown'
@@ -795,6 +795,7 @@ export default function Store() {
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [mobileSortOpen, setMobileSortOpen] = useState(false)
   const [sortMode, setSortMode] = useState<'relevance' | 'newest' | 'asc' | 'desc'>('relevance')
+  const [displayLimit, setDisplayLimit] = useState(20)
   const [hoursOpen, setHoursOpen] = useState(false)
   const [hoursStyle, setHoursStyle] = useState<React.CSSProperties>({})
   const [hoursArrowLeft, setHoursArrowLeft] = useState<number>(16)
@@ -906,6 +907,8 @@ export default function Store() {
     if (bikes) next.set('bikes', '1')
     else next.delete('bikes')
     setSearch(next, { replace: true })
+    // Resetear paginación cuando cambia la categoría
+    setDisplayLimit(20)
   }, [search, setSearch])
 
   const setFilters = useCallback((patch: Partial<StoreFiltersState>) => {
@@ -926,6 +929,8 @@ export default function Store() {
       deal: 'deal' in patch ? patch.deal : prev.deal,
       q: 'q' in patch ? patch.q : prev.q
     }))
+    // Resetear paginación cuando cambian los filtros
+    setDisplayLimit(20)
   }, [])
 
   const sellerId = useMemo(() => profile?.id ?? null, [profile])
@@ -941,7 +946,7 @@ export default function Store() {
       if (/^[0-9a-fA-F-]{16,}$/.test(slugOrId)) {
         found = await fetchUserProfile(slugOrId)
       } else {
-        found = await fetchStoreProfileBySlug(slugOrId)
+        found = await fetchStoreProfileBySlug(slugOrId, user?.id)
       }
       if (!active) return
       setProfile(found)
@@ -1513,13 +1518,13 @@ const handleClearFilters = useCallback(() => {
   const workingHours = (profile as any).store_hours as string | null
 
   return (
-    <div className="min-h-[70vh] overflow-x-hidden bg-gray-50 text-gray-900">
+    <div className="min-h-screen bg-gray-50 text-gray-900">
       <SeoHead {...seoConfig} />
       
-      {/* Hero Header - Mobile Optimized */}
-      <div className="w-full">
-        {/* Banner */}
-        <div className="relative h-40 sm:h-48 md:h-56 w-full overflow-hidden bg-gradient-to-r from-gray-900 to-gray-800">
+      {/* Hero Header - Banner más alto con fade a blanco */}
+      <div className="relative w-full">
+        {/* Banner extendido */}
+        <div className="relative h-64 sm:h-80 md:h-96 lg:h-[420px] w-full overflow-hidden bg-gradient-to-r from-gray-900 to-gray-800">
           {banner ? (
             <img
               src={buildPublicUrlSafe(banner) || ''}
@@ -1532,72 +1537,47 @@ const handleClearFilters = useCallback(() => {
           ) : (
             <div className="absolute inset-0 bg-gradient-to-br from-blue-600 to-blue-800" />
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+          {/* Gradiente superior (oscuro) */}
+          <div className="absolute inset-0 bg-gradient-to-t from-transparent via-black/30 to-black/60" />
           
-          {/* Stats Bar - Hidden on mobile, shown on sm+ */}
-          <div className="hidden sm:block absolute bottom-0 left-0 right-0">
-            <Container>
-              <div className="flex items-center gap-4 md:gap-6 py-3 text-white/90 text-xs md:text-sm">
-                <span className="flex items-center gap-1.5">
-                  <Package className="h-3.5 w-3.5 md:h-4 md:w-4" />
-                  {listings.length} productos
-                </span>
-                {profile.created_at && (
-                  <span className="flex items-center gap-1.5">
-                    <CalendarDays className="h-3.5 w-3.5 md:h-4 md:w-4" />
-                    Desde {new Date(profile.created_at).toLocaleDateString('es-AR', { year: 'numeric', month: 'short' })}
-                  </span>
-                )}
-                <span className="flex items-center gap-1 px-2 py-0.5 bg-white/20 backdrop-blur rounded-full text-xs font-medium">
-                  <CheckCircle2 className="h-3 w-3" />
-                  Verificada
-                </span>
-              </div>
-            </Container>
-          </div>
+          {/* Gradiente inferior (fade a gris) - Se mezcla con la sección de abajo */}
+          <div className="absolute bottom-0 left-0 right-0 h-40 bg-gradient-to-t from-gray-50 via-gray-50/95 to-transparent" />
+        </div>
+
+        {/* Avatar superpuesto - Posicionado entre banner y contenido */}
+        <div className="relative z-10 flex justify-center -mt-36 sm:-mt-48">
+          <img
+            src={buildPublicUrlSafe(avatar) || ''}
+            alt={storeName}
+            className="h-24 w-24 sm:h-32 sm:w-32 rounded-2xl object-cover ring-4 ring-white shadow-2xl bg-white"
+            loading="eager"
+            decoding="async"
+          />
         </div>
 
         {/* Store Info Bar */}
-        <div className="bg-white border-b border-gray-200">
-          <Container className="pt-0 pb-4 sm:py-4">
-            {/* Mobile: Stack layout */}
-            <div className="flex flex-col">
-              {/* Avatar + Name Row */}
-              <div className="flex items-start gap-3 -mt-10 sm:-mt-12 mb-3 relative z-10">
-                <img
-                  src={buildPublicUrlSafe(avatar) || ''}
-                  alt={storeName}
-                  className="h-20 w-20 sm:h-24 sm:w-24 md:h-28 md:w-28 rounded-xl sm:rounded-2xl object-cover ring-4 ring-white shadow-lg bg-white flex-shrink-0 relative z-10"
-                  loading="eager"
-                  decoding="async"
-                />
-                <div className="pt-10 sm:pt-12 flex-1 min-w-0">
-                  <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-900 truncate">{storeName}</h1>
-                  {/* Mobile stats */}
-                  <div className="flex sm:hidden items-center gap-2 mt-1 text-xs text-gray-500">
-                    <span>{listings.length} productos</span>
-                    <span>•</span>
-                    <span className="text-emerald-600 font-medium">Verificada</span>
-                  </div>
-                </div>
-              </div>
+        <div className="relative z-10">
+          <Container className="!pt-4 !pb-0">
+            <div className="flex flex-col items-center text-center">
+              {/* Nombre de la tienda */}
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 mb-2">{storeName}</h1>
 
-              {/* Address */}
+              {/* Dirección */}
               {address && (
-                <div className="flex items-start gap-1.5 text-sm text-gray-600 mb-3">
-                  <MapPin className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
-                  <span className="line-clamp-2">{address}</span>
+                <div className="flex items-center justify-center gap-1.5 text-sm text-gray-600 mb-4">
+                  <MapPin className="h-4 w-4 text-gray-400" />
+                  <span>{address}</span>
                 </div>
               )}
 
-              {/* Social Links - Horizontal scroll on mobile */}
-              <div className="flex items-center gap-2 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 sm:pb-0 sm:flex-wrap scrollbar-hide">
+              {/* Social Links */}
+              <div className="flex items-center justify-center gap-2 flex-wrap mb-2">
                 {profile.store_instagram && (
                   <a
                     href={normalizeHandle(profile.store_instagram, 'ig')}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs sm:text-sm font-medium hover:bg-gray-200 transition-colors flex-shrink-0"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs sm:text-sm font-medium hover:bg-gray-200 transition-colors"
                   >
                     <Instagram className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                     Instagram
@@ -1608,7 +1588,7 @@ const handleClearFilters = useCallback(() => {
                     href={profile.store_website}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs sm:text-sm font-medium hover:bg-gray-200 transition-colors flex-shrink-0"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs sm:text-sm font-medium hover:bg-gray-200 transition-colors"
                   >
                     <Globe className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                     Web
@@ -1616,135 +1596,96 @@ const handleClearFilters = useCallback(() => {
                 )}
                 {profile.store_phone && (
                   <a
-                    href={`tel:${profile.store_phone}`}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs sm:text-sm font-medium hover:bg-gray-200 transition-colors flex-shrink-0"
+                    href={`tel:${profile.store_phone.replace(/\s/g, '')}`}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs sm:text-sm font-medium hover:bg-gray-200 transition-colors"
                   >
                     <Phone className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                    {profile.store_phone}
+                    Llamar
                   </a>
                 )}
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 mt-4">
                 {(() => {
                   const waNumber = normaliseWhatsapp(profile.whatsapp_number || phone || '')
-                  const trimmedStoreName = (storeName || '').trim()
-                  const storeWaMessage = trimmedStoreName
-                    ? `Hola ${trimmedStoreName}! Vi tu tienda en Ciclo Market y me interesa consultarte.`
-                    : 'Hola! Vi tu tienda en Ciclo Market.'
+                  const storeWaMessage = `Hola ${storeName}! Vi tu tienda en Ciclo Market.`
                   const waLink = buildWhatsappUrl(waNumber || (profile.whatsapp_number || phone || ''), storeWaMessage)
-                  const href = waLink || undefined
-                  const disabled = !href
+                  if (!waLink) return null
                   return (
                     <a
-                      href={href}
-                      target={disabled ? undefined : '_blank'}
-                      rel={disabled ? undefined : 'noreferrer'}
-                      className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-bold transition ${
-                        disabled
-                          ? 'cursor-not-allowed bg-emerald-600/50 text-white/80'
-                          : 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm'
-                      }`}
-                      onClick={(e) => {
-                        if (disabled) e.preventDefault()
-                      }}
+                      href={waLink}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#25D366] text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-[#22c35e] transition-colors"
                     >
-                      <MessageCircle className="h-4 w-4" />
-                      Contactar
+                      <svg className="h-3.5 w-3.5 sm:h-4 sm:w-4" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.822 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                      </svg>
+                      WhatsApp
                     </a>
                   )
                 })()}
-
-                <button
-                  type="button"
-                  className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-bold text-gray-700 hover:bg-gray-50 transition-colors"
-                >
-                  <Star className="h-4 w-4" />
-                  Seguir
-                </button>
               </div>
             </div>
           </Container>
         </div>
       </div>
 
-      <Container className="pt-6">
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div className="w-full md:max-w-md">
-            <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500">{`Buscar en ${storeName}`}</label>
-            <input
-              type="search"
-              value={filters.q || ''}
-              onChange={(e) => setFilters({ q: e.target.value ? e.target.value : undefined })}
-              placeholder={`Buscar en ${storeName}…`}
-              className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-mb-ink shadow-sm focus:border-mb-primary focus:ring-1 focus:ring-mb-primary"
-            />
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {[
-              { key: 'all', label: 'Todo', onClick: () => setSection('') },
-              { key: 'bikes', label: 'Bicis', onClick: () => setSection('', undefined, true) },
-              { key: 'accessories', label: 'Accesorios', onClick: () => setSection('accessories') },
-              { key: 'apparel', label: 'Indumentaria', onClick: () => setSection('apparel') },
-            ].map((chip) => {
-              const active =
-                (chip.key === 'all' && !activeSection && !bikesOnly) ||
-                (chip.key === 'bikes' && bikesOnly) ||
-                (chip.key === 'accessories' && activeSection === 'accessories' && !bikesOnly) ||
-                (chip.key === 'apparel' && activeSection === 'apparel' && !bikesOnly)
-              return (
-                <button
-                  key={chip.key}
-                  type="button"
-                  onClick={chip.onClick}
-                  className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-                    active ? 'bg-mb-primary text-white' : 'bg-white text-mb-ink border border-gray-200 hover:bg-gray-50'
-                  }`}
-                  aria-pressed={active}
-                >
-                  {chip.label}
-                </button>
-              )
-            })}
-          </div>
+      <Container className="!py-0">
+        {/* Tabs de categorías */}
+        <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+          {[
+            { key: 'all', label: 'Todo', onClick: () => setSection('') },
+            { key: 'bikes', label: 'Bicis', onClick: () => setSection('', undefined, true) },
+            { key: 'accessories', label: 'Accesorios', onClick: () => setSection('accessories') },
+            { key: 'apparel', label: 'Indumentaria', onClick: () => setSection('apparel') },
+          ].map((chip) => {
+            const active =
+              (chip.key === 'all' && !activeSection && !bikesOnly) ||
+              (chip.key === 'bikes' && bikesOnly) ||
+              (chip.key === 'accessories' && activeSection === 'accessories' && !bikesOnly) ||
+              (chip.key === 'apparel' && activeSection === 'apparel' && !bikesOnly)
+            return (
+              <button
+                key={chip.key}
+                type="button"
+                onClick={chip.onClick}
+                className={`rounded-full px-5 py-2.5 text-sm font-semibold transition ${
+                  active ? 'bg-mb-primary text-white shadow-md' : 'bg-white text-mb-ink border border-gray-200 hover:bg-gray-50 hover:border-gray-300'
+                }`}
+                aria-pressed={active}
+              >
+                {chip.label}
+              </button>
+            )
+          })}
         </div>
 
-        {/* Bloque de "Dejar reseña en Google" removido */}
-
-        <div className="mt-6 space-y-6">
-          {/* Horarios movidos al header junto a Redes */}
-          <div className="space-y-6">
-
-            <div className="sm:hidden">
-              <div className="flex w-full overflow-hidden rounded-2xl bg-white text-[#14212e] shadow">
-                <button
-                  type="button"
-                  onClick={() => setMobileFiltersOpen(true)}
-                  className="flex-1 px-4 py-3 text-sm font-semibold uppercase tracking-wide"
-                >
-                  Filtros
-                </button>
-                <div className="w-px bg-[#14212e]/10" />
-                <button
-                  type="button"
-                  onClick={() => setMobileSortOpen(true)}
-                  className="flex-1 px-4 py-3 text-sm font-semibold uppercase tracking-wide"
-                >
-                  {sortSummary}
-                </button>
+        {/* Layout principal: Sidebar + Productos */}
+        <div className="mt-4 flex flex-col lg:flex-row lg:items-start gap-6">
+          
+          {/* SIDEBAR DE FILTROS - Desktop (sticky) */}
+          <aside className="hidden lg:block w-64 flex-shrink-0 sticky top-40">
+            <div className="max-h-[calc(100vh-120px)] overflow-y-auto pr-2 pb-4 space-y-4">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="font-semibold text-gray-900">Filtros</h3>
+                {hasActiveFilters && (
+                  <button 
+                    onClick={handleClearFilters}
+                    className="text-xs text-mb-primary hover:text-mb-primary/80 font-medium"
+                  >
+                    Limpiar
+                  </button>
+                )}
               </div>
-            </div>
+              
+              {/* Contador de resultados */}
+              <div className="text-sm text-gray-600 pb-3 border-b border-gray-200">
+                {finalList.length} resultados
+              </div>
 
-            <div className="sm:hidden text-xs text-gray-600">{finalList.length} resultados</div>
-
-            <div className="hidden flex-col gap-3 sm:flex lg:flex-row lg:items-center lg:justify-between">
-              <div className="text-sm text-gray-600">{finalList.length} resultados</div>
-              <div className="flex items-center gap-2 text-sm">
-                <span className="text-gray-500">Ordenar</span>
+              {/* Ordenar */}
+              <div className="space-y-2">
+                <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Ordenar</label>
                 <select
-                  className="input w-48 rounded-full border border-gray-200 bg-white text-sm text-[#14212e]"
+                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:border-mb-primary focus:ring-1 focus:ring-mb-primary"
                   value={sortMode}
                   onChange={(e) => setSortMode(e.target.value as 'relevance' | 'newest' | 'asc' | 'desc')}
                 >
@@ -1754,15 +1695,13 @@ const handleClearFilters = useCallback(() => {
                   <option value="asc">Precio: menor a mayor</option>
                 </select>
               </div>
-            </div>
 
-            {/* Filtros (desktop): estilo inline con separadores y wrap a 2+ filas */}
-            <div className="hidden sm:flex flex-wrap items-center text-sm gap-y-2">
+              {/* Filtros individuales */}
               {UI_FILTERS_BEFORE_PRICE.map((key) => {
                 const rawOptions = facetsData.options[key]
                 const options = Array.from(new Set([...rawOptions, ...filters[key]]))
                 return (
-                  <div key={key} className="px-3 border-l border-gray-200 first:border-l-0 whitespace-nowrap">
+                  <div key={key} className="border-t border-gray-200 pt-3">
                     <FilterDropdown
                       label={MULTI_FILTER_LABELS[key]}
                       summary={summaryFor(key)}
@@ -1792,28 +1731,31 @@ const handleClearFilters = useCallback(() => {
                   </div>
                 )
               })}
-              <div className="px-3 border-l border-gray-200 first:border-l-0 whitespace-nowrap">
-              <FilterDropdown label="Precio" summary={priceSummary} tone="light" variant="inline">
-                {({ close }) => (
-                  <PriceFilterContent
-                    min={filters.priceMin}
-                    max={filters.priceMax}
-                    bounds={facetsData.priceRange}
-                    currency={filters.priceCur}
-                    boundsByCur={facetsData.priceRangeByCur}
-                    onCurrencyChange={(cur) => setFilters({ priceCur: cur })}
-                    onApply={({ min, max }) => setFilters({ priceMin: min, priceMax: max })}
-                    onClear={() => setFilters({ priceMin: undefined, priceMax: undefined })}
-                    close={close}
-                  />
-                )}
-              </FilterDropdown>
+
+              {/* Precio */}
+              <div className="border-t border-gray-200 pt-3">
+                <FilterDropdown label="Precio" summary={priceSummary} tone="light" variant="inline">
+                  {({ close }) => (
+                    <PriceFilterContent
+                      min={filters.priceMin}
+                      max={filters.priceMax}
+                      bounds={facetsData.priceRange}
+                      currency={filters.priceCur}
+                      boundsByCur={facetsData.priceRangeByCur}
+                      onCurrencyChange={(cur) => setFilters({ priceCur: cur })}
+                      onApply={({ min, max }) => setFilters({ priceMin: min, priceMax: max })}
+                      onClear={() => setFilters({ priceMin: undefined, priceMax: undefined })}
+                      close={close}
+                    />
+                  )}
+                </FilterDropdown>
               </div>
+
               {UI_FILTERS_AFTER_PRICE.map((key) => {
                 const rawOptions = facetsData.options[key]
                 const options = Array.from(new Set([...rawOptions, ...filters[key]]))
                 return (
-                  <div key={key} className="px-3 border-l border-gray-200 first:border-l-0 whitespace-nowrap">
+                  <div key={key} className="border-t border-gray-200 pt-3">
                     <FilterDropdown
                       label={MULTI_FILTER_LABELS[key]}
                       summary={summaryFor(key)}
@@ -1834,36 +1776,136 @@ const handleClearFilters = useCallback(() => {
                   </div>
                 )
               })}
-              <div className="px-3 border-l border-gray-200 first:border-l-0 whitespace-nowrap">
-              <FilterDropdown label="Promos" summary={filters.deal === '1' ? 'Activas' : 'Todas'} tone="light" variant="inline">
-                {({ close }) => (
-                  <DealFilterContent
-                    active={filters.deal === '1'}
-                    onToggle={(active) => setFilters({ deal: active ? '1' : undefined })}
-                    close={close}
-                  />
-                )}
-              </FilterDropdown>
+
+              {/* Promos */}
+              <div className="border-t border-gray-200 pt-3">
+                <FilterDropdown label="Promos" summary={filters.deal === '1' ? 'Activas' : 'Todas'} tone="light" variant="inline">
+                  {({ close }) => (
+                    <DealFilterContent
+                      active={filters.deal === '1'}
+                      onToggle={(active) => setFilters({ deal: active ? '1' : undefined })}
+                      close={close}
+                    />
+                  )}
+                </FilterDropdown>
+              </div>
+            </div>
+          </aside>
+
+          {/* CONTENIDO PRINCIPAL - Scroll natural de la página */}
+          <div className="flex-1 min-w-0 space-y-6">
+            {/* Mobile: botones de filtros y orden */}
+            <div className="sm:hidden">
+              <div className="flex w-full overflow-hidden rounded-2xl bg-white text-[#14212e] shadow">
+                <button
+                  type="button"
+                  onClick={() => setMobileFiltersOpen(true)}
+                  className="flex-1 px-4 py-3 text-sm font-semibold uppercase tracking-wide"
+                >
+                  Filtros
+                </button>
+                <div className="w-px bg-[#14212e]/10" />
+                <button
+                  type="button"
+                  onClick={() => setMobileSortOpen(true)}
+                  className="flex-1 px-4 py-3 text-sm font-semibold uppercase tracking-wide"
+                >
+                  {sortSummary}
+                </button>
               </div>
             </div>
 
+            <div className="sm:hidden text-xs text-gray-600">{finalList.length} resultados</div>
+
+            {/* Header de resultados - tablet/desktop sin sidebar */}
+            <div className="hidden sm:flex lg:hidden flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-sm text-gray-600">{finalList.length} resultados</div>
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-gray-500">Ordenar</span>
+                <select
+                  className="input w-48 rounded-full border border-gray-200 bg-white text-sm text-[#14212e]"
+                  value={sortMode}
+                  onChange={(e) => setSortMode(e.target.value as 'relevance' | 'newest' | 'asc' | 'desc')}
+                >
+                  <option value="relevance">Relevancia</option>
+                  <option value="newest">Más recientes</option>
+                  <option value="desc">Precio: mayor a menor</option>
+                  <option value="asc">Precio: menor a mayor</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Filtros activos chips - visible en todos los tamaños */}
             {hasActiveFilters ? (
-              <div className="text-xs text-gray-600">
-                Filtros activos: {activeFilterChips.map((c) => c.label).join(', ')}{' '}
-                <button type="button" onClick={handleClearFilters} className="underline hover:text-gray-900">Limpiar</button>
+              <div className="flex flex-wrap gap-2">
+                {activeFilterChips.map((chip) => (
+                  <span 
+                    key={chip.key} 
+                    className="inline-flex items-center gap-1 px-3 py-1.5 bg-mb-primary/10 text-mb-primary rounded-full text-xs font-medium"
+                  >
+                    {chip.label}
+                    <button 
+                      onClick={chip.onRemove}
+                      className="hover:bg-mb-primary/20 rounded-full p-0.5"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+                <button 
+                  onClick={handleClearFilters}
+                  className="text-xs text-gray-500 hover:text-gray-700 underline px-2"
+                >
+                  Limpiar todo
+                </button>
               </div>
             ) : null}
 
-            <div className="grid -mx-2 grid-cols-1 gap-0 sm:mx-0 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 items-start content-start">
-              {finalList.map((l, idx) => (
-                <div key={l.id} className="p-2 sm:p-0">
-                  <ListingCard l={l} storeLogoUrl={profile.store_avatar_url || profile.avatar_url || null} priority={idx < 4} likeCount={likeCounts[l.id]} />
-                </div>
-              ))}
-              {finalList.length === 0 && (
-                <div className="py-12 text-center text-[#14212e]/60 col-span-full">No hay productos en esta categoría.</div>
-              )}
-            </div>
+            {/* Grid de productos con paginación */}
+            {(() => {
+              const displayedItems = finalList.slice(0, displayLimit)
+              const hasMore = finalList.length > displayLimit
+              
+              return (
+                <>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    {displayedItems.map((l, idx) => (
+                      <ListingCard 
+                        key={l.id} 
+                        l={l} 
+                        storeLogoUrl={profile.store_avatar_url || profile.avatar_url || null} 
+                        priority={idx < 4} 
+                        likeCount={likeCounts[l.id]} 
+                      />
+                    ))}
+                  </div>
+                  
+                  {finalList.length === 0 && (
+                    <div className="py-12 text-center text-[#14212e]/60">No hay productos en esta categoría.</div>
+                  )}
+                  
+                  {/* Botón Cargar más */}
+                  {hasMore && (
+                    <div className="flex justify-center pt-6 pb-4">
+                      <button
+                        onClick={() => setDisplayLimit(prev => prev + 20)}
+                        className="inline-flex items-center gap-2 px-6 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl font-medium hover:bg-gray-50 hover:border-gray-300 transition-colors shadow-sm"
+                      >
+                        Cargar más productos
+                        <span className="text-xs text-gray-400">({finalList.length - displayLimit} restantes)</span>
+                      </button>
+                    </div>
+                  )}
+                  
+                  {/* Texto de total cuando se cargó todo */}
+                  {!hasMore && finalList.length > 0 && (
+                    <div className="text-center pt-6 pb-4 text-sm text-gray-500">
+                      Mostrando todos los {finalList.length} productos
+                    </div>
+                  )}
+                </>
+              )
+            })()}
           </div>
         </div>
       </Container>
