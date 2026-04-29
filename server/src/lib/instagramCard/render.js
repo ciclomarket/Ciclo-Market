@@ -12,23 +12,47 @@ function getBrowser() {
   if (_browserPromise) return _browserPromise
   _browserPromise = (async () => {
     const puppeteer = require('puppeteer')
-    const browser = await puppeteer.launch({
-      headless: true,
+
+    // Resolve the Chrome executable installed by `puppeteer browsers install chrome`
+    // On Render the cache dir is set via PUPPETEER_CACHE_DIR env var.
+    let executablePath
+    try {
+      executablePath = puppeteer.executablePath()
+    } catch {
+      executablePath = undefined
+    }
+
+    const launchOpts = {
+      headless: 'new',
+      executablePath,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
+        '--disable-dev-shm-usage',  // use /tmp instead of /dev/shm (tiny on Render)
         '--disable-gpu',
-        '--disable-software-rasterizer',
-        '--single-process',
+        '--no-zygote',              // avoid zygote process that fails in some containers
+        '--disable-accelerated-2d-canvas',
+        '--disable-extensions',
+        '--font-render-hinting=none',
+        '--run-all-compositor-stages-before-draw',
+        '--hide-scrollbars',
+        '--mute-audio',
       ],
-    })
+    }
+
+    console.log('[instagram-card] launching browser', executablePath || '(default path)')
+    const browser = await puppeteer.launch(launchOpts)
+    console.log('[instagram-card] browser ready')
     browser.on('disconnected', () => {
-      // Allow re-init on next request
+      console.warn('[instagram-card] browser disconnected — will re-init on next request')
       _browserPromise = null
     })
     return browser
-  })()
+  })().catch((err) => {
+    console.error('[instagram-card] browser launch failed:', err?.message || err)
+    _browserPromise = null   // allow retry on next request
+    throw err
+  })
   return _browserPromise
 }
 

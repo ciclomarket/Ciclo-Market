@@ -112,11 +112,12 @@ router.post('/listings/:id/instagram-card', async (req, res) => {
   try {
     pngBuffer = await renderListingCard(cardData)
   } catch (err) {
-    console.error('[instagram-card] render failed', err?.message)
+    const detail = err?.message || String(err)
+    console.error('[instagram-card] render failed:', detail)
     if (err?.code === 'RENDER_TIMEOUT') {
-      return res.status(503).json({ ok: false, error: 'render_timeout', message: 'Timeout al generar el post. Intentá de nuevo.' })
+      return res.status(503).json({ ok: false, error: 'render_timeout', message: 'Timeout al generar el post. Intentá de nuevo.', detail })
     }
-    return res.status(503).json({ ok: false, error: 'render_failed', message: 'No pudimos generar el post. Intentá de nuevo.' })
+    return res.status(503).json({ ok: false, error: 'render_failed', message: 'No pudimos generar el post. Intentá de nuevo.', detail })
   }
 
   // Upload to Supabase storage
