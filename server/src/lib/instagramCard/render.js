@@ -1,9 +1,43 @@
 'use strict'
 
+const fs = require('fs')
+const path = require('path')
 const { renderTemplate } = require('./template')
 const cfg = require('./config')
 
 const RENDER_TIMEOUT_MS = 15_000
+
+/**
+ * Find the Chrome binary installed by `puppeteer browsers install chrome`.
+ * Puppeteer may resolve executablePath() to the wrong location when
+ * PUPPETEER_CACHE_DIR is a relative path at build time but resolves
+ * differently at runtime. We scan the cache directory directly.
+ */
+function findChrome() {
+  // Candidate cache dirs in order of preference
+  const candidates = [
+    process.env.PUPPETEER_CACHE_DIR,          // explicit env var (may be relative)
+    path.join(process.cwd(), 'node_modules', '.cache', 'puppeteer'),
+    path.join(process.env.HOME || '/opt/render', '.cache', 'puppeteer'),
+    '/opt/render/.cache/puppeteer',
+  ].filter(Boolean).map((p) => path.resolve(p))
+
+  for (const cacheDir of candidates) {
+    try {
+      const chromeBucket = path.join(cacheDir, 'chrome')
+      if (!fs.existsSync(chromeBucket)) continue
+      const versions = fs.readdirSync(chromeBucket)
+      for (const ver of versions) {
+        const binary = path.join(chromeBucket, ver, 'chrome-linux64', 'chrome')
+        if (fs.existsSync(binary)) {
+          console.log(`[instagram-card] found Chrome at ${binary}`)
+          return binary
+        }
+      }
+    } catch { /* try next */ }
+  }
+  return undefined
+}
 
 // Singleton browser — lazy-init, shared across requests
 let _browserPromise = null
@@ -12,14 +46,13 @@ function getBrowser() {
   if (_browserPromise) return _browserPromise
   _browserPromise = (async () => {
     const puppeteer = require('puppeteer')
+    const executablePath = findChrome()
 
-    // Resolve the Chrome executable installed by `puppeteer browsers install chrome`
-    // On Render the cache dir is set via PUPPETEER_CACHE_DIR env var.
-    let executablePath
-    try {
-      executablePath = puppeteer.executablePath()
-    } catch {
-      executablePath = undefined
+    if (!executablePath) {
+      throw Object.assign(
+        new Error('Chrome binary not found. Run: ./node_modules/.bin/puppeteer browsers install chrome'),
+        { code: 'CHROME_NOT_FOUND' }
+      )
     }
 
     const launchOpts = {
@@ -28,19 +61,18 @@ function getBrowser() {
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',  // use /tmp instead of /dev/shm (tiny on Render)
+        '--disable-dev-shm-usage',
         '--disable-gpu',
-        '--no-zygote',              // avoid zygote process that fails in some containers
+        '--no-zygote',
         '--disable-accelerated-2d-canvas',
         '--disable-extensions',
         '--font-render-hinting=none',
-        '--run-all-compositor-stages-before-draw',
         '--hide-scrollbars',
         '--mute-audio',
       ],
     }
 
-    console.log('[instagram-card] launching browser', executablePath || '(default path)')
+    console.log(`[instagram-card] launching browser → ${executablePath}`)
     const browser = await puppeteer.launch(launchOpts)
     console.log('[instagram-card] browser ready')
     browser.on('disconnected', () => {
@@ -50,7 +82,7 @@ function getBrowser() {
     return browser
   })().catch((err) => {
     console.error('[instagram-card] browser launch failed:', err?.message || err)
-    _browserPromise = null   // allow retry on next request
+    _browserPromise = null
     throw err
   })
   return _browserPromise

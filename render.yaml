@@ -76,9 +76,9 @@ services:
       - key: MERCADOLIBRE_ACCESS_TOKEN
         sync: false
 
-      # Puppeteer (Render): download browser into slug so runtime can find it
+      # Puppeteer (Render): use absolute path so build + runtime resolve identically
       - key: PUPPETEER_CACHE_DIR
-        value: node_modules/.cache/puppeteer
+        value: /opt/render/.cache/puppeteer
 
       # Instagram card generation — Supabase storage bucket for generated PNGs
       - key: INSTAGRAM_CARDS_BUCKET
