@@ -28,6 +28,7 @@
     "send-upsell-emails": "node server/scripts/campaigns/sendWhatsappUpsellBlast.js"
   },
   "dependencies": {
+    "@sparticuz/chromium": "^131.0.1",
     "@supabase/supabase-js": "^2.75.0",
     "@tiptap/extension-bubble-menu": "^3.20.0",
     "@tiptap/extension-code-block-lowlight": "^3.20.0",
@@ -59,6 +60,7 @@
     "posthog-js": "^1.347.0",
     "posthog-node": "^5.13.2",
     "puppeteer": "^23.11.1",
+    "puppeteer-core": "^23.11.1",
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
     "react": "^18.3.1",
