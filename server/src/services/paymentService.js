@@ -57,17 +57,20 @@ function extractMetadata(mpPayment) {
   const externalReference = mpPayment?.external_reference ? String(mpPayment.external_reference).trim() : null
   const userIdRaw = meta.userId ?? meta.user_id ?? null
   const listingIdRaw = meta.listingId ?? meta.listing_id ?? null
+  const listingIdsRaw = meta.listingIds ?? meta.listing_ids ?? null
   const planRaw = meta.planCode ?? meta.plan_code ?? meta.planId ?? meta.plan_id ?? meta.upgradePlanCode ?? meta.upgrade_plan_code
+  const isBundle = Boolean(meta.bundle)
 
   const userId = userIdRaw ? String(userIdRaw).trim() : null
   const listingId = listingIdRaw ? String(listingIdRaw).trim() : null
+  const listingIds = Array.isArray(listingIdsRaw) ? listingIdsRaw.filter(Boolean).map(String) : (listingId ? [listingId] : [])
   const planCode = normalizePlanCode(planRaw)
 
   const amount = typeof mpPayment?.transaction_amount === 'number' ? mpPayment.transaction_amount : null
   const currency = mpPayment?.currency_id ? String(mpPayment.currency_id) : 'ARS'
   const status = mapMpStatus(mpPayment?.status)
 
-  return { paymentId, externalReference, userId, listingId, planCode, amount, currency, status }
+  return { paymentId, externalReference, userId, listingId, listingIds, planCode, isBundle, amount, currency, status }
 }
 
 async function upsertPaymentRecord(supabase, payload) {
@@ -247,29 +250,211 @@ async function processPayment(paymentIdRaw) {
 
     if (extracted.status !== 'succeeded') return { ok: true, status: extracted.status }
 
-    const listingId = extracted.listingId
     const planCode = extracted.planCode
     const userId = extracted.userId
-    if (!listingId || !planCode) {
-      console.warn('[payments] missing metadata to apply plan', { paymentId, listingId, planCode, userId })
+    const isBundle = extracted.isBundle
+    const listingIds = extracted.listingIds || []
+    const listingId = extracted.listingId
+
+    if ((!listingId && !listingIds.length) || !planCode) {
+      console.warn('[payments] missing metadata to apply plan', { paymentId, listingId, listingIds, planCode, userId })
       return { ok: false, error: 'missing_metadata' }
     }
 
-    // Plans: PREMIUM (8), PRO (12). Legacy "basic" is treated as PREMIUM for backwards compatibility.
-    const targetCap = planCode === 'pro' ? 12 : 8
-    const listingDays = 60
-    const expiresAt = new Date(approvedBaseTs + listingDays * 24 * 60 * 60 * 1000).toISOString()
-    const rankBoostUntil = (planCode === 'premium' || planCode === 'pro')
-      ? new Date(approvedBaseTs + 90 * 24 * 60 * 60 * 1000).toISOString()
-      : null
+    // Si es bundle, aplicar a todas las listings
+    if (isBundle && listingIds.length >= 2) {
+      return await processBundlePayment({
+        supabase,
+        paymentId,
+        userId,
+        listingIds,
+        planCode,
+        amount: extracted.amount,
+        currency: extracted.currency,
+        approvedBaseTs,
+        alreadyApplied,
+      })
+    }
 
-    const { data: listingRow, error: listingErr } = await supabase
-      .from('listings')
-      .select('id,seller_id,images,granted_visible_photos,plan_photo_limit,whatsapp_user_disabled,whatsapp_enabled,contact_methods,seller_whatsapp')
-      .eq('id', listingId)
-      .maybeSingle()
-    if (listingErr || !listingRow) throw (listingErr || new Error('listing_not_found'))
+    // Single listing upgrade
+    return await processSinglePayment({
+      supabase,
+      paymentId,
+      userId,
+      listingId,
+      planCode,
+      amount: extracted.amount,
+      currency: extracted.currency,
+      approvedBaseTs,
+      alreadyApplied,
+    })
+  } catch (err) {
+    console.error('[payments] processPayment failed', { paymentId, error: err?.message || err })
+    return { ok: false, error: 'unexpected_error' }
+  } finally {
+    inFlightPayments.delete(paymentId)
+  }
+}
 
+async function processSinglePayment({
+  supabase,
+  paymentId,
+  userId,
+  listingId,
+  planCode,
+  amount,
+  currency,
+  approvedBaseTs,
+  alreadyApplied,
+}) {
+  const targetCap = planCode === 'pro' ? 12 : 8
+  const listingDays = 60
+  const expiresAt = new Date(approvedBaseTs + listingDays * 24 * 60 * 60 * 1000).toISOString()
+  const rankBoostUntil = (planCode === 'premium' || planCode === 'pro')
+    ? new Date(approvedBaseTs + 90 * 24 * 60 * 60 * 1000).toISOString()
+    : null
+
+  const { data: listingRow, error: listingErr } = await supabase
+    .from('listings')
+    .select('id,seller_id,images,granted_visible_photos,plan_photo_limit,whatsapp_user_disabled,whatsapp_enabled,contact_methods,seller_whatsapp')
+    .eq('id', listingId)
+    .maybeSingle()
+  if (listingErr || !listingRow) throw (listingErr || new Error('listing_not_found'))
+
+  const currentGranted = Number(listingRow.granted_visible_photos || 4)
+  const nextGrantedPhotos = Math.max(currentGranted, targetCap)
+  const currentPlanPhotoLimit = Number(listingRow.plan_photo_limit || 4)
+  const nextPlanPhotoLimit = Math.max(currentPlanPhotoLimit, targetCap)
+  const imagesArr = Array.isArray(listingRow.images) ? listingRow.images : []
+  const nextVisibleCount = Math.min(imagesArr.length, nextPlanPhotoLimit)
+
+  let sellerWhatsapp = normalizeWhatsappForStorage(listingRow.seller_whatsapp || '')
+  if (!sellerWhatsapp && listingRow.seller_id) {
+    try {
+      const { data: profile, error: prErr } = await supabase
+        .from('users')
+        .select('whatsapp_number,store_phone')
+        .eq('id', listingRow.seller_id)
+        .maybeSingle()
+      if (prErr) throw prErr
+      const fallback = profile?.whatsapp_number || profile?.store_phone || ''
+      sellerWhatsapp = normalizeWhatsappForStorage(fallback)
+    } catch (err) {
+      console.warn('[payments] whatsapp lookup failed (non-fatal)', err?.message || err)
+    }
+  }
+
+  const nextWhatsappEnabled = listingRow.whatsapp_user_disabled ? Boolean(listingRow.whatsapp_enabled) : true
+  const nextContactMethods = ensureWhatsappInContactMethods(listingRow.contact_methods)
+
+  console.info('[payments] applying plan to listing', {
+    paymentId,
+    listingId,
+    planCode,
+    targetCap,
+    nextGrantedPhotos,
+    nextPlanPhotoLimit,
+    nextWhatsappEnabled,
+    hasSellerWhatsapp: Boolean(sellerWhatsapp),
+    alreadyApplied,
+  })
+
+  const listingUpdate = {
+    plan: planCode,
+    plan_code: planCode,
+    status: 'active',
+    expires_at: expiresAt,
+    plan_photo_limit: nextPlanPhotoLimit,
+    granted_visible_photos: nextGrantedPhotos,
+    visible_images_count: nextVisibleCount,
+    whatsapp_cap_granted: true,
+    whatsapp_enabled: nextWhatsappEnabled,
+    contact_methods: nextContactMethods,
+    ...(sellerWhatsapp ? { seller_whatsapp: sellerWhatsapp } : {}),
+    ...(rankBoostUntil ? { rank_boost_until: rankBoostUntil } : {}),
+  }
+
+  const { error: updErr } = await supabase
+    .from('listings')
+    .update(listingUpdate)
+    .eq('id', listingId)
+
+  if (updErr) throw updErr
+
+  if (!alreadyApplied) {
+    const justApplied = await markPaymentAppliedOnce(supabase, paymentId)
+    if (!justApplied) return { ok: true, status: 'already_applied' }
+
+    captureServerEvent({
+      distinctId: userId || listingRow.seller_id || listingId,
+      event: 'payment_succeeded',
+      properties: {
+        user_id: userId || null,
+        listing_id: listingId,
+        seller_id: listingRow.seller_id || null,
+        plan: planCode,
+        amount,
+        currency,
+        provider: 'mercadopago',
+        payment_id: paymentId,
+        source: 'server',
+      },
+    })
+
+    try {
+      await sendPaymentSuccessEmail({
+        supabase,
+        userId,
+        planCode,
+        listingId,
+        amount,
+        currency,
+      })
+    } catch (err) {
+      console.warn('[payments] success email failed (non-fatal)', err?.message || err)
+    }
+  }
+
+  return { ok: true, status: alreadyApplied ? 'reconciled' : 'applied' }
+}
+
+async function processBundlePayment({
+  supabase,
+  paymentId,
+  userId,
+  listingIds,
+  planCode,
+  amount,
+  currency,
+  approvedBaseTs,
+  alreadyApplied,
+}) {
+  const targetCap = planCode === 'pro' ? 12 : 8
+  const listingDays = 60
+  const expiresAt = new Date(approvedBaseTs + listingDays * 24 * 60 * 60 * 1000).toISOString()
+  const rankBoostUntil = (planCode === 'premium' || planCode === 'pro')
+    ? new Date(approvedBaseTs + 90 * 24 * 60 * 60 * 1000).toISOString()
+    : null
+
+  console.info('[payments] applying bundle plan to listings', {
+    paymentId,
+    listingCount: listingIds.length,
+    listingIds,
+    planCode,
+    alreadyApplied,
+  })
+
+  // Obtener todas las listings
+  const { data: listings, error: listingsErr } = await supabase
+    .from('listings')
+    .select('id,seller_id,images,granted_visible_photos,plan_photo_limit,whatsapp_user_disabled,whatsapp_enabled,contact_methods,seller_whatsapp')
+    .in('id', listingIds)
+
+  if (listingsErr || !listings) throw (listingsErr || new Error('listings_not_found'))
+
+  // Procesar cada listing
+  const results = []
+  for (const listingRow of listings) {
     const currentGranted = Number(listingRow.granted_visible_photos || 4)
     const nextGrantedPhotos = Math.max(currentGranted, targetCap)
     const currentPlanPhotoLimit = Number(listingRow.plan_photo_limit || 4)
@@ -285,9 +470,10 @@ async function processPayment(paymentIdRaw) {
           .select('whatsapp_number,store_phone')
           .eq('id', listingRow.seller_id)
           .maybeSingle()
-        if (prErr) throw prErr
-        const fallback = profile?.whatsapp_number || profile?.store_phone || ''
-        sellerWhatsapp = normalizeWhatsappForStorage(fallback)
+        if (!prErr && profile) {
+          const fallback = profile?.whatsapp_number || profile?.store_phone || ''
+          sellerWhatsapp = normalizeWhatsappForStorage(fallback)
+        }
       } catch (err) {
         console.warn('[payments] whatsapp lookup failed (non-fatal)', err?.message || err)
       }
@@ -295,18 +481,6 @@ async function processPayment(paymentIdRaw) {
 
     const nextWhatsappEnabled = listingRow.whatsapp_user_disabled ? Boolean(listingRow.whatsapp_enabled) : true
     const nextContactMethods = ensureWhatsappInContactMethods(listingRow.contact_methods)
-
-    console.info('[payments] applying plan to listing', {
-      paymentId,
-      listingId,
-      planCode,
-      targetCap,
-      nextGrantedPhotos,
-      nextPlanPhotoLimit,
-      nextWhatsappEnabled,
-      hasSellerWhatsapp: Boolean(sellerWhatsapp),
-      alreadyApplied,
-    })
 
     const listingUpdate = {
       plan: planCode,
@@ -326,50 +500,61 @@ async function processPayment(paymentIdRaw) {
     const { error: updErr } = await supabase
       .from('listings')
       .update(listingUpdate)
-      .eq('id', listingId)
+      .eq('id', listingRow.id)
 
-    if (updErr) throw updErr
-
-    if (!alreadyApplied) {
-      const justApplied = await markPaymentAppliedOnce(supabase, paymentId)
-      if (!justApplied) return { ok: true, status: 'already_applied' }
-
-      captureServerEvent({
-        distinctId: userId || listingRow.seller_id || listingId,
-        event: 'payment_succeeded',
-        properties: {
-          user_id: userId || null,
-          listing_id: listingId,
-          seller_id: listingRow.seller_id || null,
-          plan: planCode,
-          amount: extracted.amount,
-          currency: extracted.currency,
-          provider: 'mercadopago',
-          payment_id: paymentId,
-          source: 'server',
-        },
-      })
-
-      try {
-        await sendPaymentSuccessEmail({
-          supabase,
-          userId,
-          planCode,
-          listingId,
-          amount: extracted.amount,
-          currency: extracted.currency,
-        })
-      } catch (err) {
-        console.warn('[payments] success email failed (non-fatal)', err?.message || err)
-      }
+    if (updErr) {
+      console.error('[payments] bundle update failed for listing', { listingId: listingRow.id, error: updErr })
+      results.push({ listingId: listingRow.id, ok: false, error: updErr.message })
+    } else {
+      results.push({ listingId: listingRow.id, ok: true })
     }
+  }
 
-    return { ok: true, status: alreadyApplied ? 'reconciled' : 'applied' }
-  } catch (err) {
-    console.error('[payments] processPayment failed', { paymentId, error: err?.message || err })
-    return { ok: false, error: 'unexpected_error' }
-  } finally {
-    inFlightPayments.delete(paymentId)
+  const allSucceeded = results.every(r => r.ok)
+  const anySucceeded = results.some(r => r.ok)
+
+  if (!alreadyApplied && anySucceeded) {
+    const justApplied = await markPaymentAppliedOnce(supabase, paymentId)
+    if (!justApplied) return { ok: true, status: 'already_applied' }
+
+    captureServerEvent({
+      distinctId: userId || listings[0]?.seller_id || listingIds[0],
+      event: 'payment_succeeded_bundle',
+      properties: {
+        user_id: userId || null,
+        listing_ids: listingIds,
+        bundle_count: listingIds.length,
+        seller_id: listings[0]?.seller_id || null,
+        plan: planCode,
+        amount,
+        currency,
+        provider: 'mercadopago',
+        payment_id: paymentId,
+        source: 'server',
+        all_succeeded: allSucceeded,
+      },
+    })
+
+    try {
+      await sendPaymentSuccessEmail({
+        supabase,
+        userId,
+        planCode,
+        listingId: listingIds[0],
+        amount,
+        currency,
+      })
+    } catch (err) {
+      console.warn('[payments] success email failed (non-fatal)', err?.message || err)
+    }
+  }
+
+  return { 
+    ok: anySucceeded, 
+    status: alreadyApplied ? 'reconciled' : 'applied',
+    bundle: true,
+    results,
+    allSucceeded,
   }
 }
 

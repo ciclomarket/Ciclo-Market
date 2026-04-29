@@ -1,4 +1,4 @@
-const { createUpgradeToken, resolvePlanPrice } = require('../mercadopagoCheckout')
+const { createUpgradeToken, createBundleUpgradeToken, resolvePlanPrice } = require('../mercadopagoCheckout')
 
 const CAMPAIGN = 'payment_abandon_20off'
 const PRIORITY = 1
@@ -51,6 +51,10 @@ function buildIdempotencyKey(email, uniqueId) {
 
 function buildIdempotencyKeyForListing(email, listingId) {
   return `payment_abandon_free:${email}:${listingId}`
+}
+
+function buildIdempotencyKeyForUser(email) {
+  return `payment_abandon_user:${email}:${new Date().toISOString().split('T')[0]}`
 }
 
 function selectSubject(paymentId) {
@@ -122,14 +126,45 @@ function buildPlansForCandidate({ sellerId, listing, preferredPlan = 'premium', 
       discountPrice: discounted,
       highlighted: planCode === preferredPlan,
       url: `${serverBase}/api/checkout/listing-upgrade?token=${encodeURIComponent(token)}`,
+      listingId: listing.id, // Para identificar a qué listing pertenece
+    }
+  })
+}
+
+function buildBundlePlans({ sellerId, listingIds, preferredPlan = 'premium', serverBase }) {
+  const count = listingIds.length
+  const bundleDiscountPct = 50 // 50% OFF en el total
+  
+  return ['premium', 'pro'].map((planCode) => {
+    const unitPrice = resolvePlanPrice(planCode)
+    const originalTotal = unitPrice * count
+    const discountedTotal = Math.round(originalTotal * (1 - bundleDiscountPct / 100))
+    
+    const token = createBundleUpgradeToken({
+      userId: sellerId,
+      listingIds,
+      planCode,
+      campaign: CAMPAIGN,
+      discountPct: bundleDiscountPct,
+      exp: Date.now() + 48 * 60 * 60 * 1000,
+    })
+    
+    return {
+      planCode,
+      title: planCode === 'pro' ? 'Plan Pro Bundle' : 'Plan Premium Bundle',
+      subtitle: `${count} publicaciones · 50% OFF`,
+      originalPrice: originalTotal,
+      discountPrice: discountedTotal,
+      highlighted: planCode === preferredPlan,
+      url: `${serverBase}/api/checkout/bundle-upgrade?token=${encodeURIComponent(token)}`,
+      bundle: true,
+      count,
+      unitPrice,
     }
   })
 }
 
 async function buildCandidates({ supabase, dateCtx, baseFront, serverBase }) {
-  const candidates = []
-  const processedKeys = new Set() // Evitar duplicados
-
   // ===== FUENTE 1: Pagos pendientes (abandono de checkout) =====
   const min = new Date(dateCtx.now.getTime() - (24 * 60 * 60 * 1000)).toISOString()
   const max = new Date(dateCtx.now.getTime() - (10 * 60 * 1000)).toISOString()
@@ -171,7 +206,11 @@ async function buildCandidates({ supabase, dateCtx, baseFront, serverBase }) {
   const usersMap = new Map((users || []).map((u) => [String(u.id), u]))
   const listingMap = new Map((listings || []).map((l) => [String(l.id), l]))
 
-  // ===== Procesar pagos pendientes =====
+  // ===== AGRUPAR POR USUARIO =====
+  const listingsByUser = new Map() // userId -> { listings: [], hasPayment: boolean, paymentId: string|null, preferredPlan: string }
+  const processedListingIds = new Set()
+
+  // Procesar pagos pendientes primero (tienen prioridad)
   for (const payment of payments) {
     const sellerId = inferSellerId(payment)
     const listingId = inferListingId(payment)
@@ -182,50 +221,23 @@ async function buildCandidates({ supabase, dateCtx, baseFront, serverBase }) {
     if (!['active', 'published'].includes(String(listing.status || '').toLowerCase())) continue
     if (!isListingFreeStrict(listing)) continue
 
-    const user = usersMap.get(String(sellerId))
-    const email = String(user?.email || payment?.email || '').trim().toLowerCase()
-    if (!email) continue
-
-    const idempotencyKey = buildIdempotencyKey(email, payment.id)
-    if (processedKeys.has(idempotencyKey)) continue
-    processedKeys.add(idempotencyKey)
-
-    const preferredPlan = inferPlanCode(payment) || 'premium'
-    const subject = selectSubject(payment.id)
-    const features = buildFeatureChecklist()
-    const plans = buildPlansForCandidate({ sellerId, listing, preferredPlan, serverBase, paymentId: payment.id })
-
-    candidates.push({
-      campaign: CAMPAIGN,
-      priority: PRIORITY,
-      userId: sellerId,
-      paymentId: payment.id,
-      listingId: listing.id,
-      email,
-      idempotencyKey,
-      payload: {
-        subject,
-        title: 'Un último paso para activar tu anuncio',
-        subtitle: 'Podés activarlo ahora con mejores beneficios para vender más rápido.',
-        intro: 'Esta mejora te da más visibilidad y contacto directo con compradores reales.',
-        cards: [{
-          id: listing.id,
-          slug: listing.slug,
-          title: listing.title,
-          image: listing.images?.[0],
-          price: listing.price,
-          price_currency: listing.price_currency,
-          link: `${baseFront}/listing/${encodeURIComponent(listing.slug || listing.id)}`,
-          planBadge: 'Free',
-        }],
-        features,
-        planOffers: plans,
-        ctas: [],
-      },
-    })
+    if (!listingsByUser.has(sellerId)) {
+      listingsByUser.set(sellerId, { 
+        listings: [], 
+        hasPayment: true, 
+        paymentId: payment.id,
+        preferredPlan: inferPlanCode(payment) || 'premium'
+      })
+    }
+    
+    const userData = listingsByUser.get(sellerId)
+    if (!processedListingIds.has(listingId)) {
+      userData.listings.push(listing)
+      processedListingIds.add(listingId)
+    }
   }
 
-  // ===== Procesar listings FREE sin pago =====
+  // Procesar listings FREE sin pago
   for (const listing of freeListings) {
     const sellerId = listing.seller_id
     if (!sellerId) continue
@@ -236,47 +248,107 @@ async function buildCandidates({ supabase, dateCtx, baseFront, serverBase }) {
     if (!['active', 'published'].includes(String(freshListing.status || '').toLowerCase())) continue
     if (!isListingFreeStrict(freshListing)) continue
 
+    // Si ya fue procesado por un pago, saltear
+    if (processedListingIds.has(listing.id)) continue
+
+    if (!listingsByUser.has(sellerId)) {
+      listingsByUser.set(sellerId, { 
+        listings: [], 
+        hasPayment: false, 
+        paymentId: null,
+        preferredPlan: 'premium'
+      })
+    }
+    
+    const userData = listingsByUser.get(sellerId)
+    userData.listings.push(freshListing)
+    processedListingIds.add(listing.id)
+  }
+
+  // ===== CONSTRUIR CANDIDATOS AGRUPADOS =====
+  const candidates = []
+  
+  for (const [sellerId, userData] of listingsByUser.entries()) {
+    if (userData.listings.length === 0) continue
+
     const user = usersMap.get(String(sellerId))
     const email = String(user?.email || '').trim().toLowerCase()
     if (!email) continue
 
-    const idempotencyKey = buildIdempotencyKeyForListing(email, listing.id)
-    if (processedKeys.has(idempotencyKey)) continue
-    processedKeys.add(idempotencyKey)
+    const idempotencyKey = buildIdempotencyKeyForUser(email)
 
-    // Evitar duplicados: si ya hay un candidato para este email+listing desde pagos, saltear
-    const duplicateKey = `${email}:${listing.id}`
-    if (candidates.some(c => c.email === email && c.listingId === listing.id)) continue
+    // Construir cards para todas las publicaciones
+    const cards = userData.listings.map(listing => ({
+      id: listing.id,
+      slug: listing.slug,
+      title: listing.title,
+      image: listing.images?.[0],
+      price: listing.price,
+      price_currency: listing.price_currency,
+      link: `${baseFront}/listing/${encodeURIComponent(listing.slug || listing.id)}`,
+      planBadge: 'Free',
+    }))
 
-    const subject = 'Tu publicación está lista para destacar'
+    // Construir planes
+    let planOffers
+    let isBundle = false
+    
+    if (userData.listings.length >= 2) {
+      // Bundle: 50% OFF en el total
+      const listingIds = userData.listings.map(l => l.id)
+      planOffers = buildBundlePlans({ 
+        sellerId, 
+        listingIds, 
+        preferredPlan: userData.preferredPlan, 
+        serverBase 
+      })
+      isBundle = true
+    } else {
+      // Individual: 20% OFF
+      planOffers = []
+      for (const listing of userData.listings) {
+        const plans = buildPlansForCandidate({ 
+          sellerId, 
+          listing, 
+          preferredPlan: userData.preferredPlan, 
+          serverBase, 
+          paymentId: userData.paymentId 
+        })
+        planOffers.push({ listingId: listing.id, listingTitle: listing.title, plans })
+      }
+    }
+
+    const subject = userData.hasPayment 
+      ? selectSubject(userData.paymentId)
+      : (isBundle ? `¡Bundle especial! 50% OFF en tus ${cards.length} publicaciones` : 'Tus publicaciones están listas para destacar')
+    
     const features = buildFeatureChecklist()
-    const plans = buildPlansForCandidate({ sellerId, listing, preferredPlan: 'premium', serverBase })
 
     candidates.push({
       campaign: CAMPAIGN,
       priority: PRIORITY,
       userId: sellerId,
-      paymentId: null, // No hay pago asociado
-      listingId: listing.id,
+      paymentId: userData.paymentId,
+      listingId: userData.listings[0].id, // Primary listing para tracking
       email,
       idempotencyKey,
       payload: {
         subject,
-        title: 'Un último paso para activar tu anuncio',
-        subtitle: 'Podés activarlo ahora con mejores beneficios para vender más rápido.',
-        intro: 'Esta mejora te da más visibilidad y contacto directo con compradores reales.',
-        cards: [{
-          id: listing.id,
-          slug: listing.slug,
-          title: listing.title,
-          image: listing.images?.[0],
-          price: listing.price,
-          price_currency: listing.price_currency,
-          link: `${baseFront}/listing/${encodeURIComponent(listing.slug || listing.id)}`,
-          planBadge: 'Free',
-        }],
+        title: cards.length === 1 
+          ? 'Un último paso para activar tu anuncio' 
+          : (isBundle ? `¡Bundle especial! 50% OFF` : `Tenés ${cards.length} publicaciones listas para destacar`),
+        subtitle: cards.length === 1
+          ? 'Podés activarlo ahora con mejores beneficios para vender más rápido.'
+          : (isBundle 
+              ? `Paga $${Math.round(planOffers[0].discountPrice).toLocaleString('es-AR')} en lugar de $${Math.round(planOffers[0].originalPrice).toLocaleString('es-AR')} y destacá tus ${cards.length} publicaciones.` 
+              : `Activá WhatsApp en tus ${cards.length} publicaciones para vender más rápido.`),
+        intro: isBundle 
+          ? 'Aprovechá este descuento especial por publicar múltiples bicis. El pago aplica el upgrade a TODAS tus publicaciones.' 
+          : 'Esta mejora te da más visibilidad y contacto directo con compradores reales.',
+        cards,
         features,
-        planOffers: plans,
+        planOffers, // Array de planes (o bundle)
+        isBundle,
         ctas: [],
       },
     })

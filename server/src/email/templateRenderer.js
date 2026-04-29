@@ -120,29 +120,95 @@ function buildSingleCta(text, url) {
   return `<table role="presentation" cellpadding="0" cellspacing="0"><tr><td bgcolor="#0ea5e9" style="border-radius:999px;"><a href="${url}" target="_blank" style="display:inline-block;background:#0ea5e9;color:#ffffff;font-family:Helvetica,Arial,sans-serif;font-size:14px;font-weight:700;line-height:130%;text-decoration:none;padding:12px 18px;border-radius:999px;">${escapeHtml(text)}</a></td></tr></table>`
 }
 
-function buildPlanOffers(planOffers = [], baseFront) {
-  const offers = planOffers.slice(0, 2)
-  if (!offers.length) return ''
-  const cols = offers.map((offer, idx) => {
-    const title = escapeHtml(offer.title || String(offer.planCode || '').toUpperCase())
-    const original = Number.isFinite(Number(offer.originalPrice)) ? formatPrice(Number(offer.originalPrice), 'ARS') : ''
-    const discounted = Number.isFinite(Number(offer.discountPrice)) ? formatPrice(Number(offer.discountPrice), 'ARS') : ''
-    const url = toAbsoluteUrl(offer.url, baseFront)
-    const buttonColor = idx === 0 ? '#0ea5e9' : '#16a34a'
-    return `
-    <td class="mj-column-per-50 stack-col" style="width:50%;max-width:50%;vertical-align:top;padding:0 6px 10px 6px;">
-      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #e5e7eb;border-radius:12px;">
-        <tr><td style="padding:12px;">
-          <div style="font-family:Helvetica,Arial,sans-serif;font-size:16px;font-weight:800;color:#111827;margin:0 0 6px;">${title}</div>
-          ${discounted ? `<div style="font-family:Helvetica,Arial,sans-serif;font-size:20px;font-weight:800;color:#0f172a;margin:0 0 4px;">${discounted}</div>` : ''}
-          ${original ? `<div style="font-family:Helvetica,Arial,sans-serif;font-size:12px;color:#64748b;text-decoration:line-through;margin:0 0 10px;">${original}</div>` : ''}
-          <table role="presentation" cellpadding="0" cellspacing="0" width="100%"><tr><td bgcolor="${buttonColor}" style="border-radius:10px;text-align:center;"><a href="${url}" target="_blank" style="display:block;background:${buttonColor};color:#ffffff;font-family:Helvetica,Arial,sans-serif;font-size:13px;font-weight:700;line-height:120%;text-decoration:none;padding:10px 8px;border-radius:10px;">Elegir ${title}</a></td></tr></table>
-        </td></tr>
-      </table>
-    </td>`
-  })
+function buildSinglePlanOfferCard(offer, baseFront, idx) {
+  const title = escapeHtml(offer.title || String(offer.planCode || '').toUpperCase())
+  const original = Number.isFinite(Number(offer.originalPrice)) ? formatPrice(Number(offer.originalPrice), 'ARS') : ''
+  const discounted = Number.isFinite(Number(offer.discountPrice)) ? formatPrice(Number(offer.discountPrice), 'ARS') : ''
+  const url = toAbsoluteUrl(offer.url, baseFront)
+  const buttonColor = idx === 0 ? '#0ea5e9' : '#16a34a'
+  return `
+  <td class="mj-column-per-50 stack-col" style="width:50%;max-width:50%;vertical-align:top;padding:0 6px 10px 6px;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #e5e7eb;border-radius:12px;">
+      <tr><td style="padding:12px;">
+        <div style="font-family:Helvetica,Arial,sans-serif;font-size:16px;font-weight:800;color:#111827;margin:0 0 6px;">${title}</div>
+        ${discounted ? `<div style="font-family:Helvetica,Arial,sans-serif;font-size:20px;font-weight:800;color:#0f172a;margin:0 0 4px;">${discounted}</div>` : ''}
+        ${original ? `<div style="font-family:Helvetica,Arial,sans-serif;font-size:12px;color:#64748b;text-decoration:line-through;margin:0 0 10px;">${original}</div>` : ''}
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%"><tr><td bgcolor="${buttonColor}" style="border-radius:10px;text-align:center;"><a href="${url}" target="_blank" style="display:block;background:${buttonColor};color:#ffffff;font-family:Helvetica,Arial,sans-serif;font-size:13px;font-weight:700;line-height:120%;text-decoration:none;padding:10px 8px;border-radius:10px;">Elegir ${title}</a></td></tr></table>
+      </td></tr>
+    </table>
+  </td>`
+}
 
-  return wrapSection('', `<table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr>${cols.join('')}</tr></table>`)
+function buildBundleOfferCard(offer, baseFront, idx) {
+  const title = escapeHtml(offer.title || 'Bundle')
+  const subtitle = escapeHtml(offer.subtitle || '')
+  const original = Number.isFinite(Number(offer.originalPrice)) ? formatPrice(Number(offer.originalPrice), 'ARS') : ''
+  const discounted = Number.isFinite(Number(offer.discountPrice)) ? formatPrice(Number(offer.discountPrice), 'ARS') : ''
+  const url = toAbsoluteUrl(offer.url, baseFront)
+  const buttonColor = idx === 0 ? '#dc2626' : '#16a34a' // Rojo para bundle destacado
+  
+  return `
+  <td class="mj-column-per-50 stack-col" style="width:50%;max-width:50%;vertical-align:top;padding:0 6px 10px 6px;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:2px solid ${buttonColor};border-radius:12px;background:#fef2f2;">
+      <tr><td style="padding:12px;">
+        <div style="font-family:Helvetica,Arial,sans-serif;font-size:16px;font-weight:800;color:#111827;margin:0 0 4px;">${title}</div>
+        ${subtitle ? `<div style="font-family:Helvetica,Arial,sans-serif;font-size:12px;color:#dc2626;margin:0 0 8px;font-weight:600;">${subtitle}</div>` : ''}
+        ${discounted ? `<div style="font-family:Helvetica,Arial,sans-serif;font-size:24px;font-weight:800;color:#dc2626;margin:0 0 4px;">${discounted}</div>` : ''}
+        ${original ? `<div style="font-family:Helvetica,Arial,sans-serif;font-size:14px;color:#64748b;text-decoration:line-through;margin:0 0 10px;">${original}</div>` : ''}
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%"><tr><td bgcolor="${buttonColor}" style="border-radius:10px;text-align:center;"><a href="${url}" target="_blank" style="display:block;background:${buttonColor};color:#ffffff;font-family:Helvetica,Arial,sans-serif;font-size:14px;font-weight:700;line-height:120%;text-decoration:none;padding:12px 8px;border-radius:10px;">Aprovechar Bundle</a></td></tr></table>
+      </td></tr>
+    </table>
+  </td>`
+}
+
+function buildPlanOffers(planOffers = [], baseFront, { isBundle = false } = {}) {
+  if (!planOffers.length) return ''
+
+  // Detectar formato bundle
+  if (isBundle || planOffers[0]?.bundle) {
+    const offers = planOffers.slice(0, 2)
+    const cols = offers.map((offer, idx) => buildBundleOfferCard(offer, baseFront, idx))
+    return wrapSection('¡Bundle especial! 50% OFF en el total', `
+      <p style="margin:0 0 12px;font-family:Helvetica,Arial,sans-serif;font-size:14px;color:#374151;">Pagá una sola vez y aplicá el upgrade a TODAS tus publicaciones.</p>
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr>${cols.join('')}</tr></table>
+    `)
+  }
+
+  // Detectar formato nuevo: array de objetos con { listingId, listingTitle, plans }
+  const isNewFormat = planOffers[0] && Array.isArray(planOffers[0].plans)
+
+  if (!isNewFormat) {
+    // Formato antiguo: array de planes directamente
+    const offers = planOffers.slice(0, 2)
+    const cols = offers.map((offer, idx) => buildSinglePlanOfferCard(offer, baseFront, idx))
+    return wrapSection('', `<table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr>${cols.join('')}</tr></table>`)
+  }
+
+  // Formato nuevo: agrupado por listing
+  const sections = []
+  
+  for (const group of planOffers.slice(0, 3)) { // Máximo 3 publicaciones con planes
+    const listingTitle = escapeHtml(group.listingTitle || 'Publicación')
+    const plans = (group.plans || []).slice(0, 2) // Máximo 2 planes por publicación
+    
+    if (!plans.length) continue
+
+    const planCols = plans.map((offer, idx) => buildSinglePlanOfferCard(offer, baseFront, idx))
+    
+    const sectionHtml = `
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom:16px;">
+      <tr><td style="padding:0 6px 8px;">
+        <div style="font-family:Helvetica,Arial,sans-serif;font-size:14px;font-weight:600;color:#374151;">${listingTitle}</div>
+      </td></tr>
+      <tr>${planCols.join('')}</tr>
+    </table>`
+    
+    sections.push(sectionHtml)
+  }
+
+  if (!sections.length) return ''
+  
+  return wrapSection('Planes disponibles para tus publicaciones', sections.join(''))
 }
 
 function buildCtaRow(ctas = [], baseFront) {
@@ -178,7 +244,7 @@ function renderEmailTemplate({ campaign, baseFront, recipient, payload }) {
   const cards = buildCardsSection(payload.cards || [], cleanFront, { viewsOnly: payload.viewsOnly === true })
   const features = buildFeatureChecklist(payload.features || [])
   const actions = buildRecommendedActions(payload.recommendedActions || [])
-  const offers = buildPlanOffers(payload.planOffers || [], cleanFront)
+  const offers = buildPlanOffers(payload.planOffers || [], cleanFront, { isBundle: payload.isBundle })
   const hasPlanOffers = Array.isArray(payload.planOffers) && payload.planOffers.length > 0
   const ctaRow = hasPlanOffers ? '' : buildCtaRow(Array.isArray(payload.ctas) ? payload.ctas : [], cleanFront)
 
@@ -208,10 +274,19 @@ function renderEmailTemplate({ campaign, baseFront, recipient, payload }) {
     '',
     ...(payload.features || []).slice(0, 6).map((f) => `- ${f}`),
     '',
-    ...((payload.planOffers || []).slice(0, 2).map((offer) => {
+    ...((payload.planOffers || []).slice(0, 2).flatMap((offer) => {
+      // Formato nuevo: objeto con plans array
+      if (offer.plans && Array.isArray(offer.plans)) {
+        return offer.plans.slice(0, 2).map((plan) => {
+          const original = Number.isFinite(Number(plan.originalPrice)) ? formatPrice(Number(plan.originalPrice), 'ARS') : ''
+          const discounted = Number.isFinite(Number(plan.discountPrice)) ? formatPrice(Number(plan.discountPrice), 'ARS') : ''
+          return `${plan.title || plan.planCode} (${offer.listingTitle || 'Publicación'}): ${discounted || original} ${plan.url ? `· ${toAbsoluteUrl(plan.url, cleanFront)}` : ''}`
+        })
+      }
+      // Formato antiguo: plan directamente
       const original = Number.isFinite(Number(offer.originalPrice)) ? formatPrice(Number(offer.originalPrice), 'ARS') : ''
       const discounted = Number.isFinite(Number(offer.discountPrice)) ? formatPrice(Number(offer.discountPrice), 'ARS') : ''
-      return `${offer.title || offer.planCode}: ${discounted || original} ${offer.url ? `· ${toAbsoluteUrl(offer.url, cleanFront)}` : ''}`
+      return [`${offer.title || offer.planCode}: ${discounted || original} ${offer.url ? `· ${toAbsoluteUrl(offer.url, cleanFront)}` : ''}`]
     })),
     '',
     ...((payload.ctas || []).map((cta) => `${cta.text}: ${toAbsoluteUrl(cta.url, cleanFront)}`)),

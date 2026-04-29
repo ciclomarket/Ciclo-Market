@@ -9,6 +9,7 @@ const {
 } = require('../email/unsubscribe')
 const {
   createListingUpgradePreference,
+  createBundleUpgradePreference,
   verifyUpgradeToken,
 } = require('../email/mercadopagoCheckout')
 const { recordPaymentIntent } = require('../services/paymentService')
@@ -235,6 +236,120 @@ router.get('/api/checkout/listing-upgrade', async (req, res) => {
   }
   req.body = body
   return handleListingUpgradeCheckout(req, res, { redirect: true })
+})
+
+// Bundle upgrade checkout - para múltiples publicaciones con 50% OFF
+async function handleBundleUpgradeCheckout(req, res, { redirect = false } = {}) {
+  const supabase = getServerSupabaseClient()
+  const authUser = await getAuthUser(req, supabase)
+
+  let userId = authUser?.id || null
+  let userEmail = authUser?.email || null
+  let listingIds = []
+  let planCode = 'premium'
+  let campaign = 'payment_abandon_20off'
+  let bundleDiscountPct = 50
+
+  const token = String(req.body?.token || req.query?.token || '').trim()
+  if (token) {
+    const payload = verifyUpgradeToken(token)
+    if (!payload) return res.status(401).json({ ok: false, error: 'invalid_token' })
+    if (!payload.bundle) return res.status(400).json({ ok: false, error: 'not_bundle_token' })
+    
+    userId = payload.userId || userId
+    listingIds = Array.isArray(payload.listingIds) ? payload.listingIds : []
+    planCode = String(payload.planCode || planCode).toLowerCase()
+    campaign = String(payload.campaign || campaign)
+    bundleDiscountPct = Number(payload.discountPct || bundleDiscountPct)
+  }
+
+  if (!userId || listingIds.length < 2 || !['premium', 'pro'].includes(planCode)) {
+    return res.status(400).json({ ok: false, error: 'invalid_payload' })
+  }
+
+  // Verificar que todas las listings pertenecen al usuario y están en plan FREE
+  const { data: listings, error } = await supabase
+    .from('listings')
+    .select('id,seller_id,slug,title,plan,plan_code,seller_plan,status')
+    .in('id', listingIds)
+
+  if (error || !listings || listings.length !== listingIds.length) {
+    return res.status(404).json({ ok: false, error: 'listings_not_found' })
+  }
+
+  for (const listing of listings) {
+    if (String(listing.seller_id) !== String(userId)) {
+      return res.status(403).json({ ok: false, error: 'forbidden', listingId: listing.id })
+    }
+    const currentPlans = [listing.plan, listing.plan_code, listing.seller_plan].map((v) => String(v || '').toLowerCase())
+    if (currentPlans.includes(planCode)) {
+      return res.status(409).json({ ok: false, error: `already_${planCode}`, listingId: listing.id })
+    }
+    if (!['active', 'published'].includes(String(listing.status).toLowerCase())) {
+      return res.status(409).json({ ok: false, error: 'listing_not_active', listingId: listing.id })
+    }
+  }
+
+  if (!userEmail) {
+    const { data: userRow } = await supabase.from('users').select('email').eq('id', userId).maybeSingle()
+    userEmail = userRow?.email || null
+  }
+
+  try {
+    const result = await createBundleUpgradePreference({
+      userId,
+      userEmail,
+      listingIds,
+      planCode,
+      campaign,
+      bundleDiscountPct,
+      metadata: { listingSlugs: listings.map(l => l.slug).filter(Boolean) },
+    })
+
+    try {
+      await recordPaymentIntent({
+        userId,
+        listingId: listingIds[0], // Primary para tracking
+        amount: result.amount,
+        currency: 'ARS',
+        status: 'pending',
+        providerRef: result.checkoutRef,
+        planCode,
+        email: userEmail || null,
+        sellerId: userId,
+        metadata: {
+          bundle: true,
+          bundleCount: listingIds.length,
+          listingIds,
+          listingSlugs: listings.map(l => l.slug).filter(Boolean),
+          campaign,
+          discountPct: bundleDiscountPct,
+          preferenceId: result.preferenceId || null,
+          source: 'email_engine_bundle_checkout',
+        },
+      })
+    } catch (err) {
+      console.warn('[emailEngine] recordPaymentIntent (bundle) failed', err?.message || err)
+    }
+
+    if (redirect) return res.redirect(302, result.url)
+    return res.json({ ok: true, url: result.url, preference_id: result.preferenceId, bundle: true, count: listingIds.length })
+  } catch (err) {
+    console.error('[emailEngine] bundle-upgrade failed', err)
+    return res.status(500).json({ ok: false, error: err?.message || 'checkout_failed' })
+  }
+}
+
+router.post('/api/checkout/bundle-upgrade', async (req, res) => {
+  return handleBundleUpgradeCheckout(req, res, { redirect: false })
+})
+
+router.get('/api/checkout/bundle-upgrade', async (req, res) => {
+  const body = {
+    token: req.query?.token,
+  }
+  req.body = body
+  return handleBundleUpgradeCheckout(req, res, { redirect: true })
 })
 
 router.post('/api/cron/email-orchestrator', ensureCronSecret, async (req, res) => {

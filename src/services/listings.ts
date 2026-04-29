@@ -47,6 +47,8 @@ type ListingRow = {
   wheelset?: string | null
   wheel_size?: string | null
   extras?: string | null
+  gear_ratio?: string | null
+  hub_type?: string | null
   plan?: string | null
   plan_code?: string | null
   status?: string | null
@@ -110,6 +112,8 @@ const normalizeListing = (row: ListingRow): Listing => {
     wheelset: row.wheelset ?? undefined,
     wheelSize: row.wheel_size ?? undefined,
     extras: row.extras ?? undefined,
+    gearRatio: row.gear_ratio ?? undefined,
+    hubType: row.hub_type ?? undefined,
     status: (rawStatus ?? undefined) as Listing['status'],
     expiresAt: row.expires_at ? Date.parse(row.expires_at) : null,
     renewalNotifiedAt: row.renewal_notified_at ? Date.parse(row.renewal_notified_at) : null,
@@ -180,6 +184,8 @@ export async function fetchListings(): Promise<Listing[]> {
       if (mod !== 'approved') return false
       const expiresAt = row?.expires_at ? Date.parse(row.expires_at) : null
       if (typeof expiresAt === 'number' && !Number.isNaN(expiresAt) && expiresAt > 0 && expiresAt < now) return false
+      // Ocultar publicaciones de cuentas demo (defensivo: verificar que exista la propiedad)
+      if (row && 'is_demo_listing' in row && row.is_demo_listing === true) return false
       return true
     })
     return filtered.map((row: any) => normalizeListing(row as ListingRow))
@@ -333,6 +339,8 @@ export async function fetchListingsByCategory(
       if (mod !== 'approved') return false
       const expiresAt = row?.expires_at ? Date.parse(row.expires_at) : null
       if (typeof expiresAt === 'number' && !Number.isNaN(expiresAt) && expiresAt > 0 && expiresAt < now) return false
+      // Ocultar publicaciones de cuentas demo (defensivo)
+      if (row && 'is_demo_listing' in row && row.is_demo_listing === true) return false
       if (subcategory) {
         const subLc = String(subcategory).toLowerCase()
         if (String(row?.subcategory || '').toLowerCase() !== subLc) return false
@@ -834,6 +842,8 @@ export async function createListing(payload: Omit<Listing, 'id' | 'createdAt'>):
       wheelset: payload.wheelset ?? null,
       wheel_size: payload.wheelSize ?? null,
       extras: payload.extras ?? null,
+      gear_ratio: payload.gearRatio ?? null,
+      hub_type: payload.hubType ?? null,
       plan: payload.plan ?? null,
       plan_code: payload.plan ?? null,
       status: payload.status ?? 'active',
@@ -955,5 +965,51 @@ export async function normalizeListingVigencies(id: string): Promise<Listing | n
   } catch (err) {
     console.warn('[listings] normalize vigencies exception', err)
     return null
+  }
+}
+
+// ── Instagram card generation ────────────────────────────────────────────────
+
+export interface InstagramCardResult {
+  url: string
+  width: number
+  height: number
+  generatedAt: string
+}
+
+export async function generateInstagramCard(listingId: string): Promise<{ ok: true; data: InstagramCardResult } | { ok: false; error: string }> {
+  if (!supabaseEnabled) return { ok: false, error: 'supabase_disabled' }
+  try {
+    const supabase = getSupabaseClient()
+    const { data: session } = await supabase.auth.getSession()
+    const token = session.session?.access_token || null
+    if (!token) return { ok: false, error: 'not_authenticated' }
+
+    const path = `/api/listings/${encodeURIComponent(listingId)}/instagram-card`
+    const endpoints = API_BASE ? [`${API_BASE}${path}`, path] : [path]
+    let lastError = 'network_error'
+
+    for (let i = 0; i < endpoints.length; i++) {
+      try {
+        const res = await fetch(endpoints[i], {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const payload = await res.json().catch(() => ({})) as any
+        if (!res.ok || !payload?.ok) {
+          lastError = payload?.message || payload?.error || `generate_failed_${res.status}`
+          if (i < endpoints.length - 1) continue
+          break
+        }
+        return { ok: true, data: payload as InstagramCardResult }
+      } catch (err) {
+        lastError = (err as Error)?.message || 'network_error'
+        if (i < endpoints.length - 1) continue
+        break
+      }
+    }
+    return { ok: false, error: lastError }
+  } catch (err) {
+    return { ok: false, error: (err as Error)?.message || 'unknown_error' }
   }
 }

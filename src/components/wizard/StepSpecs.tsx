@@ -13,6 +13,8 @@ import { cn } from '@/lib/utils';
 
 const BRAKE_TYPES = ['Disco hidráulico', 'Disco mecánico', 'Herradura'] as const;
 const MATERIALS = ['Aluminio', 'Carbono', 'Aluminio + Carbono', 'Titanio', 'Acero', 'Otro'] as const;
+const HUB_TYPES = ['Flip Flop', 'Fixed', 'Freehub', 'Otro'] as const;
+const GEAR_RATIOS = ['44:16', '46:16', '48:16', '48:17', '50:16', 'Otra'] as const;
 
 const CUSTOM_BRAND_VALUE = '__custom__';
 const MIN_YEAR = 1980;
@@ -212,6 +214,7 @@ export default function StepSpecs({ data, onChange, frameSizes = [], wheelSizeOp
   const isAccessory = data.mainCategory === 'Accesorios';
   const isApparel = data.mainCategory === 'Indumentaria';
   const isNutrition = data.mainCategory === 'Nutrición';
+  const isFixieOrPista = data.category === 'Fixie' || data.category === 'Pista';
 
   const modelPlaceholder = (() => {
     if (isBike) return 'Ej: Domane SL 6, Tarmac SL7';
@@ -409,48 +412,110 @@ export default function StepSpecs({ data, onChange, frameSizes = [], wheelSizeOp
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <Label className="text-base font-medium">Grupo de transmisión *</Label>
-              <Select
-                value={data.drivetrain || ''}
-                onValueChange={(v) => {
-                  updateField('drivetrain', v);
-                  if (v !== 'Otro' && data.drivetrainOther) updateField('drivetrainOther', '');
-                }}
-              >
-                <SelectTrigger className={cn("h-12", errors?.drivetrain && "border-red-500")}>
-                  <SelectValue placeholder="Seleccionar…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {drivetrainOptions.map((opt) => (
-                    <SelectItem key={opt} value={opt}>
-                      {opt}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {data.drivetrain === 'Otro' && (
-                <Input
-                  className="h-12 mt-2"
-                  placeholder="Detalle del grupo (ej: 105 Di2)"
-                  value={data.drivetrainOther || ''}
-                  onChange={(e) => updateField('drivetrainOther', e.target.value)}
-                />
-              )}
-              {errors?.drivetrain && <p className="text-sm text-red-500">{errors.drivetrain}</p>}
-            </div>
+          {/* Grupo de transmisión - Oculto para Fixie/Pista */}
+          {!isFixieOrPista && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label className="text-base font-medium">Grupo de transmisión *</Label>
+                <Select
+                  value={data.drivetrain || ''}
+                  onValueChange={(v) => {
+                    updateField('drivetrain', v);
+                    if (v !== 'Otro' && data.drivetrainOther) updateField('drivetrainOther', '');
+                  }}
+                >
+                  <SelectTrigger className={cn("h-12", errors?.drivetrain && "border-red-500")}>
+                    <SelectValue placeholder="Seleccionar…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {drivetrainOptions.map((opt) => (
+                      <SelectItem key={opt} value={opt}>
+                        {opt}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {data.drivetrain === 'Otro' && (
+                  <Input
+                    className="h-12 mt-2"
+                    placeholder="Detalle del grupo (ej: 105 Di2)"
+                    value={data.drivetrainOther || ''}
+                    onChange={(e) => updateField('drivetrainOther', e.target.value)}
+                  />
+                )}
+                {errors?.drivetrain && <p className="text-sm text-red-500">{errors.drivetrain}</p>}
+              </div>
 
-            <div className="space-y-2">
-              <Label className="text-base font-medium">Tipo de transmisión</Label>
-              <Input
-                className="h-12"
-                value={inferTxType(data.drivetrain === 'Otro' ? data.drivetrainOther : data.drivetrain) || ''}
-                placeholder="Auto (mecánico/electrónico)"
-                disabled
-              />
+              <div className="space-y-2">
+                <Label className="text-base font-medium">Tipo de transmisión</Label>
+                <Input
+                  className="h-12"
+                  value={inferTxType(data.drivetrain === 'Otro' ? data.drivetrainOther : data.drivetrain) || ''}
+                  placeholder="Auto (mecánico/electrónico)"
+                  disabled
+                />
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* Campos específicos para Fixie/Pista */}
+          {isFixieOrPista && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label className="text-base font-medium">Relación Plato:Piñón</Label>
+                <Select 
+                  value={data.gearRatio || ''} 
+                  onValueChange={(v) => updateField('gearRatio', v)}
+                >
+                  <SelectTrigger className="h-12">
+                    <SelectValue placeholder="Seleccionar…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {GEAR_RATIOS.map((ratio) => (
+                      <SelectItem key={ratio} value={ratio}>
+                        {ratio}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {data.gearRatio === 'Otra' && (
+                  <Input
+                    className="h-12 mt-2"
+                    placeholder="Ej: 47:17, 49:15"
+                    value={data.gearRatioOther || ''}
+                    onChange={(e) => updateField('gearRatioOther', e.target.value)}
+                  />
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-base font-medium">Tipo de maza</Label>
+                <Select 
+                  value={data.hubType || ''} 
+                  onValueChange={(v) => updateField('hubType', v)}
+                >
+                  <SelectTrigger className="h-12">
+                    <SelectValue placeholder="Seleccionar…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {HUB_TYPES.map((hub) => (
+                      <SelectItem key={hub} value={hub}>
+                        {hub}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {data.hubType === 'Otro' && (
+                  <Input
+                    className="h-12 mt-2"
+                    placeholder="Especificar tipo de maza"
+                    value={data.hubTypeOther || ''}
+                    onChange={(e) => updateField('hubTypeOther', e.target.value)}
+                  />
+                )}
+              </div>
+            </div>
+          )}
         </>
       )}
 

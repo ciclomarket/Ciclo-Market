@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import dayjs from 'dayjs'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import Container from '../components/Container'
@@ -9,7 +9,8 @@ import { useCurrency } from '../context/CurrencyContext'
 import { formatListingPrice } from '../utils/pricing'
 import { getPlanLabel, hasPaidPlan, isPlanVerified } from '../utils/plans'
 import { useListingLike } from '../hooks/useServerLikes'
-import { fetchListing, deleteListing, setListingWhatsapp, updateListingStatus, archiveListing, reduceListingPrice, updateListingFields, upgradeListingPlan, setListingHighlightDays, normalizeListingVigencies, fetchListingsByCategory, fetchListingsCountBySeller } from '../services/listings'
+import { fetchListing, deleteListing, setListingWhatsapp, updateListingStatus, archiveListing, reduceListingPrice, updateListingFields, upgradeListingPlan, setListingHighlightDays, normalizeListingVigencies, fetchListingsByCategory, fetchListingsCountBySeller, generateInstagramCard } from '../services/listings'
+import type { InstagramCardResult } from '../services/listings'
 import { supabaseEnabled, getSupabaseClient } from '../services/supabase'
 import type { Listing } from '../types'
 import { formatNameWithInitial, computeTrustLevel, trustLabel, trustColorClasses, trustBadgeBgClasses } from '../utils/user'
@@ -70,6 +71,11 @@ export default function ListingDetail() {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   // Lightweight sticky banner for upgrade CTA
   const [bannerClosed, setBannerClosed] = useState(false)
+  // Instagram card generation
+  const [igCardGenerating, setIgCardGenerating] = useState(false)
+  const [igCardResult, setIgCardResult] = useState<InstagramCardResult | null>(null)
+  const [igCardError, setIgCardError] = useState<string | null>(null)
+  const [igCardModalOpen, setIgCardModalOpen] = useState(false)
 
   const openEditField = (name: string, value: string | number | null | undefined, type: 'text'|'number'|'textarea' = 'text') => {
     setEditFieldName(name)
@@ -374,6 +380,8 @@ export default function ListingDetail() {
   // con persistencia local para no mostrarlo en cada visita (salvo post_publish=1)
   useEffect(() => {
     if (!listing || !user?.id || user.id !== listing.sellerId) return
+    // No mostrar upgrade para tiendas (ya tienen plan PRO implícito)
+    if (listing.isTienda) return
     const premiumActive = typeof listing.rankBoostUntil === 'number' && listing.rankBoostUntil > Date.now()
     const forceShow = searchParams.get('post_publish') === '1'
     const tierRaw = (listing.planTier || listing.planStatus || '').toString().trim().toUpperCase()
@@ -383,7 +391,7 @@ export default function ListingDetail() {
     const key = `cm_upg_seen_${listing.id}`
     const seen = typeof window !== 'undefined' ? window.localStorage.getItem(key) === '1' : false
     if (forceShow || !seen) setShowUpgradeModal(true)
-  }, [listing?.id, listing?.rankBoostUntil, user?.id, searchParams])
+  }, [listing?.id, listing?.rankBoostUntil, user?.id, searchParams, listing?.isTienda])
 
 	  const markUpgradeSeen = () => {
 	    try {
@@ -628,6 +636,7 @@ export default function ListingDetail() {
   const specBrake = extractToken('Tipo de freno') || extractToken('Freno')
   const specFork = extractToken('Horquilla')
   const specFixieRatio = extractToken('Relaci[óo]n')
+  const specHubType = extractToken('Maza')
   const specMotor = extractToken('Motor')
   const specCharge = extractToken('Carga')
   const isBikeCategory = listing.category !== 'Accesorios' && listing.category !== 'Indumentaria'
@@ -915,25 +924,19 @@ export default function ListingDetail() {
             </a>
           ) : null}
           {emailRecipient ? (
-            <a
-              href={`mailto:${emailRecipient}?subject=${mailtoSubjectParam}&body=${mailtoBodyParam}`}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-900 shadow-sm transition hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mb-primary/40"
-              aria-label="Enviar correo"
-              onClick={() => {
+            <EmailButton
+              emailRecipient={emailRecipient}
+              mailtoHref={`mailto:${emailRecipient}?subject=${mailtoSubjectParam}&body=${mailtoBodyParam}`}
+              gmailUrl={`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(emailRecipient)}&su=${mailtoSubjectParam}&body=${mailtoBodyParam}`}
+              outlookUrl={`https://outlook.live.com/mail/0/deeplink/compose?to=${encodeURIComponent(emailRecipient)}&subject=${mailtoSubjectParam}&body=${mailtoBodyParam}`}
+              onContact={() => {
                 try {
                   trackMetaPixel('Contact', { method: 'email', content_ids: [listing.id], content_type: 'product' })
                   logContactEvent({ sellerId: listing.sellerId, listingId: listing.id, buyerId: user?.id || null, type: 'email' })
-                  captureContactSellerClicked({
-                    listingId: listing.id,
-                    sellerId: listing.sellerId || null,
-                    method: 'email',
-                  })
+                  captureContactSellerClicked({ listingId: listing.id, sellerId: listing.sellerId || null, method: 'email' })
                 } catch { /* noop */ }
               }}
-            >
-              <span className="h-5 w-5">{<MailIcon />}</span>
-              Email
-            </a>
+            />
           ) : null}
         </div>
       </div>
@@ -1202,6 +1205,36 @@ export default function ListingDetail() {
                       </div>
                     </div>
                   )}
+                  {(isOwner || isModerator) && (
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        disabled={igCardGenerating}
+                        onClick={async () => {
+                          if (!listing) return
+                          setIgCardError(null)
+                          setIgCardGenerating(true)
+                          const result = await generateInstagramCard(listing.id)
+                          setIgCardGenerating(false)
+                          if (result.ok) {
+                            setIgCardResult(result.data)
+                            setIgCardModalOpen(true)
+                          } else {
+                            setIgCardError(result.error)
+                          }
+                        }}
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-[#14212e]/15 bg-gradient-to-r from-[#833ab4]/10 via-[#fd1d1d]/10 to-[#fcb045]/10 px-4 py-2.5 text-sm font-semibold text-[#14212e] transition hover:from-[#833ab4]/20 hover:via-[#fd1d1d]/20 hover:to-[#fcb045]/20 disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="2" y="2" width="20" height="20" rx="5" ry="5" /><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" /><line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+                        </svg>
+                        {igCardGenerating ? 'Generando…' : 'Generar post de Instagram'}
+                      </button>
+                      {igCardError && (
+                        <p className="mt-1.5 text-xs text-red-600">No pudimos generar el post — intentá de nuevo.</p>
+                      )}
+                    </div>
+                  )}
                   {!canSubmitOffer && listingSold && (
                     <p className="text-xs font-semibold text-[#0f766e]">Esta publicación está marcada como vendida.</p>
                   )}
@@ -1322,6 +1355,7 @@ export default function ListingDetail() {
 		                  specBrake={specBrake}
 		                  specFork={specFork}
 		                  specFixieRatio={specFixieRatio}
+		                  specHubType={specHubType}
 		                  specMotor={specMotor}
 		                  specCharge={specCharge}
 		                  specTxType={specTxType}
@@ -1596,6 +1630,85 @@ export default function ListingDetail() {
       )}
 
       {/* Modal editar campo genérico */}
+      {/* Instagram card modal */}
+      {igCardModalOpen && igCardResult && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          onClick={() => setIgCardModalOpen(false)}
+          onKeyDown={(e) => { if (e.key === 'Escape') setIgCardModalOpen(false) }}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Post de Instagram generado"
+          tabIndex={-1}
+        >
+          <div
+            className="relative flex w-full max-w-sm flex-col overflow-hidden rounded-3xl bg-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between bg-gradient-to-r from-[#833ab4] via-[#fd1d1d] to-[#fcb045] p-4">
+              <div className="flex items-center gap-2 text-white">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="2" width="20" height="20" rx="5" ry="5" /><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" /><line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+                </svg>
+                <span className="text-sm font-bold">Post de Instagram listo</span>
+              </div>
+              <button
+                type="button"
+                aria-label="Cerrar"
+                className="rounded-full p-1 text-white/80 hover:text-white"
+                onClick={() => setIgCardModalOpen(false)}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2}>
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+            {/* Preview */}
+            <div className="p-4">
+              <img
+                src={igCardResult.url}
+                alt="Post de Instagram"
+                className="w-full rounded-xl border border-gray-100 object-cover"
+                style={{ aspectRatio: '1080/1350' }}
+              />
+              <p className="mt-2 text-center text-xs text-gray-400">
+                {igCardResult.width}×{igCardResult.height}px · PNG
+              </p>
+            </div>
+            {/* Actions */}
+            <div className="flex gap-2 border-t border-gray-100 p-4">
+              <a
+                href={igCardResult.url}
+                download={`ciclomarket-ig-${listing?.id ?? 'post'}.png`}
+                className="flex flex-1 items-center justify-center gap-2 rounded-full bg-[#14212e] py-2.5 text-sm font-semibold text-white hover:bg-[#1b2f3f]"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                Descargar
+              </a>
+              <button
+                type="button"
+                className="flex flex-1 items-center justify-center gap-2 rounded-full border border-gray-200 py-2.5 text-sm font-semibold text-[#14212e] hover:bg-gray-50"
+                onClick={() => {
+                  navigator.clipboard.writeText(igCardResult.url).then(() => {
+                    showToast('Enlace copiado al portapapeles')
+                  }).catch(() => {
+                    showToast('No se pudo copiar el enlace', { variant: 'error' } as any)
+                  })
+                }}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+                Copiar enlace
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {editFieldOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setEditFieldOpen(false)}>
           <div className="w-full max-w-md rounded-2xl bg-white p-4" onClick={(e) => e.stopPropagation()}>
@@ -1710,6 +1823,91 @@ const MailIcon = () => (
     <path d="M4 5h16a2 2 0 0 1 2 2v10c0 1.1-.9 2-2 2H4a2 2 0 0 1-2-2V7c0-1.1.9-2 2-2Zm0 2v.5l8 5 8-5V7H4Zm16 10v-7.3l-7.4 4.6a1 1 0 0 1-1.2 0L4 9.7V17h16Z" />
   </svg>
 )
+
+function EmailButton({ emailRecipient, mailtoHref, gmailUrl, outlookUrl, onContact }: {
+  emailRecipient: string
+  mailtoHref: string
+  gmailUrl: string
+  outlookUrl: string
+  onContact: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const isTouchDevice = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0)
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  const buttonClass = "inline-flex w-full items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-900 shadow-sm transition hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mb-primary/40"
+
+  if (isTouchDevice) {
+    return (
+      <a href={mailtoHref} className={buttonClass} aria-label="Enviar correo" onClick={onContact}>
+        <span className="h-5 w-5"><MailIcon /></span>
+        Email
+      </a>
+    )
+  }
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        className={`${buttonClass} w-full`}
+        aria-label="Enviar correo"
+        onClick={() => { onContact(); setOpen(prev => !prev) }}
+      >
+        <span className="h-5 w-5"><MailIcon /></span>
+        Email
+      </button>
+      {open && (
+        <div className="absolute bottom-full mb-2 left-0 right-0 z-50 rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden">
+          <p className="px-4 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Abrir con</p>
+          <a
+            href={gmailUrl}
+            target="_blank"
+            rel="noreferrer"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-800 hover:bg-gray-50 transition"
+          >
+            <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M22 6c0-1.1-.9-2-2-2H4C2.9 4 2 4.9 2 6v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6z" fill="#FAFAFA"/>
+              <path d="M22 6l-10 7L2 6" stroke="#EA4335" strokeWidth="2" strokeLinecap="round"/>
+              <path d="M2 6l10 7 10-7" fill="none"/>
+            </svg>
+            Gmail
+          </a>
+          <a
+            href={outlookUrl}
+            target="_blank"
+            rel="noreferrer"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-800 hover:bg-gray-50 transition"
+          >
+            <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="#0078D4" aria-hidden="true">
+              <path d="M22 6.5A2.5 2.5 0 0 0 19.5 4H13V2L2 4v16l11 2V20h6.5A2.5 2.5 0 0 0 22 17.5v-11zM13 18.18l-9-1.636V7.455l9-1.636v12.36zM20 18h-7v-2h2v-2h-2v-1h2v-2h-2V9h7v9z"/>
+            </svg>
+            Outlook
+          </a>
+          <a
+            href={mailtoHref}
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-3 px-4 py-2.5 pb-3 text-sm text-gray-800 hover:bg-gray-50 transition"
+          >
+            <span className="h-4 w-4 shrink-0"><MailIcon /></span>
+            App de correo
+          </a>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function ShareBoostModal({ listingId, sellerId, onClose }: { listingId: string; sellerId: string; onClose: () => void }) {
   const { show: showToast } = useToast()

@@ -124,15 +124,11 @@ interface UserPlan {
   features: Record<string, any>
 }
 
-interface AccountVerification {
+interface VerificationRequest {
   id: string
-  user_id: string
-  status: 'pending' | 'under_review' | 'approved' | 'rejected'
-  dni_front_url: string
-  dni_back_url: string
-  reviewed_at?: string
-  rejection_reason?: string
-  ciclotrust_score: number
+  email: string
+  attachments: string[]
+  created_at: string
 }
 
 // ============================================
@@ -222,6 +218,9 @@ function PlanBadge({ planCode }: { planCode?: string }) {
 // ============================================
 function ListingUpgradeSection({ listing, userId, onUpgrade }: { listing: Listing; userId: string; onUpgrade?: () => void }) {
   const [upgrading, setUpgrading] = useState(false)
+  
+  // No mostrar upgrade para tiendas (ya tienen plan PRO implícito)
+  if (listing.isTienda) return null
   
   const planCode = (listing.sellerPlan || listing.plan || 'free').toLowerCase()
   
@@ -365,111 +364,98 @@ function CicloTrustBadge({ score, status }: { score: number; status: string }) {
 // ============================================
 // COMPONENTE: VERIFICACIÓN DE CUENTA
 // ============================================
-function AccountVerificationSection({ 
-  verification, 
+function AccountVerificationSection({
+  existingRequest,
   onUpdate,
-  isUserVerified = false
-}: { 
-  verification: AccountVerification | null
+  isUserVerified = false,
+  userEmail,
+  userName,
+  userInstagram,
+  userPhone,
+}: {
+  existingRequest: VerificationRequest | null
   onUpdate: () => void
   isUserVerified?: boolean
+  userEmail: string | null
+  userName: string | null
+  userInstagram?: string | null
+  userPhone?: string | null
 }) {
   const { show: showToast } = useToast()
   const { user } = useAuth()
-  const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState({ front: false, back: false })
+  const [frontUrl, setFrontUrl] = useState<string | null>(null)
+  const [backUrl, setBackUrl] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const DEFAULT_MESSAGE = `¡Hola! Me llamo [nombre] y quiero verificar mi perfil en Ciclo Market. Soy de [ciudad, provincia] y uso la plataforma para [comprá/vendé/buscá equipos — editá según tu caso]. Mi DNI adjunto confirma mi identidad.`
+  const [message, setMessage] = useState(DEFAULT_MESSAGE)
 
-  // Si el usuario ya está verificado (profile.verified), mostrar mensaje de éxito
-  if (isUserVerified || verification?.status === 'approved') {
+  if (isUserVerified) {
     return (
-      <div className="space-y-6">
-        {/* Mensaje de cuenta verificada */}
-        <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-8 text-center">
-          <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Check className="w-10 h-10 text-emerald-600" />
+      <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-8 text-center">
+        <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <Check className="w-10 h-10 text-emerald-600" />
+        </div>
+        <h3 className="text-2xl font-bold text-emerald-900 mb-2">¡Tu cuenta está verificada!</h3>
+        <p className="text-emerald-700">
+          Tu identidad ha sido confirmada. Los compradores ven tu perfil como confiable.
+        </p>
+      </div>
+    )
+  }
+
+  if (existingRequest) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+        <div className="flex items-start gap-4 mb-4">
+          <div className="p-3 bg-amber-100 rounded-xl">
+            <Award className="w-6 h-6 text-amber-600" />
           </div>
-          <h3 className="text-2xl font-bold text-emerald-900 mb-2">
-            ¡Tu cuenta está verificada!
-          </h3>
-          <p className="text-emerald-700 mb-4">
-            Tu identidad ha sido confirmada exitosamente. Los compradores ven tu perfil como confiable.
-          </p>
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-white rounded-full border border-emerald-200">
-            <Award className="w-5 h-5 text-emerald-600" />
-            <span className="font-medium text-emerald-800">
-              CicloTrust Score: {verification?.ciclotrust_score || 100}/100
-            </span>
+          <div>
+            <h3 className="font-semibold text-gray-900">Solicitud en revisión</h3>
+            <p className="text-sm text-gray-500 mt-1">
+              Recibimos tu solicitud el {new Date(existingRequest.created_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })}. Te avisaremos por email cuando esté aprobada.
+            </p>
           </div>
         </div>
-
-        {/* Documentos subidos (solo lectura) */}
-        {(verification?.dni_front_url || verification?.dni_back_url) && (
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h4 className="font-medium text-gray-900 mb-4">Documentos verificados</h4>
-            <div className="grid grid-cols-2 gap-4">
-              {verification.dni_front_url && (
-                <div>
-                  <p className="text-sm text-gray-500 mb-2">Frente del DNI</p>
-                  <div className="aspect-[3/2] bg-gray-100 rounded-xl overflow-hidden">
-                    <img 
-                      src={verification.dni_front_url} 
-                      alt="Frente del DNI"
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
+        {existingRequest.attachments.length > 0 && (
+          <div className="grid grid-cols-2 gap-4 mt-4">
+            {existingRequest.attachments[0] && (
+              <div>
+                <p className="text-sm text-gray-500 mb-2">Frente del DNI</p>
+                <div className="aspect-[3/2] bg-gray-100 rounded-xl overflow-hidden">
+                  <img src={existingRequest.attachments[0]} alt="Frente del DNI" className="w-full h-full object-cover" />
                 </div>
-              )}
-              {verification.dni_back_url && (
-                <div>
-                  <p className="text-sm text-gray-500 mb-2">Dorso del DNI</p>
-                  <div className="aspect-[3/2] bg-gray-100 rounded-xl overflow-hidden">
-                    <img 
-                      src={verification.dni_back_url} 
-                      alt="Dorso del DNI"
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
+              </div>
+            )}
+            {existingRequest.attachments[1] && (
+              <div>
+                <p className="text-sm text-gray-500 mb-2">Dorso del DNI</p>
+                <div className="aspect-[3/2] bg-gray-100 rounded-xl overflow-hidden">
+                  <img src={existingRequest.attachments[1]} alt="Dorso del DNI" className="w-full h-full object-cover" />
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         )}
       </div>
     )
   }
 
-  const handleUpload = async (side: 'front' | 'back', file: File) => {
+  const handleUploadPhoto = async (side: 'front' | 'back', file: File) => {
     if (!user?.id) return
-    
     setUploadProgress(p => ({ ...p, [side]: true }))
-    
     try {
       const supabase = getSupabaseClient()
       const fileExt = file.name.split('.').pop()
       const fileName = `dni_${side}_${user.id}_${Date.now()}.${fileExt}`
-      
       const { error: uploadError } = await supabase.storage
         .from('verifications')
         .upload(fileName, file, { upsert: true })
-
       if (uploadError) throw uploadError
-
       const { data: { publicUrl } } = supabase.storage.from('verifications').getPublicUrl(fileName)
-      
-      // Crear o actualizar verificación
-      const { error: dbError } = await supabase
-        .from('account_verifications')
-        .upsert({
-          user_id: user.id,
-          [`dni_${side}_url`]: publicUrl,
-          status: 'pending',
-          updated_at: new Date().toISOString()
-        }, { onConflict: 'user_id' })
-
-      if (dbError) throw dbError
-
-      showToast(`DNI ${side === 'front' ? 'frente' : 'dorso'} subido correctamente`, { variant: 'success' })
-      onUpdate()
+      if (side === 'front') setFrontUrl(publicUrl)
+      else setBackUrl(publicUrl)
     } catch (error) {
       console.error('Error uploading:', error)
       showToast('Error al subir el documento', { variant: 'error' })
@@ -478,29 +464,62 @@ function AccountVerificationSection({
     }
   }
 
-  const getStatusBadge = () => {
-    const styles = {
-      pending: 'bg-amber-100 text-amber-700 border-amber-200',
-      under_review: 'bg-blue-100 text-blue-700 border-blue-200',
-      approved: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-      rejected: 'bg-red-100 text-red-700 border-red-200',
+  const handleSubmit = async () => {
+    if (!frontUrl || !backUrl || !userEmail) return
+    setSubmitting(true)
+    try {
+      const res = await fetch('/api/verification/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: userName || userEmail,
+          email: userEmail,
+          instagram: userInstagram || null,
+          phone: userPhone || null,
+          message,
+          attachments: [frontUrl, backUrl],
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.ok) throw new Error(data.error || 'error')
+      showToast('Solicitud enviada correctamente', { variant: 'success' })
+      onUpdate()
+    } catch (error) {
+      console.error('Error submitting verification:', error)
+      showToast('Error al enviar la solicitud', { variant: 'error' })
+    } finally {
+      setSubmitting(false)
     }
-
-    const labels = {
-      pending: 'Pendiente',
-      under_review: 'En revisión',
-      approved: 'Aprobado',
-      rejected: 'Rechazado',
-    }
-
-    return (
-      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium border ${styles[verification?.status || 'pending']}`}>
-        {verification?.status === 'approved' && <Check className="w-4 h-4" />}
-        {verification?.status === 'rejected' && <X className="w-4 h-4" />}
-        {labels[verification?.status || 'pending']}
-      </span>
-    )
   }
+
+  const PhotoSlot = ({ side, url }: { side: 'front' | 'back'; url: string | null }) => (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-2">
+        {side === 'front' ? 'Frente del DNI' : 'Dorso del DNI'}
+      </label>
+      {url ? (
+        <div className="relative aspect-[3/2] bg-gray-100 rounded-xl overflow-hidden">
+          <img src={url} alt={side === 'front' ? 'Frente del DNI' : 'Dorso del DNI'} className="w-full h-full object-cover" />
+          <label className="absolute inset-0 bg-black/50 flex items-center justify-center cursor-pointer hover:bg-black/60 transition-colors">
+            <Camera className="w-8 h-8 text-white" />
+            <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleUploadPhoto(side, e.target.files[0])} />
+          </label>
+        </div>
+      ) : (
+        <label className="flex flex-col items-center justify-center aspect-[3/2] border-2 border-dashed border-gray-300 rounded-xl hover:border-gray-400 hover:bg-gray-50 cursor-pointer transition-colors">
+          {uploadProgress[side] ? (
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-600" />
+          ) : (
+            <>
+              <Camera className="w-8 h-8 text-gray-400 mb-2" />
+              <span className="text-sm text-gray-500">Subir foto</span>
+            </>
+          )}
+          <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleUploadPhoto(side, e.target.files[0])} />
+        </label>
+      )}
+    </div>
+  )
 
   return (
     <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
@@ -508,135 +527,46 @@ function AccountVerificationSection({
         <div className="p-3 bg-purple-100 rounded-xl">
           <Award className="w-6 h-6 text-purple-600" />
         </div>
-        <div className="flex-1">
+        <div>
           <h3 className="font-semibold text-gray-900">Verificación de identidad</h3>
           <p className="text-sm text-gray-500 mt-1">
-            Verificá tu identidad para obtener el badge CicloTrust y aumentar la confianza de los compradores.
+            Subí ambas caras de tu DNI para obtener el badge CicloTrust.
           </p>
         </div>
-        {getStatusBadge()}
       </div>
-
-      {verification?.status === 'rejected' && verification.rejection_reason && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl">
-          <p className="text-sm text-red-700">
-            <strong>Motivo del rechazo:</strong> {verification.rejection_reason}
-          </p>
-        </div>
-      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Frente del DNI */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Frente del DNI
-          </label>
-          {verification?.dni_front_url ? (
-            <div className="relative aspect-[3/2] bg-gray-100 rounded-xl overflow-hidden">
-              <img 
-                src={verification.dni_front_url} 
-                alt="Frente del DNI"
-                className="w-full h-full object-cover"
-              />
-              {verification.status !== 'approved' && (
-                <label className="absolute inset-0 bg-black/50 flex items-center justify-center cursor-pointer hover:bg-black/60 transition-colors">
-                  <Camera className="w-8 h-8 text-white" />
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => e.target.files?.[0] && handleUpload('front', e.target.files[0])}
-                  />
-                </label>
-              )}
-            </div>
-          ) : (
-            <label className="flex flex-col items-center justify-center aspect-[3/2] border-2 border-dashed border-gray-300 rounded-xl hover:border-gray-400 hover:bg-gray-50 cursor-pointer transition-colors">
-              {uploadProgress.front ? (
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-600" />
-              ) : (
-                <>
-                  <Camera className="w-8 h-8 text-gray-400 mb-2" />
-                  <span className="text-sm text-gray-500">Subir foto</span>
-                </>
-              )}
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => e.target.files?.[0] && handleUpload('front', e.target.files[0])}
-              />
-            </label>
-          )}
-        </div>
-
-        {/* Dorso del DNI */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Dorso del DNI
-          </label>
-          {verification?.dni_back_url ? (
-            <div className="relative aspect-[3/2] bg-gray-100 rounded-xl overflow-hidden">
-              <img 
-                src={verification.dni_back_url} 
-                alt="Dorso del DNI"
-                className="w-full h-full object-cover"
-              />
-              {verification.status !== 'approved' && (
-                <label className="absolute inset-0 bg-black/50 flex items-center justify-center cursor-pointer hover:bg-black/60 transition-colors">
-                  <Camera className="w-8 h-8 text-white" />
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => e.target.files?.[0] && handleUpload('back', e.target.files[0])}
-                  />
-                </label>
-              )}
-            </div>
-          ) : (
-            <label className="flex flex-col items-center justify-center aspect-[3/2] border-2 border-dashed border-gray-300 rounded-xl hover:border-gray-400 hover:bg-gray-50 cursor-pointer transition-colors">
-              {uploadProgress.back ? (
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-600" />
-              ) : (
-                <>
-                  <Camera className="w-8 h-8 text-gray-400 mb-2" />
-                  <span className="text-sm text-gray-500">Subir foto</span>
-                </>
-              )}
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => e.target.files?.[0] && handleUpload('back', e.target.files[0])}
-              />
-            </label>
-          )}
-        </div>
+        <PhotoSlot side="front" url={frontUrl} />
+        <PhotoSlot side="back" url={backUrl} />
       </div>
 
-      {verification?.status === 'approved' && (
-        <div className="mt-6 p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
-          <div className="flex items-center gap-3">
-            <Check className="w-5 h-5 text-emerald-600" />
-            <div>
-              <p className="font-medium text-emerald-800">¡Cuenta verificada!</p>
-              <p className="text-sm text-emerald-600">
-                Tu CicloTrust Score: <strong>{verification.ciclotrust_score}/100</strong>
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
+      <div className="mt-6">
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Presentate brevemente
+        </label>
+        <p className="text-xs text-gray-400 mb-2">
+          Contanos tu nombre completo, de dónde sos y cómo usás Ciclo Market. Cuanto más detalle des, más rápido podemos validar tu cuenta.
+        </p>
+        <textarea
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          rows={4}
+          className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm text-gray-800 placeholder-gray-400 focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-100 resize-none"
+        />
+      </div>
 
-      {(!verification || verification.status === 'pending') && (
-        <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-xl">
-          <p className="text-sm text-amber-700">
-            <strong>Importante:</strong> Subí ambas caras del DNI para completar la verificación. 
-            El proceso puede tomar hasta 24 horas hábiles.
-          </p>
-        </div>
-      )}
+      <div className="mt-4">
+        <button
+          onClick={handleSubmit}
+          disabled={!frontUrl || !backUrl || !message.trim() || submitting}
+          className="w-full rounded-xl bg-purple-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {submitting ? 'Enviando...' : 'Enviar solicitud de verificación'}
+        </button>
+        {(!frontUrl || !backUrl) && (
+          <p className="text-xs text-gray-400 text-center mt-2">Subí las dos fotos para habilitar el envío</p>
+        )}
+      </div>
     </div>
   )
 }
@@ -2165,6 +2095,26 @@ function ListingsSection({ listings, onRefresh, userId }: { listings: Listing[],
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [markingSoldId, setMarkingSoldId] = useState<string | null>(null)
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null)
+  const [igCardGeneratingId, setIgCardGeneratingId] = useState<string | null>(null)
+  const [igCardModal, setIgCardModal] = useState<{ url: string; listingId: string } | null>(null)
+
+  const handleGenerateIgCard = async (listingId: string) => {
+    setOpenDropdownId(null)
+    setIgCardGeneratingId(listingId)
+    try {
+      const { generateInstagramCard } = await import('../services/listings')
+      const result = await generateInstagramCard(listingId)
+      if (result.ok) {
+        setIgCardModal({ url: result.data.url, listingId })
+      } else {
+        showToast(result.error || 'No pudimos generar el post — intentá de nuevo.', { variant: 'error' })
+      }
+    } catch {
+      showToast('No pudimos generar el post — intentá de nuevo.', { variant: 'error' })
+    } finally {
+      setIgCardGeneratingId(null)
+    }
+  }
 
   const applySuggestedPrice = async (price: number) => {
     if (!priceSuggestionListing) return
@@ -2341,7 +2291,7 @@ function ListingsSection({ listings, onRefresh, userId }: { listings: Listing[],
                   <Settings className="w-4 h-4" />
                 </button>
                 
-                <a 
+                <a
                   href={`/listing/${listing.slug || listing.id}`}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -2350,6 +2300,16 @@ function ListingsSection({ listings, onRefresh, userId }: { listings: Listing[],
                 >
                   <ExternalLink className="w-4 h-4" />
                 </a>
+
+                {/* Generar post de Instagram */}
+                <button
+                  onClick={() => handleGenerateIgCard(listing.id)}
+                  disabled={igCardGeneratingId === listing.id}
+                  className="p-2 text-pink-500 hover:bg-pink-50 rounded-lg transition-colors disabled:opacity-50"
+                  title="Generar post de Instagram"
+                >
+                  <Instagram className="w-4 h-4" />
+                </button>
 
                 {/* Marcar como vendida */}
                 <button 
@@ -2430,6 +2390,14 @@ function ListingsSection({ listings, onRefresh, userId }: { listings: Listing[],
                         <ExternalLink className="w-4 h-4 text-gray-500" />
                         Ver público
                       </a>
+                      <button
+                        onClick={() => handleGenerateIgCard(listing.id)}
+                        disabled={igCardGeneratingId === listing.id}
+                        className="w-full px-4 py-2.5 text-left text-sm text-pink-600 hover:bg-pink-50 flex items-center gap-2 disabled:opacity-50"
+                      >
+                        <Instagram className="w-4 h-4" />
+                        {igCardGeneratingId === listing.id ? 'Generando…' : 'Post de Instagram'}
+                      </button>
                       <div className="border-t border-gray-100 my-1" />
                       <button
                         onClick={() => handleMarkAsSold(listing.id)}
@@ -2474,6 +2442,77 @@ function ListingsSection({ listings, onRefresh, userId }: { listings: Listing[],
         onClose={() => setPriceSuggestionListing(null)}
         onApplyPrice={applySuggestedPrice}
       />
+
+      {/* Modal post de Instagram */}
+      {igCardModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          onClick={() => setIgCardModal(null)}
+          onKeyDown={(e) => { if (e.key === 'Escape') setIgCardModal(null) }}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Post de Instagram generado"
+          tabIndex={-1}
+        >
+          <div
+            className="relative flex w-full max-w-sm flex-col overflow-hidden rounded-3xl bg-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between bg-gradient-to-r from-[#833ab4] via-[#fd1d1d] to-[#fcb045] p-4">
+              <div className="flex items-center gap-2 text-white">
+                <Instagram className="h-5 w-5" />
+                <span className="text-sm font-bold">Post de Instagram listo</span>
+              </div>
+              <button
+                type="button"
+                aria-label="Cerrar"
+                className="rounded-full p-1 text-white/80 hover:text-white"
+                onClick={() => setIgCardModal(null)}
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-4">
+              <img
+                src={igCardModal.url}
+                alt="Post de Instagram"
+                className="w-full rounded-xl border border-gray-100 object-cover"
+                style={{ aspectRatio: '1080/1350' }}
+              />
+              <p className="mt-2 text-center text-xs text-gray-400">1080×1350px · PNG</p>
+            </div>
+            <div className="flex gap-2 border-t border-gray-100 p-4">
+              <a
+                href={igCardModal.url}
+                download={`ciclomarket-ig-${igCardModal.listingId}.png`}
+                className="flex flex-1 items-center justify-center gap-2 rounded-full bg-[#14212e] py-2.5 text-sm font-semibold text-white hover:bg-[#1b2f3f]"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                Descargar
+              </a>
+              <button
+                type="button"
+                className="flex flex-1 items-center justify-center gap-2 rounded-full border border-gray-200 py-2.5 text-sm font-semibold text-[#14212e] hover:bg-gray-50"
+                onClick={() => {
+                  navigator.clipboard.writeText(igCardModal.url).then(() => {
+                    showToast('Enlace copiado al portapapeles')
+                    setIgCardModal(null)
+                  }).catch(() => {
+                    showToast('No se pudo copiar el enlace', { variant: 'error' })
+                  })
+                }}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+                Copiar enlace
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -2742,7 +2781,7 @@ function AlertsSection() {
 // ============================================
 // COMPONENTE: CONFIGURACIÓN COMPLETA
 // ============================================
-function SettingsSection({ profile, onProfileUpdate, accountVerification, onVerificationUpdate }: { profile: any, onProfileUpdate: () => void, accountVerification: AccountVerification | null, onVerificationUpdate: () => void }) {
+function SettingsSection({ profile, onProfileUpdate, verificationRequest, onVerificationUpdate }: { profile: any, onProfileUpdate: () => void, verificationRequest: VerificationRequest | null, onVerificationUpdate: () => void }) {
   const { show: showToast } = useToast()
   const { user } = useAuth()
   const [saving, setSaving] = useState(false)
@@ -3236,10 +3275,14 @@ function SettingsSection({ profile, onProfileUpdate, accountVerification, onVeri
 
       {/* Verificación (solo usuarios normales) */}
       {activeTab === 'verification' && !profile?.store_enabled && (
-        <AccountVerificationSection 
-          verification={accountVerification} 
+        <AccountVerificationSection
+          existingRequest={verificationRequest}
           onUpdate={onVerificationUpdate}
           isUserVerified={profile?.verified || false}
+          userEmail={user?.email ?? null}
+          userName={profile?.full_name ?? null}
+          userInstagram={profile?.instagram_handle ?? null}
+          userPhone={profile?.whatsapp_number ?? profile?.store_phone ?? null}
         />
       )}
 
@@ -3576,7 +3619,7 @@ export default function DashboardUnified() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [notificationCount, setNotificationCount] = useState(0)
   const [userPlan, setUserPlan] = useState<UserPlan | null>(null)
-  const [accountVerification, setAccountVerification] = useState<AccountVerification | null>(null)
+  const [verificationRequest, setVerificationRequest] = useState<VerificationRequest | null>(null)
   const [mobileView, setMobileView] = useState<'menu' | 'content'>('menu')
 
   const activeTab = searchParams.get('tab') || 'inicio'
@@ -3623,16 +3666,15 @@ export default function DashboardUnified() {
       
       try {
         const { data: verificationData } = await supabase
-          .from('account_verifications')
-          .select('*')
-          .eq('user_id', user.id)
+          .from('verification_requests')
+          .select('id, email, attachments, created_at')
+          .eq('email', user.email)
           .order('created_at', { ascending: false })
           .limit(1)
           .single()
-        setAccountVerification(verificationData || null)
+        setVerificationRequest(verificationData || null)
       } catch (e) {
-        // Tabla no existe o no hay verificación - ignorar
-        setAccountVerification(null)
+        setVerificationRequest(null)
       }
       
       // Contar mensajes no leídos (sin responder y no leídos por el seller)
@@ -3721,10 +3763,10 @@ export default function DashboardUnified() {
         return <ChatSection userId={user!.id} onUpdate={loadData} />
 
       case 'configuracion':
-        return <SettingsSection 
-          profile={profile} 
-          onProfileUpdate={loadData} 
-          accountVerification={accountVerification}
+        return <SettingsSection
+          profile={profile}
+          onProfileUpdate={loadData}
+          verificationRequest={verificationRequest}
           onVerificationUpdate={loadData}
         />
 

@@ -36,6 +36,10 @@ export interface Listing {
   wheelset?: string
   wheelSize?: string
   extras?: string
+  /** Relación Plato:Piñón (para Fixie/Pista) ej: 46:16 */
+  gearRatio?: string
+  /** Tipo de maza (para Fixie/Pista) ej: Flip Flop o Fixed */
+  hubType?: string
   plan?: string
   status?: 'draft' | 'active' | 'paused' | 'sold' | 'expired' | 'archived' | 'deleted'
   expiresAt?: number | null

@@ -62,6 +62,7 @@ const emailCronRouter = require('./routes/emailCron')
 const pricingApiRouter = require('./routes/pricingApi')
 const notionSyncRouter = require('./routes/notionSync')
 const { emailEngineRouter } = require('./routes/emailEngine')
+const instagramCardRouter = require('./routes/instagramCard')
 const { startEmailOrchestratorJob } = require('./email/orchestrator')
 // Sweepstake feature removed
 const path = require('path')
@@ -381,6 +382,9 @@ app.use(emailEngineRouter)
 
 // Pricing API routes (ingesta de precios, sugerencias, analytics)
 app.use('/api/v1/pricing', pricingApiRouter)
+
+// Instagram card generation
+app.use('/api', instagramCardRouter)
 
 /* ----------------------------- Cron jobs ---------------------------------- */
 // Start scheduled jobs after basic middleware is ready

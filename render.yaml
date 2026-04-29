@@ -79,3 +79,7 @@ services:
       # Puppeteer (Render): download browser into slug so runtime can find it
       - key: PUPPETEER_CACHE_DIR
         value: node_modules/.cache/puppeteer
+
+      # Instagram card generation — Supabase storage bucket for generated PNGs
+      - key: INSTAGRAM_CARDS_BUCKET
+        value: instagram-cards

@@ -61,6 +61,15 @@ function createUpgradeToken(payload) {
   return `v1.${body}.${sig}`
 }
 
+function createBundleUpgradeToken({ userId, listingIds, planCode, campaign, discountPct = 50, exp }) {
+  const secret = String(process.env.CRON_SECRET || process.env.NEWSLETTER_UNSUB_SECRET || '').trim()
+  if (!secret) throw new Error('checkout_secret_missing')
+  const payload = { userId, listingIds, planCode, campaign, discountPct, bundle: true, exp }
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url')
+  const sig = crypto.createHmac('sha256', secret).update(body).digest('base64url')
+  return `v1.${body}.${sig}`
+}
+
 function verifyUpgradeToken(token) {
   const secret = String(process.env.CRON_SECRET || process.env.NEWSLETTER_UNSUB_SECRET || '').trim()
   if (!secret || !token) return null
@@ -152,9 +161,94 @@ async function createListingUpgradePreference({
   }
 }
 
+async function createBundleUpgradePreference({
+  userId,
+  userEmail,
+  listingIds,
+  planCode,
+  campaign,
+  bundleDiscountPct = 50,
+  metadata = {},
+}) {
+  const mpClient = getMpClient()
+  if (!mpClient) throw new Error('payments_unavailable')
+
+  const cleanPlan = String(planCode || '').trim().toLowerCase()
+  if (!['premium', 'pro', 'basic'].includes(cleanPlan)) throw new Error('invalid_plan')
+
+  const count = Math.max(1, Array.isArray(listingIds) ? listingIds.length : 1)
+  const unitPrice = resolvePlanPrice(cleanPlan)
+  if (!Number.isFinite(unitPrice) || unitPrice <= 0) throw new Error('amount_not_configured')
+
+  const baseAmount = unitPrice * count
+  const pct = Math.max(0, Math.min(90, Number(bundleDiscountPct) || 0))
+  const finalAmount = Math.round(baseAmount * (1 - pct / 100))
+  
+  const checkoutRef = typeof crypto.randomUUID === 'function'
+    ? `bundle_${crypto.randomUUID()}`
+    : `bundle_${Date.now()}_${Math.random().toString(16).slice(2)}`
+
+  const front = resolvePublicFrontendUrl()
+  const publicBase = String(process.env.PUBLIC_BASE_URL || process.env.SERVER_BASE_URL || '').trim().replace(/\/$/, '')
+
+  const planLabel = cleanPlan === 'pro' ? 'Plan Pro' : cleanPlan === 'premium' ? 'Plan Premium' : 'Plan Básico'
+
+  const pref = new Preference(mpClient)
+  const response = await pref.create({
+    body: {
+      external_reference: checkoutRef,
+      items: [
+        {
+          id: `bundle_${cleanPlan}_${count}x_${campaign || 'email'}`,
+          title: `${planLabel} Bundle (${count} publicaciones)`,
+          description: `Upgrade ${count} listings: ${(listingIds || []).join(', ')}`,
+          quantity: 1,
+          unit_price: finalAmount,
+          currency_id: 'ARS',
+        },
+      ],
+      payer: { email: userEmail || undefined },
+      metadata: {
+        userId,
+        listingIds: listingIds || [],
+        planCode: cleanPlan,
+        campaign: campaign || null,
+        bundle: true,
+        bundle_count: count,
+        discount_pct: pct,
+        checkoutRef,
+        ...metadata,
+      },
+      back_urls: {
+        success: `${front}/checkout/success`,
+        failure: `${front}/checkout/failure`,
+        pending: `${front}/checkout/pending`,
+      },
+      ...(publicBase ? { notification_url: `${publicBase}/api/mp/webhook` } : {}),
+      auto_return: 'approved',
+      statement_descriptor: 'CICLO MARKET',
+    },
+  })
+
+  const initPoint = response?.init_point || response?.sandbox_init_point
+  if (!initPoint) throw new Error('mp_init_point_missing')
+
+  return {
+    url: initPoint,
+    preferenceId: response?.id || null,
+    amount: finalAmount,
+    baseAmount,
+    discountPct: pct,
+    checkoutRef,
+    count,
+  }
+}
+
 module.exports = {
   createListingUpgradePreference,
+  createBundleUpgradePreference,
   createUpgradeToken,
+  createBundleUpgradeToken,
   verifyUpgradeToken,
   resolvePlanPrice,
 }

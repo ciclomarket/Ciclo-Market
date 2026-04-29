@@ -992,7 +992,8 @@ export default function Dashboard() {
               </div>
             ) : (
               <div className="space-y-4">
-                {availableBasic > 0 && sellerListings.length === 0 && (
+                {/* No mostrar banner de crédito para tiendas */}
+                {!profile?.store_enabled && availableBasic > 0 && sellerListings.length === 0 && (
                   <div className="rounded-3xl border border-emerald-200 bg-emerald-50/95 p-4 text-emerald-900 shadow-lg">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div>
@@ -1205,7 +1206,8 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {sellerListings.length === 0 && availableBasic > 0 && (
+          {/* No mostrar banner de crédito para tiendas */}
+          {!profile?.store_enabled && sellerListings.length === 0 && availableBasic > 0 && (
             <div className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-900 shadow-sm">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
@@ -2022,15 +2024,17 @@ function ListingsView({
 
       <div className="md:hidden space-y-4">
         {listings.map((listing) => {
+          const isStore = Boolean(profile?.store_enabled)
           const listingPlanCode = canonicalPlanCode(listing.plan ?? listing.sellerPlan ?? undefined)
           const basicOptionKey = `${listing.id}-basic`
           const premiumOptionKey = `${listing.id}-premium`
           const basicCheckoutKey = `${listing.id}-basic-checkout`
           const premiumCheckoutKey = `${listing.id}-premium-checkout`
-          const showBasicCreditOption = creditAvailable('basic') && listingPlanCode !== 'premium'
-          const showPremiumCreditOption = creditAvailable('premium')
-          const showBasicCheckoutOption = canInitiateCheckout && listingPlanCode !== 'premium'
-          const showPremiumCheckoutOption = canInitiateCheckout
+          // No mostrar opciones de upgrade para tiendas
+          const showBasicCreditOption = !isStore && creditAvailable('basic') && listingPlanCode !== 'premium'
+          const showPremiumCreditOption = !isStore && creditAvailable('premium')
+          const showBasicCheckoutOption = !isStore && canInitiateCheckout && listingPlanCode !== 'premium'
+          const showPremiumCheckoutOption = !isStore && canInitiateCheckout
           const basicUpgradeLabel = getUpgradeLabel(listingPlanCode, 'basic')
           const premiumUpgradeLabel = getUpgradeLabel(listingPlanCode, 'premium')
           const basicCheckoutLabel = getCheckoutLabel(listingPlanCode, 'basic')
@@ -2236,15 +2240,17 @@ function ListingsView({
           </thead>
           <tbody className="divide-y divide-gray-100 bg-white">
             {listings.map((listing) => {
+              const isStore = Boolean(profile?.store_enabled)
               const listingPlanCode = canonicalPlanCode(listing.plan ?? listing.sellerPlan ?? undefined)
               const basicOptionKey = `${listing.id}-basic`
               const premiumOptionKey = `${listing.id}-premium`
               const basicCheckoutKey = `${listing.id}-basic-checkout`
               const premiumCheckoutKey = `${listing.id}-premium-checkout`
-              const showBasicCreditOption = creditAvailable('basic') && listingPlanCode !== 'premium'
-              const showPremiumCreditOption = creditAvailable('premium')
-              const showBasicCheckoutOption = canInitiateCheckout && listingPlanCode !== 'premium'
-              const showPremiumCheckoutOption = canInitiateCheckout
+              // No mostrar opciones de upgrade para tiendas
+              const showBasicCreditOption = !isStore && creditAvailable('basic') && listingPlanCode !== 'premium'
+              const showPremiumCreditOption = !isStore && creditAvailable('premium')
+              const showBasicCheckoutOption = !isStore && canInitiateCheckout && listingPlanCode !== 'premium'
+              const showPremiumCheckoutOption = !isStore && canInitiateCheckout
               const basicUpgradeLabel = getUpgradeLabel(listingPlanCode, 'basic')
               const premiumUpgradeLabel = getUpgradeLabel(listingPlanCode, 'premium')
               const basicCheckoutLabel = getCheckoutLabel(listingPlanCode, 'basic')

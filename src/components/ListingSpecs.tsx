@@ -107,6 +107,7 @@ type Props = {
   specBrake?: string | null
   specFork?: string | null
   specFixieRatio?: string | null
+  specHubType?: string | null
   specMotor?: string | null
   specCharge?: string | null
   specTxType?: string | null
@@ -120,6 +121,7 @@ export default function ListingSpecs({
   specBrake,
   specFork,
   specFixieRatio,
+  specHubType,
   specMotor,
   specCharge,
   specTxType,
@@ -192,7 +194,13 @@ export default function ListingSpecs({
     if (specCondition) add({ key: 'cond', label: 'Condición', value: specCondition })
     if (listing.category === 'MTB' && specFork) add({ key: 'fork', label: 'Horquilla', value: specFork })
     if (listing.wheelset) add({ key: 'wheelset', label: 'Ruedas', value: listing.wheelset, onEdit: isModerator && onEditField ? () => onEditField('wheelset', listing.wheelset, 'text') : undefined })
-    if (listing.category === 'Fixie' && specFixieRatio) add({ key: 'ratio', label: 'Relación', value: specFixieRatio })
+    // Fixie/Pista: mostrar relación y tipo de maza
+    const isFixieOrPista = listing.category === 'Fixie' || listing.category === 'Pista'
+    if (isFixieOrPista && specFixieRatio) add({ key: 'ratio', label: 'Relación Plato:Piñón', value: specFixieRatio })
+    if (isFixieOrPista && specHubType) add({ key: 'hubType', label: 'Tipo de maza', value: specHubType })
+    // Fallback: si no vienen como props, intentar desde los campos directos
+    if (isFixieOrPista && !specFixieRatio && listing.gearRatio) add({ key: 'ratio', label: 'Relación Plato:Piñón', value: listing.gearRatio })
+    if (isFixieOrPista && !specHubType && listing.hubType) add({ key: 'hubType', label: 'Tipo de maza', value: listing.hubType })
     if (listing.category === 'E-Bike' && specMotor) add({ key: 'motor', label: 'Motor', value: specMotor })
     if (listing.category === 'E-Bike' && specCharge) add({ key: 'charge', label: 'Batería / Carga', value: specCharge })
 
@@ -225,7 +233,8 @@ export default function ListingSpecs({
 
     const hidden = new Set(HIDDEN_EXTRAS_KEYS_BASE)
     if (listing.category === 'MTB' && specFork) hidden.add(normalizeKey('Horquilla'))
-    if (listing.category === 'Fixie' && specFixieRatio) hidden.add(normalizeKey('Relación'))
+    if (isFixieOrPista && specFixieRatio) hidden.add(normalizeKey('Relación'))
+    if (isFixieOrPista && specHubType) hidden.add(normalizeKey('Maza'))
     if (listing.category === 'E-Bike' && specMotor) hidden.add(normalizeKey('Motor'))
     if (listing.category === 'E-Bike' && specCharge) hidden.add(normalizeKey('Carga'))
     for (const it of upgradeItems) hidden.add(normalizeKey(it.label))
