@@ -9,17 +9,19 @@ let _logoDataUri = null
 function getLogoDataUri() {
   if (_logoDataUri !== null) return _logoDataUri
   const candidates = [
-    path.join(__dirname, 'assets', 'site-logo.webp'),
-    path.join(process.cwd(), 'public', 'site-logo.webp'),
+    { p: path.join(__dirname, 'assets', 'logo-blanco.png'), mime: 'image/png' },
+    { p: path.join(process.cwd(), 'public', 'blanco.png'),  mime: 'image/png' },
+    { p: path.join(__dirname, 'assets', 'site-logo.webp'),  mime: 'image/webp' },
+    { p: path.join(process.cwd(), 'public', 'site-logo.webp'), mime: 'image/webp' },
   ]
-  for (const p of candidates) {
+  for (const { p, mime } of candidates) {
     try {
       const data = fs.readFileSync(p)
-      _logoDataUri = `data:image/webp;base64,${data.toString('base64')}`
+      _logoDataUri = `data:${mime};base64,${data.toString('base64')}`
       return _logoDataUri
     } catch { /* try next */ }
   }
-  _logoDataUri = '' // no logo found — fall back to text
+  _logoDataUri = ''
   return _logoDataUri
 }
 
@@ -116,8 +118,9 @@ function renderTemplate(data) {
     z-index: 10;
   }
   .header-logo {
-    height: 34px;
+    height: 44px;
     width: auto;
+    max-width: 200px;
     display: block;
     object-fit: contain;
     object-position: left center;

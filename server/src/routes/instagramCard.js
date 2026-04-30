@@ -50,6 +50,74 @@ async function isModerator(supabase, userId) {
   }
 }
 
+// ── Caption generator ─────────────────────────────────────────────────────────
+
+const CATEGORY_HASHTAGS = {
+  'Ruta':        ['#ciclismoderuta', '#roadbike', '#roadcycling'],
+  'MTB':         ['#mtb', '#mountainbike', '#trailbike'],
+  'Gravel':      ['#gravel', '#gravelbike', '#gravelcycling'],
+  'Urbana':      ['#bicicletaurbana', '#urbancycling', '#commuter'],
+  'Fixie':       ['#fixie', '#fixedgear', '#trackbike'],
+  'E-Bike':      ['#ebike', '#electricbike', '#eciclo'],
+  'Niños':       ['#bicicletaninos', '#kidsride'],
+  'Pista':       ['#pista', '#trackcycling', '#velodrome'],
+  'Triatlón':    ['#triatlon', '#triathlete', '#ironman'],
+  'Indumentaria':['#indumentariaciclismo', '#cyclingapparel'],
+  'Accesorios':  ['#accesoriosciclismo', '#cyclinggear'],
+}
+
+function buildCaption(listing) {
+  const currency = String(listing.price_currency || 'ARS').toUpperCase()
+  const formattedPrice = Number(listing.price).toLocaleString('es-AR', { maximumFractionDigits: 0 })
+  const priceStr = currency === 'USD' ? `U$D ${formattedPrice}` : `$${formattedPrice} ARS`
+
+  // Spec lines — only include fields that exist
+  const specs = []
+  if (listing.brand)           specs.push(`Marca: ${listing.brand}`)
+  if (listing.model)           specs.push(`Modelo: ${listing.model}`)
+  if (listing.year)            specs.push(`Año: ${listing.year}`)
+  if (listing.category)        specs.push(`Categoría: ${listing.category}`)
+  if (listing.material)        specs.push(`Material: ${listing.material}`)
+  if (listing.frame_size)      specs.push(`Talle: ${listing.frame_size}`)
+  if (listing.wheel_size)      specs.push(`Rodado: ${listing.wheel_size}`)
+  if (listing.drivetrain)      specs.push(`Transmisión: ${listing.drivetrain}`)
+  if (listing.drivetrain_detail) specs.push(`Grupo: ${listing.drivetrain_detail}`)
+  if (listing.wheelset)        specs.push(`Ruedas: ${listing.wheelset}`)
+  if (listing.location)        specs.push(`Ubicación: ${listing.location}`)
+
+  // Hashtags
+  const categoryTags = CATEGORY_HASHTAGS[listing.category] || []
+  const brandTag = listing.brand
+    ? `#${listing.brand.toLowerCase().replace(/[^a-z0-9]/g, '')}`
+    : ''
+  const hashtags = [
+    '#ciclismo',
+    '#bicicletasenventa',
+    '#ciclomarket',
+    brandTag,
+    ...categoryTags,
+    '#argentina',
+    '#ciclismoargentina',
+  ].filter(Boolean).join(' ')
+
+  const sellerLine = listing.seller_name ? `Vendido por ${listing.seller_name}` : ''
+
+  return [
+    `🚲 ${listing.title} | En venta`,
+    '',
+    `💰 Precio: ${priceStr}`,
+    '',
+    specs.length ? `📋 Especificaciones:\n${specs.map(s => `• ${s}`).join('\n')}` : '',
+    '',
+    sellerLine ? `🤝 ${sellerLine}` : '',
+    '',
+    '👉 Ver publicación completa en ciclomarket.ar',
+    '📩 Consultá por DM o encontranos en la bio',
+    '',
+    hashtags,
+  ].filter(l => l !== null).join('\n').replace(/\n{3,}/g, '\n\n').trim()
+}
+
 // ── POST /api/listings/:id/instagram-card ─────────────────────────────────
 
 router.post('/listings/:id/instagram-card', async (req, res) => {
@@ -58,16 +126,23 @@ router.post('/listings/:id/instagram-card', async (req, res) => {
   const supabase = getSupabaseOrFail(res)
   if (!supabase) return
 
-  // Auth
   const authUser = await getAuthUser(req, supabase)
   if (!authUser) {
     return res.status(401).json({ ok: false, error: 'not_authenticated' })
   }
 
-  // Load listing
+  // Fetch all fields needed for card + caption
   const { data: listing, error: listingErr } = await supabase
     .from('listings')
-    .select('id, title, brand, model, year, category, price, price_currency, seller_id, seller_name, images')
+    .select(`
+      id, title, brand, model, year, category, subcategory,
+      price, price_currency,
+      seller_id, seller_name, seller_location,
+      images, location,
+      material, frame_size, wheel_size,
+      drivetrain, drivetrain_detail, wheelset,
+      extras
+    `)
     .eq('id', id)
     .maybeSingle()
 
@@ -79,14 +154,12 @@ router.post('/listings/:id/instagram-card', async (req, res) => {
     return res.status(404).json({ ok: false, error: 'listing_not_found' })
   }
 
-  // Authorize: must be owner or moderator/admin
   const isOwner = authUser.id === listing.seller_id
   const isMod = isOwner ? false : await isModerator(supabase, authUser.id)
   if (!isOwner && !isMod) {
     return res.status(403).json({ ok: false, error: 'forbidden' })
   }
 
-  // Validate image availability
   const imageUrl = Array.isArray(listing.images) && listing.images.length > 0
     ? listing.images[0]
     : null
@@ -94,7 +167,6 @@ router.post('/listings/:id/instagram-card', async (req, res) => {
     return res.status(400).json({ ok: false, error: 'no_image', message: 'La publicación no tiene imágenes para generar el post.' })
   }
 
-  // Map listing → template data shape
   const cardData = {
     title: listing.title || '',
     brand: listing.brand || '',
@@ -135,14 +207,15 @@ router.post('/listings/:id/instagram-card', async (req, res) => {
     return res.status(500).json({ ok: false, error: 'upload_failed', message: 'No pudimos guardar el post. Intentá de nuevo.' })
   }
 
-  // Build public URL
   const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${INSTAGRAM_CARDS_BUCKET}/${storagePath}`
+  const caption = buildCaption(listing)
 
   console.log(`[instagram-card] generated for listing ${listing.id} → ${storagePath}`)
 
   return res.status(200).json({
     ok: true,
     url: publicUrl,
+    caption,
     width: 1080,
     height: 1350,
     generatedAt: new Date().toISOString(),

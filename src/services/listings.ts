@@ -972,6 +972,7 @@ export async function normalizeListingVigencies(id: string): Promise<Listing | n
 
 export interface InstagramCardResult {
   url: string
+  caption: string
   width: number
   height: number
   generatedAt: string
