@@ -234,8 +234,8 @@ router.post('/listings/:id/instagram-card', async (req, res) => {
     currency:    String(listing.price_currency || 'ARS').toUpperCase(),
     sellerName:  sellerProfile?.full_name || listing.seller_name || '',
     imageUrl,
-    // date badge
-    publishedLabel: formatPublishedLabel(listing.updated_at),
+    // date badge — use created_at (immutable), updated_at refreshes on every row touch
+    publishedLabel: formatPublishedLabel(listing.created_at),
     // badges
     isFeatured:   shouldShowFeaturedBadge(listing),
     isOpportunity: shouldShowOpportunityBadge(listing),
