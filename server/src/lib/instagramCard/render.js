@@ -69,8 +69,7 @@ async function renderListingCard(data) {
   const browser = await getBrowser()
   const page = await browser.newPage()
   try {
-    // deviceScaleFactor: 2 → renders at 2160x2700, giving crisp text and edges
-    await page.setViewport({ width: cfg.width, height: cfg.height, deviceScaleFactor: 2 })
+    await page.setViewport({ width: cfg.width, height: cfg.height, deviceScaleFactor: 1 })
     const html = renderTemplate(data)
     await Promise.race([
       page.setContent(html, { waitUntil: 'networkidle0' }),
@@ -82,8 +81,7 @@ async function renderListingCard(data) {
         }, RENDER_TIMEOUT_MS)
       ),
     ])
-    // fullPage: false captures exactly the viewport at 2x DPI → 2160×2700 PNG
-    const buffer = await page.screenshot({ type: 'png', fullPage: false })
+    const buffer = await page.screenshot({ type: 'png', clip: { x: 0, y: 0, width: cfg.width, height: cfg.height } })
     return buffer
   } catch (err) {
     if (!err.code) err.code = 'RENDER_FAILED'

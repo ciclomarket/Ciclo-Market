@@ -160,6 +160,8 @@ function buildCaption(listing) {
 // ── POST /api/listings/:id/instagram-card ─────────────────────────────────────
 
 router.post('/listings/:id/instagram-card', async (req, res) => {
+  // Outer catch: Express 4 doesn't propagate async rejections — any unhandled throw gives a 500
+  try {
   const { id } = req.params
 
   const supabase = getSupabaseOrFail(res)
@@ -273,6 +275,14 @@ router.post('/listings/:id/instagram-card', async (req, res) => {
 
   console.log(`[instagram-card] generated for listing ${listing.id} → ${storagePath}`)
   return res.status(200).json({ ok: true, url: publicUrl, caption, width: 1080, height: 1350, generatedAt: new Date().toISOString() })
+
+  } catch (err) {
+    const detail = err?.message || String(err)
+    console.error('[instagram-card] unhandled error:', detail)
+    if (!res.headersSent) {
+      res.status(500).json({ ok: false, error: 'server_error', message: 'Error interno al generar el post.', detail })
+    }
+  }
 })
 
 module.exports = router
