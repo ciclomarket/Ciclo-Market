@@ -1,6 +1,35 @@
 'use strict'
 
+const fs = require('fs')
+const path = require('path')
 const cfg = require('./config')
+
+// ── Logo: loaded once at module init, embedded as data URI ───────────────────
+let _logoDataUri = null
+function getLogoDataUri() {
+  if (_logoDataUri !== null) return _logoDataUri
+  const candidates = [
+    path.join(__dirname, 'assets', 'site-logo.webp'),
+    path.join(process.cwd(), 'public', 'site-logo.webp'),
+  ]
+  for (const p of candidates) {
+    try {
+      const data = fs.readFileSync(p)
+      _logoDataUri = `data:image/webp;base64,${data.toString('base64')}`
+      return _logoDataUri
+    } catch { /* try next */ }
+  }
+  _logoDataUri = '' // no logo found — fall back to text
+  return _logoDataUri
+}
+
+// ── Adaptive price font size ─────────────────────────────────────────────────
+function priceFontSize(str) {
+  const len = str.replace(/[\s]/g, '').length
+  if (len <= 8)  return '64px'
+  if (len <= 11) return '52px'
+  return '44px'
+}
 
 /**
  * @param {object} data
@@ -18,26 +47,35 @@ const cfg = require('./config')
 function renderTemplate(data) {
   const { width, height, colors, fonts, brand } = cfg
 
-  const title = String(data.title || '').trim()
-  const brandName = String(data.brand || '').trim()
-  const model = String(data.model || '').trim()
-  const year = data.year ? String(data.year) : null
-  const category = String(data.category || '').trim()
-  const price = typeof data.price === 'number' ? data.price : Number(data.price)
-  const currency = String(data.currency || 'ARS').toUpperCase()
+  const title      = String(data.title      || '').trim()
+  const brandName  = String(data.brand      || '').trim()
+  const model      = String(data.model      || '').trim()
+  const year       = data.year ? String(data.year) : null
+  const category   = String(data.category   || '').trim()
+  const price      = typeof data.price === 'number' ? data.price : Number(data.price)
+  const currency   = String(data.currency   || 'ARS').toUpperCase()
   const sellerName = String(data.sellerName || '').trim()
-  const imageUrl = data.imageUrl || null
+  const imageUrl   = data.imageUrl || null
 
   const formattedPrice = price.toLocaleString('es-AR', { maximumFractionDigits: 0 })
-  const priceDisplay = currency === 'USD' ? `U$D ${formattedPrice}` : `$${formattedPrice}`
-  const subtitle = [brandName, model, year].filter(Boolean).join(' · ')
+  const priceDisplay   = currency === 'USD' ? `U$D ${formattedPrice}` : `$${formattedPrice}`
+  const metaLine       = [brandName, model, year].filter(Boolean).join(' · ')
+  const logoUri        = getLogoDataUri()
+  const priceSize      = priceFontSize(priceDisplay)
+
+  // ── Zone heights (must sum to ${height}px) ─────────────────────────────
+  // header: 80px  |  hero: 760px  |  content: 510px  =  1350px
+  const HEADER_H  = 80
+  const HERO_H    = 760
+  const CONTENT_H = height - HEADER_H - HERO_H   // 510px
 
   return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
   html, body {
     width: ${width}px;
     height: ${height}px;
@@ -46,248 +84,294 @@ function renderTemplate(data) {
     font-family: ${fonts.body};
     -webkit-font-smoothing: antialiased;
   }
+
+  /* ── Root canvas ── */
   .card {
-    position: relative;
     width: ${width}px;
     height: ${height}px;
-    background: ${colors.background};
+    overflow: hidden;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    background: ${colors.background};
+    position: relative;
   }
 
-  /* ── Top bar ── */
-  .top-bar {
-    position: relative;
-    z-index: 10;
+  /* ── Accent bar (top edge) ── */
+  .accent-bar {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 5px;
+    background: linear-gradient(90deg, ${colors.accent} 0%, ${colors.accentSecondary} 55%, ${colors.accent} 100%);
+    z-index: 20;
+  }
+
+  /* ── Zone 1: Header (80px) ── */
+  .header {
+    flex: 0 0 ${HEADER_H}px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 48px 64px 32px;
+    padding: 0 52px;
+    background: ${colors.background};
+    z-index: 10;
   }
-  .brand-name {
-    font-family: ${fonts.body};
+  .header-logo {
+    height: 34px;
+    width: auto;
+    display: block;
+    object-fit: contain;
+    object-position: left center;
+  }
+  .header-logo-text {
+    font-size: 28px;
     font-weight: 800;
-    font-size: 36px;
-    letter-spacing: -0.5px;
     color: ${colors.text};
+    letter-spacing: -0.3px;
   }
-  .brand-name span {
-    color: ${colors.accent};
-  }
-  .category-pill {
-    background: ${colors.categoryBg};
-    border: 1px solid rgba(255,255,255,0.12);
+  .header-logo-text span { color: ${colors.accent}; }
+  .cat-pill {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.14);
     border-radius: 999px;
-    padding: 10px 28px;
-    font-size: 26px;
+    padding: 8px 24px;
+    font-size: 22px;
     font-weight: 600;
     color: ${colors.categoryText};
-    letter-spacing: 0.3px;
-    backdrop-filter: blur(8px);
+    letter-spacing: 0.2px;
+    white-space: nowrap;
   }
 
-  /* ── Image area ── */
-  .image-wrap {
-    position: relative;
-    flex: 1;
+  /* ── Zone 2: Hero image (760px) ── */
+  .hero {
+    flex: 0 0 ${HERO_H}px;
     overflow: hidden;
-    margin: 0 0 0 0;
+    position: relative;
+    background: ${colors.imageFallback};
   }
-  .image-wrap img {
+  .hero img {
     width: 100%;
     height: 100%;
     object-fit: cover;
     display: block;
   }
-  .image-fallback {
+  .hero-fallback {
     width: 100%;
     height: 100%;
-    background: ${colors.imageFallback};
     display: flex;
     align-items: center;
     justify-content: center;
   }
-  .image-fallback svg {
-    opacity: 0.15;
-  }
-  /* gradient overlay at bottom of image */
-  .image-wrap::after {
+  /* Subtle bottom scrim so content area blends cleanly */
+  .hero::after {
     content: '';
     position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: 55%;
-    background: linear-gradient(
-      to bottom,
-      transparent 0%,
-      rgba(11,17,26,0.4) 30%,
-      rgba(11,17,26,0.85) 65%,
-      rgba(11,17,26,0.97) 90%,
-      ${colors.background} 100%
-    );
+    bottom: 0; left: 0; right: 0;
+    height: 80px;
+    background: linear-gradient(to bottom, transparent 0%, ${colors.background} 100%);
     pointer-events: none;
   }
 
-  /* ── Bottom info panel (overlaid on image gradient) ── */
-  .info-panel {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    padding: 0 64px 56px;
-    z-index: 5;
+  /* ── Zone 3: Content area (510px) ── */
+  .content {
+    flex: 0 0 ${CONTENT_H}px;
+    display: flex;
+    flex-direction: column;
+    padding: 24px 52px 44px;
+    background: ${colors.background};
+    overflow: hidden;
   }
-  .title-text {
+
+  /* brand chip */
+  .brand-chip {
+    display: inline-flex;
+    align-items: center;
+    align-self: flex-start;
+    background: ${colors.accent}18;
+    border: 1px solid ${colors.accent}40;
+    border-radius: 6px;
+    padding: 4px 14px;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: ${colors.accent};
+    margin-bottom: 10px;
+    white-space: nowrap;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* title */
+  .title {
     font-family: ${fonts.title};
-    font-size: 62px;
-    font-weight: 900;
-    line-height: 1.1;
+    font-size: 58px;
+    font-weight: 700;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
     color: ${colors.text};
-    letter-spacing: -1.5px;
-    margin-bottom: 16px;
-    /* clamp to 2 lines */
+    margin-bottom: 10px;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
-  .subtitle {
-    font-size: 30px;
+
+  /* meta line */
+  .meta {
+    font-size: 20px;
     font-weight: 500;
     color: ${colors.textMuted};
-    margin-bottom: 36px;
-    letter-spacing: 0.2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
-  .price-row {
+
+  /* spacer pushes bottom block down */
+  .spacer { flex: 1; min-height: 12px; }
+
+  /* price + seller row */
+  .bottom-block {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 24px;
+    flex-direction: column;
+    gap: 0;
   }
-  .price-badge {
-    display: inline-flex;
-    align-items: center;
-    background: ${colors.priceBg};
-    color: ${colors.priceText};
+
+  .price-seller-row {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+
+  .price-block { flex-shrink: 0; }
+  .price-label {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: ${colors.textMuted};
+    margin-bottom: 4px;
+  }
+  .price-value {
     font-family: ${fonts.price};
-    font-size: 72px;
+    font-size: ${priceSize};
     font-weight: 900;
     line-height: 1;
-    letter-spacing: -2px;
-    padding: 18px 44px;
-    border-radius: 18px;
+    letter-spacing: -0.03em;
+    color: ${colors.accent};
+    white-space: nowrap;
   }
-  .seller-info {
+
+  .seller-block {
     text-align: right;
-    flex-shrink: 0;
-    max-width: 340px;
+    flex-shrink: 1;
+    min-width: 0;
   }
   .seller-label {
-    font-size: 22px;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
     color: ${colors.textMuted};
     margin-bottom: 4px;
   }
   .seller-name {
-    font-size: 30px;
+    font-size: 24px;
     font-weight: 700;
     color: ${colors.text};
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 300px;
+    max-width: 340px;
   }
 
-  /* ── Divider + footer ── */
+  /* footer strip */
   .footer {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    padding: 0 64px 32px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    z-index: 6;
-    border-top: 1px solid ${colors.divider};
-    margin-top: 32px;
-    padding-top: 28px;
-    background: ${colors.background};
+    border-top: 1px solid rgba(255,255,255,0.10);
+    padding-top: 16px;
   }
-
-  /* ── Accent line at top ── */
-  .accent-line {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 6px;
-    background: linear-gradient(90deg, ${colors.accent} 0%, ${colors.accentSecondary} 60%, ${colors.accent} 100%);
-    z-index: 20;
+  .footer-logo {
+    height: 26px;
+    width: auto;
+    object-fit: contain;
+    object-position: left center;
+    display: block;
   }
-
-  /* ── Watermark on image ── */
-  .watermark {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%) rotate(-25deg);
-    font-size: 48px;
-    font-weight: 900;
-    color: ${colors.watermarkText};
-    white-space: nowrap;
-    pointer-events: none;
-    z-index: 3;
-    letter-spacing: 2px;
-    text-transform: uppercase;
+  .footer-logo-text {
+    font-size: 18px;
+    font-weight: 700;
+    color: ${colors.textMuted};
+    letter-spacing: -0.2px;
+  }
+  .footer-tagline {
+    font-size: 16px;
+    font-weight: 400;
+    color: rgba(148,163,184,0.6);
   }
 </style>
 </head>
 <body>
 <div class="card">
-  <div class="accent-line"></div>
+  <div class="accent-bar"></div>
 
-  <!-- Top bar -->
-  <div class="top-bar">
-    <div class="brand-name">ciclo<span>market</span>.ar</div>
-    ${category ? `<div class="category-pill">${escHtml(category)}</div>` : ''}
+  <!-- Zone 1: Header -->
+  <div class="header">
+    ${logoUri
+      ? `<img src="${logoUri}" class="header-logo" alt="Ciclo Market" />`
+      : `<div class="header-logo-text">ciclo<span>market</span>.ar</div>`
+    }
+    ${category ? `<div class="cat-pill">${escHtml(category)}</div>` : ''}
   </div>
 
-  <!-- Image -->
-  <div class="image-wrap">
+  <!-- Zone 2: Hero photo — no watermark, no overlays on the image itself -->
+  <div class="hero">
     ${imageUrl
       ? `<img src="${escAttr(imageUrl)}" alt="" />`
-      : `<div class="image-fallback">
-          <svg width="200" height="200" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-            <circle cx="8.5" cy="8.5" r="1.5"/>
-            <polyline points="21 15 16 10 5 21"/>
+      : `<div class="hero-fallback">
+          <svg width="120" height="120" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="0.8">
+            <circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/>
+            <path d="M8 17.5h7M15 6l2 5.5M5.5 14l3-8 2.5 8"/><circle cx="12" cy="6" r="1"/>
           </svg>
         </div>`
     }
-    <div class="watermark">ciclomarket.ar</div>
   </div>
 
-  <!-- Info panel overlaid on gradient -->
-  <div class="info-panel">
-    <div class="title-text">${escHtml(title)}</div>
-    ${subtitle ? `<div class="subtitle">${escHtml(subtitle)}</div>` : ''}
-    <div class="price-row">
-      <div class="price-badge">${escHtml(priceDisplay)}</div>
-      ${sellerName ? `
-      <div class="seller-info">
-        <div class="seller-label">Vendido por</div>
-        <div class="seller-name">${escHtml(sellerName)}</div>
-      </div>` : ''}
+  <!-- Zone 3: Content -->
+  <div class="content">
+    ${brandName ? `<div class="brand-chip">${escHtml(brandName)}</div>` : ''}
+    <div class="title">${escHtml(title)}</div>
+    ${metaLine ? `<div class="meta">${escHtml(metaLine)}</div>` : ''}
+
+    <div class="spacer"></div>
+
+    <div class="bottom-block">
+      <div class="price-seller-row">
+        <div class="price-block">
+          <div class="price-label">Precio</div>
+          <div class="price-value">${escHtml(priceDisplay)}</div>
+        </div>
+        ${sellerName ? `
+        <div class="seller-block">
+          <div class="seller-label">Vendido por</div>
+          <div class="seller-name">${escHtml(sellerName)}</div>
+        </div>` : ''}
+      </div>
+
+      <div class="footer">
+        ${logoUri
+          ? `<img src="${logoUri}" class="footer-logo" alt="Ciclo Market" />`
+          : `<span class="footer-logo-text">ciclomarket.ar</span>`
+        }
+        <span class="footer-tagline">${escHtml(brand.tagline)}</span>
+      </div>
     </div>
   </div>
 
-  <!-- Footer -->
-  <div class="footer">
-    <div style="font-size:24px; color:${colors.textMuted}; font-weight:500;">ciclomarket.ar</div>
-    <div style="font-size:24px; color:${colors.textMuted};">${brand.tagline}</div>
-  </div>
 </div>
 </body>
 </html>`
