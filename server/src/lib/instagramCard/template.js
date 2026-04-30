@@ -24,15 +24,28 @@ function getLogoDataUri() {
   return _logoDataUri
 }
 
-// ── Adaptive price font-size ──────────────────────────────────────────────────
+// ── Adaptive price size ───────────────────────────────────────────────────────
 function priceClass(str) {
   const len = str.replace(/\s/g, '').length
-  if (len <= 8)  return 'price-lg'
-  if (len <= 11) return 'price-md'
-  return 'price-sm'
+  if (len <= 8)  return 'price-xl'
+  if (len <= 11) return 'price-lg'
+  return 'price-md'
 }
 
 // ── Template ──────────────────────────────────────────────────────────────────
+/**
+ * @param {object} data
+ * @param {string} data.title
+ * @param {string} data.brand
+ * @param {string} data.model
+ * @param {number|null} data.year
+ * @param {string} data.category
+ * @param {number} data.price
+ * @param {string} data.currency
+ * @param {string} data.sellerName
+ * @param {string|null} data.imageUrl
+ * @param {string} [data.badge]   — micro-copy label above price
+ */
 function renderTemplate(data) {
   const title      = String(data.title      || '').trim()
   const brandName  = String(data.brand      || '').trim()
@@ -43,6 +56,7 @@ function renderTemplate(data) {
   const currency   = String(data.currency   || 'ARS').toUpperCase()
   const sellerName = String(data.sellerName || '').trim()
   const imageUrl   = data.imageUrl || null
+  const badge      = String(data.badge || 'En venta').trim()
 
   const formattedPrice = price.toLocaleString('es-AR', { maximumFractionDigits: 0 })
   const priceDisplay   = currency === 'USD' ? `U$D ${formattedPrice}` : `$${formattedPrice}`
@@ -50,27 +64,9 @@ function renderTemplate(data) {
   const logoUri        = getLogoDataUri()
   const pc             = priceClass(priceDisplay)
 
-  // Zone heights: accent(6) + hero(730) + content(614) = 1350
-  const HERO_H    = 730
-  const CONTENT_H = cfg.height - 6 - HERO_H   // 614
-
-  // Spec grid always 4 cells (shows dash if missing)
-  const specs = [
-    { label: 'Marca',     value: brandName || '—' },
-    { label: 'Modelo',    value: model     || '—' },
-    { label: 'Año',       value: year      || '—' },
-    { label: 'Categoría', value: category  || '—' },
-  ]
-
-  const heroFallback = `
-    <div style="width:100%;height:100%;background:#1a2535;display:flex;align-items:center;justify-content:center;">
-      <svg width="90" height="90" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="0.6">
-        <circle cx="5.5" cy="17.5" r="3.5"/>
-        <circle cx="18.5" cy="17.5" r="3.5"/>
-        <path d="M8 17.5h7M15 6l2 5.5M5.5 14l3-8 2.5 8"/>
-        <circle cx="12" cy="6" r="1"/>
-      </svg>
-    </div>`
+  // Zones: accent(6) + hero(806) + content(538) = 1350
+  const HERO_H    = 806
+  const CONTENT_H = cfg.height - 6 - HERO_H  // 538
 
   return `<!DOCTYPE html>
 <html>
@@ -97,18 +93,18 @@ function renderTemplate(data) {
     background: #0B111A;
   }
 
-  /* ── 1. Accent bar ── */
+  /* ─ Accent bar ─ */
   .accent-bar {
     flex: 0 0 6px;
     background: linear-gradient(90deg, #00BFFF 0%, #7C3AED 100%);
   }
 
-  /* ── 2. Hero ── */
+  /* ─ Hero ─ */
   .hero {
     flex: 0 0 ${HERO_H}px;
     position: relative;
     overflow: hidden;
-    background: #1a2535;
+    background: #111b27;
   }
   .hero-img {
     width: 100%;
@@ -116,102 +112,132 @@ function renderTemplate(data) {
     object-fit: cover;
     display: block;
   }
-  .hero-gradient {
+  .hero-fallback {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #111b27;
+  }
+  /* Bottom scrim — blends hero into content */
+  .hero-scrim {
     position: absolute;
     bottom: 0; left: 0; right: 0;
-    height: 200px;
-    background: linear-gradient(to bottom, transparent 0%, #0B111A 100%);
+    height: 260px;
+    background: linear-gradient(to bottom,
+      transparent 0%,
+      rgba(11,17,26,0.55) 45%,
+      #0B111A 100%);
     pointer-events: none;
     z-index: 2;
   }
+  /* Logo — top left, small, branding only */
   .hero-logo {
     position: absolute;
-    top: 44px;
-    left: 52px;
-    width: 150px;
+    top: 40px;
+    left: 48px;
+    width: 110px;
     height: auto;
     object-fit: contain;
     z-index: 10;
-    filter: drop-shadow(0 2px 12px rgba(0,0,0,0.6));
+    opacity: 0.92;
+    filter: drop-shadow(0 1px 8px rgba(0,0,0,0.5));
   }
   .hero-logo-text {
     position: absolute;
-    top: 44px;
-    left: 52px;
-    font-size: 32px;
+    top: 40px;
+    left: 48px;
+    font-size: 26px;
     font-weight: 800;
-    color: #fff;
+    color: rgba(255,255,255,0.9);
     z-index: 10;
-    text-shadow: 0 2px 12px rgba(0,0,0,0.6);
+    text-shadow: 0 1px 8px rgba(0,0,0,0.5);
   }
   .hero-logo-text span { color: #00BFFF; }
+  /* Category pill — top right */
   .hero-pill {
     position: absolute;
-    top: 44px;
-    right: 52px;
-    background: rgba(11,17,26,0.65);
-    border: 1px solid rgba(255,255,255,0.18);
+    top: 40px;
+    right: 48px;
+    background: rgba(11,17,26,0.60);
+    border: 1px solid rgba(255,255,255,0.16);
     border-radius: 999px;
-    padding: 12px 26px;
-    font-size: 22px;
-    font-weight: 700;
-    letter-spacing: 0.2px;
-    color: #FFFFFF;
+    padding: 10px 24px;
+    font-size: 20px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.88);
     z-index: 10;
     white-space: nowrap;
+    letter-spacing: 0.02em;
   }
 
-  /* ── 3. Content ── */
+  /* ─ Content ─ */
   .content {
     flex: 0 0 ${CONTENT_H}px;
     display: flex;
     flex-direction: column;
-    padding: 24px 52px 40px;
+    padding: 0 52px 40px;
     background: #0B111A;
     overflow: hidden;
   }
 
-  /* Brand row */
-  .brand-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 10px;
+  /* Price block — the visual anchor of content */
+  .price-block {
     flex-shrink: 0;
+    margin-bottom: 20px;
   }
-  .brand-chip {
+  .price-badge {
     display: inline-flex;
     align-items: center;
-    background: rgba(0,191,255,0.08);
-    border: 1px solid rgba(0,191,255,0.32);
-    border-radius: 8px;
-    padding: 5px 14px;
-    font-size: 15px;
-    font-weight: 800;
-    letter-spacing: 0.14em;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+  .price-badge-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #00BFFF;
+    flex-shrink: 0;
+  }
+  .price-badge-text {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
     text-transform: uppercase;
+    color: rgba(148,163,184,0.7);
+  }
+  .price-card {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0;
+    background: rgba(0,191,255,0.06);
+    border: 1px solid rgba(0,191,255,0.18);
+    border-radius: 18px;
+    padding: 14px 28px 14px 24px;
+  }
+  .price-value {
+    font-family: 'Arial Black', Impact, 'Helvetica Neue', sans-serif;
+    font-weight: 900;
     color: #00BFFF;
+    line-height: 1;
+    letter-spacing: -0.025em;
     white-space: nowrap;
-    max-width: 460px;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    text-shadow: 0 0 48px rgba(0,191,255,0.25);
   }
-  .site-url {
-    font-size: 17px;
-    font-weight: 500;
-    color: rgba(148,163,184,0.55);
-    white-space: nowrap;
-  }
+  .price-xl { font-size: 86px; }
+  .price-lg { font-size: 70px; }
+  .price-md { font-size: 56px; }
 
   /* Title */
   .title {
     font-family: 'Arial Black', Impact, 'Helvetica Neue', sans-serif;
-    font-size: 56px;
+    font-size: 52px;
     font-weight: 900;
     line-height: 1.06;
     letter-spacing: -0.02em;
     color: #FFFFFF;
-    margin-bottom: 8px;
+    margin-bottom: 10px;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
@@ -223,41 +249,48 @@ function renderTemplate(data) {
   .meta {
     font-size: 20px;
     font-weight: 400;
-    color: #94A3B8;
-    margin-bottom: 16px;
+    color: #64748B;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     flex-shrink: 0;
   }
 
-  /* Spec grid */
-  .spec-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 10px;
-    margin-bottom: 18px;
-    flex-shrink: 0;
-  }
-  .spec-card {
-    background: rgba(255,255,255,0.035);
-    border: 1px solid rgba(255,255,255,0.07);
-    border-radius: 14px;
-    padding: 11px 14px;
+  /* Spacer */
+  .spacer { flex: 1; min-height: 8px; }
+
+  /* Seller row */
+  .seller-row {
     display: flex;
-    flex-direction: column;
-    gap: 5px;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    flex-shrink: 0;
     overflow: hidden;
   }
-  .spec-label {
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.13em;
+  .seller-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.10);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .seller-avatar svg { opacity: 0.5; }
+  .seller-text { overflow: hidden; }
+  .seller-label {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
     color: #475569;
+    margin-bottom: 1px;
   }
-  .spec-value {
-    font-size: 16px;
+  .seller-name {
+    font-size: 20px;
     font-weight: 700;
     color: #CBD5E1;
     white-space: nowrap;
@@ -265,110 +298,46 @@ function renderTemplate(data) {
     text-overflow: ellipsis;
   }
 
-  /* Price + Seller */
-  .price-seller-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 20px;
-    margin-bottom: 18px;
-    flex-shrink: 0;
-  }
-  .price-block { flex-shrink: 0; }
-  .price-label {
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: #475569;
-    margin-bottom: 3px;
-  }
-  .price-value {
-    font-family: 'Arial Black', Impact, sans-serif;
-    font-weight: 900;
-    color: #00BFFF;
-    line-height: 1;
-    letter-spacing: -0.02em;
-    white-space: nowrap;
-  }
-  .price-lg { font-size: 64px; }
-  .price-md { font-size: 54px; }
-  .price-sm { font-size: 44px; }
-
-  .seller-card {
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.09);
-    border-radius: 18px;
-    padding: 14px 20px;
-    text-align: right;
-    flex-shrink: 1;
-    min-width: 0;
-    max-width: 380px;
-  }
-  .seller-label {
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: #475569;
-    margin-bottom: 4px;
-  }
-  .seller-name {
-    font-size: 24px;
-    font-weight: 700;
-    color: #FFFFFF;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
   /* Footer */
   .footer {
-    border-top: 1px solid rgba(255,255,255,0.07);
-    padding-top: 14px;
     display: flex;
     align-items: center;
     justify-content: space-between;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    padding-top: 14px;
     flex-shrink: 0;
   }
-  .footer-logo {
-    height: 28px;
-    width: auto;
-    max-width: 160px;
-    object-fit: contain;
-    object-position: left center;
-    display: block;
-  }
-  .footer-logo-text {
-    font-size: 20px;
+  .footer-left {
+    font-size: 18px;
     font-weight: 700;
-    color: rgba(148,163,184,0.7);
+    color: rgba(148,163,184,0.5);
+    letter-spacing: -0.01em;
   }
-  .footer-right { text-align: right; }
-  .footer-tagline {
-    display: block;
-    font-size: 16px;
-    font-weight: 500;
-    color: rgba(148,163,184,0.65);
-  }
-  .footer-sub {
-    display: block;
-    font-size: 13px;
-    color: rgba(148,163,184,0.35);
-    margin-top: 2px;
+  .footer-right {
+    font-size: 14px;
+    color: rgba(148,163,184,0.3);
   }
 </style>
 </head>
 <body>
 <div class="card">
 
-  <!-- Accent bar -->
   <div class="accent-bar"></div>
 
-  <!-- Hero -->
+  <!-- Hero: bike photo fills this zone -->
   <div class="hero">
-    ${imageUrl ? `<img src="${escAttr(imageUrl)}" class="hero-img" alt="" />` : heroFallback}
-    <div class="hero-gradient"></div>
+    ${imageUrl
+      ? `<img src="${escAttr(imageUrl)}" class="hero-img" alt="" />`
+      : `<div class="hero-fallback">
+          <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="0.6">
+            <circle cx="5.5" cy="17.5" r="3.5"/>
+            <circle cx="18.5" cy="17.5" r="3.5"/>
+            <path d="M8 17.5h7M15 6l2 5.5M5.5 14l3-8 2.5 8"/>
+            <circle cx="12" cy="6" r="1"/>
+          </svg>
+        </div>`
+    }
+    <div class="hero-scrim"></div>
     ${logoUri
       ? `<img src="${logoUri}" class="hero-logo" alt="Ciclo Market" />`
       : `<div class="hero-logo-text">ciclo<span>market</span>.ar</div>`
@@ -376,50 +345,47 @@ function renderTemplate(data) {
     ${category ? `<div class="hero-pill">${escHtml(category)}</div>` : ''}
   </div>
 
-  <!-- Content -->
+  <!-- Content: price → title → seller → footer -->
   <div class="content">
 
-    <!-- Brand row -->
-    <div class="brand-row">
-      ${brandName ? `<div class="brand-chip">${escHtml(brandName)}</div>` : '<div></div>'}
-      <div class="site-url">www.ciclomarket.ar</div>
+    <!-- Price — visual anchor -->
+    <div class="price-block">
+      <div class="price-badge">
+        <div class="price-badge-dot"></div>
+        <span class="price-badge-text">${escHtml(badge)}</span>
+      </div>
+      <div class="price-card">
+        <span class="price-value ${pc}">${escHtml(priceDisplay)}</span>
+      </div>
     </div>
 
     <!-- Title -->
     <div class="title">${escHtml(title)}</div>
 
-    <!-- Meta line -->
+    <!-- Meta -->
     ${metaLine ? `<div class="meta">${escHtml(metaLine)}</div>` : ''}
 
-    <!-- Spec grid -->
-    <div class="spec-grid">
-      ${specs.map(s => `
-      <div class="spec-card">
-        <div class="spec-label">${escHtml(s.label)}</div>
-        <div class="spec-value">${escHtml(s.value)}</div>
-      </div>`).join('')}
-    </div>
+    <div class="spacer"></div>
 
-    <!-- Price + Seller -->
-    <div class="price-seller-row">
-      <div class="price-block">
-        <div class="price-label">Precio</div>
-        <div class="price-value ${pc}">${escHtml(priceDisplay)}</div>
+    <!-- Seller -->
+    ${sellerName ? `
+    <div class="seller-row">
+      <div class="seller-avatar">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.5">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+          <circle cx="12" cy="7" r="4"/>
+        </svg>
       </div>
-      ${sellerName ? `
-      <div class="seller-card">
+      <div class="seller-text">
         <div class="seller-label">Publicado por</div>
         <div class="seller-name">${escHtml(sellerName)}</div>
-      </div>` : ''}
-    </div>
+      </div>
+    </div>` : ''}
 
     <!-- Footer -->
     <div class="footer">
-      <span class="footer-logo-text">ciclomarket.ar</span>
-      <div class="footer-right">
-        <span class="footer-tagline">Marketplace de ciclismo</span>
-        <span class="footer-sub">Comprá y vendé bicicletas en Argentina</span>
-      </div>
+      <span class="footer-left">ciclomarket.ar</span>
+      <span class="footer-right">Marketplace de ciclismo</span>
     </div>
 
   </div>

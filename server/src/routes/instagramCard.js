@@ -138,7 +138,7 @@ router.post('/listings/:id/instagram-card', async (req, res) => {
       id, title, brand, model, year, category, subcategory,
       price, price_currency,
       seller_id, seller_name, seller_location,
-      images, location,
+      images, location, created_at,
       material, frame_size, wheel_size,
       drivetrain, drivetrain_detail, wheelset,
       extras
@@ -167,6 +167,15 @@ router.post('/listings/:id/instagram-card', async (req, res) => {
     return res.status(400).json({ ok: false, error: 'no_image', message: 'La publicación no tiene imágenes para generar el post.' })
   }
 
+  // Badge: "Publicada hoy" / "Nuevo ingreso" / "En venta"
+  function getBadge() {
+    if (!listing.created_at) return 'En venta'
+    const days = (Date.now() - new Date(listing.created_at).getTime()) / 86_400_000
+    if (days < 1) return 'Publicada hoy'
+    if (days < 7) return 'Nuevo ingreso'
+    return 'En venta'
+  }
+
   const cardData = {
     title: listing.title || '',
     brand: listing.brand || '',
@@ -177,6 +186,7 @@ router.post('/listings/:id/instagram-card', async (req, res) => {
     currency: String(listing.price_currency || 'ARS').toUpperCase(),
     sellerName: listing.seller_name || '',
     imageUrl,
+    badge: getBadge(),
   }
 
   // Render PNG
