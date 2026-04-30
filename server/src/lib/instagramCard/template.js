@@ -64,9 +64,9 @@ function renderTemplate(data) {
   const logoUri        = getLogoDataUri()
   const pc             = priceClass(priceDisplay)
 
-  // Zones: accent(6) + hero(806) + content(538) = 1350
-  const HERO_H    = 806
-  const CONTENT_H = cfg.height - 6 - HERO_H  // 538
+  // Zones: accent(6) + hero(770) + content(574) = 1350
+  const HERO_H    = 770
+  const CONTENT_H = cfg.height - 6 - HERO_H  // 574
 
   return `<!DOCTYPE html>
 <html>
@@ -177,44 +177,49 @@ function renderTemplate(data) {
     flex: 0 0 ${CONTENT_H}px;
     display: flex;
     flex-direction: column;
-    padding: 0 52px 40px;
+    padding: 28px 52px 40px;
     background: #0B111A;
     overflow: hidden;
+    gap: 0;
   }
 
-  /* Price block — the visual anchor of content */
+  /* Price block — MAIN FIX: flex column so badge sits above price */
   .price-block {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
     flex-shrink: 0;
-    margin-bottom: 20px;
+    margin-bottom: 22px;
   }
   .price-badge {
-    display: inline-flex;
+    display: flex;
     align-items: center;
-    gap: 6px;
-    margin-bottom: 6px;
+    gap: 7px;
+    margin-bottom: 8px;
   }
   .price-badge-dot {
-    width: 6px;
-    height: 6px;
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
     background: #00BFFF;
     flex-shrink: 0;
   }
   .price-badge-text {
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 700;
-    letter-spacing: 0.15em;
+    letter-spacing: 0.16em;
     text-transform: uppercase;
-    color: rgba(148,163,184,0.7);
+    color: rgba(148,163,184,0.75);
   }
+  /* Price card: full width so it anchors the layout */
   .price-card {
-    display: inline-flex;
-    align-items: baseline;
-    gap: 0;
-    background: rgba(0,191,255,0.06);
-    border: 1px solid rgba(0,191,255,0.18);
-    border-radius: 18px;
-    padding: 14px 28px 14px 24px;
+    display: flex;
+    align-items: center;
+    width: 100%;
+    background: rgba(0,191,255,0.07);
+    border: 1px solid rgba(0,191,255,0.22);
+    border-radius: 20px;
+    padding: 18px 32px;
   }
   .price-value {
     font-family: 'Arial Black', Impact, 'Helvetica Neue', sans-serif;
@@ -223,18 +228,18 @@ function renderTemplate(data) {
     line-height: 1;
     letter-spacing: -0.025em;
     white-space: nowrap;
-    text-shadow: 0 0 48px rgba(0,191,255,0.25);
+    text-shadow: 0 0 60px rgba(0,191,255,0.3);
   }
-  .price-xl { font-size: 86px; }
-  .price-lg { font-size: 70px; }
-  .price-md { font-size: 56px; }
+  .price-xl { font-size: 80px; }
+  .price-lg { font-size: 66px; }
+  .price-md { font-size: 54px; }
 
   /* Title */
   .title {
     font-family: 'Arial Black', Impact, 'Helvetica Neue', sans-serif;
-    font-size: 52px;
+    font-size: 56px;
     font-weight: 900;
-    line-height: 1.06;
+    line-height: 1.05;
     letter-spacing: -0.02em;
     color: #FFFFFF;
     margin-bottom: 10px;
@@ -245,54 +250,55 @@ function renderTemplate(data) {
     flex-shrink: 0;
   }
 
-  /* Meta */
+  /* Meta — brighter so it's legible */
   .meta {
-    font-size: 20px;
-    font-weight: 400;
-    color: #64748B;
+    font-size: 22px;
+    font-weight: 500;
+    color: #94A3B8;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     flex-shrink: 0;
+    margin-bottom: 0;
   }
 
   /* Spacer */
-  .spacer { flex: 1; min-height: 8px; }
+  .spacer { flex: 1; min-height: 12px; }
 
   /* Seller row */
   .seller-row {
     display: flex;
     align-items: center;
-    gap: 10px;
-    margin-bottom: 16px;
+    gap: 12px;
+    margin-bottom: 18px;
     flex-shrink: 0;
     overflow: hidden;
   }
   .seller-avatar {
-    width: 36px;
-    height: 36px;
+    width: 40px;
+    height: 40px;
     border-radius: 50%;
-    background: rgba(255,255,255,0.08);
-    border: 1px solid rgba(255,255,255,0.10);
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.12);
     flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: center;
   }
-  .seller-avatar svg { opacity: 0.5; }
+  .seller-avatar svg { opacity: 0.55; }
   .seller-text { overflow: hidden; }
   .seller-label {
     font-size: 12px;
-    font-weight: 600;
-    letter-spacing: 0.12em;
+    font-weight: 700;
+    letter-spacing: 0.13em;
     text-transform: uppercase;
     color: #475569;
-    margin-bottom: 1px;
+    margin-bottom: 2px;
   }
   .seller-name {
-    font-size: 20px;
+    font-size: 22px;
     font-weight: 700;
-    color: #CBD5E1;
+    color: #E2E8F0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -303,19 +309,19 @@ function renderTemplate(data) {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    border-top: 1px solid rgba(255,255,255,0.06);
+    border-top: 1px solid rgba(255,255,255,0.07);
     padding-top: 14px;
     flex-shrink: 0;
   }
   .footer-left {
-    font-size: 18px;
+    font-size: 19px;
     font-weight: 700;
-    color: rgba(148,163,184,0.5);
+    color: rgba(148,163,184,0.55);
     letter-spacing: -0.01em;
   }
   .footer-right {
-    font-size: 14px;
-    color: rgba(148,163,184,0.3);
+    font-size: 15px;
+    color: rgba(148,163,184,0.32);
   }
 </style>
 </head>
