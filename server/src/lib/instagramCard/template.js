@@ -415,10 +415,7 @@ function renderTemplate(data) {
 
     <!-- Footer -->
     <div class="footer">
-      ${logoUri
-        ? `<img src="${logoUri}" class="footer-logo" alt="Ciclo Market" />`
-        : `<span class="footer-logo-text">ciclomarket.ar</span>`
-      }
+      <span class="footer-logo-text">ciclomarket.ar</span>
       <div class="footer-right">
         <span class="footer-tagline">Marketplace de ciclismo</span>
         <span class="footer-sub">Comprá y vendé bicicletas en Argentina</span>
