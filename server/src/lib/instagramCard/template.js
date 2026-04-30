@@ -24,8 +24,8 @@ function getLogoDataUri() {
 
 function formatPrice(currency, price) {
   const n = typeof price === 'number' ? price : Number(price)
-  const formatted = n.toLocaleString('es-AR', { maximumFractionDigits: 0 })
-  return currency === 'USD' ? `U$D ${formatted}` : `$${formatted}`
+  const s = n.toLocaleString('es-AR', { maximumFractionDigits: 0 })
+  return currency === 'USD' ? `U$D ${s}` : `$${s}`
 }
 
 function getPriceClass(str) {
@@ -37,61 +37,62 @@ function getPriceClass(str) {
 
 function renderStars(avg, count) {
   if (!count || !avg) return ''
-  const full  = Math.round(avg)
-  const stars = '★'.repeat(Math.min(full, 5)) + '☆'.repeat(Math.max(0, 5 - full))
-  return `<span class="stars">${stars}</span><span class="review-count">(${count})</span>`
+  const full  = Math.min(Math.round(avg), 5)
+  const stars = '★'.repeat(full) + '☆'.repeat(5 - full)
+  return `<span class="stars">${stars}</span><span class="review-count"> (${count})</span>`
 }
 
-function trustLabelText(level) {
+function trustLabelShort(level) {
   switch (level) {
-    case 'verified':  return 'Vendedor verificado'
-    case 'pro':       return 'Vendedor Pro'
-    case 'semi_pro':  return 'Perfil completo'
-    default:          return null
+    case 'verified': return 'Verificado'
+    case 'pro':      return 'Pro'
+    case 'semi_pro': return 'Completo'
+    default:         return null
   }
 }
 
 // ── Template ──────────────────────────────────────────────────────────────────
 function renderTemplate(data) {
-  const title        = String(data.title      || '').trim()
-  const brandName    = String(data.brand      || '').trim()
-  const model        = String(data.model      || '').trim()
-  const year         = data.year ? String(data.year) : null
-  const category     = String(data.category   || '').trim()
-  const currency     = String(data.currency   || 'ARS').toUpperCase()
-  const price        = typeof data.price === 'number' ? data.price : Number(data.price)
-  const sellerName   = String(data.sellerName || '').trim()
-  const imageUrl     = data.imageUrl || null
+  const title     = String(data.title    || '').trim()
+  const brandName = String(data.brand    || '').trim()
+  const model     = String(data.model    || '').trim()
+  const year      = data.year ? String(data.year) : null
+  const category  = String(data.category || '').trim()
+  const currency  = String(data.currency || 'ARS').toUpperCase()
+  const price     = typeof data.price === 'number' ? data.price : Number(data.price)
+  const sellerName = String(data.sellerName || '').trim()
+  const imageUrl  = data.imageUrl || null
 
-  // Enriched fields
-  const publishedLabel = data.publishedLabel || null
-  const isFeatured     = Boolean(data.isFeatured)
-  const isOpportunity  = Boolean(data.isOpportunity)
-  const sellerVerified = Boolean(data.sellerVerified)
-  const avatarUri      = data.sellerAvatarUri || null
-  const reviewCount    = Number(data.sellerReviewCount) || 0
-  const reviewAvg      = Number(data.sellerReviewAvg)   || 0
-  const trustLevel     = String(data.trustLevel || 'basic')
+  const publishedLabel  = data.publishedLabel  || null
+  const isFeatured      = Boolean(data.isFeatured)
+  const isOpportunity   = Boolean(data.isOpportunity)
+  const sellerVerified  = Boolean(data.sellerVerified)
+  const avatarUri       = data.sellerAvatarUri || null
+  const reviewCount     = Number(data.sellerReviewCount) || 0
+  const reviewAvg       = Number(data.sellerReviewAvg)   || 0
+  const trustLevel      = String(data.trustLevel || 'basic')
+  const condition       = data.condition ? String(data.condition).trim() : null
 
   const priceDisplay = formatPrice(currency, price)
   const pc           = getPriceClass(priceDisplay)
   const metaLine     = [brandName, model, year].filter(Boolean).join(' · ')
   const logoUri      = getLogoDataUri()
-  const trustText    = trustLabelText(trustLevel)
+  const trustShort   = trustLabelShort(trustLevel)
+  const hasSellerInfo = Boolean(sellerName)
 
-  // Selling-point items (right side of price card) — only real data
-  const sellingPoints = []
+  // Badges — only real data, no placeholders
+  const badges = []
+  if (condition)
+    badges.push({ label: 'Estado', value: condition })
   if (publishedLabel)
-    sellingPoints.push({ icon: '📅', title: publishedLabel, sub: 'Lista para rodar' })
+    badges.push({ label: 'Publicación', value: publishedLabel })
   if (isFeatured)
-    sellingPoints.push({ icon: '⭐', title: 'Publicación destacada', sub: 'Mayor visibilidad' })
+    badges.push({ label: 'Destacada', value: 'Mayor visibilidad' })
   if (isOpportunity)
-    sellingPoints.push({ icon: '🔥', title: 'Oportunidad', sub: 'Precio competitivo' })
-  if (sellerVerified)
-    sellingPoints.push({ icon: '✓', title: 'Vendedor verificado', sub: 'Identidad confirmada' })
+    badges.push({ label: 'Oportunidad', value: 'Precio competitivo' })
 
-  // Zone heights: accent(6) + hero(700) + content(644) = 1350
-  const HERO_H    = 700
+  // Zones: accent(6) + hero(675) + content(669) = 1350
+  const HERO_H    = 675
   const CONTENT_H = cfg.height - 6 - HERO_H
 
   return `<!DOCTYPE html>
@@ -105,98 +106,84 @@ function renderTemplate(data) {
     background: #0B111A;
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
   .card { width: 1080px; height: 1350px; overflow: hidden; display: flex; flex-direction: column; background: #0B111A; }
 
-  /* Accent bar */
+  /* ── Accent bar ── */
   .accent-bar { flex: 0 0 6px; background: linear-gradient(90deg, #00BFFF 0%, #7C3AED 100%); }
 
   /* ── Hero ── */
-  .hero { flex: 0 0 ${HERO_H}px; position: relative; overflow: hidden; background: #111b27; }
+  .hero { flex: 0 0 ${HERO_H}px; position: relative; overflow: hidden; background: #0f1923; }
   .hero-img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .hero-fallback { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: #111b27; }
+  .hero-fallback { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
   .hero-scrim {
-    position: absolute; bottom: 0; left: 0; right: 0; height: 240px;
-    background: linear-gradient(to bottom, transparent 0%, rgba(11,17,26,0.7) 55%, #0B111A 100%);
+    position: absolute; bottom: 0; left: 0; right: 0; height: 220px;
+    background: linear-gradient(to bottom, transparent 0%, rgba(11,17,26,0.72) 50%, #0B111A 100%);
     pointer-events: none; z-index: 2;
   }
   .hero-logo {
-    position: absolute; top: 40px; left: 48px;
-    width: 120px; height: auto; object-fit: contain; z-index: 10;
-    filter: drop-shadow(0 1px 10px rgba(0,0,0,0.6));
+    position: absolute; top: 42px; left: 50px;
+    width: 140px; height: auto; object-fit: contain; z-index: 10;
+    filter: drop-shadow(0 2px 12px rgba(0,0,0,0.65));
   }
   .hero-logo-text {
-    position: absolute; top: 40px; left: 48px;
-    font-size: 26px; font-weight: 800; color: rgba(255,255,255,0.9); z-index: 10;
-    text-shadow: 0 1px 8px rgba(0,0,0,0.5);
+    position: absolute; top: 42px; left: 50px;
+    font-size: 28px; font-weight: 800; color: #fff; z-index: 10;
+    text-shadow: 0 2px 10px rgba(0,0,0,0.6);
   }
   .hero-logo-text span { color: #00BFFF; }
   .hero-pill {
-    position: absolute; top: 40px; right: 48px;
-    background: rgba(11,17,26,0.65); border: 1px solid rgba(255,255,255,0.18);
-    border-radius: 999px; padding: 10px 24px;
-    font-size: 20px; font-weight: 600; color: rgba(255,255,255,0.9); z-index: 10; white-space: nowrap;
+    position: absolute; top: 42px; right: 50px;
+    background: rgba(11,17,26,0.72); border: 1px solid rgba(255,255,255,0.20);
+    border-radius: 999px; padding: 11px 26px;
+    font-size: 22px; font-weight: 700; color: #FFFFFF; z-index: 10; white-space: nowrap;
   }
 
   /* ── Content ── */
   .content {
     flex: 0 0 ${CONTENT_H}px;
     display: flex; flex-direction: column;
-    padding: 28px 52px 36px;
+    padding: 24px 50px 32px;
     background: #0B111A; overflow: hidden;
   }
 
-  /* Status badge */
-  .status-badge {
-    display: flex; align-items: center; gap: 7px;
+  /* Status label */
+  .status-label {
+    display: flex; align-items: center; gap: 8px;
     margin-bottom: 10px; flex-shrink: 0;
   }
-  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: #00BFFF; flex-shrink: 0; }
-  .status-text { font-size: 13px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: rgba(148,163,184,0.75); }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #00BFFF; flex-shrink: 0; }
+  .status-text { font-size: 15px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; color: #94A3B8; }
 
   /* Price card */
   .price-card {
-    display: flex; align-items: stretch;
-    background: rgba(0,191,255,0.065);
-    border: 1px solid rgba(0,191,255,0.30);
-    border-radius: 22px;
-    margin-bottom: 20px; flex-shrink: 0;
-    overflow: hidden;
-  }
-  .price-left {
-    flex: 1; padding: 20px 24px;
+    height: 132px; flex-shrink: 0;
     display: flex; flex-direction: column; justify-content: center;
-    border-right: 1px solid rgba(0,191,255,0.15);
+    padding: 0 28px;
+    border-radius: 22px;
+    border: 1px solid rgba(0,191,255,0.35);
+    background: radial-gradient(circle at 20% 50%, rgba(0,191,255,0.18), rgba(0,191,255,0.04) 45%, rgba(255,255,255,0.025) 100%);
+    margin-bottom: 16px;
   }
-  .price-label { font-size: 11px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: #475569; margin-bottom: 4px; }
+  .price-label { font-size: 13px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: #64748B; margin-bottom: 5px; }
   .price-value {
-    font-family: 'Arial Black', Impact, sans-serif; font-weight: 900;
+    font-family: 'Arial Black', Impact, 'Helvetica Neue', sans-serif; font-weight: 900;
     color: #00BFFF; line-height: 1; letter-spacing: -0.025em; white-space: nowrap;
-    text-shadow: 0 0 50px rgba(0,191,255,0.22);
+    text-shadow: 0 0 60px rgba(0,191,255,0.3);
   }
-  .price-xl { font-size: 76px; }
-  .price-lg { font-size: 62px; }
-  .price-md { font-size: 50px; }
-
-  /* Selling points (right side of price card) */
-  .price-right {
-    flex: 0 0 230px; padding: 14px 18px;
-    display: flex; flex-direction: column; justify-content: center; gap: 10px;
-  }
-  .sp-item { display: flex; align-items: flex-start; gap: 8px; }
-  .sp-icon { font-size: 14px; line-height: 1.4; flex-shrink: 0; }
-  .sp-text { overflow: hidden; }
-  .sp-title { font-size: 13px; font-weight: 700; color: #E2E8F0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .sp-sub   { font-size: 11px; font-weight: 400; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .price-xl { font-size: 72px; }
+  .price-lg { font-size: 60px; }
+  .price-md { font-size: 52px; }
 
   /* Title block */
   .brand-chip {
-    display: inline-flex; align-items: center; align-self: flex-start;
+    display: inline-flex; align-self: flex-start;
     background: rgba(0,191,255,0.08); border: 1px solid rgba(0,191,255,0.28);
-    border-radius: 8px; padding: 4px 13px;
-    font-size: 14px; font-weight: 800; letter-spacing: 0.13em; text-transform: uppercase; color: #00BFFF;
-    margin-bottom: 8px; flex-shrink: 0;
-    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    border-radius: 8px; padding: 5px 14px;
+    font-size: 15px; font-weight: 800; letter-spacing: 0.13em; text-transform: uppercase; color: #00BFFF;
+    margin-bottom: 8px; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
   }
   .title {
     font-family: 'Arial Black', Impact, 'Helvetica Neue', sans-serif;
@@ -206,49 +193,65 @@ function renderTemplate(data) {
     flex-shrink: 0;
   }
   .meta {
-    font-size: 20px; font-weight: 500; color: #94A3B8;
+    font-size: 22px; font-weight: 500; color: #94A3B8;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     flex-shrink: 0;
   }
 
-  .spacer { flex: 1; min-height: 8px; }
+  /* Badges row */
+  .badges {
+    display: flex; gap: 10px;
+    margin-top: 16px; flex-shrink: 0;
+  }
+  .badge {
+    flex: 1;
+    height: 64px;
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 0 14px;
+    border-radius: 16px;
+    background: rgba(255,255,255,0.045);
+    border: 1px solid rgba(255,255,255,0.08);
+    overflow: hidden;
+  }
+  .badge-title { font-size: 18px; font-weight: 700; color: #E2E8F0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .badge-sub   { font-size: 13px; font-weight: 400; color: #94A3B8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+
+  /* Spacer */
+  .spacer { flex: 1; min-height: 10px; }
 
   /* Seller card */
   .seller-card {
+    height: 98px; flex-shrink: 0;
     display: flex; align-items: center; gap: 14px;
     background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 18px; padding: 14px 18px;
-    margin-bottom: 16px; flex-shrink: 0; overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.09);
+    border-radius: 20px; padding: 0 18px;
+    margin-bottom: 14px; overflow: hidden;
   }
   .seller-avatar {
-    width: 56px; height: 56px; border-radius: 50%; flex-shrink: 0;
-    overflow: hidden; background: rgba(255,255,255,0.08);
-    border: 2px solid rgba(255,255,255,0.12);
+    width: 58px; height: 58px; flex-shrink: 0;
+    border-radius: 50%; overflow: hidden;
+    background: rgba(255,255,255,0.08);
+    border: 2px solid rgba(255,255,255,0.14);
     display: flex; align-items: center; justify-content: center;
   }
-  .seller-avatar img { width: 100%; height: 100%; object-fit: cover; }
-  .seller-info { flex: 1; min-width: 0; overflow: hidden; }
-  .seller-pub-label { font-size: 11px; font-weight: 600; letter-spacing: 0.13em; text-transform: uppercase; color: #475569; margin-bottom: 2px; }
-  .seller-name-row { display: flex; align-items: center; gap: 7px; overflow: hidden; }
-  .seller-name { font-size: 21px; font-weight: 700; color: #E2E8F0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .verified-badge {
-    display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0;
-    background: rgba(0,191,255,0.12); border: 1px solid rgba(0,191,255,0.3);
-    border-radius: 999px; padding: 2px 8px;
-    font-size: 11px; font-weight: 700; color: #00BFFF; white-space: nowrap;
+  .seller-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .seller-body { flex: 1; min-width: 0; overflow: hidden; }
+  .seller-pub  { font-size: 13px; font-weight: 600; letter-spacing: 0.13em; text-transform: uppercase; color: #475569; margin-bottom: 3px; }
+  .seller-name-row { display: flex; align-items: center; gap: 8px; overflow: hidden; margin-bottom: 3px; }
+  .seller-name { font-size: 24px; font-weight: 700; color: #FFFFFF; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .v-badge {
+    display: inline-flex; align-items: center; flex-shrink: 0;
+    background: rgba(0,191,255,0.12); border: 1px solid rgba(0,191,255,0.30);
+    border-radius: 999px; padding: 2px 9px;
+    font-size: 13px; font-weight: 700; color: #00BFFF; white-space: nowrap;
   }
-  .seller-meta { display: flex; align-items: center; gap: 8px; margin-top: 3px; }
-  .stars { font-size: 14px; color: #F59E0B; letter-spacing: 1px; }
-  .review-count { font-size: 12px; color: #64748B; }
-  .trust-text { font-size: 12px; color: #64748B; }
-  /* Right side of seller card */
-  .seller-trust {
-    flex: 0 0 auto; text-align: right; flex-shrink: 0;
-    padding-left: 12px; border-left: 1px solid rgba(255,255,255,0.07);
-  }
-  .trust-label { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #334155; margin-bottom: 3px; }
-  .trust-level { font-size: 14px; font-weight: 700; color: #94A3B8; white-space: nowrap; }
+  .seller-meta { display: flex; align-items: center; gap: 6px; }
+  .stars { font-size: 15px; color: #F59E0B; }
+  .review-count { font-size: 14px; color: #64748B; }
+  .seller-right { flex-shrink: 0; text-align: right; padding-left: 14px; border-left: 1px solid rgba(255,255,255,0.07); }
+  .trust-lbl { font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 3px; }
+  .trust-val { font-size: 18px; font-weight: 700; color: #94A3B8; }
 
   /* Footer */
   .footer {
@@ -256,8 +259,8 @@ function renderTemplate(data) {
     border-top: 1px solid rgba(255,255,255,0.07);
     padding-top: 13px; flex-shrink: 0;
   }
-  .footer-l { font-size: 19px; font-weight: 700; color: rgba(148,163,184,0.55); letter-spacing: -0.01em; }
-  .footer-r { font-size: 14px; color: rgba(148,163,184,0.3); }
+  .footer-l { font-size: 19px; font-weight: 700; color: rgba(148,163,184,0.6); }
+  .footer-r { font-size: 15px; color: rgba(148,163,184,0.35); }
 </style>
 </head>
 <body>
@@ -270,7 +273,7 @@ function renderTemplate(data) {
     ${imageUrl
       ? `<img src="${escAttr(imageUrl)}" class="hero-img" alt="" />`
       : `<div class="hero-fallback">
-          <svg width="72" height="72" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="0.5">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="0.5">
             <circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/>
             <path d="M8 17.5h7M15 6l2 5.5M5.5 14l3-8 2.5 8"/><circle cx="12" cy="6" r="1"/>
           </svg>
@@ -287,29 +290,16 @@ function renderTemplate(data) {
   <!-- Content -->
   <div class="content">
 
-    <!-- Status badge (always EN VENTA) -->
-    <div class="status-badge">
+    <!-- Status label -->
+    <div class="status-label">
       <div class="status-dot"></div>
       <span class="status-text">En venta</span>
     </div>
 
     <!-- Price card -->
     <div class="price-card">
-      <div class="price-left">
-        <div class="price-label">Precio</div>
-        <div class="price-value ${pc}">${escHtml(priceDisplay)}</div>
-      </div>
-      ${sellingPoints.length > 0 ? `
-      <div class="price-right">
-        ${sellingPoints.slice(0, 4).map(sp => `
-        <div class="sp-item">
-          <span class="sp-icon">${sp.icon}</span>
-          <div class="sp-text">
-            <div class="sp-title">${escHtml(sp.title)}</div>
-            <div class="sp-sub">${escHtml(sp.sub)}</div>
-          </div>
-        </div>`).join('')}
-      </div>` : ''}
+      <div class="price-label">Precio</div>
+      <div class="price-value ${pc}">${escHtml(priceDisplay)}</div>
     </div>
 
     <!-- Title block -->
@@ -317,35 +307,45 @@ function renderTemplate(data) {
     <div class="title">${escHtml(title)}</div>
     ${metaLine ? `<div class="meta">${escHtml(metaLine)}</div>` : ''}
 
+    <!-- Badges (only when real data exists) -->
+    ${badges.length > 0 ? `
+    <div class="badges">
+      ${badges.slice(0, 4).map(b => `
+      <div class="badge">
+        <div class="badge-title">${escHtml(b.value)}</div>
+        <div class="badge-sub">${escHtml(b.label)}</div>
+      </div>`).join('')}
+    </div>` : ''}
+
     <div class="spacer"></div>
 
     <!-- Seller card -->
-    ${sellerName ? `
+    ${hasSellerInfo ? `
     <div class="seller-card">
       <div class="seller-avatar">
         ${avatarUri
           ? `<img src="${escAttr(avatarUri)}" alt="" />`
-          : `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="1.5">
+          : `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="1.5">
               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
               <circle cx="12" cy="7" r="4"/>
              </svg>`
         }
       </div>
-      <div class="seller-info">
-        <div class="seller-pub-label">Publicado por</div>
+      <div class="seller-body">
+        <div class="seller-pub">Publicado por</div>
         <div class="seller-name-row">
           <span class="seller-name">${escHtml(sellerName)}</span>
-          ${sellerVerified ? `<span class="verified-badge">✓ Verificado</span>` : ''}
+          ${sellerVerified ? `<span class="v-badge">✓ Verificado</span>` : ''}
         </div>
-        ${(reviewCount > 0) ? `
+        ${reviewCount > 0 ? `
         <div class="seller-meta">
           ${renderStars(reviewAvg, reviewCount)}
         </div>` : ''}
       </div>
-      ${trustText ? `
-      <div class="seller-trust">
-        <div class="trust-label">Confianza</div>
-        <div class="trust-level">${escHtml(trustText.replace('Vendedor ', '').replace('Perfil ', ''))}</div>
+      ${trustShort ? `
+      <div class="seller-right">
+        <div class="trust-lbl">Confianza</div>
+        <div class="trust-val">${escHtml(trustShort)}</div>
       </div>` : ''}
     </div>` : ''}
 
