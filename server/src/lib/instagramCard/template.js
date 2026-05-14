@@ -99,9 +99,7 @@ function renderTemplate(data) {
 <html>
 <head>
 <meta charset="utf-8">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<!-- System fonts only: no external requests, no OOM risk in Puppeteer -->
 <style>
   *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {

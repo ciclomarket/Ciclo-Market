@@ -15,8 +15,8 @@ const CARD_CONFIG = {
     accentSecondary: '#7C3AED',
   },
   fonts: {
-    display: "'Archivo Black', 'Bebas Neue', 'Arial Black', Impact, sans-serif",
-    body:    "'Inter', 'Helvetica Neue', Arial, sans-serif",
+    display: "'Arial Black', 'Arial Bold', Impact, 'Helvetica Neue', sans-serif",
+    body:    "'Helvetica Neue', Helvetica, Arial, sans-serif",
   },
 }
 

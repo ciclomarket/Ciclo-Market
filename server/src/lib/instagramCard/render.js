@@ -97,8 +97,6 @@ async function renderListingCard(data) {
         }, RENDER_TIMEOUT_MS)
       ),
     ])
-    // Wait for Google Fonts to finish rendering before screenshot
-    await page.evaluate(() => document.fonts.ready).catch(() => {})
     const raw = await page.screenshot({ type: 'png', clip: { x: 0, y: 0, width: cfg.width, height: cfg.height } })
     return upscale2x(raw)
   } catch (err) {
