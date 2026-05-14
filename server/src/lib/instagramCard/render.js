@@ -88,7 +88,8 @@ async function renderListingCard(data) {
     await page.setViewport({ width: cfg.width, height: cfg.height, deviceScaleFactor: 1 })
     const html = renderTemplate(data)
     await Promise.race([
-      page.setContent(html, { waitUntil: 'networkidle0' }),
+      // domcontentloaded: don't block on external resources; fonts load separately below
+      page.setContent(html, { waitUntil: 'domcontentloaded' }),
       new Promise((_, reject) =>
         setTimeout(() => {
           const err = new Error('Instagram card render timed out after 15s')
@@ -97,6 +98,11 @@ async function renderListingCard(data) {
         }, RENDER_TIMEOUT_MS)
       ),
     ])
+    // Wait up to 4s for Google Fonts; fall back to system fonts if slow/unavailable
+    await Promise.race([
+      page.evaluate(() => document.fonts.ready),
+      new Promise((r) => setTimeout(r, 4000)),
+    ]).catch(() => {})
     const raw = await page.screenshot({ type: 'png', clip: { x: 0, y: 0, width: cfg.width, height: cfg.height } })
     return upscale2x(raw)
   } catch (err) {

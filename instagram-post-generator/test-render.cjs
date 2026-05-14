@@ -5,34 +5,50 @@ const path = require('path')
 const fs   = require('fs')
 const { renderListingCard } = require('../server/src/lib/instagramCard/render')
 
-const OUT = path.join(__dirname, 'test-output')
+const OUT = path.join(__dirname, 'test-output-v2')
+fs.mkdirSync(OUT, { recursive: true })
 
 const cases = [
   {
-    // Case 1 spec: Bianchi Impulso RC 2025, U$D 8.500, talle M
-    name: '1-bianchi-impulso-usd',
+    // Case 1: CUBE del screenshot actual — todos los campos presentes
+    name: '1-cube-usd-full',
     data: {
-      brand: 'Bianchi', model: 'Impulso RC', year: 2025,
-      category: 'Ruta', title: 'Bianchi Impulso RC 2025',
-      price: 8500, currency: 'USD', size: 'M', imageUrl: null,
+      id:         '421bf143-7e2b-4293-aacd-290198094abb',
+      brand:      'CUBE', model: 'C:62 One Elite', year: 2023,
+      category:   'MTB',
+      size:       'XL',
+      drivetrain: 'SRAM GX Eagle',
+      location:   'Córdoba',
+      sellerName: 'Juan Ignacio Busso',
+      price:      2000, currency: 'USD',
+      imageUrl:   null,
     },
   },
   {
-    // Case 2 spec: S-Works Tarmac SL8 — brand >10 chars → 80px
-    name: '2-sworks-tarmac-usd',
+    // Case 2: sin drivetrain, sin location, sin seller, sin talle — todo opcional oculto
+    name: '2-bianchi-minimal',
     data: {
-      brand: 'Specialized', model: 'S-Works Tarmac SL8', year: 2025,
-      category: 'Ruta', title: 'Specialized S-Works Tarmac SL8 2025',
-      price: 9500, currency: 'USD', size: 'S', imageUrl: null,
+      id:         'a1b2c3d4-0000-0000-0000-000000000001',
+      brand:      'Bianchi', model: 'Impulso RC', year: 2025,
+      category:   'Ruta',
+      size:       null, drivetrain: null, location: null, sellerName: null,
+      price:      8500, currency: 'USD',
+      imageUrl:   null,
     },
   },
   {
-    // Case 3 spec: Cannondale Synapse Carbon Disc, $8.500.000 ARS, sin talle
-    name: '3-cannondale-synapse-ars',
+    // Case 3: drivetrain largo — verificar ellipsis
+    name: '3-canyon-long-drivetrain',
     data: {
-      brand: 'Cannondale', model: 'Synapse Carbon Disc', year: null,
-      category: 'Ruta', title: 'Cannondale Synapse Carbon Disc',
-      price: 8500000, currency: 'ARS', size: null, imageUrl: null,
+      id:         'f9e8d7c6-1111-2222-3333-444455556666',
+      brand:      'Canyon', model: 'Aeroad CF SLX', year: 2024,
+      category:   'Ruta',
+      size:       'M',
+      drivetrain: 'Shimano Ultegra Di2 R8170 12s',
+      location:   'Buenos Aires',
+      sellerName: 'Rodrigo Zalazar',
+      price:      12500000, currency: 'ARS',
+      imageUrl:   null,
     },
   },
 ]

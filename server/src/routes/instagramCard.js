@@ -225,14 +225,18 @@ router.post('/listings/:id/instagram-card', async (req, res) => {
   const avatarDataUri = await fetchAsDataUri(avatarSrc)
 
   const cardData = {
-    title:    listing.title    || '',
-    brand:    listing.brand    || '',
-    model:    listing.model    || '',
-    year:     listing.year     || null,
-    category: listing.category || '',
-    size:     listing.frame_size || null,
-    price:    Number(listing.price) || 0,
-    currency: String(listing.price_currency || 'ARS').toUpperCase(),
+    id:         listing.id       || '',
+    title:      listing.title    || '',
+    brand:      listing.brand    || '',
+    model:      listing.model    || '',
+    year:       listing.year     || null,
+    category:   listing.category || '',
+    size:       listing.frame_size  || null,
+    drivetrain: listing.drivetrain  || null,
+    location:   listing.location    || null,
+    sellerName: sellerProfile?.full_name || listing.seller_name || null,
+    price:      Number(listing.price) || 0,
+    currency:   String(listing.price_currency || 'ARS').toUpperCase(),
     imageUrl,
   }
 

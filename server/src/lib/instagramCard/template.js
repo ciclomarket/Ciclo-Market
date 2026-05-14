@@ -4,7 +4,7 @@ const fs   = require('fs')
 const path = require('path')
 const cfg  = require('./config')
 
-// ── Logo (loaded once at module init) ────────────────────────────────────────
+// ── Logo ─────────────────────────────────────────────────────────────────────
 let _logoDataUri = null
 function getLogoDataUri() {
   if (_logoDataUri !== null) return _logoDataUri
@@ -28,35 +28,49 @@ function formatPrice(currency, price) {
   return currency === 'USD' ? `U$D ${s}` : `$${s}`
 }
 
-// Brand name: calibrated for 612px content width with Archivo Black ~0.60em/char
+// Brand: Archivo Black, calibrated for 612px content width
 function brandFontSize(brand) {
   const len = String(brand || '').length
-  if (len <= 7)  return '96px'   // BIANCHI, TREK, CANYON
-  if (len <= 11) return '80px'   // CANNONDALE, SPECIALIZED
-  if (len <= 15) return '68px'   // SANTA CRUZ BIKES
+  if (len <= 7)  return '96px'
+  if (len <= 11) return '80px'
+  if (len <= 15) return '68px'
   return '56px'
 }
 
-// Dossard price: calibrated for 280px usable width (320px dossard - 40px padding)
-// Archivo Black: letters ~0.68em, digits ~0.58em, space ~0.30em
+// Dossard price: calibrated for 272px usable width (320px - 48px padding).
+// Sizes match the widest fallback (Arial Black ~0.62em/char), so Bebas Neue
+// (narrower, ~0.40em/char) will always have breathing room.
 function dossardPriceFontSize(str) {
   const len = str.replace(/\s/g, '').length
-  if (len <= 6)  return '64px'   // $9.500 (6) · $850.000 (7 → tier below)
-  if (len <= 8)  return '52px'   // U$D9.500 (8), $850.000 (7)
-  if (len <= 11) return '44px'   // $8.500.000 (10), U$D12.000 (10)
+  if (len <= 6)  return '64px'   // $9.500
+  if (len <= 8)  return '52px'   // U$D 2.000, $850.000
+  if (len <= 11) return '44px'   // $8.500.000, U$D 12.000
   return '36px'
+}
+
+// Serial: 4-digit race number derived deterministically from listing id.
+// Uses last 6 hex chars of UUID (without hyphens), mod 9000 + 1000 → #1000–#9999
+function deriveSerial(id) {
+  if (!id) return '0000'
+  const hex = String(id).replace(/-/g, '').slice(-6)
+  const n = parseInt(hex, 16)
+  if (isNaN(n)) return '0000'
+  return String((n % 9000) + 1000)
 }
 
 // ── Template ──────────────────────────────────────────────────────────────────
 /**
  * @param {object} data
+ * @param {string} data.id
  * @param {string} data.title
  * @param {string} data.brand
  * @param {string} data.model
  * @param {number|null} data.year
  * @param {string} data.category
- * @param {string|null} data.condition
- * @param {string|null} data.size      — talle / frame_size
+ * @param {string|null} data.size        — frame_size (talle)
+ * @param {string|null} data.drivetrain  — groupset (SRAM GX Eagle, etc.)
+ * @param {string|null} data.location    — ciudad / provincia
+ * @param {string|null} data.sellerName  — users.full_name
  * @param {number} data.price
  * @param {string} data.currency
  * @param {string|null} data.imageUrl
@@ -64,31 +78,30 @@ function dossardPriceFontSize(str) {
 function renderTemplate(data) {
   const { colors, fonts } = cfg
 
-  const brand    = String(data.brand    || '').trim()
-  const model    = String(data.model    || '').trim()
-  const year     = data.year    ? String(data.year)    : null
-  const category = String(data.category || '').trim()
-  const condition = data.condition ? String(data.condition).trim() : null
-  const size     = data.size    ? String(data.size).trim()     : null
-  const currency = String(data.currency || 'ARS').toUpperCase()
-  const price    = typeof data.price === 'number' ? data.price : Number(data.price)
-  const imageUrl = data.imageUrl || null
+  const id         = String(data.id       || '')
+  const brand      = String(data.brand    || '').trim()
+  const model      = String(data.model    || '').trim()
+  const year       = data.year       ? String(data.year)       : null
+  const category   = String(data.category || '').trim()
+  const size       = data.size       ? String(data.size).trim()       : null
+  const drivetrain = data.drivetrain ? String(data.drivetrain).trim() : null
+  const location   = data.location   ? String(data.location).trim()   : null
+  const sellerName = data.sellerName ? String(data.sellerName).trim()  : null
+  const currency   = String(data.currency || 'ARS').toUpperCase()
+  const price      = typeof data.price === 'number' ? data.price : Number(data.price)
+  const imageUrl   = data.imageUrl || null
 
   const priceDisplay  = formatPrice(currency, price)
   const brandSize     = brandFontSize(brand)
   const dossardPxSize = dossardPriceFontSize(priceDisplay)
+  const serial        = deriveSerial(id)
   const logoUri       = getLogoDataUri()
 
-  // Pill: condition if available, else category
-  const pillText = condition || category || null
+  // Model line: model · year · location
+  const modelLine = [model, year, location].filter(Boolean).join(' · ')
 
-  // Model line: model · year (no brand duplication)
-  const modelLine = [model, year].filter(Boolean).join(' · ')
-
-  // Dossard meta rows (only real data)
-  const metaItems = []
-  if (size) metaItems.push({ label: 'TALLE', value: size })
-  if (year)  metaItems.push({ label: 'AÑO',   value: year })
+  // Serial line: AÑO {year} · #{serial}
+  const serialLine = [year ? `AÑO ${year}` : null, `#${serial}`].filter(Boolean).join(' · ')
 
   // Zone heights: header(80) + hero(900) + content(370) = 1350
   const HEADER_H  = 80
@@ -99,7 +112,9 @@ function renderTemplate(data) {
 <html>
 <head>
 <meta charset="utf-8">
-<!-- System fonts only: no external requests, no OOM risk in Puppeteer -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Bebas+Neue&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {
@@ -110,27 +125,19 @@ function renderTemplate(data) {
     text-rendering: optimizeLegibility;
   }
 
-  /* ── Root canvas ── */
   .card {
     width: 1080px; height: 1350px; overflow: hidden;
     display: flex; flex-direction: column;
     background: ${colors.background};
   }
 
-  /* ── Header (80px) ── */
+  /* ── Header (80px) — no gradient bar ── */
   .header {
     flex: 0 0 ${HEADER_H}px;
-    display: flex; flex-direction: column;
-    background: ${colors.background};
-  }
-  .accent-bar {
-    flex: 0 0 5px;
-    background: linear-gradient(90deg, ${colors.accent} 0%, ${colors.accentSecondary} 100%);
-  }
-  .header-inner {
-    flex: 1;
     display: flex; align-items: center; justify-content: space-between;
     padding: 0 28px;
+    background: ${colors.background};
+    border-bottom: 1px solid rgba(255,255,255,0.06);
   }
   .header-logo {
     height: 40px; width: auto; object-fit: contain; object-position: left center; display: block;
@@ -141,13 +148,10 @@ function renderTemplate(data) {
   .pill {
     background: rgba(255,255,255,0.08);
     border: 0.5px solid rgba(255,255,255,0.18);
-    border-radius: 999px;
-    padding: 8px 18px;
-    font-family: ${fonts.body};
-    font-size: 13px; font-weight: 600;
+    border-radius: 999px; padding: 8px 18px;
+    font-family: ${fonts.body}; font-size: 13px; font-weight: 600;
     letter-spacing: 0.14em; text-transform: uppercase;
-    color: ${colors.text};
-    white-space: nowrap;
+    color: ${colors.text}; white-space: nowrap;
   }
 
   /* ── Hero (900px) ── */
@@ -162,7 +166,6 @@ function renderTemplate(data) {
     display: flex; align-items: center; justify-content: center;
     background: #0f1923;
   }
-  /* Subtle bottom scrim — only 120px, just enough to anchor dossard */
   .hero-scrim {
     position: absolute; bottom: 0; left: 0; right: 0; height: 120px;
     background: linear-gradient(to top, rgba(20,33,46,0.85) 0%, rgba(20,33,46,0) 100%);
@@ -173,153 +176,159 @@ function renderTemplate(data) {
   .content {
     flex: 0 0 ${CONTENT_H}px;
     position: relative;
-    overflow: visible;           /* allow dossard to overlap hero above */
+    overflow: visible;
     background: ${colors.background};
-    display: flex;
-    align-items: flex-end;       /* text sits at bottom */
+    display: flex; align-items: flex-end;
     padding: 32px 56px 48px;
   }
 
-  /* Left column: brand name + model */
+  /* Left column */
   .text-col {
-    flex: 1;
-    min-width: 0;
-    padding-right: 356px;        /* 320px dossard + 36px gap */
+    flex: 1; min-width: 0;
+    padding-right: 356px;
   }
   .brand-name {
     font-family: ${fonts.display};
-    font-weight: 700;
     font-size: ${brandSize};
     line-height: 0.9;
     letter-spacing: -0.03em;
     color: ${colors.text};
     text-transform: uppercase;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     display: block;
-    margin-bottom: 14px;
+    margin-bottom: 0;
   }
-  .model-name {
-    font-family: ${fonts.body};
-    font-size: 32px;
-    font-weight: 500;
-    color: ${colors.textMuted};
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  .drivetrain-line {
     display: block;
+    margin-top: 6px;
+    font-family: ${fonts.body};
+    font-size: 22px; font-weight: 500;
+    color: rgba(255,255,255,0.7);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     line-height: 1.2;
+  }
+  .model-line {
+    display: block;
+    margin-top: 14px;
+    font-family: ${fonts.body};
+    font-size: 26px; font-weight: 500;
+    color: ${colors.textMuted};
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    line-height: 1.2;
+  }
+  .seller-line {
+    display: block;
+    margin-top: 10px;
+    font-family: ${fonts.body};
+    font-size: 16px; font-weight: 400;
+    color: rgba(255,255,255,0.55);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
 
   /* ── Dossard ── */
   .dossard {
     position: absolute;
-    top: -100px;           /* overlap 100px into the hero */
-    right: 56px;
-    width: 320px;
-    height: 380px;
+    top: -100px; right: 56px;
+    width: 320px; height: 380px;
     background: ${colors.paper};
-    border-radius: 6px;
-    box-shadow: 0 12px 40px rgba(0,0,0,0.45), 0 2px 8px rgba(0,0,0,0.25);
-    overflow: visible;
+    border-radius: 2px;
+    box-shadow: 0 18px 40px rgba(0,0,0,0.5), 0 4px 12px rgba(0,0,0,0.3);
+    overflow: hidden;
     z-index: 10;
+    transform: rotate(-2.5deg);
+    transform-origin: center;
+    display: flex; flex-direction: column;
   }
 
-  /* Top band with pin holes */
-  .dossard-band {
-    position: relative;
-    height: 28px;
+  /* Sponsor strip */
+  .sponsor-strip {
+    flex: 0 0 44px;
     background: ${colors.ink};
-    border-radius: 6px 6px 0 0;
+    display: flex; align-items: center;
+    padding: 0 16px;
+    overflow: hidden;
+  }
+  .sponsor-text {
+    font-family: ${fonts.display};
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: ${colors.paper};
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  /* Pin row */
+  .pin-row {
+    flex: 0 0 36px;
+    background: ${colors.paper};
     display: flex; align-items: center; justify-content: space-between;
-    padding: 0 28px;
+    padding: 0 26px;
   }
   .pin-hole {
-    width: 14px; height: 14px;
-    border-radius: 50%;
-    background: ${colors.paper};
+    width: 20px; height: 20px; border-radius: 50%;
+    background: ${colors.ink};
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.6), 0 0.5px 0 rgba(255,255,255,0.4);
   }
 
   /* Dossard body */
   .dossard-body {
-    padding: 18px 20px 18px;
+    flex: 1;
+    padding: 22px 24px 18px;
     display: flex; flex-direction: column;
-    height: calc(100% - 28px);
+    justify-content: space-between;
   }
-  .dossard-price-label {
+
+  /* Price */
+  .dossard-price {
+    font-family: ${fonts.numeric};
+    font-size: ${dossardPxSize};
+    color: ${colors.ink};
+    line-height: 0.9;
+    letter-spacing: 0.01em;
+    white-space: nowrap; overflow: hidden;
+  }
+
+  /* Talle */
+  .talle-block { display: flex; flex-direction: column; }
+  .talle-label {
     font-family: ${fonts.body};
     font-size: 13px; font-weight: 600;
     letter-spacing: 0.18em; text-transform: uppercase;
     color: ${colors.inkMuted};
-    margin-bottom: 6px;
-    flex-shrink: 0;
+    margin-bottom: 4px;
   }
-  .dossard-price {
+  .talle-value {
     font-family: ${fonts.display};
-    font-size: ${dossardPxSize};
-    font-weight: 800;
+    font-size: 40px; line-height: 0.9;
     color: ${colors.ink};
-    line-height: 1;
-    letter-spacing: -0.02em;
-    white-space: nowrap;
-    overflow: hidden;
-    flex-shrink: 0;
+    text-transform: uppercase;
   }
 
-  /* Divider + meta */
-  .dossard-divider {
+  /* Serial */
+  .serial-block {}
+  .serial-divider {
     height: 1px;
     background: rgba(20,33,46,0.15);
-    margin: 14px 0 12px;
-    flex-shrink: 0;
+    margin-bottom: 10px;
   }
-  .dossard-meta {
-    display: flex; flex-direction: column; gap: 5px;
-    flex-shrink: 0;
+  .serial-text {
+    font-family: ${fonts.mono};
+    font-size: 12px; font-weight: 500;
+    color: rgba(20,33,46,0.65);
+    letter-spacing: 0.02em;
   }
-  .meta-row {
-    display: flex; align-items: baseline; gap: 8px;
-  }
-  .meta-label {
-    font-family: ${fonts.body};
-    font-size: 10px; font-weight: 600;
-    letter-spacing: 0.16em; text-transform: uppercase;
-    color: ${colors.inkMuted};
-  }
-  .meta-value {
-    font-family: ${fonts.body};
-    font-size: 14px; font-weight: 600;
-    color: ${colors.ink};
-  }
-
-  /* Registration corner marks (bottom corners of dossard body) */
-  .reg {
-    position: absolute;
-    width: 12px; height: 12px;
-  }
-  .reg::before, .reg::after {
-    content: ''; position: absolute; background: ${colors.inkFaint};
-  }
-  .reg::before { width: 1.5px; height: 100%; left: 50%; transform: translateX(-50%); }
-  .reg::after  { height: 1.5px; width: 100%; top: 50%;  transform: translateY(-50%); }
-  .reg-bl { bottom: 10px; left: 10px; }
-  .reg-br { bottom: 10px; right: 10px; }
 </style>
 </head>
 <body>
 <div class="card">
 
-  <!-- Header -->
+  <!-- Header: no gradient bar -->
   <div class="header">
-    <div class="accent-bar"></div>
-    <div class="header-inner">
-      ${logoUri
-        ? `<img src="${logoUri}" class="header-logo" alt="Ciclo Market" />`
-        : `<span class="header-logo-text">Ciclo Market</span>`
-      }
-      ${pillText ? `<div class="pill">${escHtml(pillText)}</div>` : ''}
-    </div>
+    ${logoUri
+      ? `<img src="${logoUri}" class="header-logo" alt="Ciclo Market" />`
+      : `<span class="header-logo-text">Ciclo Market</span>`
+    }
+    ${category ? `<div class="pill">${escHtml(category)}</div>` : ''}
   </div>
 
   <!-- Hero -->
@@ -336,36 +345,37 @@ function renderTemplate(data) {
     <div class="hero-scrim"></div>
   </div>
 
-  <!-- Content: brand/model + dossard -->
+  <!-- Content -->
   <div class="content">
 
     <div class="text-col">
-      ${brand ? `<span class="brand-name">${escHtml(brand)}</span>` : ''}
-      ${modelLine ? `<span class="model-name">${escHtml(modelLine)}</span>` : ''}
+      ${brand      ? `<span class="brand-name">${escHtml(brand)}</span>` : ''}
+      ${drivetrain ? `<span class="drivetrain-line">${escHtml(drivetrain)}</span>` : ''}
+      ${modelLine  ? `<span class="model-line">${escHtml(modelLine)}</span>` : ''}
+      ${sellerName ? `<span class="seller-line">Publicado por ${escHtml(sellerName)}</span>` : ''}
     </div>
 
-    <!-- Dossard — positioned absolute, overlaps hero by 100px -->
+    <!-- Dossard: dorsal de carrera, rotado -2.5deg, solapa 100px sobre el hero -->
     <div class="dossard">
-      <div class="dossard-band">
+      <div class="sponsor-strip">
+        <span class="sponsor-text">CICLO MARKET - El Marketplace de Ciclismo</span>
+      </div>
+      <div class="pin-row">
         <div class="pin-hole"></div>
         <div class="pin-hole"></div>
       </div>
       <div class="dossard-body">
-        <div class="dossard-price-label">Precio</div>
         <div class="dossard-price">${escHtml(priceDisplay)}</div>
-        ${metaItems.length > 0 ? `
-        <div class="dossard-divider"></div>
-        <div class="dossard-meta">
-          ${metaItems.map(m => `
-          <div class="meta-row">
-            <span class="meta-label">${escHtml(m.label)}</span>
-            <span class="meta-value">${escHtml(m.value)}</span>
-          </div>`).join('')}
+        ${size ? `
+        <div class="talle-block">
+          <span class="talle-label">Talle</span>
+          <span class="talle-value">${escHtml(size)}</span>
         </div>` : ''}
+        <div class="serial-block">
+          <div class="serial-divider"></div>
+          <span class="serial-text">${escHtml(serialLine)}</span>
+        </div>
       </div>
-      <!-- Register corner marks -->
-      <div class="reg reg-bl"></div>
-      <div class="reg reg-br"></div>
     </div>
 
   </div>
