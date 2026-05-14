@@ -225,26 +225,15 @@ router.post('/listings/:id/instagram-card', async (req, res) => {
   const avatarDataUri = await fetchAsDataUri(avatarSrc)
 
   const cardData = {
-    title:       listing.title || '',
-    brand:       listing.brand || '',
-    model:       listing.model || '',
-    year:        listing.year  || null,
-    category:    listing.category || '',
-    price:       Number(listing.price) || 0,
-    currency:    String(listing.price_currency || 'ARS').toUpperCase(),
-    sellerName:  sellerProfile?.full_name || listing.seller_name || '',
+    title:    listing.title    || '',
+    brand:    listing.brand    || '',
+    model:    listing.model    || '',
+    year:     listing.year     || null,
+    category: listing.category || '',
+    size:     listing.frame_size || null,
+    price:    Number(listing.price) || 0,
+    currency: String(listing.price_currency || 'ARS').toUpperCase(),
     imageUrl,
-    // date badge — use created_at (immutable), updated_at refreshes on every row touch
-    publishedLabel: formatPublishedLabel(listing.created_at),
-    // badges
-    isFeatured:   shouldShowFeaturedBadge(listing),
-    isOpportunity: shouldShowOpportunityBadge(listing),
-    // seller enriched
-    sellerVerified:   sellerProfile?.verified === true,
-    sellerAvatarUri:  avatarDataUri,
-    sellerReviewCount: reviewCount,
-    sellerReviewAvg:   reviewAvg,
-    trustLevel,
   }
 
   // Render PNG

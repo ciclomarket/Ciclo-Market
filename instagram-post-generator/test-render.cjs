@@ -2,52 +2,37 @@
 'use strict'
 
 const path = require('path')
+const fs   = require('fs')
 const { renderListingCard } = require('../server/src/lib/instagramCard/render')
-const fs = require('fs')
 
 const OUT = path.join(__dirname, 'test-output')
 
 const cases = [
   {
-    name: '1-sworks-usd',
+    // Case 1 spec: Bianchi Impulso RC 2025, U$D 8.500, talle M
+    name: '1-bianchi-impulso-usd',
     data: {
-      title: 'S-Works Tarmac SL8 2024',
-      brand: 'Specialized',
-      model: 'Tarmac SL8',
-      year: 2024,
-      category: 'Ruta',
-      price: 9500,
-      currency: 'USD',
-      sellerName: 'Rodrigo Zalazar',
-      imageUrl: null,
+      brand: 'Bianchi', model: 'Impulso RC', year: 2025,
+      category: 'Ruta', title: 'Bianchi Impulso RC 2025',
+      price: 8500, currency: 'USD', size: 'M', imageUrl: null,
     },
   },
   {
-    name: '2-long-title-ars',
+    // Case 2 spec: S-Works Tarmac SL8 — brand >10 chars → 80px
+    name: '2-sworks-tarmac-usd',
     data: {
-      title: 'Trek Marlin 7 Gen 3 – casi sin uso, full equipada lista para salir',
-      brand: 'Trek',
-      model: 'Marlin 7',
-      year: 2023,
-      category: 'MTB',
-      price: 850000,
-      currency: 'ARS',
-      sellerName: 'Lucas Rodríguez',
-      imageUrl: null,
+      brand: 'Specialized', model: 'S-Works Tarmac SL8', year: 2025,
+      category: 'Ruta', title: 'Specialized S-Works Tarmac SL8 2025',
+      price: 9500, currency: 'USD', size: 'S', imageUrl: null,
     },
   },
   {
-    name: '3-million-price-ars',
+    // Case 3 spec: Cannondale Synapse Carbon Disc, $8.500.000 ARS, sin talle
+    name: '3-cannondale-synapse-ars',
     data: {
-      title: 'Canyon Aeroad CF SLX 9 Disc',
-      brand: 'Canyon',
-      model: 'Aeroad CF SLX',
-      year: 2024,
-      category: 'Ruta',
-      price: 12500000,
-      currency: 'ARS',
-      sellerName: 'Ciclo Market Store',
-      imageUrl: null,
+      brand: 'Cannondale', model: 'Synapse Carbon Disc', year: null,
+      category: 'Ruta', title: 'Cannondale Synapse Carbon Disc',
+      price: 8500000, currency: 'ARS', size: null, imageUrl: null,
     },
   },
 ]
@@ -56,7 +41,7 @@ const cases = [
   for (const { name, data } of cases) {
     process.stdout.write(`Rendering ${name}… `)
     try {
-      const buf = await renderListingCard(data)
+      const buf     = await renderListingCard(data)
       const outPath = path.join(OUT, `${name}.png`)
       fs.writeFileSync(outPath, buf)
       console.log(`✓  ${(buf.length / 1024).toFixed(0)} KB → ${outPath}`)
