@@ -3,6 +3,22 @@
 const { renderTemplate } = require('./template')
 const cfg = require('./config')
 
+// Sharp upscales the 1x Puppeteer output to 2x (2160×2700) using Lanczos3.
+// Memory cost: ~30 MB — vs ~500 MB for native Puppeteer 2x rendering.
+async function upscale2x(pngBuffer) {
+  try {
+    const sharp = require('sharp')
+    return await sharp(pngBuffer)
+      .resize(cfg.width * 2, cfg.height * 2, { kernel: sharp.kernel.lanczos3 })
+      .sharpen({ sigma: 0.4, m1: 0.5, m2: 2 })
+      .png({ compressionLevel: 6 })
+      .toBuffer()
+  } catch (err) {
+    console.warn('[instagram-card] sharp upscale failed, returning 1x buffer:', err?.message)
+    return pngBuffer
+  }
+}
+
 const RENDER_TIMEOUT_MS = 15_000
 
 // Singleton browser — lazy-init, shared across requests
@@ -81,8 +97,8 @@ async function renderListingCard(data) {
         }, RENDER_TIMEOUT_MS)
       ),
     ])
-    const buffer = await page.screenshot({ type: 'png', clip: { x: 0, y: 0, width: cfg.width, height: cfg.height } })
-    return buffer
+    const raw = await page.screenshot({ type: 'png', clip: { x: 0, y: 0, width: cfg.width, height: cfg.height } })
+    return upscale2x(raw)
   } catch (err) {
     if (!err.code) err.code = 'RENDER_FAILED'
     throw err

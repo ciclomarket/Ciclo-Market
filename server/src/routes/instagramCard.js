@@ -274,7 +274,7 @@ router.post('/listings/:id/instagram-card', async (req, res) => {
   const caption   = buildCaption(listing)
 
   console.log(`[instagram-card] generated for listing ${listing.id} → ${storagePath}`)
-  return res.status(200).json({ ok: true, url: publicUrl, caption, width: 1080, height: 1350, generatedAt: new Date().toISOString() })
+  return res.status(200).json({ ok: true, url: publicUrl, caption, width: 2160, height: 2700, generatedAt: new Date().toISOString() })
 
   } catch (err) {
     const detail = err?.message || String(err)
