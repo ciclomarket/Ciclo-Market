@@ -394,6 +394,36 @@ async function fetchReviewsWithBuyerData(supabase, sellerId) {
   }))
 }
 
+router.get('/api/reviews/can-review', async (req, res) => {
+  try {
+    const sellerId = String(req.query.sellerId || '').trim()
+    const buyerId = String(req.query.buyerId || '').trim()
+    if (!sellerId || !buyerId) {
+      return res.status(400).json({ allowed: false, reason: 'missing_fields' })
+    }
+    if (sellerId === buyerId) {
+      return res.json({ allowed: false, reason: 'self_review' })
+    }
+    const supabase = getSupabaseOrFail(res)
+    if (!supabase) return
+
+    const { data: existing } = await supabase
+      .from('reviews')
+      .select('id')
+      .eq('seller_id', sellerId)
+      .eq('buyer_id', buyerId)
+      .maybeSingle()
+    if (existing) {
+      return res.json({ allowed: false, reason: 'already_reviewed' })
+    }
+
+    return res.json({ allowed: true })
+  } catch (err) {
+    console.error('[api] can-review error', err)
+    return res.status(500).json({ allowed: false, reason: 'unexpected_error' })
+  }
+})
+
 router.get('/api/reviews/:sellerId', async (req, res) => {
   try {
     const { sellerId } = req.params
@@ -450,36 +480,6 @@ router.get('/api/reviews/:sellerId', async (req, res) => {
   } catch (err) {
     console.error('[api] reviews list error', err)
     return res.status(500).json({ ok: false, error: 'unexpected_error' })
-  }
-})
-
-router.get('/api/reviews/can-review', async (req, res) => {
-  try {
-    const sellerId = String(req.query.sellerId || '').trim()
-    const buyerId = String(req.query.buyerId || '').trim()
-    if (!sellerId || !buyerId) {
-      return res.status(400).json({ allowed: false, reason: 'missing_fields' })
-    }
-    if (sellerId === buyerId) {
-      return res.json({ allowed: false, reason: 'self_review' })
-    }
-    const supabase = getSupabaseOrFail(res)
-    if (!supabase) return
-
-    const { data: existing } = await supabase
-      .from('reviews')
-      .select('id')
-      .eq('seller_id', sellerId)
-      .eq('buyer_id', buyerId)
-      .maybeSingle()
-    if (existing) {
-      return res.json({ allowed: false, reason: 'already_reviewed' })
-    }
-
-    return res.json({ allowed: true })
-  } catch (err) {
-    console.error('[api] can-review error', err)
-    return res.status(500).json({ allowed: false, reason: 'unexpected_error' })
   }
 })
 
