@@ -418,16 +418,37 @@ async function sendTargetedSecurityAlert({ userIds = [], dryRun = false } = {}) 
   }
 
   const supabase = getServerSupabaseClient()
-  const { data, error } = await supabase
+
+  // Buscar primero en public.users
+  const { data: publicUsers } = await supabase
     .from('users')
     .select('id,email,full_name')
     .in('id', userIds)
 
-  if (error) throw error
+  const foundIds = new Set((publicUsers || []).map(u => u.id))
+  const missingIds = userIds.filter(id => !foundIds.has(id))
 
-  const recipients = (data || [])
+  // Para los IDs que no tienen fila en public.users, buscar en auth.users via admin API
+  const authUsers = []
+  for (const id of missingIds) {
+    try {
+      const { data: authUser } = await supabase.auth.admin.getUserById(id)
+      if (authUser?.user?.email) {
+        authUsers.push({
+          id: authUser.user.id,
+          email: authUser.user.email,
+          full_name: authUser.user.user_metadata?.full_name || authUser.user.user_metadata?.name || null,
+        })
+      }
+    } catch {}
+  }
+
+  const allData = [...(publicUsers || []), ...authUsers]
+  const recipients = allData
     .map(row => ({ userId: row.id, email: row.email, fullName: row.full_name || 'Ciclista' }))
     .filter(u => u.email)
+
+  console.info(`[${AUTOMATION_TYPE}:targeted] public=${publicUsers?.length || 0} auth=${authUsers.length} total=${recipients.length}`)
 
   console.info(`[${AUTOMATION_TYPE}:targeted] sending to ${recipients.length} users (dryRun=${dryRun})`)
 
