@@ -144,7 +144,7 @@ async function sendReminder({ listing, profile }) {
         <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="width:100%">
           <tr>
             <td style="padding:20px 24px;text-align:center">
-              <img src="${baseFront.replace(/\/$/, '')}/site-logo.png" alt="Ciclo Market" style="height:64px;width:auto;display:inline-block" />
+              <img src="${baseFront.replace(/\/$/, '')}/logo-azul.png" alt="Ciclo Market" style="height:64px;width:auto;display:inline-block" />
             </td>
           </tr>
           <tr>
@@ -222,7 +222,7 @@ async function sendExpiredNotice({ listing, profile }) {
         <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="width:100%">
           <tr>
             <td style="padding:20px 24px;text-align:center">
-              <img src="${cleanBase}/site-logo.png" alt="Ciclo Market" style="height:64px;width:auto;display:inline-block" />
+              <img src="${cleanBase}/logo-azul.png" alt="Ciclo Market" style="height:64px;width:auto;display:inline-block" />
             </td>
           </tr>
           <tr>

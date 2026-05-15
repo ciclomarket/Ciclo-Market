@@ -71,7 +71,7 @@ function buildSecurityAlertHtml({ recipientName }) {
             <!-- LOGO -->
             <tr>
               <td align="center" style="padding:20px 20px 10px 20px; background-color:#FFFFFF;">
-                <img src="https://www.ciclomarket.ar/_static/email-logo-ciclomarket.png" alt="Ciclo Market" width="120" style="display:block; max-width:120px; height:auto; margin:0 auto;" />
+                <img src="https://www.ciclomarket.ar/logo-azul.png" alt="Ciclo Market" width="120" style="display:block; max-width:120px; height:auto; margin:0 auto;" />
               </td>
             </tr>
 
@@ -163,7 +163,7 @@ function buildSecurityAlertHtml({ recipientName }) {
             <tr>
               <td style="padding:16px 24px 20px 24px; background-color:#FFFFFF; border-top:1px solid #E2E4E8;">
                 <p style="margin:0 0 8px 0; font-family:Arial, sans-serif; font-size:12px; color:#777777;">
-                  ¿Tenés dudas? Escribinos a <a href="mailto:hola@ciclomarket.ar" style="color:#14212E; text-decoration:none;">hola@ciclomarket.ar</a>.
+                  ¿Tenés dudas? Escribinos a <a href="mailto:admin@ciclomarket.ar" style="color:#14212E; text-decoration:none;">admin@ciclomarket.ar</a>.
                 </p>
                 <p style="margin:0 0 6px 0; font-family:Arial, sans-serif; font-size:12px; color:#777777;">
                   Instagram: <a href="https://www.instagram.com/ciclomarket.ar" style="color:#14212E; text-decoration:none;">@ciclomarket.ar</a>
@@ -198,7 +198,7 @@ function buildSecurityAlertText({ recipientName }) {
     `---`,
     ``,
     `NO hagas clic en ese enlace. Ciclo Market nunca pide verificaciones por links externos.`,
-    `Reportalo a hola@ciclomarket.ar`,
+    `Reportalo a admin@ciclomarket.ar`,
     ``,
     `Ir a tu cuenta: https://www.ciclomarket.ar/dashboard`,
   ].join('\n')
@@ -240,7 +240,7 @@ async function sendSecurityAlert({ dryRun = false, limit = 5000, batchOffset = 0
 
     try {
       await sendMail({
-        from: process.env.SMTP_FROM || 'Ciclo Market <hola@ciclomarket.ar>',
+        from: process.env.SMTP_FROM || 'Ciclo Market <admin@ciclomarket.ar>',
         to: recipient.email,
         subject,
         html,
@@ -288,7 +288,7 @@ function buildTargetedAlertHtml({ recipientName }) {
             <!-- LOGO -->
             <tr>
               <td align="center" style="padding:20px 20px 10px 20px; background-color:#FFFFFF;">
-                <img src="https://www.ciclomarket.ar/_static/email-logo-ciclomarket.png" alt="Ciclo Market" width="120" style="display:block; max-width:120px; height:auto; margin:0 auto;" />
+                <img src="https://www.ciclomarket.ar/logo-azul.png" alt="Ciclo Market" width="120" style="display:block; max-width:120px; height:auto; margin:0 auto;" />
               </td>
             </tr>
 
@@ -348,7 +348,7 @@ function buildTargetedAlertHtml({ recipientName }) {
                   <ul style="margin:0; padding-left:18px; font-family:Arial, sans-serif; font-size:13px; color:#E2E8F0; line-height:1.7;">
                     <li>Si <strong>no hiciste clic</strong>: no hay nada más que hacer, estás seguro.</li>
                     <li>Si <strong>sí hiciste clic</strong> y completaste algún formulario: cambiá tu contraseña de Ciclo Market y revisá tus datos bancarios.</li>
-                    <li>Ante cualquier duda escribinos a <strong>hola@ciclomarket.ar</strong>.</li>
+                    <li>Ante cualquier duda escribinos a <strong>admin@ciclomarket.ar</strong>.</li>
                   </ul>
                   <p style="margin:12px 0 0 0; font-family:Arial, sans-serif; font-size:13px; color:#94A3B8;">
                     Recordá: Ciclo Market nunca pide verificaciones ni pagos a través de links externos.
@@ -370,7 +370,7 @@ function buildTargetedAlertHtml({ recipientName }) {
             <tr>
               <td style="padding:16px 24px 20px 24px; background-color:#FFFFFF; border-top:1px solid #E2E4E8;">
                 <p style="margin:0 0 8px 0; font-family:Arial, sans-serif; font-size:12px; color:#777777;">
-                  ¿Tenés dudas? Escribinos a <a href="mailto:hola@ciclomarket.ar" style="color:#14212E; text-decoration:none;">hola@ciclomarket.ar</a>.
+                  ¿Tenés dudas? Escribinos a <a href="mailto:admin@ciclomarket.ar" style="color:#14212E; text-decoration:none;">admin@ciclomarket.ar</a>.
                 </p>
                 <p style="margin:0 0 6px 0; font-family:Arial, sans-serif; font-size:12px; color:#777777;">
                   Instagram: <a href="https://www.instagram.com/ciclomarket.ar" style="color:#14212E; text-decoration:none;">@ciclomarket.ar</a>
@@ -403,7 +403,7 @@ function buildTargetedAlertText({ recipientName }) {
     `Si hiciste clic en el enlace del mensaje y completaste algún formulario,`,
     `cambiá tu contraseña y revisá tus datos bancarios.`,
     ``,
-    `Ante cualquier duda: hola@ciclomarket.ar`,
+    `Ante cualquier duda: admin@ciclomarket.ar`,
     ``,
     `Ir a tu cuenta: https://www.ciclomarket.ar/dashboard`,
   ].join('\n')
@@ -448,7 +448,7 @@ async function sendTargetedSecurityAlert({ userIds = [], dryRun = false } = {}) 
 
     try {
       await sendMail({
-        from: process.env.SMTP_FROM || 'Ciclo Market <hola@ciclomarket.ar>',
+        from: process.env.SMTP_FROM || 'Ciclo Market <admin@ciclomarket.ar>',
         to: recipient.email,
         subject,
         html,

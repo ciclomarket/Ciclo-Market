@@ -112,7 +112,7 @@ function buildEmailHtml({ baseFront, profile, listing }) {
     <table role=\"presentation\" cellspacing=\"0\" cellpadding=\"0\" border=\"0\" align=\"center\" style=\"width:100%;max-width:720px;margin:0 auto\" bgcolor=\"#0b1a28\">
       <tr>
         <td bgcolor=\"#ffffff\" style=\"padding:18px 24px;text-align:center;border-bottom:1px solid #e5ebf3;\">
-          <img src=\"${cleanBase}/site-logo.png\" alt=\"Ciclo Market\" style=\"height:56px;width:auto;display:inline-block;background:#ffffff;padding:8px;border-radius:8px\" />
+          <img src=\"${cleanBase}/logo-azul.png\" alt=\"Ciclo Market\" style=\"height:56px;width:auto;display:inline-block;background:#ffffff;padding:8px;border-radius:8px\" />
         </td>
       </tr>
       <tr>

@@ -319,7 +319,7 @@ function buildSavedSearchDigestEmail({ alertName, matches, searchUrl, frontendBa
     }
   }
 
-  const logoUrl = `${frontendBase}/site-logo.png`
+  const logoUrl = `${frontendBase}/logo-azul.png`
   let heroCtaUrl
   try {
     heroCtaUrl = new URL('/marketplace', frontendBase).toString()

@@ -100,7 +100,7 @@ async function runDigestOnce() {
     return { title: l.title, image: img, link, priceLabel }
   })
 
-  const logoUrl = `${baseFront}/site-logo.png`
+  const logoUrl = `${baseFront}/logo-azul.png`
   const bikesUrl = `${baseFront}/marketplace`
   const partsUrl = `${baseFront}/marketplace?cat=Accesorios`
   const apparelUrl = `${baseFront}/marketplace?cat=Indumentaria`

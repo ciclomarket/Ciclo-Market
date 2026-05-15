@@ -829,7 +829,7 @@ function buildQuestionEmailHtml({ recipientName, listingTitle, questionBody, lis
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:600px; background-color:#FFFFFF; border-radius:12px; overflow:hidden;">
             <tr>
               <td align="center" style="padding:20px 20px 10px 20px; background-color:#FFFFFF;">
-                <img src="https://www.ciclomarket.ar/_static/email-logo-ciclomarket.png" alt="Ciclo Market" width="120" style="display:block; max-width:120px; height:auto; margin:0 auto;" />
+                <img src="https://www.ciclomarket.ar/logo-azul.png" alt="Ciclo Market" width="120" style="display:block; max-width:120px; height:auto; margin:0 auto;" />
               </td>
             </tr>
             <tr>
@@ -907,7 +907,7 @@ function buildQuestionEmailHtml({ recipientName, listingTitle, questionBody, lis
             <tr>
               <td style="padding:16px 24px 20px 24px; background-color:#FFFFFF;">
                 <p style="margin:0 0 8px 0; font-family:Arial, sans-serif; font-size:12px; color:#777777;">
-                  Si necesitás ayuda, escribinos a <a href="mailto:admin@ciclomarket.ar" style="color:#14212E; text-decoration:none;">hola@ciclomarket.ar</a>.
+                  Si necesitás ayuda, escribinos a <a href="mailto:admin@ciclomarket.ar" style="color:#14212E; text-decoration:none;">admin@ciclomarket.ar</a>.
                 </p>
                 <p style="margin:0 0 6px 0; font-family:Arial, sans-serif; font-size:12px; color:#777777;">
                   Instagram: <a href="https://www.instagram.com/ciclomarket.ar" style="color:#14212E; text-decoration:none;">@ciclomarket.ar</a>
@@ -947,7 +947,7 @@ function buildAnswerEmailHtml({ recipientName, listingTitle, answerBody, listing
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:600px; background-color:#FFFFFF; border-radius:12px; overflow:hidden;">
             <tr>
               <td align="center" style="padding:20px 20px 10px 20px; background-color:#FFFFFF;">
-                <img src="https://www.ciclomarket.ar/_static/email-logo-ciclomarket.png" alt="Ciclo Market" width="120" style="display:block; max-width:120px; height:auto; margin:0 auto;" />
+                <img src="https://www.ciclomarket.ar/logo-azul.png" alt="Ciclo Market" width="120" style="display:block; max-width:120px; height:auto; margin:0 auto;" />
               </td>
             </tr>
             <tr>
@@ -1025,7 +1025,7 @@ function buildAnswerEmailHtml({ recipientName, listingTitle, answerBody, listing
             <tr>
               <td style="padding:16px 24px 20px 24px; background-color:#FFFFFF;">
                 <p style="margin:0 0 8px 0; font-family:Arial, sans-serif; font-size:12px; color:#777777;">
-                  ¿Necesitás ayuda? Escribinos a <a href="mailto:hola@ciclomarket.ar" style="color:#14212E; text-decoration:none;">hola@ciclomarket.ar</a>.
+                  ¿Necesitás ayuda? Escribinos a <a href="mailto:admin@ciclomarket.ar" style="color:#14212E; text-decoration:none;">admin@ciclomarket.ar</a>.
                 </p>
                 <p style="margin:0 0 6px 0; font-family:Arial, sans-serif; font-size:12px; color:#777777;">
                   Instagram: <a href="https://www.instagram.com/ciclomarket.ar" style="color:#14212E; text-decoration:none;">@ciclomarket.ar</a>
@@ -1736,7 +1736,7 @@ function buildTrustLevelEmail({ baseFront, sellerName, listing, sellerId }) {
 <body style="margin:0;padding:0;background-color:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
   <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;margin-top:20px;box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);">
     <div style="background:#f1f5f9;padding:20px;text-align:center;border-bottom:2px solid #e2e8f0;">
-      <img src="${baseFront}/site-logo.png" alt="Ciclo Market" style="height:35px;">
+      <img src="${baseFront}/logo-azul.png" alt="Ciclo Market" style="height:35px;">
     </div>
     <div style="padding:30px 24px;">
       <h1 style="color:#111827;font-size:22px;margin:0 0 10px;line-height:1.3;text-align:center;">
@@ -1801,7 +1801,7 @@ function buildRenewalReminderEmail({ baseFront, sellerName, listing }) {
 <body style="margin:0;padding:0;background:#f2f4f8;font-family:Inter,Arial,sans-serif;">
   <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="width:100%;max-width:680px;margin:0 auto;">
     <tr><td style="padding:22px 24px 10px;text-align:center;">
-      <img src="${baseFront}/site-logo.png" alt="Ciclo Market" style="height:56px;">
+      <img src="${baseFront}/logo-azul.png" alt="Ciclo Market" style="height:56px;">
     </td></tr>
     <tr><td style="padding:0 24px 24px;">
       <div style="background:#ffffff;border-radius:18px;border:1px solid #e6edf6;padding:18px;">
@@ -1842,7 +1842,7 @@ function buildExpiredNoticeEmail({ baseFront, sellerName, listing }) {
 <body style="margin:0;padding:0;background:#f2f4f8;font-family:Inter,Arial,sans-serif;">
   <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="width:100%;max-width:680px;margin:0 auto;">
     <tr><td style="padding:22px 24px 10px;text-align:center;">
-      <img src="${baseFront}/site-logo.png" alt="Ciclo Market" style="height:56px;">
+      <img src="${baseFront}/logo-azul.png" alt="Ciclo Market" style="height:56px;">
     </td></tr>
     <tr><td style="padding:0 24px 24px;">
       <div style="background:#ffffff;border-radius:18px;border:1px solid #e6edf6;padding:18px;">
@@ -1877,7 +1877,7 @@ function buildExtend90dEmail({ baseFront, sellerName }) {
 <body style="margin:0;padding:0;background:#f2f4f8;font-family:Inter,Arial,sans-serif;">
   <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="width:100%;max-width:680px;margin:0 auto;">
     <tr><td style="padding:22px 24px 10px;text-align:center;">
-      <img src="${baseFront}/site-logo.png" alt="Ciclo Market" style="height:56px;">
+      <img src="${baseFront}/logo-azul.png" alt="Ciclo Market" style="height:56px;">
     </td></tr>
     <tr><td style="padding:0 24px 24px;">
       <div style="background:#ffffff;border-radius:18px;border:1px solid #e6edf6;padding:18px;">
@@ -1914,7 +1914,7 @@ function buildWhatsappUpsellEmail({ baseFront, sellerName, listing }) {
 <body style="margin:0;padding:0;background:#f2f4f8;font-family:Inter,Arial,sans-serif;">
   <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="width:100%;max-width:680px;margin:0 auto;">
     <tr><td style="padding:22px 24px 10px;text-align:center;">
-      <img src="${baseFront}/site-logo.png" alt="Ciclo Market" style="height:56px;">
+      <img src="${baseFront}/logo-azul.png" alt="Ciclo Market" style="height:56px;">
     </td></tr>
     <tr><td style="padding:0 24px 24px;">
       <div style="background:#ffffff;border-radius:18px;border:1px solid #e6edf6;padding:18px;">
@@ -1956,7 +1956,7 @@ function buildCustomEmailHtml({ baseFront, sellerName, subject, body }) {
 <body style="margin:0;padding:0;background:#f2f4f8;font-family:Inter,Arial,sans-serif;">
   <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="width:100%;max-width:680px;margin:0 auto;">
     <tr><td style="padding:22px 24px 10px;text-align:center;">
-      <img src="${baseFront}/site-logo.png" alt="Ciclo Market" style="height:56px;">
+      <img src="${baseFront}/logo-azul.png" alt="Ciclo Market" style="height:56px;">
     </td></tr>
     <tr><td style="padding:0 24px 24px;">
       <div style="background:#ffffff;border-radius:18px;border:1px solid #e6edf6;padding:18px;">

@@ -141,7 +141,7 @@ function buildEmailHtml({ profile, items, baseFront }) {
           <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="background:#ffffff;border-radius:8px;overflow:hidden;">
             <tr>
               <td style="padding:24px 24px 8px 24px;">
-                <img src="${cleanBase}/site-logo.png" alt="Ciclo Market" height="28" style="display:block;">
+                <img src="${cleanBase}/logo-azul.png" alt="Ciclo Market" height="28" style="display:block;">
               </td>
             </tr>
             <tr>

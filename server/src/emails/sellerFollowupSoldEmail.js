@@ -18,7 +18,7 @@ function buildSellerFollowupSoldEmail({ baseFront, sellerName }) {
     <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="width:100%;max-width:680px;margin:0 auto">
       <tr>
         <td style="padding:22px 24px 10px;text-align:center">
-          <img src="${cleanBase}/site-logo.png" alt="Ciclo Market" style="height:56px;width:auto;display:inline-block" />
+          <img src="${cleanBase}/logo-azul.png" alt="Ciclo Market" style="height:56px;width:auto;display:inline-block" />
         </td>
       </tr>
       <tr>

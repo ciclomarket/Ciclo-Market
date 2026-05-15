@@ -26,7 +26,7 @@ function buildStoreAnalyticsHTML({
   unsubscribeLink,
 }) {
   const cleanBase = (baseFront || 'https://ciclomarket.ar').replace(/\/$/, '')
-  const logoUrl = `${cleanBase}/site-logo.png`
+  const logoUrl = `${cleanBase}/logo-azul.png`
   const bikesUrl = `${cleanBase}/marketplace`
   const partsUrl = `${cleanBase}/marketplace?cat=Accesorios`
   const apparelUrl = `${cleanBase}/marketplace?cat=Indumentaria`

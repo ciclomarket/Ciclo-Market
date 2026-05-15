@@ -22,7 +22,7 @@ const BRAND = {
   email: 'admin@ciclomarket.ar',
   instagram: '@ciclomarket.ar',
   instagramUrl: 'https://instagram.com/ciclomarket.ar',
-  logoUrl: 'https://www.ciclomarket.ar/site-logo.png',
+  logoUrl: 'https://www.ciclomarket.ar/logo-azul.png',
   footerAvatarUrl: 'https://www.ciclomarket.ar/favicon-96x96.png',
   instagramIconUrl: 'https://www.ciclomarket.ar/icons/instagram.svg',
   colors: {

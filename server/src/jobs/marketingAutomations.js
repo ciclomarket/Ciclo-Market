@@ -126,7 +126,7 @@ function buildEmailLayout({ baseFront, title, introHtml, bodyHtml, extraFooterHt
   const bikesUrl = `${cleanBase}/marketplace`
   const partsUrl = `${cleanBase}/marketplace?cat=Accesorios`
   const apparelUrl = `${cleanBase}/marketplace?cat=Indumentaria`
-  const logoUrl = `${cleanBase}/site-logo.png`
+  const logoUrl = `${cleanBase}/logo-azul.png`
 
   return `
     <div style="background:#f2f4f8;margin:0;padding:0;font-family:Arial, sans-serif;color:#0c1723">
@@ -178,7 +178,7 @@ function buildExpiredEmail({ listing, profile, baseFront }) {
   <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="width:100%;max-width:680px;margin:0 auto;">
     <tr>
       <td style="padding:24px 24px 12px;text-align:center;">
-        <img src="${cleanBase}/site-logo.png" alt="Ciclo Market" style="height:60px;width:auto;display:inline-block;" />
+        <img src="${cleanBase}/logo-azul.png" alt="Ciclo Market" style="height:60px;width:auto;display:inline-block;" />
       </td>
     </tr>
     <tr>
@@ -324,7 +324,7 @@ function buildFreeExpiringEmail({ listing, profile, baseFront, daysLeft }) {
   <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="width:100%;max-width:680px;margin:0 auto;">
     <tr>
       <td style="padding:24px 24px 12px;text-align:center;">
-        <img src="${cleanBase}/site-logo.png" alt="Ciclo Market" style="height:60px;width:auto;display:inline-block;" />
+        <img src="${cleanBase}/logo-azul.png" alt="Ciclo Market" style="height:60px;width:auto;display:inline-block;" />
       </td>
     </tr>
     <tr>
@@ -474,7 +474,7 @@ function buildPaidExpiringEmail({ listing, profile, baseFront, daysLeft }) {
   <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="width:100%;max-width:680px;margin:0 auto;">
     <tr>
       <td style="padding:24px 24px 12px;text-align:center;">
-        <img src="${cleanBase}/site-logo.png" alt="Ciclo Market" style="height:60px;width:auto;display:inline-block;" />
+        <img src="${cleanBase}/logo-azul.png" alt="Ciclo Market" style="height:60px;width:auto;display:inline-block;" />
       </td>
     </tr>
     <tr>
@@ -572,7 +572,7 @@ function buildPaidExpiringEmail({ listing, profile, baseFront, daysLeft }) {
             <td style="padding:16px 24px 22px;color:#94a3b8;font-size:11px;text-align:center;background:#ffffff;">
               <p style="margin:0 0 6px;">
                 ¿Necesitás ayuda con la renovación? Escribinos a
-                <a href="mailto:hola@ciclomarket.ar" style="color:#64748b;text-decoration:underline;">hola@ciclomarket.ar</a>.
+                <a href="mailto:admin@ciclomarket.ar" style="color:#64748b;text-decoration:underline;">admin@ciclomarket.ar</a>.
               </p>
 
               <p style="margin:0 0 4px;">
@@ -620,7 +620,7 @@ function buildHighlightEmail({ listing, profile, baseFront }) {
   <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="width:100%;max-width:680px;margin:0 auto">
     <tr>
       <td style="padding:24px 24px 12px;text-align:center;">
-        <img src="${cleanBase}/site-logo.png" alt="Ciclo Market" style="height:60px;width:auto;display:inline-block;" />
+        <img src="${cleanBase}/logo-azul.png" alt="Ciclo Market" style="height:60px;width:auto;display:inline-block;" />
       </td>
     </tr>
     <tr>
