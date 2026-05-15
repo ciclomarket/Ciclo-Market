@@ -24,6 +24,9 @@ type Props = {
 const MIN_QUESTION_LENGTH = 5
 const MIN_ANSWER_LENGTH = 2
 
+// Desactivar temporalmente mientras se resuelve el incidente de seguridad
+const QUESTIONS_PAUSED = true
+
 function relativeTimeFromNow(timestamp?: number | null): string {
   if (!timestamp) return ''
   const now = Date.now()
@@ -324,6 +327,24 @@ export default function ListingQuestionsSection({ listing, listingUnavailable }:
   useEffect(() => {
     userNamesRef.current = userNames
   }, [userNames])
+
+  if (QUESTIONS_PAUSED) {
+    return (
+      <section className="rounded-2xl border border-red-200 bg-red-50 p-6">
+        <h2 className="text-lg font-semibold text-red-900">Consultas temporalmente desactivadas</h2>
+        <p className="mt-3 text-sm text-red-800">
+          Por razones de seguridad, el servicio de consultas está temporalmente suspendido. Estamos
+          trabajando para resolverlo a la brevedad. Para contactar al vendedor usá los botones de
+          WhatsApp o correo electrónico del aviso.
+        </p>
+        <p className="mt-2 text-sm text-red-700">
+          Si recibiste un mensaje sospechoso pidiendo que hagas clic en un enlace externo para
+          "verificar un pago", <strong>ignoralo</strong> — es una estafa. Ciclo Market nunca pide
+          verificaciones por links de terceros.
+        </p>
+      </section>
+    )
+  }
 
   return (
     <section className="rounded-2xl border border-gray-200 bg-white p-6">

@@ -8,6 +8,7 @@ const express = require('express')
 const { sendMondayEmails, AUTOMATION_TYPE: TYPE_MONDAY } = require('../jobs/mondayNewArrivals')
 const { sendWednesdayEmails, AUTOMATION_TYPE: TYPE_WEDNESDAY } = require('../jobs/wednesdayListingUpdate')
 const { sendFridayEmails, AUTOMATION_TYPE: TYPE_FRIDAY } = require('../jobs/fridayUpgradeOffer')
+const { sendSecurityAlert, AUTOMATION_TYPE: TYPE_SECURITY_ALERT } = require('../jobs/securityAlertBroadcast')
 
 const router = express.Router()
 
@@ -47,7 +48,7 @@ function ensureCronSecret(req, res, next) {
 
 // Health check
 router.get('/cron/health', (req, res) => {
-  res.json({ ok: true, automations: [TYPE_MONDAY, TYPE_WEDNESDAY, TYPE_FRIDAY] })
+  res.json({ ok: true, automations: [TYPE_MONDAY, TYPE_WEDNESDAY, TYPE_FRIDAY, TYPE_SECURITY_ALERT] })
 })
 
 // Monday - Nuevos ingresos
@@ -142,6 +143,32 @@ router.post('/cron/friday-upgrade-offer', ensureCronSecret, async (req, res) => 
     })
   } catch (err) {
     console.error('[emailCron] friday-upgrade-offer failed', err)
+    res.status(500).json({ ok: false, error: err.message })
+  }
+})
+
+// Security Alert Broadcast - one-shot to ALL users
+router.post('/cron/security-alert', ensureCronSecret, async (req, res) => {
+  try {
+    const dryRun = req.body?.dryRun === true || req.query?.dry === 'true'
+    const limit = Number(req.body?.limit || req.query?.limit || 5000)
+    const batchOffset = Number(req.body?.batchOffset || req.query?.batchOffset || 0)
+
+    console.info(`[emailCron] security-alert triggered`, { dryRun, limit, batchOffset })
+
+    const result = await sendSecurityAlert({ dryRun, limit, batchOffset })
+
+    res.json({
+      ok: true,
+      automation: TYPE_SECURITY_ALERT,
+      dryRun,
+      sent: result.sent,
+      skipped: result.skipped,
+      recipientsCount: result.recipients?.length || 0,
+      recipients: dryRun ? result.recipients?.slice(0, 20) : undefined,
+    })
+  } catch (err) {
+    console.error('[emailCron] security-alert failed', err)
     res.status(500).json({ ok: false, error: err.message })
   }
 })
