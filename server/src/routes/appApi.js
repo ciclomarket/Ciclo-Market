@@ -476,36 +476,6 @@ router.get('/api/reviews/can-review', async (req, res) => {
       return res.json({ allowed: false, reason: 'already_reviewed' })
     }
 
-    // If a reminder was issued for this buyer/seller, allow review even if we can't find a contact event.
-    // (Best-effort: some environments might not have the table.)
-    try {
-      const nowIso = new Date().toISOString()
-      const { data: reminder, error: reminderErr } = await supabase
-        .from('review_reminders')
-        .select('id')
-        .eq('seller_id', sellerId)
-        .eq('buyer_id', buyerId)
-        .lte('ready_at', nowIso)
-        .limit(1)
-        .maybeSingle()
-      if (!reminderErr && reminder?.id) return res.json({ allowed: true })
-    } catch (err) {
-      const msg = String(err?.message || '')
-      if (!/does not exist/i.test(msg) && !/42P01/i.test(msg)) {
-        console.warn('[api] can-review reminder lookup failed (non-fatal)', msg || err)
-      }
-    }
-
-    const { data: contact } = await supabase
-      .from('contact_events')
-      .select('id')
-      .eq('seller_id', sellerId)
-      .eq('buyer_id', buyerId)
-      .limit(1)
-      .maybeSingle()
-    if (!contact) {
-      return res.json({ allowed: false, reason: 'no_contact' })
-    }
     return res.json({ allowed: true })
   } catch (err) {
     console.error('[api] can-review error', err)
@@ -569,44 +539,6 @@ router.post('/api/reviews/submit', async (req, res) => {
         return res.status(500).json({ ok: false, error: 'update_failed' })
       }
       return res.json({ ok: true, review: data })
-    }
-
-    // Enforce eligibility (contact event OR reminder) for first-time reviews.
-    const allowByContact = async () => {
-      const { data: contact } = await supabase
-        .from('contact_events')
-        .select('id')
-        .eq('seller_id', String(sellerId))
-        .eq('buyer_id', String(buyerId))
-        .limit(1)
-        .maybeSingle()
-      return Boolean(contact?.id)
-    }
-    const allowByReminder = async () => {
-      try {
-        const nowIso = new Date().toISOString()
-        const { data: reminder, error: reminderErr } = await supabase
-          .from('review_reminders')
-          .select('id')
-          .eq('seller_id', String(sellerId))
-          .eq('buyer_id', String(buyerId))
-          .lte('ready_at', nowIso)
-          .limit(1)
-          .maybeSingle()
-        if (reminderErr) return false
-        return Boolean(reminder?.id)
-      } catch (err) {
-        const msg = String(err?.message || '')
-        if (!/does not exist/i.test(msg) && !/42P01/i.test(msg)) {
-          console.warn('[api] review reminder lookup failed (non-fatal)', msg || err)
-        }
-        return false
-      }
-    }
-
-    const allowed = (await allowByContact()) || (await allowByReminder())
-    if (!allowed) {
-      return res.status(403).json({ ok: false, error: 'not_allowed' })
     }
 
     const { data, error } = await supabase
