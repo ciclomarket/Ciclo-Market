@@ -8,7 +8,7 @@ const express = require('express')
 const { sendMondayEmails, AUTOMATION_TYPE: TYPE_MONDAY } = require('../jobs/mondayNewArrivals')
 const { sendWednesdayEmails, AUTOMATION_TYPE: TYPE_WEDNESDAY } = require('../jobs/wednesdayListingUpdate')
 const { sendFridayEmails, AUTOMATION_TYPE: TYPE_FRIDAY } = require('../jobs/fridayUpgradeOffer')
-const { sendSecurityAlert, AUTOMATION_TYPE: TYPE_SECURITY_ALERT } = require('../jobs/securityAlertBroadcast')
+const { sendSecurityAlert, sendTargetedSecurityAlert, AUTOMATION_TYPE: TYPE_SECURITY_ALERT } = require('../jobs/securityAlertBroadcast')
 
 const router = express.Router()
 
@@ -169,6 +169,35 @@ router.post('/cron/security-alert', ensureCronSecret, async (req, res) => {
     })
   } catch (err) {
     console.error('[emailCron] security-alert failed', err)
+    res.status(500).json({ ok: false, error: err.message })
+  }
+})
+
+// Security Alert Targeted — solo a usuarios que recibieron el mensaje fraudulento
+router.post('/cron/security-alert-targeted', ensureCronSecret, async (req, res) => {
+  try {
+    const dryRun = req.body?.dryRun === true || req.query?.dry === 'true'
+    const userIds = req.body?.userIds
+
+    if (!Array.isArray(userIds) || !userIds.length) {
+      return res.status(400).json({ ok: false, error: 'userIds debe ser un array no vacío' })
+    }
+
+    console.info(`[emailCron] security-alert-targeted triggered`, { dryRun, count: userIds.length })
+
+    const result = await sendTargetedSecurityAlert({ userIds, dryRun })
+
+    res.json({
+      ok: true,
+      automation: `${TYPE_SECURITY_ALERT}:targeted`,
+      dryRun,
+      sent: result.sent,
+      skipped: result.skipped,
+      recipientsCount: result.recipients?.length || 0,
+      recipients: dryRun ? result.recipients : undefined,
+    })
+  } catch (err) {
+    console.error('[emailCron] security-alert-targeted failed', err)
     res.status(500).json({ ok: false, error: err.message })
   }
 })
