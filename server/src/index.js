@@ -1628,6 +1628,302 @@ async function runSavedSearchAlert(listingId) {
 module.exports.runSavedSearchAlert = runSavedSearchAlert
 module.exports.runSavedSearchDigestOnce = runSavedSearchDigestOnce
 
+/* ----------------------------- Store subscription ------------------------- */
+
+// Helper: obtiene el store_slug de un usuario
+async function getStoreSlug(supabase, userId) {
+  try {
+    const { data } = await supabase.from('users').select('store_slug').eq('id', userId).maybeSingle()
+    return data?.store_slug || null
+  } catch { return null }
+}
+
+// Helper: envía email de bienvenida cuando la tienda se activa por primera vez
+async function sendStoreWelcomeEmail(email, storeName, storeSlug) {
+  if (!email || !isMailConfigured()) return
+  const name = storeName || 'tu tienda'
+  const slug = storeSlug || ''
+  const storeUrl = `https://www.ciclomarket.ar/tienda/${slug}`
+  const publishUrl = 'https://www.ciclomarket.ar/publicar'
+  const whatsappUrl = 'https://wa.me/5493764748459'
+
+  await sendMail({
+    to: email,
+    subject: '¡Tu tienda en Ciclo Market está activa!',
+    html: `
+<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f4f6f8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f8;padding:32px 16px">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;overflow:hidden;max-width:560px">
+        <tr>
+          <td style="background:#14212e;padding:32px;text-align:center">
+            <img src="https://www.ciclomarket.ar/android-chrome-192x192.png" alt="Ciclo Market" width="56" style="border-radius:12px;display:block;margin:0 auto 16px">
+            <h1 style="color:#ffffff;font-size:22px;margin:0;font-weight:700">¡Tu tienda está activa!</h1>
+            <p style="color:#94a3b8;font-size:14px;margin:8px 0 0">Ya podés empezar a vender en Ciclo Market</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:32px">
+            <p style="color:#374151;font-size:16px;margin:0 0 8px"><strong>${name}</strong> ya aparece en el directorio de tiendas de Ciclo Market.</p>
+            <p style="color:#6b7280;font-size:14px;margin:0 0 24px">Estos son tus primeros 3 pasos para sacarle el máximo provecho:</p>
+
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:16px;margin-bottom:12px">
+                  <p style="margin:0;color:#15803d;font-weight:600;font-size:14px">1. Publicá tu primer producto</p>
+                  <p style="margin:4px 0 0;color:#374151;font-size:13px">Cargá tus bicicletas con fotos, precio y descripción.</p>
+                </td>
+              </tr>
+              <tr><td style="height:10px"></td></tr>
+              <tr>
+                <td style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:16px">
+                  <p style="margin:0;color:#1d4ed8;font-weight:600;font-size:14px">2. Completá el perfil de tu tienda</p>
+                  <p style="margin:4px 0 0;color:#374151;font-size:13px">Logo, banner, descripción y redes sociales desde tu Dashboard.</p>
+                </td>
+              </tr>
+              <tr><td style="height:10px"></td></tr>
+              <tr>
+                <td style="background:#fefce8;border:1px solid #fde68a;border-radius:12px;padding:16px">
+                  <p style="margin:0;color:#92400e;font-weight:600;font-size:14px">3. Compartí el link de tu tienda</p>
+                  <p style="margin:4px 0 0;color:#374151;font-size:13px">Tu tienda ya tiene una URL propia que podés compartir.</p>
+                </td>
+              </tr>
+            </table>
+
+            ${slug ? `
+            <div style="background:#f8fafc;border-radius:10px;padding:16px;margin:24px 0 0;text-align:center">
+              <p style="margin:0 0 8px;color:#6b7280;font-size:12px;text-transform:uppercase;letter-spacing:0.05em">Tu tienda</p>
+              <a href="${storeUrl}" style="color:#14212e;font-weight:700;font-size:15px;text-decoration:none">${storeUrl}</a>
+            </div>
+            ` : ''}
+
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:24px">
+              <tr>
+                <td align="center" style="padding:0 4px">
+                  <a href="${publishUrl}" style="display:inline-block;background:#14212e;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600">Publicar producto</a>
+                </td>
+                <td align="center" style="padding:0 4px">
+                  <a href="${storeUrl}" style="display:inline-block;background:#f1f5f9;color:#14212e;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600">Ver mi tienda</a>
+                </td>
+              </tr>
+            </table>
+
+            <p style="color:#9ca3af;font-size:13px;margin:32px 0 0;text-align:center">
+              ¿Tenés dudas? Escribinos por
+              <a href="${whatsappUrl}" style="color:#14212e">WhatsApp</a>
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#f8fafc;padding:16px 32px;text-align:center;border-top:1px solid #e5e7eb">
+            <p style="margin:0;color:#9ca3af;font-size:12px">Ciclo Market · ciclomarket.ar</p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`,
+  })
+}
+
+// Helper: procesa una notificación de preapproval de MercadoPago
+async function processStoreSubscription(preapprovalId) {
+  try {
+    const token = String(process.env.MERCADOPAGO_ACCESS_TOKEN || '').trim()
+    if (!token) return { ok: false, error: 'no_token' }
+
+    const mpRes = await fetch(`https://api.mercadolibre.com/preapproval/${encodeURIComponent(String(preapprovalId))}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!mpRes.ok) {
+      const txt = await mpRes.text().catch(() => '')
+      console.warn('[processStoreSubscription] MP fetch failed', { preapprovalId, status: mpRes.status, body: txt })
+      return { ok: false, error: 'mp_fetch_failed' }
+    }
+
+    const data = await mpRes.json()
+    const status = String(data.status || '').toLowerCase()
+    const externalRef = String(data.external_reference || '')
+
+    // external_reference: "store:{userId}:plan:monthly" o "store:{userId}:plan:yearly"
+    const match = externalRef.match(/^store:([^:]+):plan:(monthly|yearly)$/)
+    if (!match) {
+      console.warn('[processStoreSubscription] unrecognized external_reference', externalRef)
+      return { ok: false, error: 'unknown_reference' }
+    }
+
+    const userId = match[1]
+    const planType = match[2]
+    const supabase = getServerSupabaseClient()
+    const now = new Date()
+
+    const periodEnd = new Date(now)
+    if (planType === 'monthly') {
+      periodEnd.setMonth(periodEnd.getMonth() + 1)
+    } else {
+      periodEnd.setFullYear(periodEnd.getFullYear() + 1)
+    }
+
+    if (status === 'authorized') {
+      // Leer estado actual para detectar primera activación
+      const { data: userRow } = await supabase
+        .from('users')
+        .select('store_enabled, store_name, store_slug, email')
+        .eq('id', userId)
+        .maybeSingle()
+
+      const wasAlreadyEnabled = Boolean(userRow?.store_enabled)
+
+      await supabase.from('users').update({ store_enabled: true }).eq('id', userId)
+
+      await supabase.from('store_subscriptions')
+        .update({
+          status: 'active',
+          provider_status: status,
+          current_period_start: now.toISOString(),
+          current_period_end: periodEnd.toISOString(),
+          updated_at: now.toISOString(),
+        })
+        .eq('provider_sub_id', String(preapprovalId))
+
+      if (!wasAlreadyEnabled && userRow?.email) {
+        sendStoreWelcomeEmail(userRow.email, userRow.store_name, userRow.store_slug)
+          .catch(err => console.error('[processStoreSubscription] welcome email failed', err))
+      }
+
+      console.info('[processStoreSubscription] store activated', { userId, planType })
+      return { ok: true, status: 'activated' }
+    }
+
+    if (status === 'cancelled' || status === 'paused') {
+      await supabase.from('users').update({ store_enabled: false }).eq('id', userId)
+
+      await supabase.from('store_subscriptions')
+        .update({
+          status: status === 'cancelled' ? 'canceled' : 'paused',
+          provider_status: status,
+          updated_at: now.toISOString(),
+        })
+        .eq('provider_sub_id', String(preapprovalId))
+
+      console.info('[processStoreSubscription] store deactivated', { userId, status })
+      return { ok: true, status: 'deactivated' }
+    }
+
+    console.info('[processStoreSubscription] unhandled status', { preapprovalId, status })
+    return { ok: true, status: 'noop' }
+  } catch (err) {
+    console.error('[processStoreSubscription] unexpected error', err)
+    return { ok: false, error: 'unexpected_error' }
+  }
+}
+
+// Crear suscripción de tienda: genera un preapproval en MercadoPago y guarda en store_subscriptions
+app.post('/api/store/subscribe', async (req, res) => {
+  try {
+    const supabase = getServerSupabaseClient()
+    const user = await getAuthUser(req, supabase)
+    if (!user) return res.status(401).json({ ok: false, error: 'unauthorized' })
+
+    const { planType, storeData } = req.body || {}
+    if (!['monthly', 'yearly'].includes(planType)) {
+      return res.status(400).json({ ok: false, error: 'invalid_plan_type' })
+    }
+
+    const token = String(process.env.MERCADOPAGO_ACCESS_TOKEN || '').trim()
+    if (!token) return res.status(503).json({ ok: false, error: 'payments_unavailable' })
+
+    const publicBase = (process.env.PUBLIC_BASE_URL || '').toString().replace(/\/$/, '')
+    const frontendBase = resolveFrontendBaseUrl()
+
+    const isMonthly = planType === 'monthly'
+    const amount = isMonthly ? 30000 : 300000
+    // MP Argentina: frequency 1 mes o 12 meses (anual)
+    const frequency = isMonthly ? 1 : 12
+    const reason = isMonthly
+      ? 'Tienda Ciclo Market – Plan Mensual'
+      : 'Tienda Ciclo Market – Plan Anual'
+
+    const preapprovalBody = {
+      reason,
+      external_reference: `store:${user.id}:plan:${planType}`,
+      payer_email: user.email,
+      auto_recurring: {
+        frequency,
+        frequency_type: 'months',
+        transaction_amount: amount,
+        currency_id: 'ARS',
+      },
+      back_url: `${frontendBase}/tienda/activada`,
+      notification_url: publicBase ? `${publicBase}/api/mp/webhook` : undefined,
+      status: 'pending',
+    }
+
+    const mpRes = await fetch('https://api.mercadolibre.com/preapproval', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(preapprovalBody),
+    })
+
+    if (!mpRes.ok) {
+      const errBody = await mpRes.text().catch(() => '')
+      console.error('[store/subscribe] MP preapproval failed', { status: mpRes.status, body: errBody })
+      return res.status(502).json({ ok: false, error: 'mp_error' })
+    }
+
+    const mpData = await mpRes.json()
+    const initUrl = mpData.init_point || mpData.sandbox_init_point
+    const providerSubId = String(mpData.id || '')
+
+    // Guardar datos de la tienda en users (sin activar aún)
+    if (storeData && typeof storeData === 'object') {
+      const rawSlug = String(storeData.storeName || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-+|-+$)/g, '')
+
+      await supabase.from('users').update({
+        store_name: storeData.storeName || null,
+        store_slug: rawSlug || null,
+        store_address: storeData.storeAddress || null,
+        store_phone: storeData.storePhone || null,
+        store_website: storeData.storeWebsite || null,
+        store_avatar_url: storeData.storeAvatarUrl || null,
+        store_banner_url: storeData.storeBannerUrl || null,
+        store_instagram: storeData.storeInstagram || null,
+      }).eq('id', user.id)
+    }
+
+    // Registrar suscripción pendiente
+    const { error: dbErr } = await supabase.from('store_subscriptions').insert({
+      user_id: user.id,
+      status: 'pending',
+      price_cents: amount,
+      currency: 'ARS',
+      provider: 'mercadopago',
+      provider_sub_id: providerSubId,
+      provider_status: 'pending',
+      init_url: initUrl,
+      plan_type: planType,
+    })
+    if (dbErr) console.error('[store/subscribe] db insert failed', dbErr)
+
+    return res.json({ ok: true, url: initUrl, subscriptionId: providerSubId })
+  } catch (err) {
+    console.error('[store/subscribe] unexpected error', err)
+    return res.status(500).json({ ok: false, error: 'unexpected_error' })
+  }
+})
+
 /* ----------------------------- Payment confirm (manual) ------------------- */
 // Admin-triggered endpoint to confirm a payment by id (fallback if webhooks fail)
 // Requires x-cron-secret header to prevent abuse
@@ -1664,6 +1960,12 @@ app.all('/api/mp/webhook', (req, res) => {
   ;(async () => {
     try {
       if (!id) return
+
+      if (topic === 'preapproval') {
+        const result = await processStoreSubscription(id)
+        if (!result.ok) console.warn('[webhook] processStoreSubscription failed', { id, result })
+        return
+      }
 
       if (topic === 'merchant_order') {
         const token = String(process.env.MERCADOPAGO_ACCESS_TOKEN || '').trim()

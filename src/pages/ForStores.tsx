@@ -203,14 +203,12 @@ export default function ForStores() {
               </p>
 
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                <a
-                  href={APPLY_URL}
-                  target="_blank"
-                  rel="noreferrer"
+                <Link
+                  to="/tienda/nueva"
                   className="inline-flex items-center justify-center rounded-full bg-[#14212E] px-6 py-3 text-base font-semibold text-white shadow-sm transition hover:bg-[#1b2f3f]"
                 >
-                  Aplicar para Tienda Oficial <ArrowRight className="ml-2 h-5 w-5" />
-                </a>
+                  Abrir mi tienda <ArrowRight className="ml-2 h-5 w-5" />
+                </Link>
                 <Link
                   to="/tienda/giant_lalucila"
                   className="inline-flex items-center justify-center rounded-full border border-gray-200 bg-white px-6 py-3 text-base font-semibold text-[#14212E] shadow-sm transition hover:border-gray-300"
@@ -218,6 +216,17 @@ export default function ForStores() {
                   Ver ejemplo en vivo
                 </Link>
               </div>
+              <p className="mt-3 text-sm text-gray-400">
+                ¿Preferís hablar primero?{' '}
+                <a
+                  href={APPLY_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[#14212e] underline-offset-2 hover:underline"
+                >
+                  Solicitá una demo por WhatsApp
+                </a>
+              </p>
 
               <div className="mt-8 flex flex-wrap items-center gap-3 text-sm text-gray-500">
                 <span className="rounded-full bg-white px-3 py-1 ring-1 ring-gray-200">Publicaciones ilimitadas</span>
@@ -486,14 +495,20 @@ export default function ForStores() {
               ))}
             </div>
 
-            <div className="mt-10 flex justify-center">
+            <div className="mt-10 flex flex-col items-center gap-3">
+              <Link
+                to="/tienda/nueva"
+                className="inline-flex items-center justify-center rounded-full bg-[#14212E] px-8 py-4 text-lg font-semibold text-white shadow-sm transition hover:bg-[#1b2f3f]"
+              >
+                Abrir mi tienda <ArrowRight className="ml-2 h-5 w-5" />
+              </Link>
               <a
                 href={APPLY_URL}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center justify-center rounded-full bg-[#14212E] px-8 py-4 text-lg font-semibold text-white shadow-sm transition hover:bg-[#1b2f3f]"
+                className="text-sm text-gray-400 underline-offset-2 hover:text-gray-600 hover:underline"
               >
-                Hablemos de negocios <ArrowRight className="ml-2 h-5 w-5" />
+                ¿Preferís una demo? Escribinos por WhatsApp
               </a>
             </div>
           </div>

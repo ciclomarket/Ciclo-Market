@@ -1,4 +1,6 @@
 /* eslint-disable react/prop-types */
+import { useState } from 'react';
+import { parseMoneyInput } from '@/utils/money';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -21,6 +23,31 @@ export default function StepPricing({ data, onChange, errors, provinces = [], cu
   const updateField = (field, value) => {
     onChange(field, value);
   };
+
+  const [displayValue, setDisplayValue] = useState(() => {
+    const n = parseMoneyInput(data.priceInput);
+    return n && n > 0 ? n.toLocaleString('es-AR') : (data.priceInput || '');
+  });
+
+  const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setDisplayValue(e.target.value.replace(/[^\d.,]/g, ''));
+  };
+
+  const handlePriceBlur = () => {
+    const n = parseMoneyInput(displayValue);
+    const parsed = n && n > 0 ? Math.floor(n) : 0;
+    updateField('priceInput', parsed > 0 ? String(parsed) : '');
+    setDisplayValue(parsed > 0 ? parsed.toLocaleString('es-AR') : '');
+  };
+
+  const handlePriceFocus = () => {
+    const n = parseMoneyInput(data.priceInput);
+    setDisplayValue(n && n > 0 ? String(n) : '');
+  };
+
+  const parsedPrice = parseMoneyInput(data.priceInput) || 0;
+  const showLowPriceWarning = data.priceCurrency === 'ARS' && parsedPrice > 0 && parsedPrice < 10_000;
+  const showHighPriceWarning = data.priceCurrency === 'ARS' && parsedPrice > 50_000_000;
 
   const selectedCurrency = CURRENCY_META[(data.priceCurrency || 'USD') as 'USD' | 'ARS'] || CURRENCY_META.USD;
   const provinceOptions = provinces.map((p) => (typeof p === 'string' ? p : p.name));
@@ -67,15 +94,28 @@ export default function StepPricing({ data, onChange, errors, provinces = [], cu
               {selectedCurrency.symbol}
             </span>
             <Input
-              type="number"
-              placeholder="0"
-              value={data.priceInput || ''}
-              onChange={(e) => updateField('priceInput', e.target.value)}
+              type="text"
+              inputMode="numeric"
+              placeholder="Ej: 650.000"
+              value={displayValue}
+              onChange={handlePriceChange}
+              onBlur={handlePriceBlur}
+              onFocus={handlePriceFocus}
               className={cn("h-12 pl-12 text-lg font-medium", errors?.priceInput && "border-red-500")}
             />
           </div>
         </div>
         {errors?.priceInput && <p className="text-sm text-red-500">{errors.priceInput}</p>}
+        {showLowPriceWarning && (
+          <p className="text-sm text-amber-600">
+            ⚠️ ¿El precio es ${parsedPrice.toLocaleString('es-AR')} ARS? Si usás punto como separador de miles, escribí sin puntos o con coma: 650000 o 650,000
+          </p>
+        )}
+        {showHighPriceWarning && (
+          <p className="text-sm text-amber-600">
+            ⚠️ Precio muy alto, verificá que sea correcto
+          </p>
+        )}
 
         {/* Negotiable toggle */}
         <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl">

@@ -154,6 +154,7 @@ function setBotHeaders(res) {
   res.set('X-Robots-Tag', 'all')
   res.set('Access-Control-Allow-Origin', '*')
   res.set('X-Content-Type-Options', 'nosniff')
+  res.set('X-Rendered-By', 'ciclomarket-ssr-v2')
 }
 
 function redirectToSpa(res, pathWithQuery) {
@@ -169,11 +170,19 @@ function renderOgHtml({
   type = 'website',
   siteName = 'Ciclo Market',
   extraMeta = '',
+  bodyHtml = null,
+  jsonLd = '',
 }) {
   const safeTitle = escapeHtml(title)
   const safeDesc = escapeHtml(description)
   const safeImage = escapeHtml(image)
   const safeUrl = escapeHtml(url)
+  const defaultBody = `<div class="card">
+      <img src="${safeImage}" alt="${safeTitle}" loading="lazy" />
+      <h1>${safeTitle}</h1>
+      <p>Vista previa para compartir.</p>
+      <p><a href="${safeUrl}">Abrir en Ciclo Market →</a></p>
+    </div>`
   return `<!doctype html>
 <html lang="es">
   <head>
@@ -191,27 +200,28 @@ function renderOgHtml({
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:locale" content="es_AR" />
-    ${FACEBOOK_APP_ID ? `<meta property=\"fb:app_id\" content=\"${FACEBOOK_APP_ID}\" />` : ''}
+    ${FACEBOOK_APP_ID ? `<meta property="fb:app_id" content="${FACEBOOK_APP_ID}" />` : ''}
     ${extraMeta || ''}
+    ${jsonLd || ''}
 
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${safeTitle}" />
     <meta name="twitter:description" content="${safeDesc}" />
     <meta name="twitter:image" content="${safeImage}" />
     <style>
-      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 2rem; color: #14212e; }
+      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 2rem; color: #14212e; max-width: 860px; margin: 0 auto; line-height: 1.6; }
+      nav { font-size: 0.875rem; margin-bottom: 1.5rem; color: #6b7280; }
+      nav a { color: #0c72ff; text-decoration: none; }
       a { color: #0c72ff; }
+      h1 { font-size: 1.75rem; margin: 0 0 1rem; }
+      h2 { font-size: 1.125rem; margin: 1.5rem 0 0.375rem; color: #374151; }
+      p { margin: 0.25rem 0; }
       .card { max-width: 520px; margin: 0 auto; border-radius: 16px; border: 1px solid #e5e7eb; padding: 1.5rem; text-align: center; box-shadow: 0 18px 40px -16px rgba(12, 23, 35, 0.18); }
       img { max-width: 100%; border-radius: 12px; margin-bottom: 1rem; }
     </style>
   </head>
   <body>
-    <div class="card">
-      <img src="${safeImage}" alt="${safeTitle}" loading="lazy" />
-      <h1>${safeTitle}</h1>
-      <p>Vista previa para compartir.</p>
-      <p><a href="${safeUrl}">Abrir en Ciclo Market →</a></p>
-    </div>
+    ${bodyHtml !== null ? bodyHtml : defaultBody}
   </body>
 </html>`
 }
@@ -375,7 +385,7 @@ exports.shareBlog = onRequest({ region: 'us-central1', memory: '256MiB', secrets
     try {
       const q = await supabase
         .from('blog_posts')
-        .select('title, slug, excerpt, cover_image_url, html_content, status, seo_title, seo_description, canonical_url, og_image_url')
+        .select('title, slug, excerpt, cover_image_url, html_content, status, seo_title, seo_description, canonical_url, og_image_url, created_at, updated_at')
         .eq('slug', slug)
         .maybeSingle()
       row = q.data; error = q.error
@@ -384,7 +394,7 @@ exports.shareBlog = onRequest({ region: 'us-central1', memory: '256MiB', secrets
       console.warn('[shareBlog] fetch with seo columns failed, retrying minimal set', e)
       const q2 = await supabase
         .from('blog_posts')
-        .select('title, slug, excerpt, cover_image_url, html_content, status')
+        .select('title, slug, excerpt, cover_image_url, html_content, status, created_at, updated_at')
         .eq('slug', slug)
         .maybeSingle()
       row = q2.data; error = q2.error
@@ -399,13 +409,70 @@ exports.shareBlog = onRequest({ region: 'us-central1', memory: '256MiB', secrets
 
     const canonical = ensureSiteUrl(row.canonical_url, `/blog/${row.slug}`)
     const baseTitle = row.seo_title || row.title || 'Artículo · Ciclo Market'
-    const title = clamp(`${baseTitle} | Ciclo Market`, 90)
-    const fallbackDesc = row.seo_description || row.excerpt || stripHtml(row.html_content) || 'Leé historias y guías en el blog de Ciclo Market.'
-    const description = clamp(fallbackDesc, 220)
+    // Title: "[Título] | Blog Ciclo Market"
+    const title = clamp(`${baseTitle} | Blog Ciclo Market`, 90)
+
+    // First real paragraph for description (max 155 chars)
+    function firstParagraph(html) {
+      if (!html) return null
+      const match = String(html).match(/<p[^>]*>([\s\S]*?)<\/p>/i)
+      const text = match ? stripHtml(match[1]) : stripHtml(html)
+      return text.replace(/\s+/g, ' ').trim() || null
+    }
+    const rawDesc = row.seo_description || row.excerpt || firstParagraph(row.html_content) || 'Leé historias y guías en el blog de Ciclo Market.'
+    const description = clamp(rawDesc, 155)
+
     const image = toAbsoluteUrl(row.og_image_url || row.cover_image_url || FALLBACK_IMAGE, SITE_ORIGIN) || FALLBACK_LOGO
+
+    // Format date as "12 de mayo de 2025"
+    function formatDateEs(iso) {
+      if (!iso) return null
+      try {
+        const d = new Date(iso)
+        const months = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
+        return `${d.getDate()} de ${months[d.getMonth()]} de ${d.getFullYear()}`
+      } catch { return null }
+    }
+    const publishedIso = row.created_at || null
+    const modifiedIso = row.updated_at || row.created_at || null
+    const publishedReadable = formatDateEs(publishedIso)
+
+    // Build rich body HTML
+    const articleTitle = escapeHtml(row.title || baseTitle)
+    const bodyParts = [
+      `<nav aria-label="breadcrumb"><a href="${SITE_ORIGIN}">Inicio</a> &rsaquo; <a href="${SITE_ORIGIN}/blog">Blog</a> &rsaquo; <span>${articleTitle}</span></nav>`,
+      `<h1>${articleTitle}</h1>`,
+    ]
+    if (publishedReadable && publishedIso) {
+      bodyParts.push(`<p><time datetime="${escapeHtml(publishedIso)}">${escapeHtml(publishedReadable)}</time></p>`)
+    }
+    const summaryText = row.excerpt || firstParagraph(row.html_content)
+    if (summaryText) bodyParts.push(`<p>${escapeHtml(clamp(summaryText, 400))}</p>`)
+    bodyParts.push(`<p><a href="${escapeHtml(canonical)}">Leer artículo completo en Ciclo Market</a></p>`)
+    const bodyHtml = bodyParts.join('\n')
+
+    // JSON-LD: Article schema
+    const articleSchema = {
+      '@context': 'https://schema.org',
+      '@type': 'Article',
+      headline: clamp(row.title || baseTitle, 110),
+      description: clamp(rawDesc, 160),
+      image,
+      ...(publishedIso ? { datePublished: publishedIso } : {}),
+      ...(modifiedIso ? { dateModified: modifiedIso } : {}),
+      author: { '@type': 'Organization', name: 'Ciclo Market', url: SITE_ORIGIN },
+      publisher: {
+        '@type': 'Organization',
+        name: 'Ciclo Market',
+        logo: { '@type': 'ImageObject', url: `${SITE_ORIGIN}/logo-azul.png` },
+      },
+      mainEntityOfPage: { '@type': 'WebPage', '@id': canonical },
+    }
+
+    const jsonLd = `<script type="application/ld+json">${JSON.stringify(articleSchema)}</script>`
     const extraMeta = `<meta property="og:image:secure_url" content="${escapeHtml(image)}" />`
 
-    const html = renderOgHtml({ title, description, image, url: canonical, type: 'article', extraMeta })
+    const html = renderOgHtml({ title, description, image, url: canonical, type: 'article', extraMeta, bodyHtml, jsonLd })
     setBotHeaders(res)
     buildCache(res)
     res.set('Content-Type', 'text/html; charset=utf-8')
@@ -554,40 +621,170 @@ exports.shareListing = onRequest({ region: 'us-central1', memory: '256MiB', secr
       return sendFallback(200)
     }
 
+    // Parse condition from extras string (e.g. "Condición: Usado • Talle: M • Rodado: 29")
+    function getExtraValue(label) {
+      const tokens = String(row.extras || '').split('•').map(t => t.trim()).filter(Boolean)
+      const token = tokens.find(t => t.toLowerCase().startsWith(label.toLowerCase() + ':'))
+      return token ? token.slice(label.length + 1).trim() : null
+    }
+    const condition = getExtraValue('Condición') || getExtraValue('Condicion') || null
+
+    // Fetch seller store info for body and JSON-LD
+    let sellerStoreSlug = null
+    let sellerStoreName = String(row.seller_name || '').trim() || null
+    if (row.seller_id) {
+      try {
+        const { data: sellerRow } = await supabase
+          .from('users')
+          .select('store_slug, store_name, store_enabled')
+          .eq('id', row.seller_id)
+          .maybeSingle()
+        if (sellerRow?.store_slug) {
+          sellerStoreSlug = sellerRow.store_slug
+          sellerStoreName = String(sellerRow.store_name || sellerStoreName || '').trim() || sellerStoreName
+        }
+      } catch (e) {
+        console.warn('[shareListing] seller store fetch error', e)
+      }
+    }
+
     const brand = String(row.brand || '').trim()
     const model = String(row.model || '').trim()
     const year = row.year ? String(row.year) : ''
-    const typeMap = { ruta: 'Ruta', gravel: 'Gravel', mtb: 'MTB', urbana: 'Urbana' }
+    const catLabelMap = { ruta: 'Ruta', gravel: 'Gravel', mtb: 'MTB', urbana: 'Urbana', fixie: 'Fixie', pista: 'Pista', cicloturismo: 'Cicloturismo' }
+    const catSlugMap = { ruta: 'bicicletas-ruta', gravel: 'bicicletas-gravel', mtb: 'bicicletas-mtb', urbana: 'bicicletas-urbanas', fixie: 'fixie' }
     const rawCat = (row.category || '').toString().toLowerCase()
-    const type = typeMap[rawCat] || (row.category || '').toString()
-    const group = (row.drivetrain_detail || row.drivetrain || '').toString()
+    const categoryLabel = catLabelMap[rawCat] || (row.category || '').toString()
+    const categorySeoSlug = catSlugMap[rawCat] || null
+    const group = (row.drivetrain_detail || row.drivetrain || '').toString().trim()
+    const wheelSize = (row.wheel_size || '').toString().trim()
+    const frameSize = (row.frame_size || '').toString().trim()
+    const location = (row.location || row.seller_location || '').toString().trim()
 
     const parts = [brand, model, year].filter(Boolean)
     const titleCore = parts.length ? parts.join(' ') : (row.title || 'Publicación')
-    const title = clamp(`${titleCore} – Ciclo Market`, 90)
 
-    const fragments = [year || null, type || null, group || null].filter(Boolean)
-    const descriptionRaw = `${[brand, model].filter(Boolean).join(' ')}${fragments.length ? ' · ' + fragments.join(' · ') : ''} · Publicada en Ciclo Market.`
-    const description = clamp(descriptionRaw || stripHtml(row.description) || 'Publicada en Ciclo Market.', 220)
+    const priceNum = typeof row.price === 'number' && Number.isFinite(row.price) ? row.price : null
+    const currency = (row.price_currency || 'ARS').toString().toUpperCase()
+    const availability = String(row.status || '').toLowerCase() === 'sold' ? 'oos' : 'instock'
+    const formattedPrice = priceNum != null
+      ? '$' + String(Math.round(priceNum)).replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+      : null
 
+    // Title: "[Marca] [Modelo] [Año] – $[Precio] | Ciclo Market" (max 60 chars)
+    const titleWithPrice = formattedPrice
+      ? `${titleCore} – ${formattedPrice} | Ciclo Market`
+      : `${titleCore} | Ciclo Market`
+    const title = titleWithPrice.length <= 60 ? titleWithPrice : clamp(`${titleCore} | Ciclo Market`, 60)
+
+    // Meta description (max 155 chars)
+    const descParts = []
+    if (condition) descParts.push(condition)
+    descParts.push([brand, model].filter(Boolean).join(' ') || 'Bicicleta')
+    if (wheelSize) descParts.push(`rodado ${wheelSize}`)
+    if (frameSize) descParts.push(`talle ${frameSize}`)
+    const locationPart = location ? `. Ubicado en ${location}` : ''
+    const description = clamp(
+      descParts.join(', ') + locationPart + '. Contactá al vendedor en Ciclo Market.',
+      155
+    )
+
+    // Images
     let rawImg = firstImage(row.images) || FALLBACK_IMAGE
-    // Si la imagen proviene de Supabase y no tiene query, solicitar versión optimizada (ancho 1200)
     if (rawImg && rawImg.includes('supabase.co') && !rawImg.includes('?')) {
       rawImg = `${rawImg}?width=1200&quality=80&resize=contain`
     }
     const image = toAbsoluteUrl(rawImg, SITE_ORIGIN) || FALLBACK_LOGO
 
+    let img2 = null
+    if (Array.isArray(row.images) && row.images.length > 1) {
+      let raw2 = row.images[1]
+      if (raw2 && typeof raw2 === 'object' && 'url' in raw2) raw2 = raw2.url
+      raw2 = String(raw2 || '').trim()
+      if (raw2) {
+        if (raw2.includes('supabase.co') && !raw2.includes('?')) raw2 = `${raw2}?width=1200&quality=80&resize=contain`
+        img2 = toAbsoluteUrl(raw2, SITE_ORIGIN) || null
+      }
+    }
+
     const canonical = ensureSiteUrl(`/listing/${row.slug || row.id}`, `/listing/${slug || ''}`)
 
-    const priceAmount = typeof row.price === 'number' && Number.isFinite(row.price) ? row.price.toString() : ''
-    const currency = (row.price_currency || 'ARS').toString().toUpperCase()
-    const availability = String(row.status || '').toLowerCase() === 'sold' ? 'oos' : 'instock'
-    const extraMeta = `${priceAmount ? `<meta property=\"product:price:amount\" content=\"${escapeHtml(priceAmount)}\" />` : ''}
-${priceAmount ? `<meta property=\"product:price:currency\" content=\"${escapeHtml(currency)}\" />` : ''}
-<meta property=\"product:availability\" content=\"${escapeHtml(availability)}\" />
-<meta property=\"og:image:secure_url\" content=\"${escapeHtml(image)}\" />`
+    // Build rich body HTML
+    const breadcrumbNav = categorySeoSlug
+      ? `<nav aria-label="breadcrumb"><a href="${SITE_ORIGIN}">Inicio</a> &rsaquo; <a href="${SITE_ORIGIN}/${categorySeoSlug}">${escapeHtml(categoryLabel)}</a> &rsaquo; <span>${escapeHtml(titleCore)}</span></nav>`
+      : `<nav aria-label="breadcrumb"><a href="${SITE_ORIGIN}">Inicio</a> &rsaquo; <span>${escapeHtml(titleCore)}</span></nav>`
 
-    const html = renderOgHtml({ title, description, image, url: canonical, type: 'product', extraMeta })
+    const bodyParts = [breadcrumbNav, `<h1>${escapeHtml(titleCore)}</h1>`]
+    if (formattedPrice) bodyParts.push(`<p><strong>Precio:</strong> ${escapeHtml(formattedPrice)} ${escapeHtml(currency)}</p>`)
+    if (condition) bodyParts.push(`<p><strong>Estado:</strong> ${escapeHtml(condition)}</p>`)
+    if (categoryLabel) bodyParts.push(`<p><strong>Categoría:</strong> ${escapeHtml(categoryLabel)}</p>`)
+    if (wheelSize) bodyParts.push(`<p><strong>Rodado:</strong> ${escapeHtml(wheelSize)}</p>`)
+    if (frameSize) bodyParts.push(`<p><strong>Talle:</strong> ${escapeHtml(frameSize)}</p>`)
+    if (group) bodyParts.push(`<p><strong>Transmisión:</strong> ${escapeHtml(group)}</p>`)
+    if (location) bodyParts.push(`<p><strong>Ubicación:</strong> ${escapeHtml(location)}, Argentina</p>`)
+    if (row.description) {
+      const descText = stripHtml(row.description).replace(/\s+/g, ' ').trim()
+      if (descText) bodyParts.push(`<h2>Descripción</h2><p>${escapeHtml(descText)}</p>`)
+    }
+    if (sellerStoreName || sellerStoreSlug) {
+      const sellerLink = sellerStoreSlug
+        ? `<a href="${SITE_ORIGIN}/tienda/${escapeHtml(sellerStoreSlug)}">${escapeHtml(sellerStoreName || sellerStoreSlug)}</a>`
+        : escapeHtml(sellerStoreName || '')
+      bodyParts.push(`<h2>Vendedor</h2><p>${sellerLink}</p>`)
+    }
+    bodyParts.push(`<p><a href="${escapeHtml(canonical)}">Ver publicación completa en Ciclo Market</a></p>`)
+    const bodyHtml = bodyParts.join('\n')
+
+    // JSON-LD: Product schema
+    const additionalProps = []
+    if (wheelSize) additionalProps.push({ '@type': 'PropertyValue', name: 'Rodado', value: wheelSize })
+    if (frameSize) additionalProps.push({ '@type': 'PropertyValue', name: 'Talle', value: frameSize })
+    if (condition) additionalProps.push({ '@type': 'PropertyValue', name: 'Estado', value: condition })
+    if (group) additionalProps.push({ '@type': 'PropertyValue', name: 'Transmisión', value: group })
+
+    const productSchema = {
+      '@context': 'https://schema.org',
+      '@type': 'Product',
+      name: titleCore,
+      description: clamp(stripHtml(row.description) || description, 300),
+      image: [image, img2].filter(Boolean),
+      ...(brand ? { brand: { '@type': 'Brand', name: brand } } : {}),
+      offers: {
+        '@type': 'Offer',
+        ...(priceNum != null ? { price: priceNum, priceCurrency: currency } : {}),
+        availability: `https://schema.org/${availability === 'instock' ? 'InStock' : 'OutOfStock'}`,
+        url: canonical,
+        ...(sellerStoreName || sellerStoreSlug ? {
+          seller: {
+            '@type': 'Store',
+            name: sellerStoreName || sellerStoreSlug,
+            ...(sellerStoreSlug ? { url: `${SITE_ORIGIN}/tienda/${sellerStoreSlug}` } : {}),
+          },
+        } : {}),
+      },
+      ...(additionalProps.length ? { additionalProperty: additionalProps } : {}),
+    }
+
+    const breadcrumbItems = [{ '@type': 'ListItem', position: 1, name: 'Inicio', item: SITE_ORIGIN }]
+    if (categorySeoSlug) {
+      breadcrumbItems.push({ '@type': 'ListItem', position: 2, name: categoryLabel, item: `${SITE_ORIGIN}/${categorySeoSlug}` })
+      breadcrumbItems.push({ '@type': 'ListItem', position: 3, name: titleCore, item: canonical })
+    } else {
+      breadcrumbItems.push({ '@type': 'ListItem', position: 2, name: titleCore, item: canonical })
+    }
+    const breadcrumbSchema = {
+      '@context': 'https://schema.org',
+      '@type': 'BreadcrumbList',
+      itemListElement: breadcrumbItems,
+    }
+
+    const jsonLd = `<script type="application/ld+json">${JSON.stringify(productSchema)}</script>\n    <script type="application/ld+json">${JSON.stringify(breadcrumbSchema)}</script>`
+    const extraMeta = `${priceNum != null ? `<meta property="product:price:amount" content="${escapeHtml(String(priceNum))}" />` : ''}
+${priceNum != null ? `<meta property="product:price:currency" content="${escapeHtml(currency)}" />` : ''}
+<meta property="product:availability" content="${escapeHtml(availability)}" />
+<meta property="og:image:secure_url" content="${escapeHtml(image)}" />`
+
+    const html = renderOgHtml({ title, description, image, url: canonical, type: 'product', extraMeta, bodyHtml, jsonLd })
     setBotHeaders(res)
     buildCache(res)
     res.set('Content-Type', 'text/html; charset=utf-8')
@@ -660,12 +857,40 @@ exports.shareStore = onRequest({ region: 'us-central1', memory: '256MiB', secret
       return sendFallback(200)
     }
 
+    // Count active listings for this store
+    let listingCount = null
+    try {
+      const { count } = await supabase
+        .from('listings')
+        .select('id', { count: 'exact', head: true })
+        .eq('seller_id', row.id)
+        .in('status', ['active', 'published'])
+      listingCount = count
+    } catch (e) {
+      console.warn('[shareStore] listing count error', e)
+    }
+
     const name = String(row.store_name || '').trim() || 'Tienda oficial'
-    const location = [row.city, row.province].filter(Boolean).join(', ')
-    const baseTitle = `${name} – Ciclo Market`
+    const city = String(row.city || '').trim()
+    const province = String(row.province || '').trim()
+    const location = [city, province].filter(Boolean).join(', ')
     const canonical = new URL(`/tienda/${row.store_slug || slug}`, SITE_ORIGIN).toString()
-    const descSource = row.bio || (location ? `Tienda en ${location}.` : '') || 'Perfil de tienda en Ciclo Market.'
-    const description = clamp(descSource, 220)
+
+    // Title: "[Nombre Tienda] – Ciclería en [Ciudad] | Ciclo Market"
+    const titleWithCity = city
+      ? `${name} – Ciclería en ${city} | Ciclo Market`
+      : `${name} – Tienda oficial | Ciclo Market`
+    const title = clamp(titleWithCity, 65)
+
+    // Meta description
+    const countPart = listingCount != null && listingCount > 0 ? ` ${listingCount} productos disponibles.` : ''
+    const descSource = row.bio
+      ? clamp(row.bio, 100)
+      : `Tienda oficial de ${name} en Ciclo Market.`
+    const description = clamp(
+      `${descSource}${countPart}${province ? ` Ciclería especializada, ${province}, Argentina.` : ''}`,
+      155
+    )
 
     let rawImg = row.store_avatar_url || FALLBACK_IMAGE
     if (rawImg && rawImg.includes('supabase.co') && !rawImg.includes('?')) {
@@ -673,7 +898,45 @@ exports.shareStore = onRequest({ region: 'us-central1', memory: '256MiB', secret
     }
     const image = toAbsoluteUrl(rawImg, SITE_ORIGIN) || FALLBACK_LOGO
 
-    const html = renderOgHtml({ title: clamp(baseTitle, 90), description, image, url: canonical, type: 'profile' })
+    // Build rich body HTML
+    const bodyParts = [
+      `<nav aria-label="breadcrumb"><a href="${SITE_ORIGIN}">Inicio</a> &rsaquo; <a href="${SITE_ORIGIN}/tiendas">Tiendas</a> &rsaquo; <span>${escapeHtml(name)}</span></nav>`,
+      `<h1>${escapeHtml(name)}</h1>`,
+    ]
+    if (row.bio) bodyParts.push(`<p>${escapeHtml(String(row.bio).trim())}</p>`)
+    if (location) bodyParts.push(`<p><strong>Ubicación:</strong> ${escapeHtml(location)}, Argentina</p>`)
+    if (listingCount != null && listingCount > 0) {
+      bodyParts.push(`<p><strong>Productos publicados:</strong> ${listingCount} bicicletas y accesorios</p>`)
+    }
+    bodyParts.push(`<p><a href="${escapeHtml(canonical)}">Ver tienda completa en Ciclo Market</a></p>`)
+    const bodyHtml = bodyParts.join('\n')
+
+    // JSON-LD: Store schema
+    const storeSchema = {
+      '@context': 'https://schema.org',
+      '@type': 'Store',
+      name,
+      ...(row.bio ? { description: clamp(row.bio, 200) } : {}),
+      url: canonical,
+      ...(row.store_avatar_url ? { logo: toAbsoluteUrl(row.store_avatar_url, SITE_ORIGIN) } : {}),
+      ...(location ? {
+        address: {
+          '@type': 'PostalAddress',
+          ...(city ? { addressLocality: city } : {}),
+          ...(province ? { addressRegion: province } : {}),
+          addressCountry: 'AR',
+        },
+      } : {}),
+      hasOfferCatalog: {
+        '@type': 'OfferCatalog',
+        name: `Productos de ${name}`,
+      },
+    }
+
+    const jsonLd = `<script type="application/ld+json">${JSON.stringify(storeSchema)}</script>`
+    const extraMeta = `<meta property="og:image:secure_url" content="${escapeHtml(image)}" />`
+
+    const html = renderOgHtml({ title, description, image, url: canonical, type: 'profile', extraMeta, bodyHtml, jsonLd })
     setBotHeaders(res)
     buildCache(res)
     res.set('Content-Type', 'text/html; charset=utf-8')

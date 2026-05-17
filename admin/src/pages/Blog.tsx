@@ -3,6 +3,9 @@ import { useSearchParams } from 'react-router-dom'
 import type { BlogPost } from '@admin/types/blog'
 import { listAllBlogPosts, deleteBlogPost } from '@admin/services/blog'
 import { useAdminAuth } from '@admin/context/AdminAuthContext'
+import BlogEditor from '@app/components/blog/BlogEditor'
+import { ToastProvider } from '@app/context/ToastContext'
+import type { BlogPost as AppBlogPost } from '@app/types/blog'
 
 const dateFormatter = new Intl.DateTimeFormat('es-AR', {
   day: 'numeric',
@@ -196,6 +199,9 @@ export default function BlogPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('table')
   const [showFilters, setShowFilters] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
+  const [editorState, setEditorState] = useState<
+    { mode: 'create'; post: null } | { mode: 'edit'; post: BlogPost } | null
+  >(null)
 
   const loadPosts = async () => {
     try {
@@ -213,6 +219,23 @@ export default function BlogPage() {
   useEffect(() => {
     loadPosts()
   }, [])
+
+  // Abrir editor según ?edit=id o ?new=1
+  useEffect(() => {
+    const editId = searchParams.get('edit')
+    const wantsNew = searchParams.get('new') === '1'
+
+    if (wantsNew) {
+      setEditorState({ mode: 'create', post: null })
+      return
+    }
+    if (editId) {
+      const match = posts.find(p => p.id === editId) ?? null
+      if (match) setEditorState({ mode: 'edit', post: match })
+      return
+    }
+    setEditorState(null)
+  }, [posts, searchParams])
 
   const filteredPosts = useMemo(() => {
     let result = [...posts]
@@ -306,11 +329,11 @@ export default function BlogPage() {
   }
 
   const openEditor = (postId?: string) => {
-    const baseUrl = window.location.origin.replace(':5273', ':5173')
-    const url = postId 
-      ? `${baseUrl}/admin/blog?edit=${postId}`
-      : `${baseUrl}/admin/blog?new=1`
-    window.open(url, '_blank')
+    if (postId) {
+      setSearchParams({ edit: postId })
+    } else {
+      setSearchParams({ new: '1' })
+    }
   }
 
   const hasActiveFilters = searchQuery || filterStatus !== 'all'
@@ -339,6 +362,20 @@ export default function BlogPage() {
       </div>
 
       <div className="admin-content">
+        {/* Editor inline */}
+        {editorState && user?.id && (
+          <ToastProvider>
+            <BlogEditor
+              authorId={user.id}
+              initialPost={editorState.mode === 'edit' ? (editorState.post as unknown as AppBlogPost) : undefined}
+              onCancel={() => setSearchParams({}, { replace: true })}
+              onSaved={() => { setSearchParams({}, { replace: true }); void loadPosts() }}
+            />
+          </ToastProvider>
+        )}
+
+        {!editorState && (
+        <>
         {/* Stats */}
         {!fetching && posts.length > 0 && (
           <div className="admin-grid admin-grid-4" style={{ marginBottom: '1.5rem' }}>
@@ -769,6 +806,8 @@ export default function BlogPage() {
               <Icons.ChevronRight />
             </button>
           </div>
+        )}
+        </>
         )}
       </div>
     </div>

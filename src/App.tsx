@@ -58,6 +58,10 @@ const BlogListPage = lazyWithRetry(() => import('./pages/Blog'))
 const BlogPostDetail = lazyWithRetry(() => import('./pages/Blog/PostDetail'))
 const BlogAdminPage = lazyWithRetry(() => import('./pages/Admin/Blog'))
 const ForStores = lazyWithRetry(() => import('./pages/ForStores'))
+const LandingVendedores = lazyWithRetry(() => import('./pages/LandingVendedores'))
+const StoreOnboarding = lazyWithRetry(() => import('./pages/StoreOnboarding'))
+const StoreActivated = lazyWithRetry(() => import('./pages/StoreActivated'))
+const StoreCancelled = lazyWithRetry(() => import('./pages/StoreCancelled'))
 const Tasacion = lazyWithRetry(() => import('./pages/Tasacion'))
 import { AuthProvider } from './context/AuthContext'
 import { CurrencyProvider } from './context/CurrencyContext'
@@ -550,10 +554,14 @@ export default function App() {
                       />
 	                      <Route path="/publicar/crear" element={<CreateListing />} />
 
-	                      {/* Vender (B2B) */}
+	                      {/* Vender — landing general + B2B */}
+	                      <Route path="/vender" element={<LandingVendedores />} />
 	                      <Route path="/vender/tiendas" element={<ForStores />} />
 	                      <Route path="/vender/tiendas/guia" element={<StoresGuide />} />
 	                      <Route path="/guia/tiendas" element={<StoresGuide />} />
+	                      <Route path="/tienda/nueva" element={<StoreOnboarding />} />
+	                      <Route path="/tienda/activada" element={<StoreActivated />} />
+	                      <Route path="/tienda/cancelada" element={<StoreCancelled />} />
 	                      {/* Alias legado */}
 	                      <Route path="/publish" element={<Navigate to="/publicar" replace />} />
 	                      <Route path="/publish/new" element={<Navigate to="/publicar" replace />} />

@@ -254,7 +254,8 @@ export default function NewListingForm() {
             setDescription(draft.description || '')
             setImages(Array.isArray(draft.images) ? draft.images : [])
             setPriceCurrency(draft.priceCurrency || 'USD')
-            setPriceInput(draft.priceInput || '')
+            const draftPriceN = parseMoneyInput(draft.priceInput)
+            setPriceInput(draftPriceN && draftPriceN > 0 ? draftPriceN.toLocaleString('es-AR') : (draft.priceInput || ''))
             setProvince(draft.province || '')
             setCity(draft.city || '')
             setCityCustom(draft.cityCustom || '')
@@ -498,7 +499,8 @@ const buildExtras = (): string => {
 	        const imagesArr = Array.isArray(row.images) ? row.images.filter(Boolean).map((x: any) => String(x)) : []
 	        setImages(imagesArr)
 	        setPriceCurrency((row.price_currency || 'USD') as any)
-	        setPriceInput(row.price != null ? String(row.price) : '')
+	        const loadedPrice = row.price != null ? Number(row.price) : 0
+        setPriceInput(loadedPrice > 0 ? loadedPrice.toLocaleString('es-AR') : '')
 
 	        const loc = String(row.location || '')
 	        if (loc && (!city || !province)) {
@@ -1149,8 +1151,32 @@ const buildExtras = (): string => {
                     <option value="USD">USD</option>
                     <option value="ARS">ARS</option>
                   </select>
-                  <input type="number" className="flex-1 h-14 px-4 bg-white border border-gray-300 rounded-lg text-xl font-bold" placeholder="0" value={priceInput} onChange={e => setPriceInput(e.target.value)} />
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    className="flex-1 h-14 px-4 bg-white border border-gray-300 rounded-lg text-xl font-bold"
+                    placeholder="Ej: 650.000"
+                    value={priceInput}
+                    onChange={e => setPriceInput(e.target.value.replace(/[^\d.,]/g, ''))}
+                    onBlur={() => {
+                      const n = parseMoneyInput(priceInput)
+                      const p = n && n > 0 ? Math.floor(n) : 0
+                      setPriceInput(p > 0 ? p.toLocaleString('es-AR') : '')
+                    }}
+                    onFocus={() => {
+                      const n = parseMoneyInput(priceInput)
+                      setPriceInput(n && n > 0 ? String(n) : '')
+                    }}
+                  />
                 </div>
+                {(() => {
+                  const p = parseMoneyInput(priceInput) || 0
+                  if (priceCurrency === 'ARS' && p > 0 && p < 10_000)
+                    return <p className="text-sm text-amber-600 mt-2">⚠️ ¿El precio es ${p.toLocaleString('es-AR')} ARS? Si usás punto como separador de miles, escribí sin puntos o con coma: 650000 o 650,000</p>
+                  if (priceCurrency === 'ARS' && p > 50_000_000)
+                    return <p className="text-sm text-amber-600 mt-2">⚠️ Precio muy alto, verificá que sea correcto</p>
+                  return null
+                })()}
                 <button type="button" onClick={() => setOpenStep(6)} className="w-full mt-4 py-3 bg-gray-900 text-white font-medium rounded-lg">Continuar</button>
               </div>
             )}

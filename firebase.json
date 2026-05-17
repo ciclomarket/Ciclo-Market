@@ -79,6 +79,8 @@
       { "source": "/blog/**", "function": "shareBlog" },
       { "source": "/listing/**", "function": "shareListing" },
       { "source": "/tienda/**", "function": "shareStore" },
+      { "source": "/admin/blog", "destination": "/index.html" },
+      { "source": "/admin/blog/**", "destination": "/index.html" },
       { "source": "/admin", "destination": "/admin/index.html" },
       { "source": "/admin/**", "destination": "/admin/index.html" },
       { "source": "**", "destination": "/index.html" }

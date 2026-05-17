@@ -265,7 +265,23 @@ export default function NutritionForm() {
                     </select>
                   </Field>
                   <Field label="Precio">
-                    <input className="input" type="number" min={0} step="0.01" inputMode="decimal" value={priceInput} onChange={(e) => setPriceInput(e.target.value)} placeholder="0" />
+                    <input
+                      className="input"
+                      type="text"
+                      inputMode="numeric"
+                      value={priceInput}
+                      onChange={(e) => setPriceInput(e.target.value.replace(/[^\d.,]/g, ''))}
+                      onBlur={() => {
+                        const n = parseMoneyInput(priceInput)
+                        const p = n && n > 0 ? Math.floor(n) : 0
+                        setPriceInput(p > 0 ? p.toLocaleString('es-AR') : '')
+                      }}
+                      onFocus={() => {
+                        const n = parseMoneyInput(priceInput)
+                        setPriceInput(n && n > 0 ? String(n) : '')
+                      }}
+                      placeholder="Ej: 15.000"
+                    />
                   </Field>
                 </div>
                 <div className="grid sm:grid-cols-2 gap-4">
