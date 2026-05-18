@@ -346,6 +346,8 @@ export default function Home() {
   const routeListings = useMemo(() => shuffleArray(listings.filter((l) => l.category === 'Ruta'), 24), [listings])
   const mtbListings = useMemo(() => shuffleArray(listings.filter((l) => l.category === 'MTB'), 24), [listings])
   const triListings = useMemo(() => shuffleArray(listings.filter((l) => l.category === 'Triatlón'), 24), [listings])
+  const accesoriosListings = useMemo(() => listings.filter((l) => l.category === 'Accesorios').slice(0, 24), [listings])
+  const indumentariaListings = useMemo(() => listings.filter((l) => l.category === 'Indumentaria').slice(0, 24), [listings])
   const officialStoreListings = useMemo(() => buildStoreRoundRobin(listings, storeLogos, 24), [listings, storeLogos])
 
   const clearBrand = () => setBrand('')
@@ -390,6 +392,8 @@ export default function Home() {
   const [likesTri, setLikesTri] = useState<Record<string, number>>({})
   const [likesStores, setLikesStores] = useState<Record<string, number>>({})
   const [likesRecent, setLikesRecent] = useState<Record<string, number>>({})
+  const [likesAccesorios, setLikesAccesorios] = useState<Record<string, number>>({})
+  const [likesIndumentaria, setLikesIndumentaria] = useState<Record<string, number>>({})
 
   useEffect(() => {
     const ids = featuredListings.slice(0, 24).map((l) => l.id)
@@ -481,6 +485,36 @@ export default function Home() {
     return () => { active = false }
   }, [filtered.slice(0, 20).map((l) => l.id).join(',')])
 
+  useEffect(() => {
+    const ids = accesoriosListings.map((l) => l.id)
+    if (!ids.length) { setLikesAccesorios({}); return }
+    let active = true
+    ;(async () => {
+      try {
+        const map = await fetchLikeCounts(ids)
+        if (active) setLikesAccesorios(map)
+      } catch (error) {
+        console.warn('[home] accesorios likes fetch failed', error)
+      }
+    })()
+    return () => { active = false }
+  }, [accesoriosListings.map((l) => l.id).join(',')])
+
+  useEffect(() => {
+    const ids = indumentariaListings.map((l) => l.id)
+    if (!ids.length) { setLikesIndumentaria({}); return }
+    let active = true
+    ;(async () => {
+      try {
+        const map = await fetchLikeCounts(ids)
+        if (active) setLikesIndumentaria(map)
+      } catch (error) {
+        console.warn('[home] indumentaria likes fetch failed', error)
+      }
+    })()
+    return () => { active = false }
+  }, [indumentariaListings.map((l) => l.id).join(',')])
+
   // Cargar logos de tiendas oficiales para mostrar badge en cards
   useEffect(() => {
     const sellerIds = Array.from(new Set(listings.map((l) => l.sellerId).filter(Boolean))) as string[]
@@ -532,21 +566,21 @@ export default function Home() {
             {/* BICICLETAS DESTACADAS */}
             {featuredListings.length > 0 && (
               <section className="relative py-1 border-b border-gray-200/80">
-                    <Container>
+                <Container>
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h2 className="text-xl font-semibold">Bicicletas destacadas</h2>
+                      <p className="mt-0.5 text-sm text-gray-500">Avisos con planes Premium o Básico activos</p>
+                    </div>
+                    <Link to="/marketplace?bikes=1" className="text-sm font-medium text-gray-500 hover:text-gray-800 whitespace-nowrap">Ver todos →</Link>
+                  </div>
                   <HorizontalSlider
-                    title="Bicicletas destacadas"
-                    subtitle="Avisos con planes Premium o Básico activos"
+                    title=" "
                     items={featuredListings}
                     maxItems={24}
                     initialLoad={8}
                     renderCard={(l: any) => (
-                      <ListingCard
-                        l={l}
-                        storeLogoUrl={storeLogos[l.sellerId] || null}
-                        priority={Boolean(firstBikeId && l.id === firstBikeId)}
-                        likeCount={likesFeatured[l.id]}
-                        imagePreset="homeCard"
-                      />
+                      <ListingCard l={l} storeLogoUrl={storeLogos[l.sellerId] || null} priority={Boolean(firstBikeId && l.id === firstBikeId)} likeCount={likesFeatured[l.id]} imagePreset="homeCard" />
                     )}
                     tone="light"
                   />
@@ -557,15 +591,19 @@ export default function Home() {
             {routeListings.length > 0 && (
               <section className="relative py-1 border-b border-gray-200/80">
                 <Container>
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h2 className="text-xl font-semibold">Bicicletas de ruta</h2>
+                      <p className="mt-0.5 text-sm text-gray-500">Modelos listos para el asfalto y las largas distancias</p>
+                    </div>
+                    <Link to="/marketplace?cat=Ruta" className="text-sm font-medium text-gray-500 hover:text-gray-800 whitespace-nowrap">Ver todos →</Link>
+                  </div>
                   <HorizontalSlider
-                    title="Bicicletas de ruta"
-                    subtitle="Modelos listos para el asfalto y las largas distancias"
+                    title=" "
                     items={routeListings}
                     maxItems={24}
                     initialLoad={8}
-                    renderCard={(l: any) => (
-                      <ListingCard l={l} storeLogoUrl={storeLogos[l.sellerId] || null} priority={false} likeCount={likesRoute[l.id]} imagePreset="homeCard" />
-                    )}
+                    renderCard={(l: any) => <ListingCard l={l} storeLogoUrl={storeLogos[l.sellerId] || null} priority={false} likeCount={likesRoute[l.id]} imagePreset="homeCard" />}
                     tone="light"
                   />
                 </Container>
@@ -575,15 +613,19 @@ export default function Home() {
             {mtbListings.length > 0 && (
               <section className="relative py-1 border-b border-gray-200/80">
                 <Container>
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h2 className="text-xl font-semibold">Bicicletas de MTB</h2>
+                      <p className="mt-0.5 text-sm text-gray-500">Rígidas y doble suspensión para dominar los senderos</p>
+                    </div>
+                    <Link to="/marketplace?cat=MTB" className="text-sm font-medium text-gray-500 hover:text-gray-800 whitespace-nowrap">Ver todos →</Link>
+                  </div>
                   <HorizontalSlider
-                    title="Bicicletas de MTB"
-                    subtitle="Rigidas y doble suspensión para dominar los senderos"
+                    title=" "
                     items={mtbListings}
                     maxItems={24}
                     initialLoad={8}
-                    renderCard={(l: any) => (
-                      <ListingCard l={l} storeLogoUrl={storeLogos[l.sellerId] || null} priority={false} likeCount={likesMtb[l.id]} imagePreset="homeCard" />
-                    )}
+                    renderCard={(l: any) => <ListingCard l={l} storeLogoUrl={storeLogos[l.sellerId] || null} priority={false} likeCount={likesMtb[l.id]} imagePreset="homeCard" />}
                     tone="light"
                   />
                 </Container>
@@ -593,15 +635,19 @@ export default function Home() {
             {triListings.length > 0 && (
               <section className="relative py-1 border-b border-gray-200/80">
                 <Container>
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h2 className="text-xl font-semibold">Bicicletas de triatlón</h2>
+                      <p className="mt-0.5 text-sm text-gray-500">Geometría y aerodinámica pensadas para ganar tiempo</p>
+                    </div>
+                    <Link to="/marketplace?cat=Triatl%C3%B3n" className="text-sm font-medium text-gray-500 hover:text-gray-800 whitespace-nowrap">Ver todos →</Link>
+                  </div>
                   <HorizontalSlider
-                    title="Bicicletas de triatlón"
-                    subtitle="Geometría y aerodinámica pensadas para ganar tiempo"
+                    title=" "
                     items={triListings}
                     maxItems={24}
                     initialLoad={8}
-                    renderCard={(l: any) => (
-                      <ListingCard l={l} storeLogoUrl={storeLogos[l.sellerId] || null} priority={false} likeCount={likesTri[l.id]} imagePreset="homeCard" />
-                    )}
+                    renderCard={(l: any) => <ListingCard l={l} storeLogoUrl={storeLogos[l.sellerId] || null} priority={false} likeCount={likesTri[l.id]} imagePreset="homeCard" />}
                     tone="light"
                   />
                 </Container>
@@ -611,15 +657,19 @@ export default function Home() {
             {officialStoreListings.length > 0 && (
               <section className="relative py-1 border-b border-gray-200/80">
                 <Container>
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h2 className="text-xl font-semibold">Tiendas oficiales</h2>
+                      <p className="mt-0.5 text-sm text-gray-500">Productos seleccionados de tiendas verificadas</p>
+                    </div>
+                    <Link to="/tiendas" className="text-sm font-medium text-gray-500 hover:text-gray-800 whitespace-nowrap">Ver todas →</Link>
+                  </div>
                   <HorizontalSlider
-                    title="Tiendas oficiales"
-                    subtitle="Productos seleccionados de tiendas verificadas"
+                    title=" "
                     items={officialStoreListings}
                     maxItems={24}
                     initialLoad={8}
-                    renderCard={(l: any) => (
-                      <ListingCard l={l} storeLogoUrl={storeLogos[l.sellerId] || null} priority={false} likeCount={likesStores[l.id]} imagePreset="homeCard" />
-                    )}
+                    renderCard={(l: any) => <ListingCard l={l} storeLogoUrl={storeLogos[l.sellerId] || null} priority={false} likeCount={likesStores[l.id]} imagePreset="homeCard" />}
                     tone="light"
                   />
                 </Container>
@@ -631,8 +681,8 @@ export default function Home() {
               <Container>
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-xl font-semibold">Últimas publicadas</h2>
+                  <Link to="/marketplace" className="text-sm font-medium text-gray-500 hover:text-gray-800 whitespace-nowrap">Ver todas →</Link>
                 </div>
-
                 {loading ? (
                   <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
                     {Array.from({length:6}).map((_,i)=><SkeletonCard key={i}/>)}
@@ -652,6 +702,46 @@ export default function Home() {
               </Container>
             </section>
           </Suspense>
+
+          {/* ACCESORIOS */}
+          {accesoriosListings.length > 0 && (
+            <section className="relative py-1 border-b border-gray-200/80">
+              <Container>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-semibold">Accesorios</h2>
+                  <Link to="/marketplace?cat=Accesorios" className="text-sm font-medium text-gray-500 hover:text-gray-800 whitespace-nowrap">Ver todos →</Link>
+                </div>
+                <HorizontalSlider
+                  title=" "
+                  items={accesoriosListings}
+                  maxItems={24}
+                  initialLoad={8}
+                  renderCard={(l: any) => <ListingCard l={l} storeLogoUrl={storeLogos[l.sellerId] || null} priority={false} likeCount={likesAccesorios[l.id]} imagePreset="homeCard" />}
+                  tone="light"
+                />
+              </Container>
+            </section>
+          )}
+
+          {/* INDUMENTARIA */}
+          {indumentariaListings.length > 0 && (
+            <section className="relative py-1 border-b border-gray-200/80">
+              <Container>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-semibold">Indumentaria</h2>
+                  <Link to="/marketplace?cat=Indumentaria" className="text-sm font-medium text-gray-500 hover:text-gray-800 whitespace-nowrap">Ver todos →</Link>
+                </div>
+                <HorizontalSlider
+                  title=" "
+                  items={indumentariaListings}
+                  maxItems={24}
+                  initialLoad={8}
+                  renderCard={(l: any) => <ListingCard l={l} storeLogoUrl={storeLogos[l.sellerId] || null} priority={false} likeCount={likesIndumentaria[l.id]} imagePreset="homeCard" />}
+                  tone="light"
+                />
+              </Container>
+            </section>
+          )}
 
           {/* CATEGORÍAS RÁPIDAS (Bicis / Accesorios / Indumentaria / Nutrición) */}
           <section className="relative py-1 border-b border-gray-200/80">

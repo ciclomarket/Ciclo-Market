@@ -5,6 +5,7 @@ import { ArrowRight, BadgeCheck, Building2, ChevronLeft, Globe, Image, Phone, Sp
 import { useAuth } from '../context/AuthContext'
 import { getSupabaseClient, supabaseEnabled } from '../services/supabase'
 import { uploadStoreAvatar, uploadStoreBanner } from '../services/storage'
+import { PROVINCES, OTHER_CITY_OPTION } from '../constants/locations'
 import Button from '../components/Button'
 import Container from '../components/Container'
 
@@ -12,8 +13,19 @@ const BASE = import.meta.env.VITE_API_BASE_URL || ''
 
 const MONTHLY_PRICE = 30000
 const YEARLY_PRICE = 300000
-const YEARLY_FULL = MONTHLY_PRICE * 12   // 360000 sin descuento
+const YEARLY_FULL = MONTHLY_PRICE * 12
 const YEARLY_SAVING = YEARLY_FULL - YEARLY_PRICE
+
+const COUNTRY_CODES = [
+  { cc: 'AR', dial: '54', label: 'Argentina', flag: '🇦🇷' },
+  { cc: 'PY', dial: '595', label: 'Paraguay', flag: '🇵🇾' },
+  { cc: 'BR', dial: '55', label: 'Brasil', flag: '🇧🇷' },
+  { cc: 'CL', dial: '56', label: 'Chile', flag: '🇨🇱' },
+  { cc: 'UY', dial: '598', label: 'Uruguay', flag: '🇺🇾' },
+  { cc: 'PE', dial: '51', label: 'Perú', flag: '🇵🇪' },
+  { cc: 'VE', dial: '58', label: 'Venezuela', flag: '🇻🇪' },
+  { cc: 'US', dial: '1', label: 'Estados Unidos', flag: '🇺🇸' },
+] as const
 
 function formatARS(n: number) {
   return '$' + n.toLocaleString('es-AR')
@@ -27,15 +39,6 @@ function slugify(str: string) {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-+|-+$)/g, '')
 }
-
-// ─── Province list ────────────────────────────────────────────────────────────
-
-const PROVINCES = [
-  'Buenos Aires', 'CABA', 'Catamarca', 'Chaco', 'Chubut', 'Córdoba', 'Corrientes',
-  'Entre Ríos', 'Formosa', 'Jujuy', 'La Pampa', 'La Rioja', 'Mendoza', 'Misiones',
-  'Neuquén', 'Río Negro', 'Salta', 'San Juan', 'San Luis', 'Santa Cruz', 'Santa Fe',
-  'Santiago del Estero', 'Tierra del Fuego', 'Tucumán',
-]
 
 // ─── Step indicator ───────────────────────────────────────────────────────────
 
@@ -243,7 +246,8 @@ interface FormData {
   storeDescription: string
   province: string
   city: string
-  storePhone: string
+  cityOther: string
+  whatsappLocal: string
   storeWebsite: string
   storeInstagram: string
   storeAvatarUrl: string
@@ -257,12 +261,14 @@ export default function StoreOnboarding() {
   const navigate = useNavigate()
 
   const [step, setStep] = useState(1)
+  const [whatsappDial, setWhatsappDial] = useState('54')
   const [form, setForm] = useState<FormData>({
     storeName: '',
     storeDescription: '',
     province: '',
     city: '',
-    storePhone: '',
+    cityOther: '',
+    whatsappLocal: '',
     storeWebsite: '',
     storeInstagram: '',
     storeAvatarUrl: '',
@@ -330,8 +336,9 @@ export default function StoreOnboarding() {
           planType,
           storeData: {
             storeName: form.storeName,
-            storeAddress: [form.city, form.province].filter(Boolean).join(', '),
-            storePhone: form.storePhone,
+            province: form.province,
+            city: form.city === OTHER_CITY_OPTION ? form.cityOther : form.city,
+            whatsappNumber: form.whatsappLocal ? `${whatsappDial}${form.whatsappLocal.replace(/\D/g, '')}` : null,
             storeWebsite: form.storeWebsite,
             storeInstagram: form.storeInstagram,
             storeAvatarUrl: form.storeAvatarUrl,
@@ -356,9 +363,13 @@ export default function StoreOnboarding() {
 
   // ── Validation ───────────────────────────────────────────────────────────────
 
+  const cityOptions = form.province
+    ? (PROVINCES.find(p => p.name === form.province)?.cities ?? [])
+    : []
+
   const step1Valid =
     form.storeName.trim().length >= 2 &&
-    form.storePhone.trim().length >= 8
+    form.whatsappLocal.replace(/\D/g, '').length >= 8
 
   // ── Redirect to login if not authenticated ───────────────────────────────────
 
@@ -439,24 +450,35 @@ export default function StoreOnboarding() {
                     <label className="mb-1 block text-sm font-medium text-gray-700">Provincia</label>
                     <select
                       value={form.province}
-                      onChange={(e) => set('province', e.target.value)}
+                      onChange={(e) => { set('province', e.target.value); set('city', ''); set('cityOther', '') }}
                       className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-[#14212e] focus:outline-none focus:ring-1 focus:ring-[#14212e]"
                     >
                       <option value="">Seleccioná</option>
-                      {PROVINCES.map((p) => <option key={p} value={p}>{p}</option>)}
+                      {PROVINCES.map((p) => <option key={p.name} value={p.name}>{p.name}</option>)}
                     </select>
                   </div>
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700">Ciudad</label>
-                    <input
-                      type="text"
+                    <select
                       value={form.city}
                       onChange={(e) => set('city', e.target.value)}
-                      placeholder="Ej: Rosario"
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-[#14212e] focus:outline-none focus:ring-1 focus:ring-[#14212e]"
-                    />
+                      disabled={!form.province}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-[#14212e] focus:outline-none focus:ring-1 focus:ring-[#14212e] disabled:bg-gray-50 disabled:text-gray-400"
+                    >
+                      <option value="">{form.province ? 'Seleccioná' : 'Elegí provincia primero'}</option>
+                      {cityOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
                   </div>
                 </div>
+                {form.city === OTHER_CITY_OPTION && (
+                  <input
+                    type="text"
+                    value={form.cityOther}
+                    onChange={(e) => set('cityOther', e.target.value)}
+                    placeholder="Ingresá tu ciudad"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-[#14212e] focus:outline-none focus:ring-1 focus:ring-[#14212e]"
+                  />
+                )}
 
                 {/* WhatsApp */}
                 <div>
@@ -464,13 +486,27 @@ export default function StoreOnboarding() {
                     <Phone className="h-3.5 w-3.5" />
                     WhatsApp de la tienda <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="tel"
-                    value={form.storePhone}
-                    onChange={(e) => set('storePhone', e.target.value)}
-                    placeholder="+54 11 1234-5678"
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-[#14212e] focus:outline-none focus:ring-1 focus:ring-[#14212e]"
-                  />
+                  <div className="flex gap-2">
+                    <select
+                      value={whatsappDial}
+                      onChange={(e) => setWhatsappDial(e.target.value)}
+                      className="w-28 flex-shrink-0 rounded-lg border border-gray-300 px-2 py-2.5 text-sm focus:border-[#14212e] focus:outline-none focus:ring-1 focus:ring-[#14212e]"
+                    >
+                      {COUNTRY_CODES.map((c) => (
+                        <option key={c.cc} value={c.dial}>
+                          {c.flag} +{c.dial}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="tel"
+                      value={form.whatsappLocal}
+                      onChange={(e) => set('whatsappLocal', e.target.value)}
+                      placeholder="11 1234-5678"
+                      className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-[#14212e] focus:outline-none focus:ring-1 focus:ring-[#14212e]"
+                    />
+                  </div>
+                  <p className="mt-1 text-xs text-gray-400">Sin el 0 ni el 15. Ej: 11 1234-5678</p>
                 </div>
 
                 {/* Instagram */}

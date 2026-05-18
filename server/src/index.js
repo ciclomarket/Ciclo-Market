@@ -1894,8 +1894,9 @@ app.post('/api/store/subscribe', async (req, res) => {
       await supabase.from('users').update({
         store_name: storeData.storeName || null,
         store_slug: rawSlug || null,
-        store_address: storeData.storeAddress || null,
-        store_phone: storeData.storePhone || null,
+        province: storeData.province || null,
+        city: storeData.city || null,
+        whatsapp_number: storeData.whatsappNumber || null,
         store_website: storeData.storeWebsite || null,
         store_avatar_url: storeData.storeAvatarUrl || null,
         store_banner_url: storeData.storeBannerUrl || null,

@@ -71,6 +71,7 @@ const Compare = lazy(() => import('./pages/Compare'))
 const IgLinks = lazyWithRetry(() => import('./pages/IgLinks'))
 import { CompareProvider } from './context/CompareContext'
 const CompareTray = lazyWithRetry(() => import('./components/CompareTray'))
+const StoreWhatsAppFloat = lazyWithRetry(() => import('./components/StoreWhatsAppFloat'))
 import { PlanProvider } from './context/PlanContext'
 import { NotificationsProvider } from './context/NotificationContext'
 import { ToastProvider } from './context/ToastContext'
@@ -646,6 +647,7 @@ export default function App() {
 
                   <Suspense fallback={null}>
                     {!isInstagramLanding && <CompareTray />}
+                    <StoreWhatsAppFloat />
                     {!isInstagramLanding && <Newsletter />}
                     <CookieConsent />
                     {!isInstagramLanding && <Footer />}
