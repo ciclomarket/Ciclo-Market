@@ -43,6 +43,8 @@ const Terms = lazyWithRetry(() => import('./pages/Terms'))
 const Privacy = lazyWithRetry(() => import('./pages/Privacy'))
 const DataDeletion = lazyWithRetry(() => import('./pages/DataDeletion'))
 // SEO landings
+const MarcaLanding = lazyWithRetry(() => import('./pages/seo/MarcaLanding'))
+const ProvinciaLanding = lazyWithRetry(() => import('./pages/seo/ProvinciaLanding'))
 const BicicletasUsadas = lazyWithRetry(() => import('./pages/seo/BicicletasUsadas'))
 const BicicletasRuta = lazyWithRetry(() => import('./pages/seo/BicicletasRuta'))
 const BicicletasMTB = lazyWithRetry(() => import('./pages/seo/BicicletasMTB'))
@@ -608,6 +610,9 @@ export default function App() {
                       <Route path="/como-publicar" element={<HowToPublish />} />
                       <Route path="/tienda-oficial" element={<OfficialStore />} />
                       <Route path="/tiendas" element={<Tiendas />} />
+                      {/* SEO landings: marca y provincia */}
+                      <Route path="/marca/:brandSlug" element={<MarcaLanding />} />
+                      <Route path="/provincia/:provinciaSlug" element={<ProvinciaLanding />} />
                       {/* SEO landings */}
                       <Route path="/bicicletas-usadas" element={<BicicletasUsadas />} />
                       <Route path="/bicicletas-ruta" element={<BicicletasRuta />} />

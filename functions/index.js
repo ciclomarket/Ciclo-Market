@@ -947,6 +947,204 @@ exports.shareStore = onRequest({ region: 'us-central1', memory: '256MiB', secret
   }
 })
 
+// ── shareMarca: SSR para bots en /marca/:brandSlug ─────────────────────────
+exports.shareMarca = onRequest({ region: 'us-central1', memory: '256MiB', secrets: ['SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY'] }, async (req, res) => {
+  res.set('Vary', 'User-Agent')
+
+  function clamp(text, max) {
+    const t = String(text || '').replace(/\s+/g, ' ').trim()
+    return t.length <= max ? t : `${t.slice(0, max - 1).trimEnd()}…`
+  }
+
+  const rawPath = req.originalUrl || req.url || '/marca'
+  let urlObj
+  try { urlObj = new URL(rawPath, SITE_ORIGIN) } catch { urlObj = new URL('/marca', SITE_ORIGIN) }
+  const brandSlug = urlObj.pathname.replace(/^\/marca\//, '').replace(/\/+$/, '')
+
+  const BRAND_NAMES = {
+    'specialized': 'Specialized', 'trek': 'Trek', 'giant': 'Giant', 'scott': 'Scott',
+    'cervelo': 'Cervelo', 'cannondale': 'Cannondale', 'orbea': 'Orbea', 'merida': 'Merida',
+    'pinarello': 'Pinarello', 'cube': 'Cube', 'bmc': 'BMC', 'canyon': 'Canyon',
+    'bianchi': 'Bianchi', 'santa-cruz': 'Santa Cruz', 'colnago': 'Colnago',
+  }
+  const brandName = BRAND_NAMES[brandSlug.toLowerCase()]
+
+  if (!isBot(req)) return sendSpaIndexHtml(res)
+
+  const canonical = new URL(`/marca/${brandSlug}`, SITE_ORIGIN).toString()
+  const fallbackTitle = brandName
+    ? `Bicicletas ${brandName} en Argentina | Ciclo Market`
+    : 'Bicicletas usadas en Argentina | Ciclo Market'
+  const fallbackDesc = brandName
+    ? `Encontrá bicicletas ${brandName} usadas en Argentina. MTB, ruta y gravel. Contacto directo.`
+    : 'Encontrá bicicletas usadas en Argentina en Ciclo Market.'
+
+  if (!brandName || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    setBotHeaders(res)
+    buildCache(res)
+    res.set('Content-Type', 'text/html; charset=utf-8')
+    return res.status(200).send(renderOgHtml({ title: clamp(fallbackTitle, 90), description: clamp(fallbackDesc, 220), image: `${SITE_ORIGIN}/OG-Marketplace.png`, url: canonical }))
+  }
+
+  try {
+    const supabase = await getSupabase()
+    const { data: rows, count } = await supabase
+      .from('listings')
+      .select('id,title,slug,price,price_currency,images,location', { count: 'estimated' })
+      .ilike('brand', brandName)
+      .in('status', ['active', 'published'])
+      .order('created_at', { ascending: false })
+      .limit(10)
+
+    const total = count ?? (rows ? rows.length : 0)
+    const title = clamp(`Bicicletas ${brandName} en Argentina | Ciclo Market`, 65)
+    const description = clamp(`Encontrá ${total > 0 ? total + ' ' : ''}bicicletas ${brandName} en venta en Argentina. MTB, ruta y gravel. Contacto directo, sin comisiones.`, 155)
+    const image = `${SITE_ORIGIN}/OG-Marketplace.png`
+
+    const bodyParts = [
+      `<nav><a href="${SITE_ORIGIN}">Inicio</a> &rsaquo; <a href="${SITE_ORIGIN}/bicicletas-usadas">Bicicletas usadas</a> &rsaquo; <span>Bicicletas ${escapeHtml(brandName)}</span></nav>`,
+      `<h1>Bicicletas ${escapeHtml(brandName)} en Argentina</h1>`,
+      `<p>${total > 0 ? total + ' bicicletas disponibles.' : ''} Nuevas y usadas · Toda Argentina.</p>`,
+    ]
+    if (rows && rows.length > 0) {
+      bodyParts.push('<h2>Publicaciones recientes</h2><ul>')
+      rows.forEach(r => {
+        const href = `${SITE_ORIGIN}/listing/${encodeURIComponent(r.slug || r.id)}`
+        const price = r.price ? ` · $${Number(r.price).toLocaleString('es-AR')} ${r.price_currency || 'ARS'}` : ''
+        const loc = r.location ? ` · ${r.location}` : ''
+        bodyParts.push(`<li><a href="${escapeHtml(href)}">${escapeHtml(r.title || 'Bicicleta')}${escapeHtml(price)}${escapeHtml(loc)}</a></li>`)
+      })
+      bodyParts.push('</ul>')
+    }
+    bodyParts.push(`<p><a href="${escapeHtml(canonical)}">Ver todas las bicicletas ${escapeHtml(brandName)} →</a></p>`)
+
+    const itemListLd = rows && rows.length > 0 ? JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'ItemList',
+      name: `Bicicletas ${brandName} en Argentina`,
+      numberOfItems: total,
+      itemListElement: rows.map((r, i) => ({
+        '@type': 'ListItem',
+        position: i + 1,
+        name: r.title || `Bicicleta ${brandName}`,
+        url: `${SITE_ORIGIN}/listing/${r.slug || r.id}`,
+      })),
+    }) : ''
+
+    const jsonLd = itemListLd ? `<script type="application/ld+json">${itemListLd}</script>` : ''
+    setBotHeaders(res)
+    buildCache(res)
+    res.set('Content-Type', 'text/html; charset=utf-8')
+    return res.status(200).send(renderOgHtml({ title, description, image, url: canonical, bodyHtml: bodyParts.join('\n'), jsonLd }))
+  } catch (err) {
+    console.error('[shareMarca] error', err)
+    setBotHeaders(res)
+    buildCache(res)
+    res.set('Content-Type', 'text/html; charset=utf-8')
+    return res.status(200).send(renderOgHtml({ title: clamp(fallbackTitle, 90), description: clamp(fallbackDesc, 220), image: `${SITE_ORIGIN}/OG-Marketplace.png`, url: canonical }))
+  }
+})
+
+// ── shareProvincia: SSR para bots en /provincia/:provinciaSlug ──────────────
+exports.shareProvincia = onRequest({ region: 'us-central1', memory: '256MiB', secrets: ['SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY'] }, async (req, res) => {
+  res.set('Vary', 'User-Agent')
+
+  function clamp(text, max) {
+    const t = String(text || '').replace(/\s+/g, ' ').trim()
+    return t.length <= max ? t : `${t.slice(0, max - 1).trimEnd()}…`
+  }
+
+  const rawPath = req.originalUrl || req.url || '/provincia'
+  let urlObj
+  try { urlObj = new URL(rawPath, SITE_ORIGIN) } catch { urlObj = new URL('/provincia', SITE_ORIGIN) }
+  const provinciaSlug = urlObj.pathname.replace(/^\/provincia\//, '').replace(/\/+$/, '')
+
+  const PROVINCIA_NAMES = {
+    'buenos-aires': 'Buenos Aires', 'cordoba': 'Córdoba', 'caba': 'Ciudad Autónoma de Buenos Aires',
+    'entre-rios': 'Entre Ríos', 'santa-fe': 'Santa Fe', 'mendoza': 'Mendoza',
+    'san-juan': 'San Juan', 'misiones': 'Misiones', 'la-rioja': 'La Rioja',
+    'chaco': 'Chaco', 'neuquen': 'Neuquén', 'catamarca': 'Catamarca',
+    'la-pampa': 'La Pampa', 'tucuman': 'Tucumán', 'rio-negro': 'Río Negro', 'san-luis': 'San Luis',
+  }
+  const provinciaNombre = PROVINCIA_NAMES[provinciaSlug.toLowerCase()]
+  const displayName = provinciaNombre === 'Ciudad Autónoma de Buenos Aires' ? 'CABA' : provinciaNombre
+
+  if (!isBot(req)) return sendSpaIndexHtml(res)
+
+  const canonical = new URL(`/provincia/${provinciaSlug}`, SITE_ORIGIN).toString()
+  const fallbackTitle = displayName
+    ? `Bicicletas usadas en ${displayName} | Ciclo Market`
+    : 'Bicicletas usadas en Argentina | Ciclo Market'
+  const fallbackDesc = displayName
+    ? `Comprá y vendé bicicletas en ${displayName}. Contacto directo con vendedores locales.`
+    : 'Marketplace de bicicletas en Argentina.'
+
+  if (!provinciaNombre || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    setBotHeaders(res)
+    buildCache(res)
+    res.set('Content-Type', 'text/html; charset=utf-8')
+    return res.status(200).send(renderOgHtml({ title: clamp(fallbackTitle, 90), description: clamp(fallbackDesc, 220), image: `${SITE_ORIGIN}/OG-Marketplace.png`, url: canonical }))
+  }
+
+  try {
+    const supabase = await getSupabase()
+    const { data: rows, count } = await supabase
+      .from('listings')
+      .select('id,title,slug,price,price_currency,brand,location', { count: 'estimated' })
+      .ilike('location', `%${provinciaNombre}%`)
+      .in('status', ['active', 'published'])
+      .order('created_at', { ascending: false })
+      .limit(10)
+
+    const total = count ?? (rows ? rows.length : 0)
+    const title = clamp(`Bicicletas usadas en ${displayName} | Ciclo Market`, 65)
+    const description = clamp(`${total > 0 ? total + ' publicaciones activas' : 'Publicaciones activas'} de vendedores locales en ${displayName}. Comprá y vendé sin comisiones.`, 155)
+    const image = `${SITE_ORIGIN}/OG-Marketplace.png`
+
+    const bodyParts = [
+      `<nav><a href="${SITE_ORIGIN}">Inicio</a> &rsaquo; <a href="${SITE_ORIGIN}/bicicletas-usadas">Bicicletas usadas</a> &rsaquo; <span>Bicicletas en ${escapeHtml(displayName || '')}</span></nav>`,
+      `<h1>Bicicletas usadas en ${escapeHtml(displayName || '')}</h1>`,
+      `<p>${total > 0 ? total + ' publicaciones activas.' : ''} Vendedores locales en ${escapeHtml(displayName || '')}.</p>`,
+    ]
+    if (rows && rows.length > 0) {
+      bodyParts.push('<h2>Publicaciones recientes</h2><ul>')
+      rows.forEach(r => {
+        const href = `${SITE_ORIGIN}/listing/${encodeURIComponent(r.slug || r.id)}`
+        const price = r.price ? ` · $${Number(r.price).toLocaleString('es-AR')} ${r.price_currency || 'ARS'}` : ''
+        const brand = r.brand ? ` · ${r.brand}` : ''
+        bodyParts.push(`<li><a href="${escapeHtml(href)}">${escapeHtml(r.title || 'Bicicleta')}${escapeHtml(brand)}${escapeHtml(price)}</a></li>`)
+      })
+      bodyParts.push('</ul>')
+    }
+    bodyParts.push(`<p><a href="${escapeHtml(canonical)}">Ver todas las bicicletas en ${escapeHtml(displayName || '')} →</a></p>`)
+
+    const itemListLd = rows && rows.length > 0 ? JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'ItemList',
+      name: `Bicicletas usadas en ${displayName}`,
+      numberOfItems: total,
+      itemListElement: rows.map((r, i) => ({
+        '@type': 'ListItem',
+        position: i + 1,
+        name: r.title || `Bicicleta en ${displayName}`,
+        url: `${SITE_ORIGIN}/listing/${r.slug || r.id}`,
+      })),
+    }) : ''
+
+    const jsonLd = itemListLd ? `<script type="application/ld+json">${itemListLd}</script>` : ''
+    setBotHeaders(res)
+    buildCache(res)
+    res.set('Content-Type', 'text/html; charset=utf-8')
+    return res.status(200).send(renderOgHtml({ title, description, image, url: canonical, bodyHtml: bodyParts.join('\n'), jsonLd }))
+  } catch (err) {
+    console.error('[shareProvincia] error', err)
+    setBotHeaders(res)
+    buildCache(res)
+    res.set('Content-Type', 'text/html; charset=utf-8')
+    return res.status(200).send(renderOgHtml({ title: clamp(fallbackTitle, 90), description: clamp(fallbackDesc, 220), image: `${SITE_ORIGIN}/OG-Marketplace.png`, url: canonical }))
+  }
+})
+
 // Exponer template para uso desde backend (cron / envíos masivos)
 exports.buildUpgradeEmailHtml = buildUpgradeEmailHtml
 

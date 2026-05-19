@@ -2,6 +2,26 @@
 import { Link } from 'react-router-dom'
 import Container from './Container'
 
+const SEO_BRANDS = [
+  { slug: 'specialized', name: 'Specialized' },
+  { slug: 'trek', name: 'Trek' },
+  { slug: 'giant', name: 'Giant' },
+  { slug: 'scott', name: 'Scott' },
+  { slug: 'cervelo', name: 'Cervelo' },
+  { slug: 'cannondale', name: 'Cannondale' },
+  { slug: 'canyon', name: 'Canyon' },
+  { slug: 'orbea', name: 'Orbea' },
+] as const
+
+const SEO_PROVINCIAS = [
+  { slug: 'buenos-aires', name: 'Buenos Aires' },
+  { slug: 'cordoba', name: 'Córdoba' },
+  { slug: 'caba', name: 'CABA' },
+  { slug: 'santa-fe', name: 'Santa Fe' },
+  { slug: 'mendoza', name: 'Mendoza' },
+  { slug: 'entre-rios', name: 'Entre Ríos' },
+] as const
+
 export default function Footer() {
   return (
     <footer className="relative overflow-hidden bg-[#14212e] text-white">
@@ -129,6 +149,32 @@ export default function Footer() {
                   </div>
                 </li>
               </ul>
+            </div>
+          </div>
+
+          {/* Links SEO por marca y provincia */}
+          <div className="border-t border-white/10 pt-8 space-y-3">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-white/50">
+              <span className="text-white/30 uppercase tracking-wider">Por marca:</span>
+              {SEO_BRANDS.map((b, i) => (
+                <span key={b.slug} className="flex items-center">
+                  <Link to={`/marca/${b.slug}`} className="hover:text-white/80 transition">
+                    {b.name}
+                  </Link>
+                  {i < SEO_BRANDS.length - 1 && <span className="text-white/20 mx-1">·</span>}
+                </span>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-white/50">
+              <span className="text-white/30 uppercase tracking-wider">Por provincia:</span>
+              {SEO_PROVINCIAS.map((p, i) => (
+                <span key={p.slug} className="flex items-center">
+                  <Link to={`/provincia/${p.slug}`} className="hover:text-white/80 transition">
+                    {p.name}
+                  </Link>
+                  {i < SEO_PROVINCIAS.length - 1 && <span className="text-white/20 mx-1">·</span>}
+                </span>
+              ))}
             </div>
           </div>
 

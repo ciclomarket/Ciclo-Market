@@ -361,6 +361,92 @@ export async function fetchListingsByCategory(
   }
 }
 
+export async function fetchListingsByBrand(
+  brandName: string,
+  options?: { limit?: number }
+): Promise<Listing[]> {
+  if (!supabaseEnabled) return []
+  try {
+    const supabase = getSupabaseClient()
+    const selectByBrand = async (table: 'listings_enriched' | 'listings') =>
+      supabase
+        .from(table)
+        .select('*')
+        .ilike('brand', brandName)
+        .order('created_at', { ascending: false })
+        .limit(options?.limit ?? 100)
+
+    let { data, error } = await selectByBrand('listings_enriched')
+    if (error && shouldFallbackToBaseListings(error)) {
+      ;({ data, error } = await selectByBrand('listings'))
+    }
+    if (error || !data) return []
+    const now = Date.now()
+    const filtered = data.filter((row: any) => {
+      const status = typeof row?.status === 'string' ? row.status.trim().toLowerCase() : 'active'
+      if (status === 'draft' || status === 'deleted' || status === 'archived' || status === 'expired') return false
+      if (row?.archived_at) return false
+      const mod = typeof row?.moderation_state === 'string' ? row.moderation_state.trim().toLowerCase() : 'approved'
+      if (mod !== 'approved') return false
+      const expiresAt = row?.expires_at ? Date.parse(row.expires_at) : null
+      if (typeof expiresAt === 'number' && !Number.isNaN(expiresAt) && expiresAt > 0 && expiresAt < now) return false
+      if (row && 'is_demo_listing' in row && row.is_demo_listing === true) return false
+      return true
+    })
+    const score = (l: Listing) => {
+      const priority = l.priorityActive ? 2 : 0
+      const tier = l.planTier === 'PRO' ? 2 : l.planTier === 'PREMIUM' ? 1 : 0
+      return priority * 1e12 + tier * 1e10 + (typeof l.createdAt === 'number' ? l.createdAt : 0)
+    }
+    return filtered.map((row: any) => normalizeListing(row as ListingRow)).sort((a, b) => score(b) - score(a))
+  } catch {
+    return []
+  }
+}
+
+export async function fetchListingsByProvincia(
+  provinciaNombre: string,
+  options?: { limit?: number }
+): Promise<Listing[]> {
+  if (!supabaseEnabled) return []
+  try {
+    const supabase = getSupabaseClient()
+    const selectByProvincia = async (table: 'listings_enriched' | 'listings') =>
+      supabase
+        .from(table)
+        .select('*')
+        .ilike('location', `%${provinciaNombre}%`)
+        .order('created_at', { ascending: false })
+        .limit(options?.limit ?? 100)
+
+    let { data, error } = await selectByProvincia('listings_enriched')
+    if (error && shouldFallbackToBaseListings(error)) {
+      ;({ data, error } = await selectByProvincia('listings'))
+    }
+    if (error || !data) return []
+    const now = Date.now()
+    const filtered = data.filter((row: any) => {
+      const status = typeof row?.status === 'string' ? row.status.trim().toLowerCase() : 'active'
+      if (status === 'draft' || status === 'deleted' || status === 'archived' || status === 'expired') return false
+      if (row?.archived_at) return false
+      const mod = typeof row?.moderation_state === 'string' ? row.moderation_state.trim().toLowerCase() : 'approved'
+      if (mod !== 'approved') return false
+      const expiresAt = row?.expires_at ? Date.parse(row.expires_at) : null
+      if (typeof expiresAt === 'number' && !Number.isNaN(expiresAt) && expiresAt > 0 && expiresAt < now) return false
+      if (row && 'is_demo_listing' in row && row.is_demo_listing === true) return false
+      return true
+    })
+    const score = (l: Listing) => {
+      const priority = l.priorityActive ? 2 : 0
+      const tier = l.planTier === 'PRO' ? 2 : l.planTier === 'PREMIUM' ? 1 : 0
+      return priority * 1e12 + tier * 1e10 + (typeof l.createdAt === 'number' ? l.createdAt : 0)
+    }
+    return filtered.map((row: any) => normalizeListing(row as ListingRow)).sort((a, b) => score(b) - score(a))
+  } catch {
+    return []
+  }
+}
+
 export async function fetchListingsCountBySeller(sellerId: string): Promise<number> {
   if (!supabaseEnabled) return 0
   if (!sellerId) return 0
