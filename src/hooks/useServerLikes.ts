@@ -13,7 +13,7 @@ export function useListingLike(listingId: string, initialCount?: number) {
     const load = async () => {
       if (!listingId) return
       const [c, h] = await Promise.all([
-        typeof initialCount === 'number' ? Promise.resolve(initialCount) : fetchLikeCount(listingId),
+        typeof initialCount === 'number' ? Promise.resolve(initialCount) : (user?.id ? fetchLikeCount(listingId) : Promise.resolve(0)),
         user?.id ? hasUserLike(user.id, listingId) : Promise.resolve(false)
       ])
       if (!active) return

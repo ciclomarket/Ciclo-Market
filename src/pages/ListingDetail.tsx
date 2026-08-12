@@ -575,7 +575,7 @@ export default function ListingDetail() {
     null
   const greetingPrefix = greetingName ? `¡Hola ${greetingName}!` : '¡Hola!'
   const listingTitleForMessage = (listing.title || '').trim()
-  const contactMessage = `${greetingPrefix} Desde ciclomarket.ar vi tu anuncio: ${listingTitleForMessage} ${previewUrl} y me interesa saber más información.`.trim()
+  const contactMessage = `${greetingPrefix} Desde ciclomarket.ar vi tu anuncio: ${listingTitleForMessage} ${shareUrl} y me interesa saber más información.`.trim()
   const sellerWhatsappRaw = listing.sellerWhatsapp ?? sellerProfile?.whatsapp_number ?? sellerProfile?.store_phone ?? ''
   const sellerWhatsappNumber = normaliseWhatsapp(sellerWhatsappRaw)
   const waLink = buildWhatsappUrl(sellerWhatsappNumber ?? sellerWhatsappRaw, contactMessage)

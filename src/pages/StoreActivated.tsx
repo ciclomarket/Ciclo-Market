@@ -7,6 +7,8 @@ import { getSupabaseClient, supabaseEnabled } from '../services/supabase'
 import Container from '../components/Container'
 import Button from '../components/Button'
 
+const BASE = import.meta.env.VITE_API_BASE_URL || ''
+
 export default function StoreActivated() {
   const { user } = useAuth()
   const [searchParams] = useSearchParams()
@@ -19,12 +21,31 @@ export default function StoreActivated() {
   // MP devuelve preapproval_id en query params
   const subscriptionId = searchParams.get('preapproval_id') || searchParams.get('subscription_id')
 
+  const MAX_POLLS = 5
+
   useEffect(() => {
     if (!user || !supabaseEnabled) { setLoading(false); return }
     const supabase = getSupabaseClient()
     let cancelled = false
 
     const fetchProfile = async () => {
+      // Además de releer la tabla, le pedimos al backend que reconsulte el
+      // estado real en MercadoPago y active la tienda si el webhook nunca
+      // llegó (o llegó como 'pending').
+      if (BASE) {
+        try {
+          const { data: sessionData } = await supabase.auth.getSession()
+          const token = sessionData.session?.access_token
+          await fetch(`${BASE}/api/store/confirm`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+          })
+        } catch { /* noop: seguimos con el polling pasivo igual */ }
+      }
+
       const { data } = await supabase
         .from('users')
         .select('store_name, store_slug, store_enabled')
@@ -36,8 +57,7 @@ export default function StoreActivated() {
       setStoreEnabled(Boolean(data?.store_enabled))
       setLoading(false)
 
-      // Si el webhook aún no llegó, reintentamos hasta 5 veces cada 3 seg
-      if (!data?.store_enabled && polls < 5) {
+      if (!data?.store_enabled && polls < MAX_POLLS) {
         setTimeout(() => setPolls((p) => p + 1), 3000)
       }
     }
@@ -69,17 +89,38 @@ export default function StoreActivated() {
           </div>
 
           <h1 className="text-2xl font-bold text-gray-900">
-            {storeName ? `¡${storeName} ya está en Ciclo Market!` : '¡Tu tienda ya está activa!'}
+            {storeEnabled
+              ? (storeName ? `¡${storeName} ya está en Ciclo Market!` : '¡Tu tienda ya está activa!')
+              : 'Pago recibido'}
           </h1>
           {storeEnabled ? (
             <p className="mt-2 text-gray-500">
               Tu suscripción fue aprobada. Tu tienda ya aparece en el directorio.
             </p>
-          ) : (
+          ) : polls < MAX_POLLS ? (
             <p className="mt-2 flex items-center justify-center gap-2 text-amber-600">
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-amber-500 border-t-transparent" />
               Confirmando pago… puede tardar unos segundos.
             </p>
+          ) : (
+            <div className="mt-2 space-y-3">
+              <p className="text-amber-600">
+                Recibimos tu pago, pero todavía no pudimos confirmar la activación automáticamente.
+              </p>
+              <div className="flex flex-wrap justify-center gap-3">
+                <Button variant="ghost" className="border border-gray-200" onClick={() => setPolls(0)}>
+                  Reintentar
+                </Button>
+                <a
+                  href="https://wa.me/5493764748459?text=Hola%2C+pagu%C3%A9+mi+tienda+pero+no+se+activ%C3%B3%2C+%C2%BFme+ayudan%3F"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center rounded-full border border-gray-200 px-4 py-2 text-sm font-semibold text-[#14212e] hover:bg-gray-50"
+                >
+                  Hablar con soporte
+                </a>
+              </div>
+            </div>
           )}
 
           {subscriptionId && (

@@ -87,6 +87,7 @@ export default function TipTapEditor({ content, onChange, placeholder }: TipTapE
   const [listingSlug, setListingSlug] = useState('')
   const [showListingInput, setShowListingInput] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const isHtmlModeRef = useRef(false)
 
   const editor = useEditor({
     extensions: [
@@ -127,6 +128,7 @@ export default function TipTapEditor({ content, onChange, placeholder }: TipTapE
     ],
     content,
     onUpdate: ({ editor }) => {
+      if (isHtmlModeRef.current) return
       const html = editor.getHTML()
       onChange(html)
       setHtmlContent(html)
@@ -143,7 +145,6 @@ export default function TipTapEditor({ content, onChange, placeholder }: TipTapE
 
   const handleHtmlChange = (newHtml: string) => {
     setHtmlContent(newHtml)
-    editor?.commands.setContent(newHtml)
     onChange(newHtml)
   }
 
@@ -205,6 +206,21 @@ export default function TipTapEditor({ content, onChange, placeholder }: TipTapE
     )
   }
 
+  const enterHtmlMode = () => {
+    isHtmlModeRef.current = true
+    setIsHtmlMode(true)
+  }
+
+  const exitHtmlMode = () => {
+    isHtmlModeRef.current = false
+    setIsHtmlMode(false)
+    // Sync TipTap con el HTML actual sin que onUpdate lo sobreescriba
+    if (editor) {
+      isHtmlModeRef.current = false
+      editor.commands.setContent(htmlContent, false)
+    }
+  }
+
   // HTML Mode
   if (isHtmlMode) {
     return (
@@ -216,7 +232,7 @@ export default function TipTapEditor({ content, onChange, placeholder }: TipTapE
           </div>
           <button
             type="button"
-            onClick={() => setIsHtmlMode(false)}
+            onClick={exitHtmlMode}
             className="rounded-lg bg-[#14212e] px-3 py-1.5 text-sm font-medium text-white"
           >
             Ver modo Visual
@@ -375,7 +391,7 @@ export default function TipTapEditor({ content, onChange, placeholder }: TipTapE
         
         <button
           type="button"
-          onClick={() => setIsHtmlMode(true)}
+          onClick={enterHtmlMode}
           className="flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100"
         >
           <FileCode className="h-4 w-4" />

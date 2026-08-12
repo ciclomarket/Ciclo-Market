@@ -15,6 +15,7 @@ import { saveSearch } from '../services/savedSearches'
 import type { Listing } from '../types'
 import { useCurrency } from '../context/CurrencyContext'
 import { hasPaidPlan } from '../utils/plans'
+import { compareListingsByRank } from '../utils/listingRank'
 import FilterDropdown from '../components/FilterDropdown'
 import { fetchLikeCounts } from '../services/likes'
 import SeoHead, { type SeoHeadProps } from '../components/SeoHead'
@@ -1383,41 +1384,8 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
     if (sortMode === 'relevance') {
       // Importante: `Array.sort` requiere un comparador consistente; fijar `now` evita "shuffles" entre renders/paginación.
       const now = Date.now()
-      return sorted.sort((a, b) => {
-        const boostScore = (l: Listing) => {
-          const rawBoost = typeof l.rankBoostUntil === 'number'
-            ? l.rankBoostUntil
-            : (l.rankBoostUntil ? Date.parse(l.rankBoostUntil as any) : 0)
-          const active = rawBoost > now
-          if (!active) return 0
-          const granted = (l as any).grantedVisiblePhotos ?? (l as any).granted_visible_photos ?? 4
-          if (granted >= 12) return 3 // Prioridad ALTA (Pro)
-          if (granted >= 8) return 2 // Prioridad (Premium)
-          return 1
-        }
-        const storeScore = (l: Listing) => (l.sellerId ? (storeLogos[l.sellerId] ? 1 : 0) : 0)
-
-        const rA = boostScore(a)
-        const rB = boostScore(b)
-        if (rB !== rA) return rB - rA
-
-        // En igualdad de boost, priorizar usuarios comunes sobre tiendas
-        const sA = storeScore(a)
-        const sB = storeScore(b)
-        if (sA !== sB) return sA - sB
-
-        // Si ambos están destacados, desempatar por vencimiento del destaque (más lejano primero)
-        if (rA === 2) {
-          const aHex = a.highlightExpires ?? 0
-          const bHex = b.highlightExpires ?? 0
-          if (bHex !== aHex) return bHex - aHex
-        }
-
-        // Fallback general: más recientes primero
-        const c = (b.createdAt ?? 0) - (a.createdAt ?? 0)
-        if (c !== 0) return c
-        return String(a.id).localeCompare(String(b.id))
-      })
+      // Orden: PRO individual > Tiendas oficiales > PREMIUM > FREE (ver utils/listingRank.ts).
+      return sorted.sort((a, b) => compareListingsByRank(a, b, now))
     }
     if (sortMode === 'newest') {
       return sorted.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))

@@ -12,9 +12,9 @@ function PageLoadingFallback() {
   )
 }
 import Header from './components/Header'
-const Newsletter = lazyWithRetry(() => import('./components/Newsletter'))
+import Newsletter from './components/Newsletter'
+import Footer from './components/Footer'
 const CookieConsent = lazyWithRetry(() => import('./components/CookieConsent'))
-const Footer = lazyWithRetry(() => import('./components/Footer'))
 import ErrorBoundary from './components/ErrorBoundary'
 import Home from './pages/Home'
 import { lazyWithRetry } from './utils/lazyWithRetry'
@@ -650,12 +650,12 @@ export default function App() {
                     </ErrorBoundary>
                   </main>
 
+                  {!isInstagramLanding && <Newsletter />}
+                  {!isInstagramLanding && <Footer />}
                   <Suspense fallback={null}>
                     {!isInstagramLanding && <CompareTray />}
                     <StoreWhatsAppFloat />
-                    {!isInstagramLanding && <Newsletter />}
                     <CookieConsent />
-                    {!isInstagramLanding && <Footer />}
                   </Suspense>
                 </div>
                 </CompareProvider>

@@ -1641,6 +1641,8 @@ function ListingsView({
   const [openMenuFor, setOpenMenuFor] = useState<string | null>(null)
   const [upgradingKey, setUpgradingKey] = useState<string | null>(null)
   const [processingPaymentKey, setProcessingPaymentKey] = useState<string | null>(null)
+  // Guard síncrono contra doble-click en el botón de upgrade (setState es async).
+  const upgradeCheckoutInFlightRef = useRef(false)
   const API_BASE = useMemo(() => (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, ''), [])
   const canInitiateCheckout = Boolean(API_BASE)
   const now = Date.now()
@@ -1742,7 +1744,7 @@ function ListingsView({
     }
   }, [creditAvailable, hasProfileWhatsapp, onRefresh, showToast])
 
-  const handleUpgradeCheckout = useCallback(async (listing: Listing, targetPlan: 'basic' | 'premium') => {
+  const handleUpgradeCheckoutInner = useCallback(async (listing: Listing, targetPlan: 'basic' | 'premium') => {
     if (!API_BASE) {
       showToast('Configurá VITE_API_BASE_URL en tu entorno para iniciar el pago.', { variant: 'error' })
       return
@@ -1822,6 +1824,16 @@ function ListingsView({
       setProcessingPaymentKey(null)
     }
   }, [API_BASE, planCatalog, showToast, userId])
+
+  const handleUpgradeCheckout = useCallback(async (listing: Listing, targetPlan: 'basic' | 'premium') => {
+    if (upgradeCheckoutInFlightRef.current) return
+    upgradeCheckoutInFlightRef.current = true
+    try {
+      await handleUpgradeCheckoutInner(listing, targetPlan)
+    } finally {
+      upgradeCheckoutInFlightRef.current = false
+    }
+  }, [handleUpgradeCheckoutInner])
 
   useEffect(() => {
     if (!upgradeIntent) return

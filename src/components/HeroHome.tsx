@@ -139,15 +139,22 @@ export default function HeroHome() {
               </picture>
             </div>
 
-            {/* Mobile: imagen como fondo con overlay oscuro */}
-            <div
-              className="lg:hidden absolute inset-0 z-[0]"
-              style={{
-                background: `linear-gradient(180deg, rgba(20,33,46,0.95) 0%, rgba(20,33,46,0.85) 40%, rgba(20,33,46,0.7) 100%), url(/images/hero-bike.webp)`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center 60%'
-              }}
-            />
+            {/* Mobile: imagen real (no CSS background) para que sea LCP-eligible y preloadeable */}
+            <div className="lg:hidden absolute inset-0 z-[0] overflow-hidden">
+              <img
+                src="/images/hero-bike.webp"
+                alt=""
+                aria-hidden="true"
+                className="absolute inset-0 h-full w-full object-cover object-[center_60%]"
+                loading="eager"
+                fetchPriority="high"
+                decoding="async"
+              />
+              <div
+                className="absolute inset-0"
+                style={{ background: 'linear-gradient(180deg, rgba(20,33,46,0.95) 0%, rgba(20,33,46,0.85) 40%, rgba(20,33,46,0.7) 100%)' }}
+              />
+            </div>
 
             {/* Contenido - 55% ancho en desktop */}
             <div className="relative z-[3] w-full lg:w-[55%] px-6 sm:px-8 lg:px-[4%] py-12 sm:py-16 lg:py-[60px] flex items-center min-h-[550px] lg:min-h-[560px]">
@@ -210,15 +217,21 @@ export default function HeroHome() {
             transition={{ duration: 0.5 }}
             className="absolute inset-0"
           >
-            {/* Mobile: mismo fondo oscuro */}
-            <div
-              className="lg:hidden absolute inset-0 z-[0]"
-              style={{
-                background: `linear-gradient(180deg, rgba(20,33,46,0.95) 0%, rgba(20,33,46,0.85) 40%, rgba(20,33,46,0.7) 100%), url(/images/hero-bike.webp)`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center 60%'
-              }}
-            />
+            {/* Mobile: imagen real (slide-stores) */}
+            <div className="lg:hidden absolute inset-0 z-[0] overflow-hidden">
+              <img
+                src="/images/hero-bike.webp"
+                alt=""
+                aria-hidden="true"
+                className="absolute inset-0 h-full w-full object-cover object-[center_60%]"
+                loading="lazy"
+                decoding="async"
+              />
+              <div
+                className="absolute inset-0"
+                style={{ background: 'linear-gradient(180deg, rgba(20,33,46,0.95) 0%, rgba(20,33,46,0.85) 40%, rgba(20,33,46,0.7) 100%)' }}
+              />
+            </div>
 
             {/* Desktop: mockup tienda en el 45% derecho */}
             <div className="hidden lg:flex absolute right-0 top-0 w-[45%] h-full z-[1] items-center justify-center px-10">
@@ -302,9 +315,13 @@ export default function HeroHome() {
             type="button"
             onClick={() => goToSlide(i)}
             aria-label={`Ir al slide ${i + 1}`}
-            className={`h-2 rounded-full transition-all duration-300 ${
-              slide === i ? 'bg-white w-5' : 'bg-white/40 w-2'
-            }`}
+            className="h-2 w-5 rounded-full border-0 p-0 bg-white"
+            style={{
+              transform: slide === i ? 'scaleX(1)' : 'scaleX(0.4)',
+              opacity: slide === i ? 1 : 0.4,
+              transition: 'transform 300ms ease, opacity 300ms ease',
+              transformOrigin: 'center',
+            }}
           />
         ))}
       </div>

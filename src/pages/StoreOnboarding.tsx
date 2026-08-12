@@ -1,10 +1,11 @@
 // src/pages/StoreOnboarding.tsx
-import { useCallback, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { ArrowRight, BadgeCheck, Building2, ChevronLeft, Globe, Image, Phone, Sparkles, Store, Tag } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
+import { ArrowRight, BadgeCheck, Building2, ChevronLeft, Globe, Image, Mail, Phone, Sparkles, Store, Tag } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { getSupabaseClient, supabaseEnabled } from '../services/supabase'
 import { uploadStoreAvatar, uploadStoreBanner } from '../services/storage'
+import { syncProfileFromAuthUser } from '../utils/authProfile'
 import { PROVINCES, OTHER_CITY_OPTION } from '../constants/locations'
 import Button from '../components/Button'
 import Container from '../components/Container'
@@ -85,6 +86,17 @@ function StepBar({ step }: { step: number }) {
           )}
         </div>
       ))}
+    </div>
+  )
+}
+
+function PasswordHint({ ok, children }: { ok: boolean; children: ReactNode }) {
+  return (
+    <div className={`flex items-center gap-2 ${ok ? 'text-emerald-600' : 'text-gray-500'}`}>
+      <span className={`inline-flex h-4 w-4 items-center justify-center rounded-full border text-[10px] font-semibold ${ok ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-gray-200 text-gray-400'}`}>
+        {ok ? '✓' : ''}
+      </span>
+      <span>{children}</span>
     </div>
   )
 }
@@ -258,7 +270,6 @@ interface FormData {
 
 export default function StoreOnboarding() {
   const { user, loading: authLoading } = useAuth()
-  const navigate = useNavigate()
 
   const [step, setStep] = useState(1)
   const [whatsappDial, setWhatsappDial] = useState('54')
@@ -279,9 +290,39 @@ export default function StoreOnboarding() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // ── Cuenta (solo para visitantes sin sesión) ─────────────────────────────────
+  const [accountMode, setAccountMode] = useState<'signup' | 'login'>('signup')
+  const [accountFullName, setAccountFullName] = useState('')
+  const [accountEmail, setAccountEmail] = useState('')
+  const [accountPassword, setAccountPassword] = useState('')
+  const [accountConfirmPassword, setAccountConfirmPassword] = useState('')
+  const [acceptedTerms, setAcceptedTerms] = useState(false)
+  const [accountError, setAccountError] = useState<string | null>(null)
+  const [accountSubmitting, setAccountSubmitting] = useState(false)
+  const [googleLoading, setGoogleLoading] = useState(false)
+  const [awaitingEmailConfirmation, setAwaitingEmailConfirmation] = useState(false)
+  const [resendingEmail, setResendingEmail] = useState(false)
+
+  const passwordChecks = {
+    length: accountPassword.length >= 8,
+    upper: /[A-Z]/.test(accountPassword),
+    lower: /[a-z]/.test(accountPassword),
+    number: /\d/.test(accountPassword),
+  }
+  const passwordValid = Object.values(passwordChecks).every(Boolean)
+
   const set = useCallback((key: keyof FormData, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }))
   }, [])
+
+  // Cuando el usuario recién se autentica (signup/login/Google/link de email),
+  // sincronizamos su perfil una vez. No hace falta restaurar ningún borrador:
+  // la cuenta se crea ANTES de que exista cualquier dato de tienda cargado.
+  useEffect(() => {
+    if (!user) return
+    setAwaitingEmailConfirmation(false)
+    void syncProfileFromAuthUser(user)
+  }, [user])
 
   const slugPreview = slugify(form.storeName)
 
@@ -315,10 +356,123 @@ export default function StoreOnboarding() {
     }
   }
 
+  // ── Cuenta: gate de login/registro previo al formulario de tienda ───────────
+
+  const handleAuthSubmit = async () => {
+    if (!supabaseEnabled) { setAccountError('Registro deshabilitado: configurá Supabase.'); return }
+    setAccountError(null)
+    const supabase = getSupabaseClient()
+
+    if (accountMode === 'login') {
+      if (!accountEmail.trim() || !accountPassword) {
+        setAccountError('Completá tu email y contraseña.')
+        return
+      }
+      setAccountSubmitting(true)
+      try {
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: accountEmail.trim(),
+          password: accountPassword,
+        })
+        if (signInError) setAccountError('Email o contraseña incorrectos.')
+        // Si no hubo error, useAuth() detecta la nueva sesión y este
+        // componente re-renderiza directo al formulario de tienda.
+      } catch {
+        setAccountError('Error de conexión. Intentá de nuevo.')
+      } finally {
+        setAccountSubmitting(false)
+      }
+      return
+    }
+
+    // Modo signup
+    if (!accountFullName.trim()) { setAccountError('Ingresá tu nombre completo.'); return }
+    if (!accountEmail.trim() || !accountEmail.includes('@')) { setAccountError('Ingresá un email válido.'); return }
+    if (!passwordValid) { setAccountError('La contraseña debe cumplir con los requisitos de seguridad.'); return }
+    if (accountPassword !== accountConfirmPassword) { setAccountError('Las contraseñas no coinciden.'); return }
+    if (!acceptedTerms) { setAccountError('Debés aceptar los términos y condiciones.'); return }
+
+    setAccountSubmitting(true)
+    try {
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email: accountEmail.trim(),
+        password: accountPassword,
+        options: {
+          data: { full_name: accountFullName.trim() },
+          emailRedirectTo: `${window.location.origin}/tienda/nueva`,
+        },
+      })
+
+      if (signUpError) {
+        if (/already registered|already exists/i.test(signUpError.message || '')) {
+          setAccountMode('login')
+          setAccountError('Ya existe una cuenta con este email. Iniciá sesión para continuar.')
+        } else {
+          setAccountError(signUpError.message || 'No pudimos crear tu cuenta.')
+        }
+        return
+      }
+
+      // Supabase devuelve un user con identities vacío cuando el email ya existe
+      // (para no filtrar qué emails están registrados).
+      if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+        setAccountMode('login')
+        setAccountError('Ya existe una cuenta con este email. Iniciá sesión para continuar.')
+        return
+      }
+
+      if (!data.session) {
+        // Confirmación de email requerida: pausamos hasta que confirme y
+        // vuelva a esta misma página (todavía no hay datos de tienda que perder).
+        setAwaitingEmailConfirmation(true)
+        return
+      }
+      // Con sesión activa, useAuth() se actualiza y este componente
+      // re-renderiza directo al formulario de tienda.
+    } catch (e: any) {
+      setAccountError(e?.message || 'Error de conexión. Intentá de nuevo.')
+    } finally {
+      setAccountSubmitting(false)
+    }
+  }
+
+  const handleGoogleContinue = async () => {
+    if (!supabaseEnabled) { setAccountError('Login deshabilitado: configurá Supabase.'); return }
+    setAccountError(null)
+    setGoogleLoading(true)
+    try {
+      const supabase = getSupabaseClient()
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: `${window.location.origin}/tienda/nueva` },
+      })
+      if (oauthError) {
+        setAccountError(oauthError.message || 'No pudimos conectar con Google.')
+        setGoogleLoading(false)
+      }
+      // Si no hay error, el navegador redirige a Google — no hay más que hacer acá.
+    } catch (e: any) {
+      setAccountError(e?.message || 'No pudimos conectar con Google.')
+      setGoogleLoading(false)
+    }
+  }
+
+  const handleResendConfirmation = async () => {
+    if (!supabaseEnabled || !accountEmail.trim()) return
+    setResendingEmail(true)
+    try {
+      const supabase = getSupabaseClient()
+      await supabase.auth.resend({ type: 'signup', email: accountEmail.trim() })
+    } catch { /* noop */ }
+    finally {
+      setResendingEmail(false)
+    }
+  }
+
   // ── Plan selection → pago ────────────────────────────────────────────────────
 
   const handleSelectPlan = async (planType: 'monthly' | 'yearly') => {
-    if (!user) { navigate('/auth?next=/tienda/nueva'); return }
+    if (!user) { setError('Tu sesión expiró. Volvé al Paso 1 para iniciar sesión de nuevo.'); return }
     setSubmitting(true)
     setError(null)
     try {
@@ -371,14 +525,211 @@ export default function StoreOnboarding() {
     form.storeName.trim().length >= 2 &&
     form.whatsappLocal.replace(/\D/g, '').length >= 8
 
-  // ── Redirect to login if not authenticated ───────────────────────────────────
-
-  if (!authLoading && !user) {
-    navigate('/auth?next=/tienda/nueva')
-    return null
-  }
+  const accountFieldsValid = accountMode === 'login'
+    ? accountEmail.trim().length > 0 && accountPassword.length > 0
+    : accountFullName.trim().length > 0 &&
+      accountEmail.trim().includes('@') &&
+      passwordValid &&
+      accountPassword === accountConfirmPassword &&
+      acceptedTerms
 
   // ── Render ───────────────────────────────────────────────────────────────────
+
+  if (authLoading) {
+    return (
+      <div className="flex min-h-[calc(100vh-64px)] items-center justify-center bg-[#f4f6f8]">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#14212e] border-t-transparent" />
+      </div>
+    )
+  }
+
+  // Sin sesión: gate de login/registro. El formulario de tienda recién se
+  // muestra una vez autenticado (evita perder datos de tienda cargados antes
+  // de un redirect completo de página, como el de Google OAuth).
+  if (!user) {
+    return (
+      <div className="min-h-[calc(100vh-64px)] bg-[#f4f6f8] py-10">
+        <Container>
+          <div className="mx-auto max-w-md">
+            <div className="mb-8 text-center">
+              <div className="mb-3 flex justify-center">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#14212e]">
+                  <Store className="h-7 w-7 text-white" />
+                </div>
+              </div>
+              <h1 className="text-2xl font-bold text-gray-900">Abrí tu tienda en Ciclo Market</h1>
+              <p className="mt-1 text-gray-500">Primero, iniciá sesión o creá tu cuenta</p>
+            </div>
+
+            <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-gray-100">
+              {awaitingEmailConfirmation ? (
+                <div className="space-y-4 text-center">
+                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50">
+                    <Mail className="h-7 w-7 text-[#14212e]" />
+                  </div>
+                  <h2 className="text-lg font-semibold text-gray-900">Confirmá tu cuenta</h2>
+                  <p className="text-sm text-gray-600">
+                    Te enviamos un link a <span className="font-medium text-gray-900">{accountEmail.trim()}</span>.
+                    Abrilo desde este mismo dispositivo para volver acá y seguir con tu tienda.
+                  </p>
+                  {accountError && (
+                    <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{accountError}</div>
+                  )}
+                  <button
+                    type="button"
+                    disabled={resendingEmail}
+                    onClick={handleResendConfirmation}
+                    className="text-sm font-medium text-[#14212e] underline-offset-2 hover:underline disabled:opacity-60"
+                  >
+                    {resendingEmail ? 'Reenviando…' : '¿No te llegó? Reenviar email'}
+                  </button>
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => setAwaitingEmailConfirmation(false)}
+                      className="text-sm text-gray-400 hover:text-gray-600"
+                    >
+                      Volver
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <h2 className="text-lg font-semibold text-gray-900">
+                    {accountMode === 'signup' ? 'Creá tu cuenta' : 'Iniciá sesión'}
+                  </h2>
+
+                  <button
+                    type="button"
+                    disabled={googleLoading}
+                    onClick={handleGoogleContinue}
+                    className="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" className="h-4 w-4" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C34.5 31.9 30.7 35 26 35c-6.1 0-11-4.9-11-11s4.9-11 11-11c2.8 0 5.4 1.1 7.4 2.9l5.7-5.7C35.6 7 30.9 5 26 5 14.4 5 5 14.4 5 26s9.4 21 21 21 21-9.4 21-21c0-1.2-.1-2.3-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.5 15.3 19.8 12 26 12c2.8 0 5.4 1.1 7.4 2.9l5.7-5.7C35.6 7 30.9 5 26 5 17 5 9.1 9.7 6.3 14.7z"/><path fill="#4CAF50" d="M26 47c4.7 0 9-1.8 12.3-4.7l-5.7-5.7C30.7 37.9 28.4 39 26 39c-4.6 0-8.4-3.1-9.8-7.3l-6.6 5.1C12.3 42.5 18.7 47 26 47z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-1.1 3.1-3.6 5.5-6.6 6.7l5.7 5.7C34.1 41.2 39 38 42 33c1.8-2.8 2.8-6.1 2.8-9.5 0-1.2-.1-2.3-.4-3.5z"/></svg>
+                    {googleLoading ? 'Conectando…' : 'Continuar con Google'}
+                  </button>
+
+                  <div className="flex items-center gap-3 text-xs text-gray-400">
+                    <div className="h-px flex-1 bg-gray-200" />
+                    o con email
+                    <div className="h-px flex-1 bg-gray-200" />
+                  </div>
+
+                  {accountMode === 'signup' && (
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700">Nombre completo</label>
+                      <input
+                        type="text"
+                        value={accountFullName}
+                        onChange={(e) => setAccountFullName(e.target.value)}
+                        placeholder="Ej: Ana Pérez"
+                        autoComplete="name"
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-[#14212e] focus:outline-none focus:ring-1 focus:ring-[#14212e]"
+                      />
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700">Email</label>
+                    <input
+                      type="email"
+                      value={accountEmail}
+                      onChange={(e) => setAccountEmail(e.target.value)}
+                      placeholder="tu@email.com"
+                      autoComplete="email"
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-[#14212e] focus:outline-none focus:ring-1 focus:ring-[#14212e]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700">Contraseña</label>
+                    <input
+                      type="password"
+                      value={accountPassword}
+                      onChange={(e) => setAccountPassword(e.target.value)}
+                      placeholder={accountMode === 'signup' ? 'Ingresá una contraseña segura' : 'Tu contraseña'}
+                      autoComplete={accountMode === 'signup' ? 'new-password' : 'current-password'}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-[#14212e] focus:outline-none focus:ring-1 focus:ring-[#14212e]"
+                    />
+                    {accountMode === 'signup' && (
+                      <div className="mt-2 space-y-1 text-xs">
+                        <PasswordHint ok={passwordChecks.length}>Al menos 8 caracteres</PasswordHint>
+                        <PasswordHint ok={passwordChecks.upper}>Una letra mayúscula</PasswordHint>
+                        <PasswordHint ok={passwordChecks.lower}>Una letra minúscula</PasswordHint>
+                        <PasswordHint ok={passwordChecks.number}>Al menos un número</PasswordHint>
+                      </div>
+                    )}
+                  </div>
+
+                  {accountMode === 'signup' && (
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700">Repetí la contraseña</label>
+                      <input
+                        type="password"
+                        value={accountConfirmPassword}
+                        onChange={(e) => setAccountConfirmPassword(e.target.value)}
+                        placeholder="Confirmá la contraseña"
+                        autoComplete="new-password"
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-[#14212e] focus:outline-none focus:ring-1 focus:ring-[#14212e]"
+                      />
+                    </div>
+                  )}
+
+                  {accountMode === 'signup' && (
+                    <label className="flex items-start gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={acceptedTerms}
+                        onChange={(e) => setAcceptedTerms(e.target.checked)}
+                        className="mt-1 h-4 w-4 rounded border-gray-300 text-[#14212e] focus:ring-[#14212e]"
+                      />
+                      <span>
+                        Acepto los{' '}
+                        <Link to="/terminos" target="_blank" rel="noopener noreferrer" className="font-semibold text-gray-900 underline">
+                          términos y condiciones
+                        </Link>
+                        .
+                      </span>
+                    </label>
+                  )}
+
+                  {accountError && (
+                    <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{accountError}</div>
+                  )}
+
+                  <Button
+                    className="w-full bg-[#14212e] text-white hover:bg-[#1b2f3f]"
+                    disabled={!accountFieldsValid || accountSubmitting}
+                    onClick={handleAuthSubmit}
+                  >
+                    {accountSubmitting ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                        {accountMode === 'signup' ? 'Creando cuenta…' : 'Ingresando…'}
+                      </span>
+                    ) : (
+                      <span className="flex items-center justify-center gap-1">
+                        {accountMode === 'signup' ? 'Crear cuenta y continuar' : 'Ingresar'}
+                        <ArrowRight className="ml-1 h-4 w-4" />
+                      </span>
+                    )}
+                  </Button>
+
+                  <button
+                    type="button"
+                    onClick={() => { setAccountMode(accountMode === 'signup' ? 'login' : 'signup'); setAccountError(null) }}
+                    className="w-full text-center text-sm text-gray-500 hover:text-gray-700"
+                  >
+                    {accountMode === 'signup' ? '¿Ya tenés cuenta? Iniciá sesión' : '¿Todavía no tenés cuenta? Registrate'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </Container>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-[calc(100vh-64px)] bg-[#f4f6f8] py-10">

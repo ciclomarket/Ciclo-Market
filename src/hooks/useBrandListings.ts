@@ -31,10 +31,7 @@ export function useBrandListings(
         .from('listings')
         .select('*', { count: 'exact', head: true })
         .ilike('brand', brandName)
-        .neq('status', 'deleted')
-        .neq('status', 'draft')
-        .neq('status', 'archived')
-        .neq('status', 'expired')
+        .in('status', ['active', 'published'])
         .or(`expires_at.is.null,expires_at.gte.${now}`)
       if (!error && typeof exactCount === 'number') setCount(exactCount)
     } catch {

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
@@ -146,6 +146,9 @@ export default function Plans() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [isStore, setIsStore] = useState<boolean>(false)
   const [processingPlan, setProcessingPlan] = useState<PlanCode | null>(null)
+  // Guard síncrono contra doble-click: setProcessingPlan (state) es async y no
+  // alcanza a deshabilitar el botón entre dos clicks muy seguidos.
+  const selectInFlightRef = useRef(false)
   const [giftCode, setGiftCode] = useState<string | null>(null)
   const [giftPlan, setGiftPlan] = useState<PlanCode | null>(null)
   const [giftValidating, setGiftValidating] = useState(false)
@@ -329,7 +332,7 @@ export default function Plans() {
     setSearchParams(next, { replace: true })
   }, [searchParams, setSearchParams])
 
-  const handleSelect = useCallback(async (plan: Plan & { _code: PlanCode }) => {
+  const handleSelectInner = useCallback(async (plan: Plan & { _code: PlanCode }) => {
     if (!listingType) {
       alert('Seleccioná qué deseas vender antes de elegir un plan.')
       return
@@ -471,6 +474,16 @@ export default function Plans() {
       setProcessingPlan(null)
     }
   }, [user, navigate, clearPaymentParams, listingType, giftCode, giftPlan])
+
+  const handleSelect = useCallback(async (plan: Plan & { _code: PlanCode }) => {
+    if (selectInFlightRef.current) return
+    selectInFlightRef.current = true
+    try {
+      await handleSelectInner(plan)
+    } finally {
+      selectInFlightRef.current = false
+    }
+  }, [handleSelectInner])
 
   const planFromQuery = useMemo(() => {
     if (!paymentPlanParam) return null

@@ -5,6 +5,7 @@ import type { Listing } from '../types'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { extractListingId, slugify } from '../utils/slug'
 import { canonicalPlanCode } from '../utils/planCodes'
+import { sortListingsByRank } from '../utils/listingRank'
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 
@@ -348,14 +349,7 @@ export async function fetchListingsByCategory(
       return true
     })
     const normalized = filtered.map((row: any) => normalizeListing(row as ListingRow))
-    const score = (l: Listing) => {
-      const priority = l.priorityActive ? 2 : 0
-      const tier = l.planTier === 'PRO' ? 2 : l.planTier === 'PREMIUM' ? 1 : 0
-      const userBoost = l.isTienda ? 0 : 1 // prefer usuarios vs tiendas a igual boost
-      const created = typeof l.createdAt === 'number' ? l.createdAt : 0
-      return priority * 1e12 + tier * 1e10 + userBoost * 1e9 + created
-    }
-    return normalized.sort((a, b) => score(b) - score(a))
+    return sortListingsByRank(normalized)
   } catch {
     return []
   }
@@ -393,12 +387,7 @@ export async function fetchListingsByBrand(
       if (row && 'is_demo_listing' in row && row.is_demo_listing === true) return false
       return true
     })
-    const score = (l: Listing) => {
-      const priority = l.priorityActive ? 2 : 0
-      const tier = l.planTier === 'PRO' ? 2 : l.planTier === 'PREMIUM' ? 1 : 0
-      return priority * 1e12 + tier * 1e10 + (typeof l.createdAt === 'number' ? l.createdAt : 0)
-    }
-    return filtered.map((row: any) => normalizeListing(row as ListingRow)).sort((a, b) => score(b) - score(a))
+    return sortListingsByRank(filtered.map((row: any) => normalizeListing(row as ListingRow)))
   } catch {
     return []
   }
@@ -436,12 +425,7 @@ export async function fetchListingsByProvincia(
       if (row && 'is_demo_listing' in row && row.is_demo_listing === true) return false
       return true
     })
-    const score = (l: Listing) => {
-      const priority = l.priorityActive ? 2 : 0
-      const tier = l.planTier === 'PRO' ? 2 : l.planTier === 'PREMIUM' ? 1 : 0
-      return priority * 1e12 + tier * 1e10 + (typeof l.createdAt === 'number' ? l.createdAt : 0)
-    }
-    return filtered.map((row: any) => normalizeListing(row as ListingRow)).sort((a, b) => score(b) - score(a))
+    return sortListingsByRank(filtered.map((row: any) => normalizeListing(row as ListingRow)))
   } catch {
     return []
   }

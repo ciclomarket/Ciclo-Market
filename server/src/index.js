@@ -1925,6 +1925,33 @@ app.post('/api/store/subscribe', async (req, res) => {
   }
 })
 
+// Fallback si el webhook de preapproval no llegó (o llegó con status 'pending'
+// antes de que MP autorice el primer cobro). El usuario dueño de la
+// suscripción puede reconsultarla activamente al volver de MP.
+app.post('/api/store/confirm', async (req, res) => {
+  try {
+    const supabase = getServerSupabaseClient()
+    const user = await getAuthUser(req, supabase)
+    if (!user) return res.status(401).json({ ok: false, error: 'unauthorized' })
+
+    const { data: sub } = await supabase
+      .from('store_subscriptions')
+      .select('provider_sub_id')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (!sub?.provider_sub_id) return res.status(404).json({ ok: false, error: 'no_subscription' })
+
+    const result = await processStoreSubscription(sub.provider_sub_id)
+    return res.json(result)
+  } catch (err) {
+    console.error('[store/confirm] unexpected error', err)
+    return res.status(500).json({ ok: false, error: 'unexpected_error' })
+  }
+})
+
 /* ----------------------------- Payment confirm (manual) ------------------- */
 // Admin-triggered endpoint to confirm a payment by id (fallback if webhooks fail)
 // Requires x-cron-secret header to prevent abuse

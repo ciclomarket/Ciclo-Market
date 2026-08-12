@@ -115,23 +115,6 @@ export default function ListingCard({ l, storeLogoUrl, priority = false, likeCou
     <div className="relative h-full">
       <Link to={`/listing/${slug}`} className="card-flat group flex h-full flex-col overflow-hidden">
         <div className={`relative overflow-hidden rounded-2xl aspect-[5/4] sm:aspect-video ${isLifestyle ? 'bg-white' : 'bg-transparent'}`}>
-          <div className="absolute top-2 left-2 right-2 z-10 flex items-start justify-between gap-2">
-            <div className="flex items-center gap-2">
-              {statusLabel && (
-                <span className={`rounded-full px-3 py-1 text-xs font-semibold text-white shadow ${isSold ? 'bg-[#0f766e]' : isArchived ? 'bg-[#6b7280]' : 'bg-[#9ca3af]'}`}>
-                  {statusLabel}
-                </span>
-              )}
-              {!statusLabel && hasPriority && (
-                <span className="rounded-full px-3 py-1 text-xs font-semibold text-white shadow bg-gradient-to-r from-orange-500 to-red-500 flex items-center gap-1">
-                  <span role="img" aria-label="Destacada">🔥</span> Destacada
-                </span>
-              )}
-              {waPublic && (
-                <span className="rounded-full px-2 py-1 text-xs bg-[#25D366] text-white shadow">WhatsApp disponible</span>
-              )}
-            </div>
-          </div>
           {hasImage ? (
             <img
               src={currentImageSrc || undefined}
@@ -163,8 +146,9 @@ export default function ListingCard({ l, storeLogoUrl, priority = false, likeCou
           )}
           <div className="absolute top-2 left-2 z-10 flex flex-col items-start gap-2">
             {!statusLabel && hasPriority && (
-              <span className="rounded-full px-3 py-1 text-xs font-semibold text-white shadow bg-gradient-to-r from-orange-500 to-red-500 flex items-center gap-1">
-                <span role="img" aria-label="Destacada">🔥</span> Destacada
+              <span className="rounded-full px-2.5 py-1 sm:px-3 text-xs font-semibold text-white shadow bg-gradient-to-r from-orange-500 to-red-500 flex items-center gap-1">
+                <span role="img" aria-label="Destacada">🔥</span>
+                <span className="hidden sm:inline">HOT</span>
               </span>
             )}
             {statusLabel && (
@@ -178,7 +162,17 @@ export default function ListingCard({ l, storeLogoUrl, priority = false, likeCou
           </div>
           <div className="absolute top-2 right-2 z-10 flex flex-col items-end gap-2">
             {storeLogoUrl ? (
-              <img src={storeLogoUrl} alt="Logo tienda" className="h-8 w-8 rounded-full border border-white/50 bg-white object-cover shadow" loading="lazy" decoding="async" />
+              <div className="relative h-8 w-8">
+                <img src={storeLogoUrl} alt="Tienda oficial" className="h-8 w-8 rounded-full border border-white/50 bg-white object-cover shadow" loading="lazy" decoding="async" />
+                <span
+                  className="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[#1d9bf0] text-white ring-2 ring-white"
+                  title="Tienda oficial verificada"
+                >
+                  <svg viewBox="0 0 24 24" className="h-2.5 w-2.5" fill="currentColor" aria-hidden="true">
+                    <path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2Z" />
+                  </svg>
+                </span>
+              </div>
             ) : null}
             {discountPct !== null && discountPct > 0 && (
               <span className="rounded-full bg-mb-secondary px-3 py-1 text-xs font-semibold text-white shadow">-{discountPct}%</span>
