@@ -11,6 +11,7 @@ const buyerInterestWeekly = require('./campaigns/buyerInterestWeekly')
 const newArrivalsWeekly = require('./campaigns/newArrivalsWeekly')
 const sellerWeeklyPerformance = require('./campaigns/sellerWeeklyPerformance')
 const externalLeadsWeekly = require('./campaigns/externalLeadsWeekly')
+const freeListingUpgradeReminder = require('./campaigns/freeListingUpgradeReminder')
 
 const CAMPAIGNS = [
   paymentAbandon20off,
@@ -20,6 +21,7 @@ const CAMPAIGNS = [
   newArrivalsWeekly,
   sellerWeeklyPerformance,
   externalLeadsWeekly,
+  freeListingUpgradeReminder,
 ]
 
 function getTimeZone() {
@@ -95,6 +97,7 @@ async function getFeatureFlags(supabase) {
     campaign_new_arrivals_weekly_enabled: true,
     campaign_seller_weekly_performance_enabled: true,
     campaign_external_lead_weekly_enabled: true,
+    campaign_free_listing_upgrade_reminder_enabled: true,
   }
 
   try {
@@ -334,7 +337,7 @@ async function runEmailOrchestrator({ dryRun = false, campaigns = null, dateOver
       exp: Date.now() + 180 * 24 * 60 * 60 * 1000,
     })
 
-    if ((candidate.campaign === 'upgrade_comparison' || candidate.campaign === 'payment_abandon_20off') && candidate.listingId) {
+    if ((candidate.campaign === 'upgrade_comparison' || candidate.campaign === 'payment_abandon_20off' || candidate.campaign === 'free_listing_upgrade_reminder') && candidate.listingId) {
       const { data: listingRow, error: listingErr } = await supabase
         .from('listings')
         .select('id,plan,plan_code,seller_plan')
