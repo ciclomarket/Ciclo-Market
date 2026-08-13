@@ -63,6 +63,7 @@ const pricingApiRouter = require('./routes/pricingApi')
 const notionSyncRouter = require('./routes/notionSync')
 const { emailEngineRouter } = require('./routes/emailEngine')
 const instagramCardRouter = require('./routes/instagramCard')
+const { diditRouter } = require('./routes/didit')
 const { startEmailOrchestratorJob } = require('./email/orchestrator')
 // Sweepstake feature removed
 const path = require('path')
@@ -385,6 +386,9 @@ app.use('/api/v1/pricing', pricingApiRouter)
 
 // Instagram card generation
 app.use('/api', instagramCardRouter)
+
+// Didit identity verification (session creation + webhook)
+app.use(diditRouter)
 
 /* ----------------------------- Cron jobs ---------------------------------- */
 // Start scheduled jobs after basic middleware is ready

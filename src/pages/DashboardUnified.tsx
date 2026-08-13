@@ -125,10 +125,10 @@ interface UserPlan {
 }
 
 interface VerificationRequest {
-  id: string
-  email: string
-  attachments: string[]
+  status: string
+  decision: Record<string, any> | null
   created_at: string
+  updated_at: string
 }
 
 // ============================================
@@ -368,10 +368,6 @@ function AccountVerificationSection({
   existingRequest,
   onUpdate,
   isUserVerified = false,
-  userEmail,
-  userName,
-  userInstagram,
-  userPhone,
 }: {
   existingRequest: VerificationRequest | null
   onUpdate: () => void
@@ -382,13 +378,47 @@ function AccountVerificationSection({
   userPhone?: string | null
 }) {
   const { show: showToast } = useToast()
-  const { user } = useAuth()
-  const [uploadProgress, setUploadProgress] = useState({ front: false, back: false })
-  const [frontUrl, setFrontUrl] = useState<string | null>(null)
-  const [backUrl, setBackUrl] = useState<string | null>(null)
-  const [submitting, setSubmitting] = useState(false)
-  const DEFAULT_MESSAGE = `¡Hola! Me llamo [nombre] y quiero verificar mi perfil en Ciclo Market. Soy de [ciudad, provincia] y uso la plataforma para [comprá/vendé/buscá equipos — editá según tu caso]. Mi DNI adjunto confirma mi identidad.`
-  const [message, setMessage] = useState(DEFAULT_MESSAGE)
+  const [starting, setStarting] = useState(false)
+
+  // Si volvemos del flujo de Didit (?verification=complete), refrescar el estado una vez
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('verification') === 'complete') {
+      onUpdate()
+      params.delete('verification')
+      const newSearch = params.toString()
+      window.history.replaceState({}, '', `${window.location.pathname}${newSearch ? `?${newSearch}` : ''}`)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const handleStartVerification = async () => {
+    setStarting(true)
+    try {
+      const supabase = getSupabaseClient()
+      const { data: session } = await supabase.auth.getSession()
+      const token = session.session?.access_token
+      if (!token) {
+        showToast('Iniciá sesión para continuar', { variant: 'error' })
+        return
+      }
+
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/verification/didit/session`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      const data = await res.json()
+      if (!res.ok || !data.ok || !data.url) throw new Error(data.error || 'error')
+      window.location.href = data.url
+    } catch (error) {
+      console.error('Error starting Didit verification:', error)
+      showToast('No pudimos iniciar la verificación. Intentá de nuevo en unos minutos.', { variant: 'error' })
+      setStarting(false)
+    }
+  }
 
   if (isUserVerified) {
     return (
@@ -404,122 +434,31 @@ function AccountVerificationSection({
     )
   }
 
-  if (existingRequest) {
+  const status = existingRequest?.status
+  const isPending = status === 'Not Started' || status === 'In Progress' || status === 'In Review'
+  const isDeclined = status === 'Declined' || status === 'Abandoned'
+
+  if (isPending) {
     return (
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
-        <div className="flex items-start gap-4 mb-4">
+        <div className="flex items-start gap-4">
           <div className="p-3 bg-amber-100 rounded-xl">
             <Award className="w-6 h-6 text-amber-600" />
           </div>
           <div>
-            <h3 className="font-semibold text-gray-900">Solicitud en revisión</h3>
+            <h3 className="font-semibold text-gray-900">Verificación en proceso</h3>
             <p className="text-sm text-gray-500 mt-1">
-              Recibimos tu solicitud el {new Date(existingRequest.created_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })}. Te avisaremos por email cuando esté aprobada.
+              Iniciaste tu verificación de identidad
+              {existingRequest?.created_at
+                ? ` el ${new Date(existingRequest.created_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })}`
+                : ''}
+              . Te avisaremos apenas esté lista — normalmente toma solo unos minutos.
             </p>
           </div>
         </div>
-        {existingRequest.attachments.length > 0 && (
-          <div className="grid grid-cols-2 gap-4 mt-4">
-            {existingRequest.attachments[0] && (
-              <div>
-                <p className="text-sm text-gray-500 mb-2">Frente del DNI</p>
-                <div className="aspect-[3/2] bg-gray-100 rounded-xl overflow-hidden">
-                  <img src={existingRequest.attachments[0]} alt="Frente del DNI" className="w-full h-full object-cover" />
-                </div>
-              </div>
-            )}
-            {existingRequest.attachments[1] && (
-              <div>
-                <p className="text-sm text-gray-500 mb-2">Dorso del DNI</p>
-                <div className="aspect-[3/2] bg-gray-100 rounded-xl overflow-hidden">
-                  <img src={existingRequest.attachments[1]} alt="Dorso del DNI" className="w-full h-full object-cover" />
-                </div>
-              </div>
-            )}
-          </div>
-        )}
       </div>
     )
   }
-
-  const handleUploadPhoto = async (side: 'front' | 'back', file: File) => {
-    if (!user?.id) return
-    setUploadProgress(p => ({ ...p, [side]: true }))
-    try {
-      const supabase = getSupabaseClient()
-      const fileExt = file.name.split('.').pop()
-      const fileName = `dni_${side}_${user.id}_${Date.now()}.${fileExt}`
-      const { error: uploadError } = await supabase.storage
-        .from('verifications')
-        .upload(fileName, file, { upsert: true })
-      if (uploadError) throw uploadError
-      const { data: { publicUrl } } = supabase.storage.from('verifications').getPublicUrl(fileName)
-      if (side === 'front') setFrontUrl(publicUrl)
-      else setBackUrl(publicUrl)
-    } catch (error) {
-      console.error('Error uploading:', error)
-      showToast('Error al subir el documento', { variant: 'error' })
-    } finally {
-      setUploadProgress(p => ({ ...p, [side]: false }))
-    }
-  }
-
-  const handleSubmit = async () => {
-    if (!frontUrl || !backUrl || !userEmail) return
-    setSubmitting(true)
-    try {
-      const res = await fetch('/api/verification/request', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: userName || userEmail,
-          email: userEmail,
-          instagram: userInstagram || null,
-          phone: userPhone || null,
-          message,
-          attachments: [frontUrl, backUrl],
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok || !data.ok) throw new Error(data.error || 'error')
-      showToast('Solicitud enviada correctamente', { variant: 'success' })
-      onUpdate()
-    } catch (error) {
-      console.error('Error submitting verification:', error)
-      showToast('Error al enviar la solicitud', { variant: 'error' })
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  const PhotoSlot = ({ side, url }: { side: 'front' | 'back'; url: string | null }) => (
-    <div>
-      <label className="block text-sm font-medium text-gray-700 mb-2">
-        {side === 'front' ? 'Frente del DNI' : 'Dorso del DNI'}
-      </label>
-      {url ? (
-        <div className="relative aspect-[3/2] bg-gray-100 rounded-xl overflow-hidden">
-          <img src={url} alt={side === 'front' ? 'Frente del DNI' : 'Dorso del DNI'} className="w-full h-full object-cover" />
-          <label className="absolute inset-0 bg-black/50 flex items-center justify-center cursor-pointer hover:bg-black/60 transition-colors">
-            <Camera className="w-8 h-8 text-white" />
-            <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleUploadPhoto(side, e.target.files[0])} />
-          </label>
-        </div>
-      ) : (
-        <label className="flex flex-col items-center justify-center aspect-[3/2] border-2 border-dashed border-gray-300 rounded-xl hover:border-gray-400 hover:bg-gray-50 cursor-pointer transition-colors">
-          {uploadProgress[side] ? (
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-600" />
-          ) : (
-            <>
-              <Camera className="w-8 h-8 text-gray-400 mb-2" />
-              <span className="text-sm text-gray-500">Subir foto</span>
-            </>
-          )}
-          <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleUploadPhoto(side, e.target.files[0])} />
-        </label>
-      )}
-    </div>
-  )
 
   return (
     <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
@@ -530,43 +469,27 @@ function AccountVerificationSection({
         <div>
           <h3 className="font-semibold text-gray-900">Verificación de identidad</h3>
           <p className="text-sm text-gray-500 mt-1">
-            Subí ambas caras de tu DNI para obtener el badge CicloTrust.
+            Verificá tu identidad en minutos con tu documento y una selfie para obtener el badge CicloTrust.
           </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <PhotoSlot side="front" url={frontUrl} />
-        <PhotoSlot side="back" url={backUrl} />
-      </div>
+      {isDeclined && (
+        <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+          No pudimos confirmar tu identidad la última vez. Podés intentarlo de nuevo.
+        </div>
+      )}
 
-      <div className="mt-6">
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Presentate brevemente
-        </label>
-        <p className="text-xs text-gray-400 mb-2">
-          Contanos tu nombre completo, de dónde sos y cómo usás Ciclo Market. Cuanto más detalle des, más rápido podemos validar tu cuenta.
-        </p>
-        <textarea
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          rows={4}
-          className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm text-gray-800 placeholder-gray-400 focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-100 resize-none"
-        />
-      </div>
-
-      <div className="mt-4">
-        <button
-          onClick={handleSubmit}
-          disabled={!frontUrl || !backUrl || !message.trim() || submitting}
-          className="w-full rounded-xl bg-purple-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          {submitting ? 'Enviando...' : 'Enviar solicitud de verificación'}
-        </button>
-        {(!frontUrl || !backUrl) && (
-          <p className="text-xs text-gray-400 text-center mt-2">Subí las dos fotos para habilitar el envío</p>
-        )}
-      </div>
+      <button
+        onClick={handleStartVerification}
+        disabled={starting}
+        className="w-full rounded-xl bg-purple-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        {starting ? 'Iniciando...' : isDeclined ? 'Volver a intentar' : 'Verificar identidad'}
+      </button>
+      <p className="text-xs text-gray-400 text-center mt-2">
+        Vas a ser redirigido a un flujo seguro para escanear tu documento y tomarte una selfie.
+      </p>
     </div>
   )
 }
@@ -3672,9 +3595,9 @@ export default function DashboardUnified() {
       
       try {
         const { data: verificationData } = await supabase
-          .from('verification_requests')
-          .select('id, email, attachments, created_at')
-          .eq('email', user.email)
+          .from('identity_verifications')
+          .select('status, decision, created_at, updated_at')
+          .eq('user_id', user.id)
           .order('created_at', { ascending: false })
           .limit(1)
           .single()
