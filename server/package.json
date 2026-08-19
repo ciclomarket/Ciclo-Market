@@ -23,6 +23,7 @@
     "email:orchestrator:once": "node -e \"require('./src/email/orchestrator').runEmailOrchestrator({dryRun:false}).then(r=>{console.log(JSON.stringify(r,null,2));process.exit(0)}).catch(e=>{console.error(e);process.exit(1)})\"",
     "email:orchestrator:dry": "node -e \"require('./src/email/orchestrator').runEmailOrchestrator({dryRun:true,forceWeekly:true}).then(r=>{console.log(JSON.stringify(r,null,2));process.exit(0)}).catch(e=>{console.error(e);process.exit(1)})\"",
     "email:test": "node ./scripts/sendTestEmail.js",
+    "email:test-campaigns": "node ./scripts/sendCampaignTestEmails.js",
     "pricing:admin": "node ./scripts/pricing-admin.js",
     "pricing:sync:ciclomarket": "node -e \"const s=require('./src/services/pricingScraperService'); s.processPendingJobs({limit:1}).then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})\"",
     "pricing:recalculate": "node -e \"const {createClient}=require('@supabase/supabase-js'); const sb=createClient(process.env.SUPABASE_URL,process.env.SUPABASE_SERVICE_ROLE_KEY); sb.rpc('recalculate_market_prices_enhanced').then(()=>{console.log('✅ Recalculated');process.exit(0)}).catch(e=>{console.error(e);process.exit(1)})\"",
