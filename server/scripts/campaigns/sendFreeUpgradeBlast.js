@@ -297,6 +297,7 @@ async function main() {
 
     try {
       await sendMail({
+        from: process.env.SMTP_FROM || 'Ciclo Market | El marketplace de ciclismo de Argentina <avisos@ciclomarket.ar>',
         to: recipient,
         subject,
         html: rendered.html,

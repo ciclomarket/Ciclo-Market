@@ -80,8 +80,8 @@ function buildSamplePayload(campaign) {
           listingId: 'sample-bici',
           listingTitle: 'Specialized Rockhopper 29" 2020',
           plans: [
-            { planCode: 'premium', title: 'Plan Premium', originalPrice: 13000, discountPrice: 10400, highlighted: true, url: `${serverBase}/api/checkout/listing-upgrade?token=TEST` },
-            { planCode: 'pro', title: 'Plan Pro', originalPrice: 16000, discountPrice: 12800, highlighted: false, url: `${serverBase}/api/checkout/listing-upgrade?token=TEST` },
+            { planCode: 'premium', title: 'Plan Premium', originalPrice: 9000, discountPrice: 7200, highlighted: true, url: `${serverBase}/api/checkout/listing-upgrade?token=TEST` },
+            { planCode: 'pro', title: 'Plan Pro', originalPrice: 13000, discountPrice: 10400, highlighted: false, url: `${serverBase}/api/checkout/listing-upgrade?token=TEST` },
           ],
         }],
         isBundle: false,

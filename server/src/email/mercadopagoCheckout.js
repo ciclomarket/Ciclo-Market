@@ -39,8 +39,9 @@ function resolvePublicFrontendUrl() {
 }
 
 function fallbackPrice(planCode) {
-  if (planCode === 'premium') return 13000
-  if (planCode === 'pro') return 16000
+  // Precios alineados con la tabla `plans` (fuente de verdad del checkout).
+  if (planCode === 'premium') return 9000
+  if (planCode === 'pro') return 13000
   if (planCode === 'basic') return 9000
   return 0
 }

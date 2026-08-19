@@ -68,13 +68,17 @@ function getMailTransport() {
 
 async function sendViaSMTP(options) {
   const transporter = getMailTransport()
+  // Si el caller no indica "from", usar SMTP_FROM (o el login como último recurso).
+  // Sin esto, nodemailer usa auth.user como remitente y Brevo lo rechaza ("Invalid from").
+  const from = options.from || process.env.SMTP_FROM || process.env.SMTP_USER || 'Ciclo Market <no-reply@ciclomarket.ar>'
   if (process.env.SMTP_LOGGER === 'true') {
     console.info('[mail] sending via SMTP', {
       to: options.to,
       subject: options.subject,
+      from,
     })
   }
-  return transporter.sendMail(options)
+  return transporter.sendMail({ ...options, from })
 }
 
 async function sendViaResend(options) {

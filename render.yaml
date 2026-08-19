@@ -97,6 +97,10 @@ services:
       - key: SMTP_PASSWORD
         sync: false
 
+      # Precios de planes para los emails (alineados con la tabla `plans`)
+      - key: AVAILABLE_PLANS
+        value: '[{"code":"premium","name":"Plan Premium","price":9000},{"code":"pro","name":"Plan Pro","price":13000}]'
+
       # Optional
       - key: SHARE_FALLBACK_IMAGE
         value: https://your-domain.com/og-preview.png
