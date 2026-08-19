@@ -129,20 +129,26 @@ async function logSent(supabase, { email, userId, listingId, subject }) {
   const start = new Date(Date.UTC(now.getFullYear(), 0, 1))
   const isoYear = now.getUTCFullYear()
   const isoWeek = Math.ceil((((now - start) / 86400000) + start.getUTCDay() + 1) / 7)
-  await supabase.from('email_logs').insert({
-    campaign: CAMPAIGN,
-    priority: 1,
-    user_id: userId || null,
-    email_to: email,
-    listing_id: listingId || null,
-    idempotency_key: `${CAMPAIGN}:${email}`,
-    iso_year: isoYear,
-    iso_week: isoWeek,
-    status: 'sent',
-    provider: 'smtp',
-    subject: subject || null,
-    metadata: { source: 'free_upgrade_blast' },
-  }).catch((err) => console.warn('[freeUpgradeBlast] log insert failed', err?.message || err))
+  try {
+    // OJO: supabase-js v2 NO tiene .catch() sobre .insert() — usar try/catch con await.
+    const { error } = await supabase.from('email_logs').insert({
+      campaign: CAMPAIGN,
+      priority: 1,
+      user_id: userId || null,
+      email_to: email,
+      listing_id: listingId || null,
+      idempotency_key: `${CAMPAIGN}:${email}`,
+      iso_year: isoYear,
+      iso_week: isoWeek,
+      status: 'sent',
+      provider: 'smtp',
+      subject: subject || null,
+      metadata: { source: 'free_upgrade_blast' },
+    })
+    if (error) console.warn('[freeUpgradeBlast] log insert failed', error?.message || error)
+  } catch (err) {
+    console.warn('[freeUpgradeBlast] log insert failed', err?.message || err)
+  }
 }
 
 function sleep(ms) {

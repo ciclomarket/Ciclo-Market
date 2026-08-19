@@ -385,27 +385,30 @@ router.get('/api/email/sold-followup', async (req, res) => {
     const front = resolvePublicFrontendUrl()
     const listingUrl = `${front}/listing/${encodeURIComponent(listing.slug || listingId)}`
 
+    const recordEvent = async (action) => {
+      try {
+        const { error } = await supabase.from('sold_followup_events').insert({
+          listing_id: listingId,
+          seller_id: listing.seller_id || null,
+          action,
+          source: 'email',
+        })
+        if (error) console.warn('[soldFollowup] event insert failed', error?.message || error)
+      } catch (err) {
+        console.warn('[soldFollowup] event insert failed', err?.message || err)
+      }
+    }
+
     if (action === 'sold') {
       if (String(listing.status || '').toLowerCase() !== 'sold') {
         await supabase.from('listings').update({ status: 'sold' }).eq('id', listingId)
       }
-      await supabase.from('sold_followup_events').insert({
-        listing_id: listingId,
-        seller_id: listing.seller_id || null,
-        action: 'sold',
-        source: 'email',
-      }).catch((err) => console.warn('[soldFollowup] event insert failed', err?.message || err))
+      await recordEvent('sold')
       return res.redirect(302, `${front}/dashboard?tab=Publicaciones&msg=marcada_vendida`)
     }
 
     // still_selling: registrar confirmación y llevar al vendedor a su publicación.
-    await supabase.from('sold_followup_events').insert({
-      listing_id: listingId,
-      seller_id: listing.seller_id || null,
-      action: 'still_selling',
-      source: 'email',
-    }).catch((err) => console.warn('[soldFollowup] event insert failed', err?.message || err))
-
+    await recordEvent('still_selling')
     return res.redirect(302, listingUrl)
   } catch (err) {
     console.error('[soldFollowup] failed', err?.message || err)
