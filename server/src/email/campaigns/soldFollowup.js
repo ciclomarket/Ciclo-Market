@@ -13,7 +13,7 @@ const CAMPAIGN = 'sold_followup'
 const PRIORITY = 2
 
 const PERIOD_DAYS = 30
-const DAILY_SEND_LIMIT = Number(process.env.SOLD_FOLLOWUP_DAILY_LIMIT) || 120
+const DAILY_SEND_LIMIT = Number(process.env.SOLD_FOLLOWUP_DAILY_LIMIT) || 250
 const TOKEN_TTL_MS = 45 * 24 * 60 * 60 * 1000 // el token dura más que el período de 30 días
 
 function shouldRunAt(dateCtx) {

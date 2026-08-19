@@ -111,8 +111,11 @@ async function sendViaResend(options) {
 }
 
 async function sendMail(options) {
-  if (isResendConfigured()) return sendViaResend(options)
+  // SMTP (Brevo) tiene prioridad si está explícitamente activado. Así migramos a
+  // Brevo sin depender de quitar RESEND_API_KEY (que se sigue usando para las
+  // audiencias/newsletter vía API directa).
   if (isSMTPConfigured()) return sendViaSMTP(options)
+  if (isResendConfigured()) return sendViaResend(options)
   throw new Error('Mail no configurado: definí RESEND_API_KEY o SMTP_*')
 }
 

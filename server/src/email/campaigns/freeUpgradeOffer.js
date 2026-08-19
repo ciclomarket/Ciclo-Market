@@ -16,8 +16,8 @@ const {
 const CAMPAIGN = 'free_upgrade_offer'
 const PRIORITY = 1
 
-// Plan gratis de Resend ~100 emails/día: dejar margen para el resto del run.
-const DAILY_SEND_LIMIT = Number(process.env.FREE_UPGRADE_OFFER_DAILY_LIMIT) || 80
+// Límite diario (con Brevo ~300/día, dejar margen para el resto del run).
+const DAILY_SEND_LIMIT = Number(process.env.FREE_UPGRADE_OFFER_DAILY_LIMIT) || 250
 const DISCOUNT_PCT = 20 // 20% OFF individual
 const BUNDLE_DISCOUNT_PCT = 50 // 50% OFF si tiene 2+ publicaciones
 const TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 7 días

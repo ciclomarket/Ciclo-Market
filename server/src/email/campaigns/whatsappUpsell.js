@@ -12,7 +12,7 @@ const PRIORITY = 3
 
 const STAGE_15_DAYS = 15
 const STAGE_40_DAYS = 40
-const DAILY_SEND_LIMIT = Number(process.env.WHATSAPP_UPSELL_DAILY_LIMIT) || 60
+const DAILY_SEND_LIMIT = Number(process.env.WHATSAPP_UPSELL_DAILY_LIMIT) || 250
 
 function shouldRunAt(dateCtx) {
   return dateCtx.hourInTz === 20 // 8PM Argentina
