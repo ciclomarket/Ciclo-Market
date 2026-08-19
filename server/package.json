@@ -13,6 +13,7 @@
     "campaign:trustblast": "node ./scripts/campaigns/sendTrustLevelBlast.js",
     "send-upsell-emails": "node ./scripts/campaigns/sendWhatsappUpsellBlast.js",
     "campaign:free-recent-whatsapp": "node ./scripts/campaigns/sendFreeRecentWhatsappUpsell.js",
+    "campaign:free-upgrade-blast": "node ./scripts/campaigns/sendFreeUpgradeBlast.js",
     "campaign:carnaval": "node ./scripts/campaigns/sendCarnavalDiscountBlast.js",
     "email:monday:once": "node -e \"require('./src/jobs/mondayNewArrivals').sendMondayEmails({dryRun:false}).then(r=>{console.log(r);process.exit(0)}).catch(e=>{console.error(e);process.exit(1)})\"",
     "email:monday:dry": "node -e \"require('./src/jobs/mondayNewArrivals').sendMondayEmails({dryRun:true,limit:5}).then(r=>{console.log(JSON.stringify(r,null,2));process.exit(0)}).catch(e=>{console.error(e);process.exit(1)})\"",
