@@ -1112,46 +1112,25 @@ ${Array.isArray(attachments) && attachments.length ? `Adjuntos:\n${attachments.j
 /* Newsletter                                                                 */
 /* -------------------------------------------------------------------------- */
 
-async function upsertAudienceContact({ apiKey, audienceId, email, name, unsubscribed }) {
-  const payload = {
-    email,
-    ...(name ? { first_name: name } : {}),
-    unsubscribed: Boolean(unsubscribed),
-  }
-  const url = `https://api.resend.com/audiences/${encodeURIComponent(audienceId)}/contacts`
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  })
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}))
-    const message = data?.error?.message || data?.message || 'resend_error'
-    throw new Error(message)
-  }
-}
-
 router.post('/api/newsletter/subscribe', async (req, res) => {
   try {
-    const { email, name, audienceId } = req.body || {}
+    const { email, name, listId } = req.body || {}
     if (!validateEmail(email)) {
       return res.status(400).json({ ok: false, error: 'invalid_email' })
     }
-    const apiKey = process.env.RESEND_API_KEY
-    const targetAudience = audienceId || process.env.RESEND_AUDIENCE_GENERAL_ID
-    if (!apiKey || !targetAudience) {
-      console.warn('[api] newsletter subscribe without Resend configuration')
+    const brevo = require('../lib/brevo')
+    if (!brevo.isBrevoConfigured()) {
+      console.warn('[api] newsletter subscribe without Brevo configuration')
       return res.status(500).json({ ok: false, error: 'newsletter_not_configured' })
     }
+    const listIds = listId
+      ? [String(listId)]
+      : (process.env.BREVO_LIST_ID ? [String(process.env.BREVO_LIST_ID)] : [])
 
-    await upsertAudienceContact({
-      apiKey,
-      audienceId: targetAudience,
+    await brevo.upsertContact({
       email: email.trim(),
       name: name ? String(name).trim() : undefined,
+      listIds,
       unsubscribed: false,
     })
     return res.json({ ok: true })

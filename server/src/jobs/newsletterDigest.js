@@ -1,5 +1,6 @@
 const cron = require('node-cron')
 const { getServerSupabaseClient } = require('../lib/supabaseClient')
+const brevo = require('../lib/brevo')
 
 async function fetchLatestListings(limit = 4) {
   const supabase = getServerSupabaseClient()
@@ -32,28 +33,27 @@ function signUnsub(email) {
   return crypto.createHmac('sha256', secret).update(email).digest('base64url')
 }
 
-async function sendEmailToAudience({ apiKey, audienceId, from, subject, buildHtml, buildText }) {
-  // Fetch contacts in audience (Resend)
-  const listRes = await fetch(`https://api.resend.com/audiences/${encodeURIComponent(audienceId)}/contacts`, {
-    headers: { Authorization: `Bearer ${apiKey}` },
-  })
-  const listData = await listRes.json().catch(() => ({}))
-  if (!listRes.ok) {
-    const msg = listData?.error?.message || listData?.message || 'audience_fetch_failed'
-    const err = new Error(msg)
-    err.code = listData?.error?.code
-    throw err
+async function sendEmailToAudience({ listId, from, subject, buildHtml, buildText }) {
+  // Fetch contacts from Brevo list (paginado)
+  let contacts = []
+  let offset = 0
+  for (;;) {
+    const page = await brevo.listContactsByList(listId, { limit: 500, offset })
+    contacts = contacts.concat(page)
+    if (page.length < 500) break
+    offset += page.length
   }
-  const contacts = Array.isArray(listData.data || listData.contacts) ? (listData.data || listData.contacts) : []
-  const recipients = contacts.filter((c) => c && c.email && !c.unsubscribed).map((c) => c.email)
+
+  const recipients = contacts
+    .filter((c) => c && c.email && !c.emailBlacklisted)
+    .map((c) => c.email)
   if (recipients.length === 0) return 0
 
   // Send one-by-one to personalize unsubscribe link
   let sent = 0
   for (const email of recipients) {
     const token = signUnsub(email)
-    const unsubBase = String(process.env.SERVER_BASE_URL || '') || String(process.env.API_BASE_URL || '')
-    const backendBase = unsubBase || (process.env.RENDER_EXTERNAL_URL || '')
+    const backendBase = String(process.env.SERVER_BASE_URL || process.env.API_BASE_URL || process.env.RENDER_EXTERNAL_URL || '')
     const unsubLink = backendBase
       ? `${backendBase.replace(/\/$/, '')}/api/newsletter/unsubscribe?e=${encodeURIComponent(email)}&t=${encodeURIComponent(token)}`
       : `https://ciclomarket.ar/ayuda` // fallback
@@ -61,30 +61,28 @@ async function sendEmailToAudience({ apiKey, audienceId, from, subject, buildHtm
     const html = buildHtml(unsubLink)
     const text = buildText(unsubLink)
 
-    const payload = {
-      from,
-      to: [email],
-      subject,
-      html,
-      text,
-      headers: { 'List-Unsubscribe': `<${unsubLink}>` }
+    try {
+      await brevo.sendEmail({
+        from,
+        to: [email],
+        subject,
+        html,
+        text,
+        headers: { 'List-Unsubscribe': `<${unsubLink}>` },
+      })
+      sent += 1
+    } catch (err) {
+      console.warn('[newsletterDigest] send failed', email, err?.message || err)
     }
-
-    const resp = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-    if (resp.ok) sent += 1
   }
   return sent
 }
 
 async function runDigestOnce() {
-  const apiKey = process.env.RESEND_API_KEY
-  const audienceId = process.env.RESEND_AUDIENCE_GENERAL_ID
-  if (!apiKey || !audienceId) {
-    console.warn('[newsletterDigest] not configured (RESEND_API_KEY / RESEND_AUDIENCE_GENERAL_ID)')
+  const apiKey = process.env.BREVO_API_KEY
+  const listId = process.env.BREVO_LIST_ID
+  if (!apiKey || !listId) {
+    console.warn('[newsletterDigest] not configured (BREVO_API_KEY / BREVO_LIST_ID)')
     return
   }
 
@@ -188,8 +186,7 @@ async function runDigestOnce() {
   const subject = 'Nuevos ingresos de la semana · Ciclo Market'
 
   const sent = await sendEmailToAudience({
-    apiKey,
-    audienceId,
+    listId,
     from,
     subject,
     buildHtml: (unsub) => htmlTemplate(unsub),

@@ -1,5 +1,6 @@
 let cachedTransport = null
 let _nodemailer = null
+const brevo = require('./brevo')
 
 function smtpEnabled() {
   return process.env.SMTP_ENABLED === 'true'
@@ -21,8 +22,12 @@ function isResendConfigured() {
   return Boolean(process.env.RESEND_API_KEY)
 }
 
+function isBrevoConfigured() {
+  return brevo.isBrevoConfigured()
+}
+
 function isMailConfigured() {
-  return isResendConfigured() || isSMTPConfigured()
+  return isBrevoConfigured() || isResendConfigured() || isSMTPConfigured()
 }
 
 function getMailTransport() {
@@ -114,13 +119,29 @@ async function sendViaResend(options) {
   return data
 }
 
+// Brevo HTTP API: sin allowlist de IPs (a diferencia del SMTP relay).
+async function sendViaBrevo(options) {
+  if (process.env.SMTP_LOGGER === 'true') {
+    console.info('[mail] sending via Brevo API', { to: options.to, subject: options.subject })
+  }
+  return brevo.sendEmail({
+    from: options.from,
+    to: options.to,
+    subject: options.subject,
+    html: options.html,
+    text: options.text,
+    headers: options.headers,
+  })
+}
+
 async function sendMail(options) {
-  // SMTP (Brevo) tiene prioridad si está explícitamente activado. Así migramos a
-  // Brevo sin depender de quitar RESEND_API_KEY (que se sigue usando para las
-  // audiencias/newsletter vía API directa).
+  // 1) Brevo HTTP API (preferido: sin allowlist de IPs).
+  // 2) SMTP (Brevo u otro relay).
+  // 3) Resend (fallback).
+  if (brevo.isBrevoConfigured()) return sendViaBrevo(options)
   if (isSMTPConfigured()) return sendViaSMTP(options)
   if (isResendConfigured()) return sendViaResend(options)
-  throw new Error('Mail no configurado: definí RESEND_API_KEY o SMTP_*')
+  throw new Error('Mail no configurado: definí BREVO_API_KEY, SMTP_* o RESEND_API_KEY')
 }
 
 module.exports = {
@@ -130,4 +151,5 @@ module.exports = {
   // Export for diagnostics (no secrets exposed)
   isSMTPConfigured,
   isResendConfigured,
+  isBrevoConfigured,
 }

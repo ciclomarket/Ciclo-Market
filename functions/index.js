@@ -1154,7 +1154,7 @@ exports.sendUpgradeEmail = onRequest(
     region: 'us-central1',
     timeoutSeconds: 120,
     memory: '256MiB',
-    secrets: ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'RESEND_API_KEY'],
+    secrets: ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'BREVO_API_KEY'],
   },
   async (req, res) => {
     if (req.method !== 'POST') {
@@ -1203,18 +1203,29 @@ exports.sendUpgradeEmail = onRequest(
         })
         .join('\n<hr style="border:none; border-top:1px solid #e5e7eb; margin:32px 0;" />\n')
 
-      const resendApiKey = process.env.RESEND_API_KEY
-      if (!resendApiKey) {
-        return res.status(500).json({ ok: false, error: 'missing_resend_key' })
+      const brevoKey = process.env.BREVO_API_KEY
+      if (!brevoKey) {
+        return res.status(500).json({ ok: false, error: 'missing_brevo_key' })
       }
 
-      const resend = new Resend(resendApiKey)
-      await resend.emails.send({
-        from: 'Ciclo Market <admin@ciclomarket.ar>',
-        to: targetEmail,
-        subject: 'Tu publicación ahora tiene prioridad en Ciclo Market',
-        html: cards,
+      const brevoRes = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'api-key': brevoKey,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          sender: { name: 'Ciclo Market', email: 'avisos@ciclomarket.ar' },
+          to: [{ email: targetEmail }],
+          subject: 'Tu publicación ahora tiene prioridad en Ciclo Market',
+          htmlContent: cards,
+        }),
       })
+      const brevoData = await brevoRes.json().catch(() => ({}))
+      if (!brevoRes.ok) {
+        throw new Error(brevoData?.message || `Brevo error ${brevoRes.status}`)
+      }
 
       return res.status(200).json({ ok: true, sent: rows.length })
     } catch (err) {

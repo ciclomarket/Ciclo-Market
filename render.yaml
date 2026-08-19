@@ -97,6 +97,12 @@ services:
       - key: SMTP_PASSWORD
         sync: false
 
+      # Brevo API (newsletter / contactos / envíos por API)
+      - key: BREVO_API_KEY
+        sync: false
+      - key: BREVO_LIST_ID
+        value: "5"   # lista "Newsletter General" en Brevo
+
       # Precios de planes para los emails (alineados con la tabla `plans`)
       - key: AVAILABLE_PLANS
         value: '[{"code":"premium","name":"Plan Premium","price":9000},{"code":"pro","name":"Plan Pro","price":13000}]'
