@@ -25,7 +25,7 @@ services:
         value: Ciclo Market <notificaciones@your-domain.com>
       # Renewal notifier (cron job to email sellers before expiry)
       - key: RENEWAL_NOTIFIER_ENABLED
-        value: "true"
+        value: "false"
       - key: RENEWAL_REMINDER_TZ
         value: America/Argentina/Buenos_Aires
       - key: RENEWAL_REMINDER_CRON
@@ -36,7 +36,7 @@ services:
         value: "24"         # no reenviar dentro de 24h
       # Newsletter digest (últimos ingresos)
       - key: NEWSLETTER_DIGEST_ENABLED
-        value: "true"
+        value: "false"
       - key: NEWSLETTER_DIGEST_TZ
         value: America/Argentina/Buenos_Aires
       - key: NEWSLETTER_DIGEST_CRON
@@ -44,7 +44,7 @@ services:
 
       # Review reminders (habilitar reseñas automáticamente y avisar 1 vez)
       - key: REVIEW_REMINDER_ENABLED
-        value: "true"
+        value: "false"
       - key: REVIEW_REMINDER_TZ
         value: America/Argentina/Buenos_Aires
       - key: REVIEW_REMINDER_CRON
@@ -59,6 +59,28 @@ services:
         value: America/Argentina/Buenos_Aires
       - key: STORE_ANALYTICS_DIGEST_CRON
         value: "0 10 * * 1"   # lunes 10:00
+
+      # ===== EMAIL ENGINE (campañas v2) =====
+      # 4 campañas activas: free_upgrade_offer, sold_followup,
+      # new_arrivals_weekly (viernes 10:00) y whatsapp_upsell.
+      # El orquestador corre 10:00 y 20:00 ARG; cada campaña decide su día/hora.
+      - key: EMAIL_ENGINE_ENABLED
+        value: "true"
+      - key: EMAIL_ENGINE_CRON
+        value: "0 10,20 * * *"
+      # Los demás jobs de email quedan apagados
+      - key: MARKETING_AUTOMATIONS_ENABLED
+        value: "false"
+      - key: MONDAY_NEW_ARRIVALS_ENABLED
+        value: "false"
+      - key: WEDNESDAY_UPDATE_ENABLED
+        value: "false"
+      - key: FRIDAY_UPGRADE_ENABLED
+        value: "false"
+      - key: SAVED_SEARCH_DIGEST_ENABLED
+        value: "false"
+      - key: EXTEND_EXPIRED_ENABLED
+        value: "false"
 
       # Optional
       - key: SHARE_FALLBACK_IMAGE

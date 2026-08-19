@@ -116,7 +116,11 @@ function buildFeatureChecklist(features = []) {
   return wrapSection('Qué ganás con el upgrade', `<table role="presentation" width="100%" cellspacing="0" cellpadding="0">${rows}</table>`)
 }
 
-function buildSingleCta(text, url) {
+function buildSingleCta(text, url, { secondary = false } = {}) {
+  if (secondary) {
+    // CTA secundario: contorno (outline) para no competir visualmente con el principal.
+    return `<table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="border-radius:999px;border:2px solid #0ea5e9;"><a href="${url}" target="_blank" style="display:inline-block;color:#0ea5e9;font-family:Helvetica,Arial,sans-serif;font-size:14px;font-weight:700;line-height:130%;text-decoration:none;padding:10px 16px;border-radius:999px;">${escapeHtml(text)}</a></td></tr></table>`
+  }
   return `<table role="presentation" cellpadding="0" cellspacing="0"><tr><td bgcolor="#0ea5e9" style="border-radius:999px;"><a href="${url}" target="_blank" style="display:inline-block;background:#0ea5e9;color:#ffffff;font-family:Helvetica,Arial,sans-serif;font-size:14px;font-weight:700;line-height:130%;text-decoration:none;padding:12px 18px;border-radius:999px;">${escapeHtml(text)}</a></td></tr></table>`
 }
 
@@ -212,16 +216,20 @@ function buildPlanOffers(planOffers = [], baseFront, { isBundle = false } = {}) 
 }
 
 function buildCtaRow(ctas = [], baseFront) {
-  const safe = ctas.slice(0, 2).map((cta) => ({ text: String(cta?.text || 'Ver más'), url: toAbsoluteUrl(cta?.url, baseFront) })).filter((c) => c.url)
+  const safe = ctas.slice(0, 2).map((cta) => ({
+    text: String(cta?.text || 'Ver más'),
+    url: toAbsoluteUrl(cta?.url, baseFront),
+    secondary: cta?.secondary === true,
+  })).filter((c) => c.url)
   if (!safe.length) return ''
   if (safe.length === 1) {
-    return wrapSection('', `<table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center" style="padding:8px 0 0;">${buildSingleCta(safe[0].text, safe[0].url)}</td></tr></table>`)
+    return wrapSection('', `<table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center" style="padding:8px 0 0;">${buildSingleCta(safe[0].text, safe[0].url, { secondary: safe[0].secondary })}</td></tr></table>`)
   }
   return wrapSection('', `
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
     <tr>
-      <td class="mj-column-per-50 stack-col" style="width:50%;max-width:50%;vertical-align:top;padding:0 6px 0 6px;" align="center">${buildSingleCta(safe[0].text, safe[0].url)}</td>
-      <td class="mj-column-per-50 stack-col" style="width:50%;max-width:50%;vertical-align:top;padding:0 6px 0 6px;" align="center">${buildSingleCta(safe[1].text, safe[1].url)}</td>
+      <td class="mj-column-per-50 stack-col" style="width:50%;max-width:50%;vertical-align:top;padding:0 6px 0 6px;" align="center">${buildSingleCta(safe[0].text, safe[0].url, { secondary: safe[0].secondary })}</td>
+      <td class="mj-column-per-50 stack-col" style="width:50%;max-width:50%;vertical-align:top;padding:0 6px 0 6px;" align="center">${buildSingleCta(safe[1].text, safe[1].url, { secondary: safe[1].secondary })}</td>
     </tr>
   </table>`)
 }

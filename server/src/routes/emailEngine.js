@@ -352,6 +352,67 @@ router.get('/api/checkout/bundle-upgrade', async (req, res) => {
   return handleBundleUpgradeCheckout(req, res, { redirect: true })
 })
 
+/* -------------------------------------------------------------------------- */
+/* Sold follow-up: botones del mail "¿Aún tenés tu bicicleta en venta?"        */
+/* -------------------------------------------------------------------------- */
+
+router.get('/api/email/sold-followup', async (req, res) => {
+  try {
+    const token = String(req.query?.token || '').trim()
+    const action = String(req.query?.action || 'still_selling').trim()
+    if (!token) return res.status(400).send('missing token')
+
+    const payload = verifyUpgradeToken(token)
+    if (!payload || payload.type !== 'sold_followup' || !payload.listingId) {
+      return res.status(401).send('invalid token')
+    }
+
+    const supabase = getServerSupabaseClient()
+    const listingId = String(payload.listingId)
+
+    const { data: listing, error } = await supabase
+      .from('listings')
+      .select('id,slug,status,seller_id,title')
+      .eq('id', listingId)
+      .maybeSingle()
+    if (error || !listing) return res.status(404).send('publicación no encontrada')
+
+    // El token se generó para el vendedor dueño de la publicación.
+    if (payload.userId && String(listing.seller_id) !== String(payload.userId)) {
+      return res.status(403).send('forbidden')
+    }
+
+    const front = resolvePublicFrontendUrl()
+    const listingUrl = `${front}/listing/${encodeURIComponent(listing.slug || listingId)}`
+
+    if (action === 'sold') {
+      if (String(listing.status || '').toLowerCase() !== 'sold') {
+        await supabase.from('listings').update({ status: 'sold' }).eq('id', listingId)
+      }
+      await supabase.from('sold_followup_events').insert({
+        listing_id: listingId,
+        seller_id: listing.seller_id || null,
+        action: 'sold',
+        source: 'email',
+      }).catch((err) => console.warn('[soldFollowup] event insert failed', err?.message || err))
+      return res.redirect(302, `${front}/dashboard?tab=Publicaciones&msg=marcada_vendida`)
+    }
+
+    // still_selling: registrar confirmación y llevar al vendedor a su publicación.
+    await supabase.from('sold_followup_events').insert({
+      listing_id: listingId,
+      seller_id: listing.seller_id || null,
+      action: 'still_selling',
+      source: 'email',
+    }).catch((err) => console.warn('[soldFollowup] event insert failed', err?.message || err))
+
+    return res.redirect(302, listingUrl)
+  } catch (err) {
+    console.error('[soldFollowup] failed', err?.message || err)
+    return res.status(500).send('error')
+  }
+})
+
 router.post('/api/cron/email-orchestrator', ensureCronSecret, async (req, res) => {
   try {
     const result = await runEmailOrchestrator({

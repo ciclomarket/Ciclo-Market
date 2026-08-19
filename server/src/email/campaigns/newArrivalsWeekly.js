@@ -6,7 +6,7 @@ function buildIdempotencyKey(userId, isoYear, isoWeek) {
 }
 
 function shouldRunToday(dateCtx) {
-  return dateCtx.dayOfWeek === 6 // sábado
+  return dateCtx.dayOfWeek === 5 && dateCtx.hourInTz === 10 // viernes 10:00
 }
 
 async function fetchRecentListings(supabase, sinceIso) {

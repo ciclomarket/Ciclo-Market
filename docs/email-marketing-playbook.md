@@ -1,5 +1,20 @@
 # Ciclo Market - Email Marketing Playbook (Operativo)
 
+> **⚠️ Reformulación v2 (2026-08-19):** El engine ahora corre SOLO 4 campañas.
+> Las anteriores (`payment_abandon_20off`, `upgrade_comparison`, `price_drop_alert`,
+> `buyer_interest_weekly`, `seller_weekly_performance`, `external_lead_weekly`,
+> `free_listing_upgrade_reminder`) quedaron **desactivadas** (ver
+> `scripts/supabase_enable_email_campaigns_v2.sql`). El orquestador corre dos veces
+> al día (10:00 y 20:00 ARG) y cada campaña decide su día/hora.
+>
+> - **1) `free_upgrade_offer`** — Upgrade de plan Free con descuento vía MercadoPago (diario **20:00**, 1 sola vez por publicación).
+> - **2) `sold_followup`** — "¿Aún tenés tu bicicleta en venta?" (diario **10:00**, cada 30 días desde publicación; botones "Sí, sigue en venta" / "Ya la vendí").
+> - **3) `new_arrivals_weekly`** — Nuevos ingresos de la semana (**viernes 10:00**).
+> - **4) `whatsapp_upsell`** — Activar WhatsApp (diario **20:00**, día 15 y día 40 desde publicación).
+>
+> En Render: `EMAIL_ENGINE_ENABLED=true`, `EMAIL_ENGINE_CRON=0 10,20 * * *`.
+> Los demás jobs (`*_ENABLED`) deben quedar en `false`.
+
 ## Objetivo
 Documento operativo para campañas de email de Ciclo Market: lógica, calendario, reglas de envío y comandos de ejecución.
 

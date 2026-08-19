@@ -4,24 +4,16 @@ const { sendMail, isMailConfigured } = require('../lib/mail')
 const { renderEmailTemplate } = require('./templateRenderer')
 const { createUnsubscribeToken } = require('./unsubscribe')
 
-const paymentAbandon20off = require('./campaigns/paymentAbandon20off')
-const upgradeComparison = require('./campaigns/upgradeComparison')
-const priceDropAlerts = require('./campaigns/priceDropAlerts')
-const buyerInterestWeekly = require('./campaigns/buyerInterestWeekly')
+const freeUpgradeOffer = require('./campaigns/freeUpgradeOffer')
+const soldFollowup = require('./campaigns/soldFollowup')
 const newArrivalsWeekly = require('./campaigns/newArrivalsWeekly')
-const sellerWeeklyPerformance = require('./campaigns/sellerWeeklyPerformance')
-const externalLeadsWeekly = require('./campaigns/externalLeadsWeekly')
-const freeListingUpgradeReminder = require('./campaigns/freeListingUpgradeReminder')
+const whatsappUpsell = require('./campaigns/whatsappUpsell')
 
 const CAMPAIGNS = [
-  paymentAbandon20off,
-  upgradeComparison,
-  priceDropAlerts,
-  buyerInterestWeekly,
-  newArrivalsWeekly,
-  sellerWeeklyPerformance,
-  externalLeadsWeekly,
-  freeListingUpgradeReminder,
+  freeUpgradeOffer,  // 1) Upgrade de plan Free con descuento (diario 20:00, una vez por publicación)
+  soldFollowup,      // 2) "¿Aún tenés tu bicicleta en venta?" (cada 30 días desde la publicación)
+  whatsappUpsell,    // 4) Upsell WhatsApp (día 15 y día 40 desde la publicación)
+  newArrivalsWeekly, // 3) Nuevos ingresos de la semana (viernes 10:00)
 ]
 
 function getTimeZone() {
@@ -43,6 +35,8 @@ function getDatePartsInTz(date, timeZone) {
     month: '2-digit',
     day: '2-digit',
     weekday: 'short',
+    hour: '2-digit',
+    hourCycle: 'h23',
   })
   const parts = formatter.formatToParts(date)
   const values = {}
@@ -52,6 +46,7 @@ function getDatePartsInTz(date, timeZone) {
     month: Number(values.month),
     day: Number(values.day),
     weekdayLabel: values.weekday,
+    hourInTz: Number(values.hour),
   }
 }
 
@@ -90,14 +85,10 @@ function buildDateContext(dateOverride) {
 async function getFeatureFlags(supabase) {
   const defaults = {
     email_engine_enabled: true,
-    campaign_payment_abandon_20off_enabled: true,
-    campaign_upgrade_comparison_enabled: true,
-    campaign_price_drop_alert_enabled: true,
-    campaign_buyer_interest_weekly_enabled: true,
+    campaign_free_upgrade_offer_enabled: true,
+    campaign_sold_followup_enabled: true,
     campaign_new_arrivals_weekly_enabled: true,
-    campaign_seller_weekly_performance_enabled: true,
-    campaign_external_lead_weekly_enabled: true,
-    campaign_free_listing_upgrade_reminder_enabled: true,
+    campaign_whatsapp_upsell_enabled: true,
   }
 
   try {
@@ -207,10 +198,14 @@ async function loadWeeklyCounts(supabase, dateCtx, candidates) {
 
 async function existingIdempotencySet(supabase, keys) {
   if (!keys.length) return new Set()
+  // Solo los envíos EXITOSOS consumen la key de dedupe. Un skip o fallo puntual
+  // (fatiga, supresión temporal, listing no free en ese momento) NO debe bloquear
+  // un envío futuro de la misma campaña/entidad.
   const { data } = await supabase
     .from('email_logs')
     .select('idempotency_key')
     .in('idempotency_key', keys)
+    .eq('status', 'sent')
   return new Set((data || []).map((r) => String(r.idempotency_key)))
 }
 
@@ -254,6 +249,7 @@ async function runEmailOrchestrator({ dryRun = false, campaigns = null, dateOver
       isoYear: dateCtx.isoYear,
       isoWeek: dateCtx.isoWeek,
       dayOfWeek: dateCtx.dayOfWeek,
+      hourInTz: dateCtx.hourInTz,
       tz: dateCtx.tz,
     },
     totals: {
@@ -337,16 +333,34 @@ async function runEmailOrchestrator({ dryRun = false, campaigns = null, dateOver
       exp: Date.now() + 180 * 24 * 60 * 60 * 1000,
     })
 
-    if ((candidate.campaign === 'upgrade_comparison' || candidate.campaign === 'payment_abandon_20off' || candidate.campaign === 'free_listing_upgrade_reminder') && candidate.listingId) {
+    // Re-validación justo antes de enviar: la publicación puede haber cambiado
+    // de estado/plan entre la generación de candidatos y el envío.
+    const FREE_TARGET_CAMPAIGNS = ['free_upgrade_offer', 'whatsapp_upsell']
+    const needsListingGuard = (FREE_TARGET_CAMPAIGNS.includes(candidate.campaign) || candidate.campaign === 'sold_followup') && candidate.listingId
+    if (needsListingGuard) {
       const { data: listingRow, error: listingErr } = await supabase
         .from('listings')
-        .select('id,plan,plan_code,seller_plan')
+        .select('id,plan,plan_code,seller_plan,status')
         .eq('id', candidate.listingId)
         .maybeSingle()
-      if (listingErr || !listingRow?.id || !isFreeListingSnapshot(listingRow)) {
+
+      let skip = false
+      let skipReason = null
+      if (listingErr || !listingRow?.id) {
+        skip = true
+        skipReason = 'listing_gone'
+      } else if (FREE_TARGET_CAMPAIGNS.includes(candidate.campaign) && !isFreeListingSnapshot(listingRow)) {
+        skip = true
+        skipReason = 'target_not_free'
+      } else if (candidate.campaign === 'sold_followup' && !['active', 'published'].includes(String(listingRow.status || '').toLowerCase())) {
+        skip = true
+        skipReason = 'target_not_active'
+      }
+
+      if (skip) {
         summary.totals.skipped += 1
         campaignBucket.skipped += 1
-        summary.skipped.push({ campaign: candidate.campaign, email, reason: 'target_not_free' })
+        summary.skipped.push({ campaign: candidate.campaign, email, reason: skipReason })
         summary.byCampaign[candidate.campaign] = campaignBucket
         await logEmail(supabase, {
           campaign: candidate.campaign,
@@ -360,7 +374,7 @@ async function runEmailOrchestrator({ dryRun = false, campaigns = null, dateOver
           iso_year: dateCtx.isoYear,
           iso_week: dateCtx.isoWeek,
           status: 'skipped',
-          skip_reason: 'target_not_free',
+          skip_reason: skipReason,
           provider: 'smtp',
           subject: candidate.payload?.subject || null,
           metadata: candidate.payload || {},
@@ -465,8 +479,9 @@ function startEmailOrchestratorJob() {
     console.info('[email_orchestrator] disabled (EMAIL_ENGINE_ENABLED=false)')
     return
   }
-
-  const schedule = process.env.EMAIL_ENGINE_CRON || '30 10 * * *'
+  // Dos corridas diarias: 10:00 y 20:00 (ARG). Cada campaña define su propia
+  // ventana de día/hora y solo genera candidatos cuando le corresponde.
+  const schedule = process.env.EMAIL_ENGINE_CRON || '0 10,20 * * *'
   const tz = getTimeZone()
 
   const task = cron.schedule(schedule, async () => {
