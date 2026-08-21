@@ -355,6 +355,125 @@ router.post('/api/contacts/log', async (req, res) => {
 })
 
 /* -------------------------------------------------------------------------- */
+/* Consultas de compradores (form de contacto por email en la ficha)          */
+/* -------------------------------------------------------------------------- */
+
+function buildInquiryEmailHtml({ listingTitle, fullName, email, phone, message, listingUrl }) {
+  return `
+    <html><body style="font-family:Arial,sans-serif;color:#111827">
+      <h1 style="font-size:20px">Nueva consulta por ${escapeHtml(listingTitle)}</h1>
+      <p><strong>Nombre:</strong> ${escapeHtml(fullName)}</p>
+      <p><strong>Email:</strong> ${escapeHtml(email)}</p>
+      ${phone ? `<p><strong>Teléfono:</strong> ${escapeHtml(phone)}</p>` : ''}
+      <p><strong>Mensaje:</strong><br>${escapeHtml(message).replaceAll('\n', '<br>')}</p>
+      <p><a href="${escapeHtml(listingUrl)}">Ver publicación</a></p>
+      <p style="color:#6b7280;font-size:12px">Podés responder directo a este email, va a llegarle a ${escapeHtml(email)}.</p>
+    </body></html>`
+}
+
+router.post('/api/listings/:id/inquiry', async (req, res) => {
+  try {
+    const listingId = req.params.id
+    if (!isUuid(listingId)) {
+      return res.status(400).json({ ok: false, error: 'invalid_listing' })
+    }
+
+    const supabase = getSupabaseOrFail(res)
+    if (!supabase) return
+
+    const fullName = clamp(String(req.body?.fullName || '').trim(), 120)
+    const email = String(req.body?.email || '').trim().toLowerCase()
+    const phone = clamp(String(req.body?.phone || '').trim(), 40) || null
+    const message = clamp(String(req.body?.message || '').trim(), 2000)
+
+    if (
+      !fullName || fullName.length < 2 ||
+      !validateEmail(email) ||
+      !message || message.length < 5
+    ) {
+      return res.status(400).json({ ok: false, error: 'invalid_payload' })
+    }
+
+    const { data: listing, error: listingErr } = await supabase
+      .from('listings')
+      .select('id, seller_id, title, slug, status')
+      .eq('id', listingId)
+      .maybeSingle()
+
+    if (listingErr || !listing) {
+      return res.status(404).json({ ok: false, error: 'listing_not_found' })
+    }
+
+    const { data: seller } = await supabase
+      .from('users')
+      .select('id, email, full_name')
+      .eq('id', listing.seller_id)
+      .maybeSingle()
+
+    // El buyer puede o no estar logueado — no lo requerimos, igual que el
+    // mailto: de hoy funciona sin sesión.
+    const authUser = await getAuthUser(req, supabase)
+
+    const { data: inquiry, error: insertErr } = await supabase
+      .from('listing_inquiries')
+      .insert({
+        listing_id: listing.id,
+        seller_id: listing.seller_id,
+        buyer_id: authUser?.id || null,
+        full_name: fullName,
+        email,
+        phone,
+        message,
+      })
+      .select('id')
+      .single()
+
+    if (insertErr || !inquiry) {
+      console.error('[api] listing_inquiries insert failed', insertErr)
+      return res.status(500).json({ ok: false, error: 'insert_failed' })
+    }
+
+    let emailSent = false
+    if (isMailConfigured() && seller?.email && validateEmail(seller.email)) {
+      const frontBase = resolveFrontendBaseUrl()
+      const listingUrl = `${frontBase}/listing/${encodeURIComponent(listing.slug || listing.id)}`
+      try {
+        await sendMail({
+          to: seller.email,
+          subject: `Nueva consulta por ${listing.title}`,
+          replyTo: `${fullName} <${email}>`,
+          html: buildInquiryEmailHtml({
+            listingTitle: listing.title,
+            fullName,
+            email,
+            phone,
+            message,
+            listingUrl,
+          }),
+          text: `Nueva consulta por ${listing.title}\n\nNombre: ${fullName}\nEmail: ${email}${phone ? `\nTeléfono: ${phone}` : ''}\nMensaje: ${message}\n\nVer publicación: ${listingUrl}`,
+        })
+        emailSent = true
+        await supabase
+          .from('listing_inquiries')
+          .update({ email_status: 'sent', email_sent_at: new Date().toISOString(), email_last_error: null })
+          .eq('id', inquiry.id)
+      } catch (err) {
+        console.error('[api] listing inquiry email failed', err?.message || err)
+        await supabase
+          .from('listing_inquiries')
+          .update({ email_status: 'failed', email_last_error: String(err?.message || err).slice(0, 500) })
+          .eq('id', inquiry.id)
+      }
+    }
+
+    return res.json({ ok: true, inquiryId: inquiry.id, emailSent })
+  } catch (err) {
+    console.error('[api] listing inquiry unexpected error', err)
+    return res.status(500).json({ ok: false, error: 'unexpected_error' })
+  }
+})
+
+/* -------------------------------------------------------------------------- */
 /* Reviews                                                                    */
 /* -------------------------------------------------------------------------- */
 

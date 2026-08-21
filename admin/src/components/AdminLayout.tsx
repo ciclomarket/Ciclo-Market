@@ -47,6 +47,12 @@ const Icons = {
       <polyline points="9,22 9,12 15,12 15,22" />
     </svg>
   ),
+  Inquiries: () => (
+    <svg className="admin-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M4 4h16v16H4z" />
+      <path d="m4 6 8 7 8-7" />
+    </svg>
+  ),
   Pricing: () => (
     <svg className="admin-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <line x1="12" y1="1" x2="12" y2="23" />
@@ -70,6 +76,7 @@ const NAV_ITEMS = [
   { to: '/analytics', label: 'Analytics', description: 'Métricas y reportes', icon: Icons.Analytics },
   { to: '/engagement', label: 'Engagement', description: 'Interacciones y contactos', icon: Icons.Engagement },
   { to: '/listings', label: 'Publicaciones', description: 'Moderación de avisos', icon: Icons.Listings },
+  { to: '/inquiries', label: 'Consultas', description: 'Mensajes de compradores a vendedores', icon: Icons.Inquiries },
   { to: '/stores', label: 'Tiendas', description: 'Partners y bicicleterías', icon: Icons.Stores },
   { to: '/pricing', label: 'Pricing', description: 'Base de datos de precios', icon: Icons.Pricing },
   { to: '/blog', label: 'Blog', description: 'Gestión de contenidos', icon: Icons.Blog },

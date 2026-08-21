@@ -80,6 +80,28 @@ export async function logContactEvent(payload: { sellerId: string; listingId?: s
   }
 }
 
+export async function submitListingInquiry(payload: {
+  listingId: string
+  fullName: string
+  email: string
+  phone?: string
+  message: string
+}): Promise<{ inquiryId: string; emailSent: boolean }> {
+  const endpoint = API_BASE
+    ? `${API_BASE}/api/listings/${encodeURIComponent(payload.listingId)}/inquiry`
+    : `/api/listings/${encodeURIComponent(payload.listingId)}/inquiry`
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  const data = await parseJsonOrThrow(res).catch(() => null)
+  if (!res.ok || !data?.ok) {
+    throw new Error(data?.error || 'No pudimos enviar tu consulta.')
+  }
+  return { inquiryId: data.inquiryId, emailSent: Boolean(data.emailSent) }
+}
+
 export async function fetchSellerReviews(sellerId: string): Promise<{ reviews: ReviewRecord[]; summary: ReviewsSummary } | null> {
   try {
     const endpoint = API_BASE ? `${API_BASE}/api/reviews/${encodeURIComponent(sellerId)}` : `/api/reviews/${encodeURIComponent(sellerId)}`

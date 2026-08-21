@@ -25,6 +25,7 @@ import { trackMetaPixel } from '../lib/metaPixel'
 import { track } from '../services/track'
 import { useToast } from '../context/ToastContext'
 import ListingQuestionsSection from '../components/ListingQuestionsSection'
+import ListingInquiryModal from '../components/ListingInquiryModal'
 import HorizontalSlider from '../components/HorizontalSlider'
 import ListingCard from '../components/ListingCard'
 import ListingSpecs from '../components/ListingSpecs'
@@ -47,6 +48,7 @@ export default function ListingDetail() {
   const siteOrigin = useMemo(() => resolveSiteOrigin(), [])
   const [listing, setListing] = useState<Listing | null>(null)
   const [loading, setLoading] = useState(true)
+  const [inquiryOpen, setInquiryOpen] = useState(false)
   // Oferta deshabilitada
   const [shareModalOpen, setShareModalOpen] = useState(false)
   const [moderatorUpdating, setModeratorUpdating] = useState(false)
@@ -579,9 +581,6 @@ export default function ListingDetail() {
   const sellerWhatsappRaw = listing.sellerWhatsapp ?? sellerProfile?.whatsapp_number ?? sellerProfile?.store_phone ?? ''
   const sellerWhatsappNumber = normaliseWhatsapp(sellerWhatsappRaw)
   const waLink = buildWhatsappUrl(sellerWhatsappNumber ?? sellerWhatsappRaw, contactMessage)
-  const emailSubject = `Consulta sobre ${listing.title}`
-  const mailtoSubjectParam = encodeURIComponent(emailSubject)
-  const mailtoBodyParam = encodeURIComponent(contactMessage)
   const sellerAvatarUrl = sellerProfile?.store_avatar_url || listing.sellerAvatar || sellerProfile?.avatar_url || null
 
 
@@ -924,19 +923,22 @@ export default function ListingDetail() {
             </a>
           ) : null}
           {emailRecipient ? (
-            <EmailButton
-              emailRecipient={emailRecipient}
-              mailtoHref={`mailto:${emailRecipient}?subject=${mailtoSubjectParam}&body=${mailtoBodyParam}`}
-              gmailUrl={`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(emailRecipient)}&su=${mailtoSubjectParam}&body=${mailtoBodyParam}`}
-              outlookUrl={`https://outlook.live.com/mail/0/deeplink/compose?to=${encodeURIComponent(emailRecipient)}&subject=${mailtoSubjectParam}&body=${mailtoBodyParam}`}
-              onContact={() => {
+            <button
+              type="button"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-900 shadow-sm transition hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mb-primary/40"
+              aria-label="Contactar por email"
+              onClick={() => {
                 try {
                   trackMetaPixel('Contact', { method: 'email', content_ids: [listing.id], content_type: 'product' })
                   logContactEvent({ sellerId: listing.sellerId, listingId: listing.id, buyerId: user?.id || null, type: 'email' })
                   captureContactSellerClicked({ listingId: listing.id, sellerId: listing.sellerId || null, method: 'email' })
                 } catch { /* noop */ }
+                setInquiryOpen(true)
               }}
-            />
+            >
+              <span className="h-5 w-5"><MailIcon /></span>
+              Email
+            </button>
           ) : null}
         </div>
       </div>
@@ -1628,6 +1630,16 @@ export default function ListingDetail() {
           onClose={() => setShareModalOpen(false)}
         />
       )}
+      {inquiryOpen && listing && (
+        <ListingInquiryModal
+          open={inquiryOpen}
+          onClose={() => setInquiryOpen(false)}
+          listingId={listing.id}
+          listingTitle={listing.title}
+          defaultMessage={contactMessage}
+          defaultEmail={user?.email || ''}
+        />
+      )}
 
       {/* Modal editar campo genérico */}
       {/* Instagram card modal */}
@@ -1831,90 +1843,6 @@ const MailIcon = () => (
   </svg>
 )
 
-function EmailButton({ emailRecipient, mailtoHref, gmailUrl, outlookUrl, onContact }: {
-  emailRecipient: string
-  mailtoHref: string
-  gmailUrl: string
-  outlookUrl: string
-  onContact: () => void
-}) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-  const isTouchDevice = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0)
-
-  useEffect(() => {
-    if (!open) return
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [open])
-
-  const buttonClass = "inline-flex w-full items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-900 shadow-sm transition hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mb-primary/40"
-
-  if (isTouchDevice) {
-    return (
-      <a href={mailtoHref} className={buttonClass} aria-label="Enviar correo" onClick={onContact}>
-        <span className="h-5 w-5"><MailIcon /></span>
-        Email
-      </a>
-    )
-  }
-
-  return (
-    <div className="relative" ref={ref}>
-      <button
-        type="button"
-        className={`${buttonClass} w-full`}
-        aria-label="Enviar correo"
-        onClick={() => { onContact(); setOpen(prev => !prev) }}
-      >
-        <span className="h-5 w-5"><MailIcon /></span>
-        Email
-      </button>
-      {open && (
-        <div className="absolute bottom-full mb-2 left-0 right-0 z-50 rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden">
-          <p className="px-4 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Abrir con</p>
-          <a
-            href={gmailUrl}
-            target="_blank"
-            rel="noreferrer"
-            onClick={() => setOpen(false)}
-            className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-800 hover:bg-gray-50 transition"
-          >
-            <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M22 6c0-1.1-.9-2-2-2H4C2.9 4 2 4.9 2 6v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6z" fill="#FAFAFA"/>
-              <path d="M22 6l-10 7L2 6" stroke="#EA4335" strokeWidth="2" strokeLinecap="round"/>
-              <path d="M2 6l10 7 10-7" fill="none"/>
-            </svg>
-            Gmail
-          </a>
-          <a
-            href={outlookUrl}
-            target="_blank"
-            rel="noreferrer"
-            onClick={() => setOpen(false)}
-            className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-800 hover:bg-gray-50 transition"
-          >
-            <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="#0078D4" aria-hidden="true">
-              <path d="M22 6.5A2.5 2.5 0 0 0 19.5 4H13V2L2 4v16l11 2V20h6.5A2.5 2.5 0 0 0 22 17.5v-11zM13 18.18l-9-1.636V7.455l9-1.636v12.36zM20 18h-7v-2h2v-2h-2v-1h2v-2h-2V9h7v9z"/>
-            </svg>
-            Outlook
-          </a>
-          <a
-            href={mailtoHref}
-            onClick={() => setOpen(false)}
-            className="flex items-center gap-3 px-4 py-2.5 pb-3 text-sm text-gray-800 hover:bg-gray-50 transition"
-          >
-            <span className="h-4 w-4 shrink-0"><MailIcon /></span>
-            App de correo
-          </a>
-        </div>
-      )}
-    </div>
-  )
-}
 
 function ShareBoostModal({ listingId, sellerId, onClose }: { listingId: string; sellerId: string; onClose: () => void }) {
   const { show: showToast } = useToast()

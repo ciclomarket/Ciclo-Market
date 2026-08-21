@@ -9,6 +9,7 @@ import ListingsPage from '@admin/pages/Listings'
 import StoresPage from '@admin/pages/Stores'
 import StoreDetailPage from '@admin/pages/StoreDetail'
 import ActionInboxPage from '@admin/pages/ActionInbox'
+import InquiriesPage from '@admin/pages/Inquiries'
 import PricingPage from '@admin/pages/Pricing'
 import BlogPage from '@admin/pages/Blog'
 import { AdminLayout } from '@admin/components/AdminLayout'
@@ -21,6 +22,7 @@ function ProtectedApp() {
         <Route path="/ops" element={<ActionInboxPage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/listings" element={<ListingsPage />} />
+        <Route path="/inquiries" element={<InquiriesPage />} />
         <Route path="/engagement" element={<EngagementPage />} />
         <Route path="/stores" element={<StoresPage />} />
         <Route path="/stores/:id" element={<StoreDetailPage />} />

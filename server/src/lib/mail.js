@@ -130,6 +130,7 @@ async function sendViaBrevo(options) {
     subject: options.subject,
     html: options.html,
     text: options.text,
+    replyTo: options.replyTo,
     headers: options.headers,
   })
 }

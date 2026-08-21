@@ -82,7 +82,7 @@ async function listContactsByList(listId, { limit = 500, offset = 0 } = {}) {
  * Envío de un email transaccional vía API de Brevo (sin allowlist de IPs).
  * from puede venir como "Nombre <email>" o "email@dominio".
  */
-async function sendEmail({ from, to, subject, html, text, headers: extraHeaders }) {
+async function sendEmail({ from, to, subject, html, text, headers: extraHeaders, replyTo }) {
   if (!isBrevoConfigured()) throw new Error('BREVO_API_KEY no configurado')
 
   const fromStr = String(from || '').trim()
@@ -96,6 +96,15 @@ async function sendEmail({ from, to, subject, html, text, headers: extraHeaders 
 
   const toArr = Array.isArray(to) ? to : [to]
 
+  let replyToObj = null
+  if (replyTo) {
+    const replyToStr = String(replyTo).trim()
+    const replyMatch = replyToStr.match(/^(.*?)\s*<([^>]+)>$/)
+    replyToObj = replyMatch
+      ? { name: replyMatch[1].trim().replace(/["|]/g, '').trim(), email: replyMatch[2].trim() }
+      : { email: replyToStr }
+  }
+
   const body = {
     sender,
     to: toArr.map((t) => (typeof t === 'string' ? { email: t } : t)),
@@ -103,6 +112,7 @@ async function sendEmail({ from, to, subject, html, text, headers: extraHeaders 
     htmlContent: html,
     ...(text ? { textContent: text } : {}),
     ...(extraHeaders ? { headers: extraHeaders } : {}),
+    ...(replyToObj ? { replyTo: replyToObj } : {}),
   }
   return request('/smtp/email', { method: 'POST', body })
 }
