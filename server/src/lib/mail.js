@@ -124,8 +124,12 @@ async function sendViaBrevo(options) {
   if (process.env.SMTP_LOGGER === 'true') {
     console.info('[mail] sending via Brevo API', { to: options.to, subject: options.subject })
   }
+  // SMTP_USER es el login SMTP de Brevo (formato <id>@smtp-brevo.com), no una
+  // dirección de remitente válida — nunca debe usarse como "from". Si el
+  // caller no pasa uno, usar SMTP_FROM (mismo fallback que sendViaSMTP).
+  const from = options.from || process.env.SMTP_FROM || 'Ciclo Market <avisos@ciclomarket.ar>'
   return brevo.sendEmail({
-    from: options.from,
+    from,
     to: options.to,
     subject: options.subject,
     html: options.html,

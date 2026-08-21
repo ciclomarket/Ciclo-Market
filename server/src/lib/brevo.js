@@ -86,7 +86,10 @@ async function sendEmail({ from, to, subject, html, text, headers: extraHeaders,
   if (!isBrevoConfigured()) throw new Error('BREVO_API_KEY no configurado')
 
   const fromStr = String(from || '').trim()
-  let sender = { email: process.env.SMTP_USER || 'avisos@ciclomarket.ar' }
+  // Último recurso si ni el caller ni mail.js resolvieron un "from": nunca
+  // SMTP_USER, que es el login SMTP de Brevo (<id>@smtp-brevo.com), no una
+  // dirección de remitente válida.
+  let sender = { email: 'avisos@ciclomarket.ar' }
   const match = fromStr.match(/^(.*?)\s*<([^>]+)>$/)
   if (match) {
     sender = { name: match[1].trim().replace(/["|]/g, '').trim(), email: match[2].trim() }
