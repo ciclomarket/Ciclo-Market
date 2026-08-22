@@ -22,6 +22,7 @@ import SeoHead, { type SeoHeadProps } from '../components/SeoHead'
 import { getOgImageUrlFromFirst } from '../lib/supabaseImages'
 import { resolveSiteOrigin, toAbsoluteUrl as absoluteUrl, buildBreadcrumbList, categoryToCanonicalPath } from '../utils/seo'
 import { trackMetaPixel } from '../lib/metaPixel'
+import { trackGA4Event } from '../lib/ga4'
 import { track } from '../services/track'
 import { useToast } from '../context/ToastContext'
 import ListingQuestionsSection from '../components/ListingQuestionsSection'
@@ -904,6 +905,7 @@ export default function ListingDetail() {
               onClick={() => {
                 try {
                   trackMetaPixel('Contact', { method: 'whatsapp', content_ids: [listing.id], content_type: 'product' })
+                  trackGA4Event('generate_lead', { method: 'whatsapp', listing_id: listing.id })
                   logContactEvent({ sellerId: listing.sellerId, listingId: listing.id, buyerId: user?.id || null, type: 'whatsapp' })
                   track('wa_click', {
                     listing_id: listing.id,
@@ -930,6 +932,7 @@ export default function ListingDetail() {
               onClick={() => {
                 try {
                   trackMetaPixel('Contact', { method: 'email', content_ids: [listing.id], content_type: 'product' })
+                  trackGA4Event('generate_lead', { method: 'email', listing_id: listing.id })
                   logContactEvent({ sellerId: listing.sellerId, listingId: listing.id, buyerId: user?.id || null, type: 'email' })
                   captureContactSellerClicked({ listingId: listing.id, sellerId: listing.sellerId || null, method: 'email' })
                 } catch { /* noop */ }

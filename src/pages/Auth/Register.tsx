@@ -8,6 +8,7 @@ import { createUserProfile } from '../../services/users'
 import { deriveProfileSlug, pickDiscipline } from '../../utils/user'
 import { useToast } from '../../context/ToastContext'
 import { trackMetaPixel } from '../../lib/metaPixel'
+import { trackGA4Event } from '../../lib/ga4'
 import { detectInAppBrowser, canUseOAuthInContext } from '../../utils/inAppBrowser'
 import InAppBrowserWarning from '../../components/InAppBrowserWarning'
 
@@ -126,6 +127,7 @@ export default function Register() {
       try {
         trackMetaPixel('SignUp', { method: 'email' })
         trackMetaPixel('CompleteRegistration', { method: 'email' })
+        trackGA4Event('sign_up', { method: 'email' })
       } catch { /* noop */ }
       // Permanecé en esta pantalla; el usuario verá el aviso y podrá revisar su mail
     } catch (err: any) {

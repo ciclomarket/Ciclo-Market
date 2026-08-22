@@ -12,6 +12,7 @@ import { getSupabaseClient, supabaseEnabled } from '../../services/supabase'
 import { validateGift, claimGift } from '../../services/gifts'
 import type { Plan } from '../../types'
 import { trackMetaPixel } from '../../lib/metaPixel'
+import { trackGA4Event } from '../../lib/ga4'
 import { PLAN_ORDER, type PlanCode, canonicalPlanCode, resolvePlanCode } from '../../utils/planCodes'
 import { fetchMyCredits } from '../../services/credits'
 
@@ -499,6 +500,12 @@ export default function Plans() {
           content_ids: [planFromQuery.id || planFromQuery._code],
           content_name: planFromQuery.name,
           content_type: 'product',
+          value: typeof planFromQuery.price === 'number' ? planFromQuery.price : 0,
+          currency: planFromQuery.currency || 'ARS'
+        })
+        trackGA4Event('purchase', {
+          transaction_id: `${planFromQuery._code}_${Date.now()}`,
+          items: [{ item_id: planFromQuery.id || planFromQuery._code, item_name: planFromQuery.name }],
           value: typeof planFromQuery.price === 'number' ? planFromQuery.price : 0,
           currency: planFromQuery.currency || 'ARS'
         })

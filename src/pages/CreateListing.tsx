@@ -13,6 +13,7 @@ import { fetchUserProfile, upsertUserProfile } from '@/services/users'
 import useUpload from '@/hooks/useUpload'
 import { parseMoneyInput } from '@/utils/money'
 import { captureListingCreatedCompleted, captureListingCreatedStarted } from '@/analytics/posthog'
+import { trackGA4Event } from '@/lib/ga4'
 
 const CONDITION_OPTIONS = ['Nuevo', 'Como nuevo', 'Usado'] as const
 
@@ -897,6 +898,12 @@ export default function CreateListing() {
         listingId: String((data as any).id),
         category: categoryField || null,
         price,
+        currency: formData.priceCurrency,
+      })
+      trackGA4Event('publish_listing', {
+        listing_id: String((data as any).id),
+        category: categoryField || null,
+        value: price,
         currency: formData.priceCurrency,
       })
     }

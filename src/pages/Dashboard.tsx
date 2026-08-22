@@ -29,6 +29,7 @@ import useUpload from '../hooks/useUpload'
 import { createGift, claimGift } from '../services/gifts'
 import { fetchCreditsHistory, type Credit } from '../services/credits'
 import { trackMetaPixel } from '../lib/metaPixel'
+import { trackGA4Event } from '../lib/ga4'
 import { canonicalPlanCode } from '../utils/planCodes'
 import { parseMoneyInput } from '../utils/money'
 import AdminFxPanel from '../components/AdminFxPanel'
@@ -334,6 +335,7 @@ export default function Dashboard() {
       if (signupIntent) {
         trackMetaPixel('SignUp', { method: signupIntent })
         trackMetaPixel('CompleteRegistration', { method: signupIntent })
+        trackGA4Event('sign_up', { method: signupIntent })
         sessionStorage.removeItem(signupKey)
       }
 
