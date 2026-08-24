@@ -398,9 +398,12 @@ try { startMarketingAutomationsJob && startMarketingAutomationsJob() } catch {}
 try { startSavedSearchDigestJob && startSavedSearchDigestJob() } catch {}
 try { startDeletedPurgerJob && startDeletedPurgerJob() } catch {}
 // New weekly email automations
-try { startMondayNewArrivalsJob && startMondayNewArrivalsJob() } catch {}
+// mondayNewArrivals y fridayUpgradeOffer deshabilitados: duplican contenido
+// que ya cubre el orquestador (newArrivalsWeekly / freeUpgradeOffer) sin
+// dedup cruzado entre ambos sistemas, causando envíos repetidos día tras día.
+// try { startMondayNewArrivalsJob && startMondayNewArrivalsJob() } catch {}
 try { startWednesdayListingUpdateJob && startWednesdayListingUpdateJob() } catch {}
-try { startFridayUpgradeOfferJob && startFridayUpgradeOfferJob() } catch {}
+// try { startFridayUpgradeOfferJob && startFridayUpgradeOfferJob() } catch {}
 try { startEmailOrchestratorJob && startEmailOrchestratorJob() } catch {}
 
 /* Google Reviews endpoints removed */

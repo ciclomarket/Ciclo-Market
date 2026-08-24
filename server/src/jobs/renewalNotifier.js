@@ -126,11 +126,9 @@ async function sendReminder({ listing, profile }) {
     ? expiresDate.toLocaleString('es-AR', { dateStyle: 'long', timeStyle: 'short' })
     : 'los próximos días'
 
-  const baseFront = (process.env.FRONTEND_URL || '').split(',')[0]?.trim() || ''
-  const highlightUrl = `${baseFront}/listing/${listing.id}/destacar`
-  const renewApiHint = `${baseFront}/dashboard?tab=Publicaciones` // Llevar directo a Publicaciones en el panel
-
   const baseFront = (process.env.FRONTEND_URL || '').split(',')[0]?.trim() || 'https://ciclomarket.ar'
+  const highlightUrl = `${baseFront.replace(/\/$/, '')}/listing/${listing.id}/destacar`
+  const renewApiHint = `${baseFront.replace(/\/$/, '')}/dashboard?tab=Publicaciones` // Llevar directo a Publicaciones en el panel
   const bikesUrl = `${baseFront.replace(/\/$/, '')}/marketplace?cat=Ruta`
   const partsUrl = `${baseFront.replace(/\/$/, '')}/marketplace?cat=Accesorios`
   const apparelUrl = `${baseFront.replace(/\/$/, '')}/marketplace?cat=Indumentaria`
