@@ -398,11 +398,12 @@ try { startMarketingAutomationsJob && startMarketingAutomationsJob() } catch {}
 try { startSavedSearchDigestJob && startSavedSearchDigestJob() } catch {}
 try { startDeletedPurgerJob && startDeletedPurgerJob() } catch {}
 // New weekly email automations
-// mondayNewArrivals y fridayUpgradeOffer deshabilitados: duplican contenido
-// que ya cubre el orquestador (newArrivalsWeekly / freeUpgradeOffer) sin
-// dedup cruzado entre ambos sistemas, causando envíos repetidos día tras día.
+// mondayNewArrivals y fridayUpgradeOffer deshabilitados: duplicaban contenido
+// que ya cubre el orquestador (newArrivalsWeekly / freeUpgradeOffer) sin dedup
+// cruzado entre ambos sistemas, causando envíos repetidos día tras día.
+// wednesdayListingUpdate deshabilitado para centralizar todo en el orquestador.
 // try { startMondayNewArrivalsJob && startMondayNewArrivalsJob() } catch {}
-try { startWednesdayListingUpdateJob && startWednesdayListingUpdateJob() } catch {}
+// try { startWednesdayListingUpdateJob && startWednesdayListingUpdateJob() } catch {}
 // try { startFridayUpgradeOfferJob && startFridayUpgradeOfferJob() } catch {}
 try { startEmailOrchestratorJob && startEmailOrchestratorJob() } catch {}
 
