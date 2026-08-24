@@ -1,6 +1,6 @@
 const cron = require('node-cron')
 const { getServerSupabaseClient } = require('../lib/supabaseClient')
-const { sendMail, isMailConfigured } = require('../lib/mail')
+const { sendMail, isMailConfigured, getDefaultSenderFrom } = require('../lib/mail')
 const { buildListingCardHtml, buildListingCardText, escapeHtml, formatPrice } = require('../emails/listingCard')
 
 const DEFAULT_TZ = 'America/Argentina/Buenos_Aires'
@@ -856,7 +856,7 @@ async function runMarketingAutomationsOnce() {
       try {
         const email = buildExpiredEmail({ listing, profile, baseFront })
         await sendMail({
-          from: process.env.SMTP_FROM || `Ciclo Market <${process.env.SMTP_USER || 'no-reply@ciclomarket.ar'}>`,
+          from: getDefaultSenderFrom(),
           to: profile.email,
           subject: email.subject,
           html: email.html,
@@ -893,7 +893,7 @@ async function runMarketingAutomationsOnce() {
       try {
         const email = buildFreeExpiringEmail({ listing, profile, baseFront, daysLeft })
         await sendMail({
-          from: process.env.SMTP_FROM || `Ciclo Market <${process.env.SMTP_USER || 'no-reply@ciclomarket.ar'}>`,
+          from: getDefaultSenderFrom(),
           to: profile.email,
           subject: email.subject,
           html: email.html,
@@ -930,7 +930,7 @@ async function runMarketingAutomationsOnce() {
       try {
         const email = buildPaidExpiringEmail({ listing, profile, baseFront, daysLeft })
         await sendMail({
-          from: process.env.SMTP_FROM || `Ciclo Market <${process.env.SMTP_USER || 'no-reply@ciclomarket.ar'}>`,
+          from: getDefaultSenderFrom(),
           to: profile.email,
           subject: email.subject,
           html: email.html,
@@ -965,7 +965,7 @@ async function runMarketingAutomationsOnce() {
       try {
         const email = buildHighlightEmail({ listing, profile, baseFront })
         await sendMail({
-          from: process.env.SMTP_FROM || `Ciclo Market <${process.env.SMTP_USER || 'no-reply@ciclomarket.ar'}>`,
+          from: getDefaultSenderFrom(),
           to: profile.email,
           subject: email.subject,
           html: email.html,

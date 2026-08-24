@@ -6,7 +6,7 @@ try {
   require('dotenv').config()
 } catch {}
 const { getServerSupabaseClient } = require('../lib/supabaseClient')
-const { sendMail, isMailConfigured } = require('../lib/mail')
+const { sendMail, isMailConfigured, getDefaultSenderFrom } = require('../lib/mail')
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -258,7 +258,7 @@ async function runOnce() {
       if (!dryRun) {
         try {
           await sendMailThrottled({
-            from: process.env.SMTP_FROM || `Ciclo Market <${process.env.SMTP_USER}>`,
+            from: getDefaultSenderFrom(),
             to: profile.email,
             subject,
             html,

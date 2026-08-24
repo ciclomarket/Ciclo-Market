@@ -1,7 +1,7 @@
 const express = require('express')
 const crypto = require('crypto')
 const { getServerSupabaseClient } = require('../lib/supabaseClient')
-const { sendMail, isMailConfigured } = require('../lib/mail')
+const { sendMail, isMailConfigured, getDefaultSenderFrom } = require('../lib/mail')
 const { resolveFrontendBaseUrl } = require('../lib/savedSearch')
 const { calculateBikePrice } = require('../utils/pricingAlgorithm')
 const { buildSellerFollowupSoldEmail } = require('../emails/sellerFollowupSoldEmail')
@@ -174,7 +174,7 @@ async function handleAdminSendEmailTemplate(req, res) {
     }
 
     await sendMail({
-      from: process.env.SMTP_FROM || `Ciclo Market <${process.env.SMTP_USER || 'no-reply@ciclomarket.ar'}>`,
+      from: getDefaultSenderFrom(),
       to: profile.email,
       subject: email.subject,
       html: email.html,

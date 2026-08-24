@@ -37,8 +37,85 @@ const EMAILS_ONLY_MARKER = '2026-09-20T00:40:50.904Z'
 const EXTEND_DAYS = 30
 const SEND_DELAY_MS = 400
 
+// Dedupe persistido: reusa email_logs (misma tabla/patrón que el
+// orquestador en src/email/orchestrator.js) para que una re-corrida de este
+// script (manual o por un Render Cron Job externo) no vuelva a mandarle el
+// mismo mail "extendimos tu publicación" a un vendedor cuya publicación ya
+// fue avisada. Ventana de 25 días: un poco menos que los 30 días de la
+// extensión, así si la publicación vuelve a vencer y se re-extiende, sí
+// puede recibir un aviso nuevo.
+const CAMPAIGN = 'revive_expired_30d'
+const DEDUP_WINDOW_DAYS = 25
+
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms))
+}
+
+function buildIdempotencyKey(listingId) {
+  return `${CAMPAIGN}:${listingId}`
+}
+
+// ISO year/week de "ahora" — email_logs los exige NOT NULL; acá solo se usan
+// para bookkeeping/consistencia con el resto de las filas de la tabla, no
+// para lógica de negocio de este script.
+function currentIsoYearWeek() {
+  const now = new Date()
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+  const dayNum = d.getUTCDay() || 7
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum)
+  const isoYear = d.getUTCFullYear()
+  const yearStart = new Date(Date.UTC(isoYear, 0, 1))
+  const isoWeek = Math.ceil((((d - yearStart) / 86400000) + 1) / 7)
+  return { isoYear, isoWeek }
+}
+
+async function fetchAlreadyEmailedListingIds(supabase, listingIds) {
+  if (!listingIds.length) return new Set()
+  const cutoffIso = new Date(Date.now() - DEDUP_WINDOW_DAYS * 86400000).toISOString()
+  const keys = listingIds.map(buildIdempotencyKey)
+  const alreadySent = new Set()
+  for (let i = 0; i < keys.length; i += 200) {
+    const chunk = keys.slice(i, i + 200)
+    const { data, error } = await supabase
+      .from('email_logs')
+      .select('idempotency_key')
+      .in('idempotency_key', chunk)
+      .eq('status', 'sent')
+      .gte('created_at', cutoffIso)
+    if (error) throw error
+    for (const row of data || []) alreadySent.add(String(row.idempotency_key))
+  }
+  // idempotency_key -> listingId (reverso del prefijo CAMPAIGN:)
+  const prefix = `${CAMPAIGN}:`
+  return new Set(
+    [...alreadySent]
+      .filter((k) => k.startsWith(prefix))
+      .map((k) => k.slice(prefix.length))
+  )
+}
+
+async function logEmailSent(supabase, { listing, seller, subject }) {
+  const { isoYear, isoWeek } = currentIsoYearWeek()
+  try {
+    await supabase.from('email_logs').insert({
+      campaign: CAMPAIGN,
+      priority: 5,
+      user_id: seller?.id || null,
+      email_to: seller.email,
+      listing_id: listing.id,
+      idempotency_key: buildIdempotencyKey(listing.id),
+      iso_year: isoYear,
+      iso_week: isoWeek,
+      status: 'sent',
+      provider: 'smtp',
+      subject,
+      metadata: { extendDays: EXTEND_DAYS },
+    })
+  } catch (err) {
+    // No debe tumbar la corrida: si el insert de log falla (p. ej. carrera de
+    // unique constraint), el mail ya salió; solo se pierde el dedupe fino.
+    console.warn(`[revive] no se pudo registrar email_logs para listing ${listing.id}:`, err?.message || err)
+  }
 }
 
 function resolveFrontendBaseUrl() {
@@ -128,12 +205,20 @@ async function main() {
   const rows = await fetchExpiredButActive(supabase)
   console.log(`[revive] ${rows.length} publicaciones vencidas-pero-activas encontradas.`)
 
+  // Dedupe persistido: no le mandamos el mail de nuevo a una publicación que
+  // ya fue avisada en los últimos DEDUP_WINDOW_DAYS días (email_logs).
+  const alreadyEmailedIds = await fetchAlreadyEmailedListingIds(supabase, rows.map((r) => r.id))
+  if (alreadyEmailedIds.size) {
+    console.log(`[revive] ${alreadyEmailedIds.size} publicaciones ya avisadas en los últimos ${DEDUP_WINDOW_DAYS} días, se saltan del mail (igual se extiende expires_at).`)
+  }
+  const emailableRows = rows.filter((r) => !alreadyEmailedIds.has(String(r.id)))
+
   const bySeller = new Map()
-  for (const row of rows) {
+  for (const row of emailableRows) {
     if (!bySeller.has(row.seller_id)) bySeller.set(row.seller_id, [])
     bySeller.get(row.seller_id).push(row)
   }
-  console.log(`[revive] ${bySeller.size} vendedores distintos.`)
+  console.log(`[revive] ${bySeller.size} vendedores distintos a notificar (post-dedupe).`)
 
   const nextExpiresIso = new Date(Date.now() + EXTEND_DAYS * 86400000).toISOString()
   const baseFront = resolveFrontendBaseUrl()
@@ -189,6 +274,9 @@ async function main() {
     try {
       await sendMail({ to: seller.email, subject, html })
       sent += 1
+      // Registrar el envío por publicación para que una re-corrida (manual o
+      // por un cron externo) no vuelva a mandar este mismo aviso.
+      await Promise.all(listings.map((listing) => logEmailSent(supabase, { listing, seller, subject })))
     } catch (err) {
       failed += 1
       console.error(`[revive] mail a ${seller.email} falló:`, err?.message || err)

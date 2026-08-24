@@ -1,6 +1,7 @@
 const cron = require('node-cron')
 const { getServerSupabaseClient } = require('../lib/supabaseClient')
 const brevo = require('../lib/brevo')
+const { getDefaultSenderFrom } = require('../lib/mail')
 
 async function fetchLatestListings(limit = 4) {
   const supabase = getServerSupabaseClient()
@@ -182,7 +183,7 @@ async function runDigestOnce() {
     `Desuscribirme: ${unsub}`
   ].join('\n')
 
-  const from = process.env.SMTP_FROM || `Ciclo Market <${process.env.SMTP_USER || 'no-reply@ciclomarket.ar'}>`
+  const from = getDefaultSenderFrom()
   const subject = 'Nuevos ingresos de la semana · Ciclo Market'
 
   const sent = await sendEmailToAudience({

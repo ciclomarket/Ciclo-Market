@@ -1,7 +1,7 @@
 const cron = require('node-cron')
 const { createClient } = require('@supabase/supabase-js')
 const { getServerSupabaseClient } = require('../lib/supabaseClient')
-const { sendMail, isMailConfigured, isSMTPConfigured, isResendConfigured } = require('../lib/mail')
+const { sendMail, isMailConfigured, isSMTPConfigured, isResendConfigured, getDefaultSenderFrom } = require('../lib/mail')
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const DEFAULT_WINDOW_HOURS = 24
@@ -136,7 +136,7 @@ async function sendReminder({ listing, profile }) {
   const apparelUrl = `${baseFront.replace(/\/$/, '')}/marketplace?cat=Indumentaria`
 
   const mailOptions = {
-    from: process.env.SMTP_FROM || `Ciclo Market <${process.env.SMTP_USER}>`,
+    from: getDefaultSenderFrom(),
     to: profile.email,
     subject: `Tu publicación "${listing.title}" está por vencer`,
     html: `
@@ -214,7 +214,7 @@ async function sendExpiredNotice({ listing, profile }) {
   const renewUrl = `${cleanBase}/dashboard?tab=Publicaciones`
 
   const mailOptions = {
-    from: process.env.SMTP_FROM || `Ciclo Market <${process.env.SMTP_USER}>`,
+    from: getDefaultSenderFrom(),
     to: profile.email,
     subject: `Tu publicación "${listing.title}" venció – renovala en 1 clic`,
     html: `

@@ -12,7 +12,7 @@ const cors = require('cors')
 const crypto = require('crypto')
 const { MercadoPagoConfig, Preference } = require('mercadopago')
 const { createClient: createSupabaseServerClient } = require('@supabase/supabase-js')
-const { sendMail, isMailConfigured } = require('./lib/mail')
+const { sendMail, isMailConfigured, getDefaultSenderFrom } = require('./lib/mail')
 const { getServerSupabaseClient } = require('./lib/supabaseClient')
 const {
   buildListingMatchContext,
@@ -1594,7 +1594,7 @@ async function runSavedSearchAlert(listingId) {
     const frontendBase = resolveFrontendBaseUrl()
     const listingPath = listing.slug ? `/listing/${listing.slug}` : `/listing/${listing.id}`
     const listingUrl = `${frontendBase}${listingPath}`
-    const from = process.env.SMTP_FROM || `Ciclo Market <${process.env.SMTP_USER || 'no-reply@ciclomarket.ar'}>`
+    const from = getDefaultSenderFrom()
     const sentKeys = new Set()
 
     for (const alert of matchedAlerts) {

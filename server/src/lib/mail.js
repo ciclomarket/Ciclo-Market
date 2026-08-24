@@ -71,11 +71,20 @@ function getMailTransport() {
   return cachedTransport
 }
 
+// Fallback compartido de remitente cuando el caller no pasa "from" explícito.
+// SMTP_USER es el login SMTP de Brevo (<id>@smtp-brevo.com), no una dirección
+// de remitente válida — nunca debe usarse como "from". Ver commit "Fix Brevo
+// sender fallback". Todos los call sites de campañas/notificaciones deben usar
+// esta función en vez de duplicar `process.env.SMTP_FROM || ...` a mano.
+function getDefaultSenderFrom() {
+  return process.env.SMTP_FROM || 'Ciclo Market <avisos@ciclomarket.ar>'
+}
+
 async function sendViaSMTP(options) {
   const transporter = getMailTransport()
-  // Si el caller no indica "from", usar SMTP_FROM (o el login como último recurso).
+  // Si el caller no indica "from", usar el fallback compartido.
   // Sin esto, nodemailer usa auth.user como remitente y Brevo lo rechaza ("Invalid from").
-  const from = options.from || process.env.SMTP_FROM || process.env.SMTP_USER || 'Ciclo Market <no-reply@ciclomarket.ar>'
+  const from = options.from || getDefaultSenderFrom()
   if (process.env.SMTP_LOGGER === 'true') {
     console.info('[mail] sending via SMTP', {
       to: options.to,
@@ -124,10 +133,8 @@ async function sendViaBrevo(options) {
   if (process.env.SMTP_LOGGER === 'true') {
     console.info('[mail] sending via Brevo API', { to: options.to, subject: options.subject })
   }
-  // SMTP_USER es el login SMTP de Brevo (formato <id>@smtp-brevo.com), no una
-  // dirección de remitente válida — nunca debe usarse como "from". Si el
-  // caller no pasa uno, usar SMTP_FROM (mismo fallback que sendViaSMTP).
-  const from = options.from || process.env.SMTP_FROM || 'Ciclo Market <avisos@ciclomarket.ar>'
+  // Si el caller no pasa "from", usar el fallback compartido (nunca SMTP_USER).
+  const from = options.from || getDefaultSenderFrom()
   return brevo.sendEmail({
     from,
     to: options.to,
@@ -153,6 +160,7 @@ module.exports = {
   getMailTransport,
   sendMail,
   isMailConfigured,
+  getDefaultSenderFrom,
   // Export for diagnostics (no secrets exposed)
   isSMTPConfigured,
   isResendConfigured,

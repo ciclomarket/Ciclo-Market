@@ -1,6 +1,6 @@
 const { MercadoPagoConfig, Payment } = require('mercadopago')
 const { getServerSupabaseClient } = require('../lib/supabaseClient')
-const { sendMail } = require('../lib/mail')
+const { sendMail, getDefaultSenderFrom } = require('../lib/mail')
 const { captureServerEvent } = require('../lib/posthog')
 
 const mpClient = (() => {
@@ -182,7 +182,7 @@ async function sendPaymentSuccessEmail({ supabase, userId, planCode, listingId, 
   const to = userRow?.email ? String(userRow.email) : null
   if (!to) return
 
-  const from = process.env.SMTP_FROM || `Ciclo Market <${process.env.SMTP_USER || 'no-reply@ciclomarket.ar'}>`
+  const from = getDefaultSenderFrom()
   const planLabel = planCode ? planCode.toUpperCase() : 'PLAN'
   const amountTxt = (typeof amount === 'number' && Number.isFinite(amount)) ? `${amount} ${currency || 'ARS'}` : null
 
