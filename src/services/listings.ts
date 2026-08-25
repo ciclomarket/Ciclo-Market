@@ -163,36 +163,59 @@ const ensureWhatsappInMethods = (methods: unknown): string[] => {
   return Array.from(set)
 }
 
+// Caché in-flight + TTL corto: evita disparar el mismo fetch completo del
+// catálogo varias veces en simultáneo (ej. Header.tsx + la página montan
+// efectos independientes que llamaban a fetchListings() sin coordinarse).
+const LISTINGS_CACHE_TTL_MS = 15_000
+let listingsCache: { data: Listing[]; ts: number } | null = null
+let listingsInFlight: Promise<Listing[]> | null = null
+
+async function fetchListingsUncached(): Promise<Listing[]> {
+  const supabase = getSupabaseClient()
+  const selectAllOrdered = async (table: 'listings_enriched' | 'listings') =>
+    supabase.from(table).select('*').order('created_at', { ascending: false })
+
+  let { data, error } = await selectAllOrdered('listings_enriched')
+  if (error && shouldFallbackToBaseListings(error)) {
+    console.warn('[listings] listings_enriched unavailable, falling back to listings', error)
+    ;({ data, error } = await selectAllOrdered('listings'))
+  }
+  if (error || !data) return []
+  const now = Date.now()
+  const filtered = data.filter((row: any) => {
+    const status = typeof row?.status === 'string' ? row.status.trim().toLowerCase() : 'active'
+    if (status === 'draft' || status === 'deleted' || status === 'archived' || status === 'expired') return false
+    if (row?.archived_at) return false
+    const mod = typeof row?.moderation_state === 'string' ? row.moderation_state.trim().toLowerCase() : 'approved'
+    if (mod !== 'approved') return false
+    const expiresAt = row?.expires_at ? Date.parse(row.expires_at) : null
+    if (typeof expiresAt === 'number' && !Number.isNaN(expiresAt) && expiresAt > 0 && expiresAt < now) return false
+    // Ocultar publicaciones de cuentas demo (defensivo: verificar que exista la propiedad)
+    if (row && 'is_demo_listing' in row && row.is_demo_listing === true) return false
+    return true
+  })
+  return filtered.map((row: any) => normalizeListing(row as ListingRow))
+}
+
 export async function fetchListings(): Promise<Listing[]> {
   if (!supabaseEnabled) return []
-  try {
-    const supabase = getSupabaseClient()
-    const selectAllOrdered = async (table: 'listings_enriched' | 'listings') =>
-      supabase.from(table).select('*').order('created_at', { ascending: false })
-
-    let { data, error } = await selectAllOrdered('listings_enriched')
-    if (error && shouldFallbackToBaseListings(error)) {
-      console.warn('[listings] listings_enriched unavailable, falling back to listings', error)
-      ;({ data, error } = await selectAllOrdered('listings'))
-    }
-    if (error || !data) return []
-    const now = Date.now()
-    const filtered = data.filter((row: any) => {
-      const status = typeof row?.status === 'string' ? row.status.trim().toLowerCase() : 'active'
-      if (status === 'draft' || status === 'deleted' || status === 'archived' || status === 'expired') return false
-      if (row?.archived_at) return false
-      const mod = typeof row?.moderation_state === 'string' ? row.moderation_state.trim().toLowerCase() : 'approved'
-      if (mod !== 'approved') return false
-      const expiresAt = row?.expires_at ? Date.parse(row.expires_at) : null
-      if (typeof expiresAt === 'number' && !Number.isNaN(expiresAt) && expiresAt > 0 && expiresAt < now) return false
-      // Ocultar publicaciones de cuentas demo (defensivo: verificar que exista la propiedad)
-      if (row && 'is_demo_listing' in row && row.is_demo_listing === true) return false
-      return true
-    })
-    return filtered.map((row: any) => normalizeListing(row as ListingRow))
-  } catch {
-    return []
+  const now = Date.now()
+  if (listingsCache && now - listingsCache.ts < LISTINGS_CACHE_TTL_MS) {
+    return listingsCache.data
   }
+  if (listingsInFlight) return listingsInFlight
+
+  listingsInFlight = fetchListingsUncached()
+    .then((data) => {
+      listingsCache = { data, ts: Date.now() }
+      return data
+    })
+    .catch(() => [])
+    .finally(() => {
+      listingsInFlight = null
+    })
+
+  return listingsInFlight
 }
 
 export async function fetchListing(identifier: string): Promise<Listing | null> {

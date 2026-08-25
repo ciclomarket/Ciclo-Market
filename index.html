@@ -4,7 +4,6 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Ciclo Market – Marketplace de bicicletas</title>
-    <meta name="description" content="Publicá tu bici, encontrá ofertas y conectá con vendedores en Ciclo Market. Clasificados de bicicletas en Argentina." />
     
     <!-- Critical CSS inline para evitar bloqueo de renderizado -->
     <style>
@@ -34,9 +33,17 @@
     <link rel="preload" as="image" href="/images/hero-bike.webp" type="image/webp" fetchpriority="high" media="(max-width: 1023px)">
     <link rel="preload" as="image" href="/images/hero-bike.webp" type="image/webp" fetchpriority="high" media="(min-width: 1024px)">
     
+    <!-- Precargar los archivos woff2 de Inter directamente (no solo el CSS):
+         arrancan a bajar en paralelo con el HTML, antes de que el navegador
+         tenga que decidir fallback vs Inter — evita el reflow de font-swap
+         que empujaba el footer (CLS). Son fuentes variables: un solo archivo
+         por subset cubre los pesos 400-800. -->
+    <link rel="preload" as="font" type="font/woff2" href="https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2" crossorigin>
+    <link rel="preload" as="font" type="font/woff2" href="https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa25L7SUc.woff2" crossorigin>
+
     <!-- Cargar CSS de fonts de forma no bloqueante -->
-    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" onload="this.onload=null;this.rel='stylesheet'">
-    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"></noscript>
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=optional" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=optional"></noscript>
     
     <link rel="stylesheet" href="/src/index.css">
     <link rel="icon" href="/favicon.ico" sizes="any">
@@ -45,22 +52,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png">
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
 
-    <!-- OpenGraph -->
-    <link rel="canonical" href="https://www.ciclomarket.ar/" />
-    <meta property="og:title" content="Ciclo Market – Marketplace de bicicletas" />
-    <meta property="og:description" content="Publicá tu bici y conectá con compradores. Ciclo Market." />
-    <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://www.ciclomarket.ar/" />
-    <meta property="og:image" content="https://www.ciclomarket.ar/logo-azul.png" />
-    <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="630" />
-    
-    <!-- Twitter -->
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Ciclo Market – Marketplace de bicicletas" />
-    <meta name="twitter:description" content="Publicá tu bici y conectá con compradores." />
-    <meta name="twitter:image" content="https://www.ciclomarket.ar/logo-azul.png" />
-    
+    <!-- OpenGraph y Twitter los inyecta SeoHead por página (Helmet). -->
     <meta name="facebook-domain-verification" content="41vv7fzi6iagjgk62frhdk0t4ottbq" />
     
     <!-- Google Analytics 4 - Cargar de forma no bloqueante -->

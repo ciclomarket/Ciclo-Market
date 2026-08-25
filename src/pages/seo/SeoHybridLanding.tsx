@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { useLocation } from 'react-router-dom'
 import SeoLandingTemplate, { type SeoLandingContent } from './SeoLandingTemplate'
 import ListingCard from '../../components/ListingCard'
 import SkeletonCard from '../../components/SkeletonCard'
@@ -7,9 +8,15 @@ import Button from '../../components/Button'
 import { useCategoryListings } from '../../hooks/useCategoryListings'
 import type { Listing } from '../../types'
 import { ChevronDown } from 'lucide-react'
+import CategorySeoSection from '../../components/seo/CategorySeoSection'
+import { CATEGORY_SEO_RICH_CONTENT } from '../../constants/seoCategoryContent'
+import SeoHead from '../../components/SeoHead'
+import { resolveSiteOrigin, toAbsoluteUrl as absoluteUrl } from '../../utils/seo'
 
 interface SeoHybridLandingProps extends SeoLandingContent {
   categoryFilter: string
+  /** Clave del contenido SEO rico (por defecto usa categoryFilter) */
+  seoContentKey?: string
   initialLimit?: number
 }
 
@@ -25,13 +32,58 @@ interface SeoHybridLandingProps extends SeoLandingContent {
  */
 export default function SeoHybridLanding({
   categoryFilter,
+  seoContentKey,
   initialLimit = 12,
   ...seoProps
 }: SeoHybridLandingProps) {
+  const { pathname } = useLocation()
+  const siteOrigin = useMemo(() => resolveSiteOrigin(), [])
   const { listings, count, loading, hasMore, loadMore } = useCategoryListings(
     categoryFilter,
     { limit: initialLimit }
   )
+
+  const richContent =
+    CATEGORY_SEO_RICH_CONTENT[seoContentKey ?? categoryFilter] ??
+    CATEGORY_SEO_RICH_CONTENT.Todos
+
+  // Título sin el sufijo duplicado (SEO.tsx agrega "| Ciclo Market")
+  const pageTitle = useMemo(
+    () => seoProps.title?.replace(/\s*\|\s*Ciclo Market\s*$/i, '').trim() || undefined,
+    [seoProps.title],
+  )
+
+  // ItemList de productos. Se renderiza como <script> directo (no vía Helmet)
+  // porque react-helmet-async colapsa los <script type="application/ld+json">.
+  const itemListSchema = useMemo(() => {
+    const elements = listings
+      .slice(0, 12)
+      .map((listing, index) => {
+        const slug = listing.slug || listing.id
+        if (!slug) return null
+        const url = absoluteUrl(`/listing/${slug}`, siteOrigin)
+        if (!url) return null
+        const brandModel = [listing.brand, listing.model].filter(Boolean).join(' ').trim()
+        const name = brandModel
+          ? listing.year
+            ? `${brandModel} ${listing.year}`
+            : brandModel
+          : listing.title
+        return { '@type': 'ListItem' as const, position: index + 1, name, url }
+      })
+      .filter(
+        (entry): entry is { '@type': 'ListItem'; position: number; name: string; url: string } => Boolean(entry),
+      )
+    if (!elements.length) return null
+    return {
+      '@context': 'https://schema.org',
+      '@type': 'ItemList',
+      name: `${seoProps.h1} - Ciclo Market`,
+      url: absoluteUrl(pathname, siteOrigin),
+      numberOfItems: elements.length,
+      itemListElement: elements,
+    }
+  }, [listings, siteOrigin, seoProps.h1, pathname])
 
   // CTAs con conteo real
   const enhancedCtAs = useMemo(() => {
@@ -49,6 +101,20 @@ export default function SeoHybridLanding({
 
   return (
     <>
+      {/* Meta tags específicos de la landing (título, descripción, canonical, keywords) */}
+      <SeoHead
+        title={pageTitle}
+        description={seoProps.description}
+        image="/OG-Marketplace.png"
+        keywords={seoProps.keywords}
+      />
+      {itemListSchema ? (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListSchema) }}
+        />
+      ) : null}
+
       {/* Hero minimalista */}
       <SeoLandingTemplate 
         {...seoProps} 
@@ -95,12 +161,8 @@ export default function SeoHybridLanding({
         </Container>
       </section>
 
-      {/* Contenido SEO - Flujo continuo debajo del grid */}
-      <SeoLandingTemplate 
-        {...seoProps}
-        mode="content"
-        productCount={count}
-      />
+      {/* Contenido SEO rico - Flujo continuo debajo del grid (estilo The Pro's Closet) */}
+      <CategorySeoSection content={richContent} />
     </>
   )
 }

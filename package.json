@@ -57,7 +57,6 @@
     "lucide-react": "^0.563.0",
     "mercadopago": "^2.9.0",
     "node-cron": "^3.0.3",
-    "posthog-js": "^1.347.0",
     "posthog-node": "^5.13.2",
     "puppeteer": "^23.11.1",
     "puppeteer-core": "^23.11.1",

@@ -20,7 +20,8 @@ import FilterDropdown from '../components/FilterDropdown'
 import { fetchLikeCounts } from '../services/likes'
 import SeoHead, { type SeoHeadProps } from '../components/SeoHead'
 import { resolveSiteOrigin, toAbsoluteUrl as absoluteUrl, categoryToCanonicalPath, buildBreadcrumbList } from '../utils/seo'
-import { captureSavedSearchCreated, captureSearchPerformed } from '../analytics/posthog'
+import CategorySeoSection from '../components/seo/CategorySeoSection'
+import { CATEGORY_SEO_RICH_CONTENT } from '../constants/seoCategoryContent'
 
 type Cat = 'Todos' | 'Ruta' | 'MTB' | 'Gravel' | 'Urbana' | 'Fixie' | 'Accesorios' | 'Indumentaria' | 'Nutrición' | 'E-Bike' | 'Niños' | 'Pista' | 'Triatlón'
 type MultiFilterKey = 'brand' | 'material' | 'frameSize' | 'wheelSize' | 'drivetrain' | 'condition' | 'brake' | 'year' | 'size' | 'location' | 'transmissionType'
@@ -960,7 +961,6 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [mobileSortOpen, setMobileSortOpen] = useState(false)
   const [likeCounts, setLikeCounts] = useState<Record<string, number>>({})
-  const lastSearchEventKeyRef = useRef<string>('')
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -1767,71 +1767,13 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
   const effectiveDealActive = Boolean(forcedDeal || effectiveDeal === '1')
   const categoryKey: CategorySeoKey = effectiveDealActive ? 'Deals' : effectiveCat
   const categoryContent = CATEGORY_SEO_CONTENT[categoryKey] ?? CATEGORY_SEO_CONTENT.Todos
+  const richCategoryContent = CATEGORY_SEO_RICH_CONTENT[categoryKey] ?? CATEGORY_SEO_RICH_CONTENT.Todos
 
   const totalResults = useMemo(
     () => (serverMode ? (typeof serverTotal === 'number' ? serverTotal : filtered.length) : filtered.length),
     [serverMode, serverTotal, filtered.length],
   )
 
-  useEffect(() => {
-    const hasSearchIntent = Boolean((filters.q || '').trim()) || hasActiveFilters
-    if (!hasSearchIntent) return
-
-    const normalizedFilters = {
-      cat: filters.cat !== 'Todos' ? filters.cat : undefined,
-      subcat: filters.subcat || undefined,
-      deal: filters.deal === '1' ? true : undefined,
-      store: filters.store === '1' ? true : undefined,
-      bikes: filters.bikes === '1' ? true : undefined,
-      brand: filters.brand.length ? filters.brand : undefined,
-      material: filters.material.length ? filters.material : undefined,
-      frameSize: filters.frameSize.length ? filters.frameSize : undefined,
-      wheelSize: filters.wheelSize.length ? filters.wheelSize : undefined,
-      drivetrain: filters.drivetrain.length ? filters.drivetrain : undefined,
-      condition: filters.condition.length ? filters.condition : undefined,
-      brake: filters.brake.length ? filters.brake : undefined,
-      year: filters.year.length ? filters.year : undefined,
-      size: filters.size.length ? filters.size : undefined,
-      location: filters.location.length ? filters.location : undefined,
-      transmissionType: filters.transmissionType.length ? filters.transmissionType : undefined,
-      priceCur: filters.priceCur,
-      priceMin: filters.priceMin,
-      priceMax: filters.priceMax,
-    }
-    const eventKey = JSON.stringify({ q: filters.q || '', normalizedFilters })
-    if (eventKey === lastSearchEventKeyRef.current) return
-    lastSearchEventKeyRef.current = eventKey
-
-    captureSearchPerformed({
-      query: filters.q || '',
-      filters: normalizedFilters,
-      resultsCount: totalResults,
-      source: 'marketplace',
-    })
-  }, [
-    filters.q,
-    filters.cat,
-    filters.subcat,
-    filters.deal,
-    filters.store,
-    filters.bikes,
-    filters.brand,
-    filters.material,
-    filters.frameSize,
-    filters.wheelSize,
-    filters.drivetrain,
-    filters.condition,
-    filters.brake,
-    filters.year,
-    filters.size,
-    filters.location,
-    filters.transmissionType,
-    filters.priceCur,
-    filters.priceMin,
-    filters.priceMax,
-    hasActiveFilters,
-    totalResults,
-  ])
 
   const primaryLocation = filters.location && filters.location.length ? filters.location[0]?.trim() || null : null
 
@@ -1918,11 +1860,6 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
       const criteriaPayload: Record<string, unknown> = { ...filters, url: urlPath }
       const created = await saveSearch(criteriaPayload, name)
       if (created?.id) {
-        captureSavedSearchCreated({
-          userId: user.id,
-          name,
-          criteria: criteriaPayload,
-        })
         window.alert('Búsqueda guardada')
       } else {
         window.alert('No se pudo guardar la búsqueda. Intentá más tarde.')
@@ -2069,9 +2006,6 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
     }),
     [titleCore, description, canonicalPath, shouldApplyNoIndex, mergedKeywords, jsonLdPayload, otherOverrides],
   )
-
-  const seoDetailsSummary = categoryContent.summary
-  const seoDetailsCopy = categoryContent.copy
 
   const headerH1 = useMemo(() => {
     if (headingTitle) return headingTitle
@@ -2436,14 +2370,7 @@ export default function Marketplace({ forcedCat, allowedCats, forcedDeal, headin
               </div>
             </div>
           </div>
-          {seoDetailsCopy ? (
-            <details className="seo-details mt-12">
-              <summary className="seo-summary">{seoDetailsSummary}</summary>
-              <div className="seo-copy">
-                <p>{seoDetailsCopy}</p>
-              </div>
-            </details>
-          ) : null}
+          {richCategoryContent ? <CategorySeoSection content={richCategoryContent} /> : null}
         </Container>
       </section>
 

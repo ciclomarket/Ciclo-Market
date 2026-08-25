@@ -12,7 +12,6 @@ function PageLoadingFallback() {
   )
 }
 import Header from './components/Header'
-import Newsletter from './components/Newsletter'
 import Footer from './components/Footer'
 const CookieConsent = lazyWithRetry(() => import('./components/CookieConsent'))
 import ErrorBoundary from './components/ErrorBoundary'
@@ -85,7 +84,6 @@ import GlobalJsonLd from './components/GlobalJsonLd'
 import Breadcrumbs from './components/Breadcrumbs'
 import { useRef } from 'react'
 import { trackMetaPixel } from './lib/metaPixel'
-import PostHogPageviewTracker from './components/PostHogPageviewTracker'
 const MyListingsPage = lazyWithRetry(() => import('./pages/MyListings'))
 const MercadoLibreImportPOC = lazyWithRetry(() => import('./pages/Dev/MercadoLibreImportPOC'))
 
@@ -519,7 +517,6 @@ export default function App() {
                   <GlobalJsonLd />
                   {!isInstagramLanding && <Header />}
                   <Breadcrumbs />
-                  <PostHogPageviewTracker />
                   <ScrollToTop />
 
                   <main className="flex-1">
@@ -650,7 +647,6 @@ export default function App() {
                     </ErrorBoundary>
                   </main>
 
-                  {!isInstagramLanding && <Newsletter />}
                   {!isInstagramLanding && <Footer />}
                   <Suspense fallback={null}>
                     {!isInstagramLanding && <CompareTray />}

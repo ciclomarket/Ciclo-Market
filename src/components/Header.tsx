@@ -7,12 +7,10 @@ import { OTHER_CITY_OPTION, PROVINCES } from '../constants/locations'
 import { useAuth } from '../context/AuthContext'
 import { getSupabaseClient, supabaseEnabled, setAuthPersistence } from '../services/supabase'
 import { createUserProfile, fetchStores, type StoreSummary } from '../services/users'
-import { fetchListings } from '../services/listings'
 import { fetchMyCredits } from '../services/credits'
 import { useToast } from '../context/ToastContext'
 import { SocialAuthButtons } from './SocialAuthButtons'
 import { deriveProfileSlug, pickDiscipline } from '../utils/user'
-import { captureSearchPerformed } from '../analytics/posthog'
 
 type MegaCol = { title: string; links: Array<{ label: string; to: string }> }
 type MegaItem = { label: string; cols: MegaCol[] }
@@ -151,11 +149,6 @@ function SearchBar() {
   const goSearch = (term: string) => {
     const cleanTerm = String(term || '').trim()
     nav(`/marketplace?q=${encodeURIComponent(cleanTerm)}`)
-    captureSearchPerformed({
-      query: cleanTerm,
-      filters: {},
-      source: 'header',
-    })
     setOpen(false)
   }
 
@@ -341,18 +334,24 @@ export default function Header() {
     return () => { mounted = false }
   }, [])
 
-  // Cargar marcas existentes de Nutrición (máximo 5) para mega menú
+  // Cargar marcas existentes de Nutrición (máximo 5) para mega menú.
+  // Query angosta (solo category+brand) en vez de traer el catálogo completo:
+  // este efecto corre en cada carga de página del sitio (Header es global).
   useEffect(() => {
     let active = true
     ;(async () => {
       try {
         if (!supabaseEnabled) return
-        const all = await fetchListings()
-        if (!active || !Array.isArray(all)) return
+        const supabase = getSupabaseClient()
+        const { data, error } = await supabase
+          .from('listings_enriched')
+          .select('category, brand')
+          .eq('category', 'Nutrición')
+          .in('status', ['active', 'published'])
+        if (!active || error || !Array.isArray(data)) return
         const map = new Map<string, { name: string; count: number }>()
-        for (const l of all) {
-          if ((l.category || '') !== 'Nutrición') continue
-          const raw = (l.brand || '').trim()
+        for (const l of data) {
+          const raw = ((l as any).brand || '').trim()
           if (!raw) continue
           const key = raw.toLowerCase()
           const prev = map.get(key)

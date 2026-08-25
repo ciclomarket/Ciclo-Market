@@ -4,6 +4,8 @@ import Button from '../../components/Button'
 import Breadcrumbs from '../../components/Breadcrumbs'
 import { Link } from 'react-router-dom'
 import { Check, ChevronRight } from 'lucide-react'
+import SizeChartTable from '../../components/seo/SizeChartTable'
+import type { SizeChartType } from '../../constants/seoCategoryContent'
 
 export interface SeoLandingContent {
   title: string
@@ -20,6 +22,8 @@ export interface SeoLandingContent {
   buyingGuide?: string
   /** Contenido SEO largo en texto corrido */
   longContent?: string
+  /** Tabla de talles (ruta, mtb, gravel, tri, urban, kids) */
+  sizeChart?: SizeChartType
 }
 
 interface SeoLandingTemplateProps extends SeoLandingContent {
@@ -41,6 +45,7 @@ export default function SeoLandingTemplate({
   popularBrands = [],
   buyingGuide,
   longContent,
+  sizeChart,
   mode = 'full',
   productCount,
 }: SeoLandingTemplateProps) {
@@ -109,7 +114,7 @@ export default function SeoLandingTemplate({
       )}
 
       {/* Contenido SEO - Texto corrido sin cajas */}
-      {showContent && (buyingGuide || longContent) && (
+      {showContent && (buyingGuide || longContent || sizeChart) && (
         <section className="py-8 border-b border-gray-100">
           <Container>
             <div className="max-w-3xl prose prose-gray">
@@ -120,6 +125,11 @@ export default function SeoLandingTemplate({
               )}
               {longContent && (
                 <div className="mt-4 text-gray-600 leading-relaxed" dangerouslySetInnerHTML={{ __html: longContent }} />
+              )}
+              {sizeChart && (
+                <div className="mt-6">
+                  <SizeChartTable type={sizeChart} />
+                </div>
               )}
             </div>
           </Container>

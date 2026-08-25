@@ -37,7 +37,6 @@ import { FALLBACK_PLANS } from '../services/plans'
 import { buildPublicUrlSafe } from '../lib/supabaseImages'
 import { canonicalPlanCode } from '../utils/planCodes'
 import { extractListingId } from '../utils/slug'
-import { captureContactSellerClicked, captureListingViewed } from '../analytics/posthog'
 
 export default function ListingDetail() {
   const params = useParams()
@@ -335,12 +334,6 @@ export default function ListingDetail() {
                 user_id: user?.id || null,
                 db_counted: dbCounted,
               })
-              captureListingViewed({
-                listingId: result.id,
-                category: result.category,
-                price: Number(result.price) || null,
-                currency: (result.priceCurrency || 'ARS').toUpperCase(),
-              })
             })()
           } catch { /* noop */ }
           return
@@ -362,12 +355,6 @@ export default function ListingDetail() {
             listing_id: fallback.id,
             store_user_id: fallback.sellerId || null,
             user_id: user?.id || null,
-          })
-          captureListingViewed({
-            listingId: fallback.id,
-            category: fallback.category,
-            price: Number(fallback.price) || null,
-            currency: (fallback.priceCurrency || 'ARS').toUpperCase(),
           })
         } catch { /* noop */ }
       }
@@ -912,11 +899,6 @@ export default function ListingDetail() {
                     store_user_id: listing.sellerId || null,
                     user_id: user?.id || null,
                   })
-                  captureContactSellerClicked({
-                    listingId: listing.id,
-                    sellerId: listing.sellerId || null,
-                    method: 'whatsapp',
-                  })
                 } catch { /* noop */ }
               }}
             >
@@ -934,7 +916,6 @@ export default function ListingDetail() {
                   trackMetaPixel('Contact', { method: 'email', content_ids: [listing.id], content_type: 'product' })
                   trackGA4Event('generate_lead', { method: 'email', listing_id: listing.id })
                   logContactEvent({ sellerId: listing.sellerId, listingId: listing.id, buyerId: user?.id || null, type: 'email' })
-                  captureContactSellerClicked({ listingId: listing.id, sellerId: listing.sellerId || null, method: 'email' })
                 } catch { /* noop */ }
                 setInquiryOpen(true)
               }}

@@ -224,7 +224,8 @@ function BrandLogo({
         <img
           src={BRAND_LOGOS[brand.slug]}
           alt={brand.name}
-          className="max-h-8 w-auto opacity-90"
+          className="h-8 w-16 object-contain opacity-90"
+          width={64}
           height={32}
           loading="lazy"
           decoding="async"
@@ -243,6 +244,29 @@ function BrandLogo({
         <span className="px-3 py-1 text-sm font-semibold">{brand.name}</span>
       )}
     </button>
+  )
+}
+
+// Reserva espacio mientras carga la data, para no generar layout shift cuando
+// las secciones por categoría aparecen recién al resolver fetchListings().
+// Una sola fila (como HorizontalSlider real) para que la altura coincida con
+// el contenido final y no haya un salto al reemplazar el skeleton.
+function SectionSkeleton({ title }: { title: string }) {
+  return (
+    <section className="relative py-1 border-b border-gray-200/80">
+      <Container>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold">{title}</h2>
+        </div>
+        <div className="flex gap-5 overflow-hidden">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="shrink-0 w-[75%] sm:w-[50%] lg:w-[25%]">
+              <SkeletonCard />
+            </div>
+          ))}
+        </div>
+      </Container>
+    </section>
   )
 }
 
@@ -564,7 +588,7 @@ export default function Home() {
             }
           >
             {/* BICICLETAS DESTACADAS */}
-            {featuredListings.length > 0 && (
+            {loading ? <SectionSkeleton title="Bicicletas destacadas" /> : featuredListings.length > 0 && (
               <section className="relative py-1 border-b border-gray-200/80">
                 <Container>
                   <div className="flex items-center justify-between mb-4">
@@ -588,7 +612,7 @@ export default function Home() {
               </section>
             )}
 
-            {routeListings.length > 0 && (
+            {loading ? <SectionSkeleton title="Bicicletas de ruta" /> : routeListings.length > 0 && (
               <section className="relative py-1 border-b border-gray-200/80">
                 <Container>
                   <div className="flex items-center justify-between mb-4">
@@ -610,7 +634,7 @@ export default function Home() {
               </section>
             )}
 
-            {mtbListings.length > 0 && (
+            {loading ? <SectionSkeleton title="Bicicletas de MTB" /> : mtbListings.length > 0 && (
               <section className="relative py-1 border-b border-gray-200/80">
                 <Container>
                   <div className="flex items-center justify-between mb-4">
@@ -632,7 +656,7 @@ export default function Home() {
               </section>
             )}
 
-            {triListings.length > 0 && (
+            {loading ? <SectionSkeleton title="Bicicletas de triatlón" /> : triListings.length > 0 && (
               <section className="relative py-1 border-b border-gray-200/80">
                 <Container>
                   <div className="flex items-center justify-between mb-4">
@@ -654,7 +678,7 @@ export default function Home() {
               </section>
             )}
 
-            {officialStoreListings.length > 0 && (
+            {loading ? <SectionSkeleton title="Tiendas oficiales" /> : officialStoreListings.length > 0 && (
               <section className="relative py-1 border-b border-gray-200/80">
                 <Container>
                   <div className="flex items-center justify-between mb-4">
@@ -704,7 +728,7 @@ export default function Home() {
           </Suspense>
 
           {/* ACCESORIOS */}
-          {accesoriosListings.length > 0 && (
+          {loading ? <SectionSkeleton title="Accesorios" /> : accesoriosListings.length > 0 && (
             <section className="relative py-1 border-b border-gray-200/80">
               <Container>
                 <div className="flex items-center justify-between mb-4">
@@ -724,7 +748,7 @@ export default function Home() {
           )}
 
           {/* INDUMENTARIA */}
-          {indumentariaListings.length > 0 && (
+          {loading ? <SectionSkeleton title="Indumentaria" /> : indumentariaListings.length > 0 && (
             <section className="relative py-1 border-b border-gray-200/80">
               <Container>
                 <div className="flex items-center justify-between mb-4">

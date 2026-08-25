@@ -139,7 +139,7 @@ export default function ListingCard({ l, storeLogoUrl, priority = false, likeCou
                 }
                 setImageLoaded(true)
               }}
-              className={`${isLifestyle ? 'h-full w-auto mx-auto object-contain' : 'h-full w-full object-cover object-center'} ${imageStatusClass}`}
+              className={`aspect-[5/4] sm:aspect-video ${isLifestyle ? 'h-full w-auto mx-auto object-contain' : 'h-full w-full object-cover object-center'} ${imageStatusClass}`}
             />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center text-xs font-medium uppercase tracking-wide text-black/40">Sin imagen</div>

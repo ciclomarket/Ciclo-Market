@@ -4,7 +4,7 @@ import { MapPin, Package, Search, Store, CheckCircle2, Star, Phone, Globe } from
 import Container from '../components/Container'
 import SeoHead from '../components/SeoHead'
 import { fetchStores, fetchStoreActivityCounts, type StoreSummary } from '../services/users'
-import { fetchListings } from '../services/listings'
+import { getSupabaseClient, supabaseEnabled } from '../services/supabase'
 import { buildPublicUrlSafe } from '../lib/supabaseImages'
 import type { Category } from '../types'
 
@@ -53,14 +53,20 @@ export default function Tiendas() {
         void 0
       }
       try {
-        const listings = await fetchListings()
-        if (active) {
+        if (!supabaseEnabled) throw new Error('supabase disabled')
+        const supabase = getSupabaseClient()
+        const { data, error } = await supabase
+          .from('listings_enriched')
+          .select('seller_id, category')
+          .in('status', ['active', 'published'])
+        if (error) throw error
+        if (active && Array.isArray(data)) {
           const categories: StoreCategoryMap = {}
-          for (const listing of listings) {
-            const sid = listing.sellerId
+          for (const row of data as Array<{ seller_id: string | null; category: Category | null }>) {
+            const sid = row.seller_id
             if (!sid) continue
             const current = categories[sid] ?? []
-            if (listing.category && !current.includes(listing.category)) current.push(listing.category)
+            if (row.category && !current.includes(row.category)) current.push(row.category)
             categories[sid] = current
           }
           setStoreCategories(categories)

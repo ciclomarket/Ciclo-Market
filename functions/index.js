@@ -1145,6 +1145,280 @@ exports.shareProvincia = onRequest({ region: 'us-central1', memory: '256MiB', se
   }
 })
 
+// ── shareStatic: SSR para bots en páginas de categoría/info fijas ──────────
+// Metadata portada 1:1 desde resolveSeoForPath() (src/App.tsx) y las páginas
+// de src/pages/seo/*.tsx. Si se edita el copy ahí, replicar acá también.
+const STATIC_PAGE_META = {
+  '/marketplace': {
+    title: 'Comprar bicicletas nuevas y usadas | Ciclo Market',
+    description: 'Explorá cientos de bicicletas verificadas por tipo, talle, ubicación y rango de precio. Filtrá por gravel, ruta, MTB, e-bikes y accesorios para encontrar tu próxima bici.',
+  },
+  '/bicicletas-ruta': {
+    title: 'Bicicletas de ruta usadas en venta | Ciclo Market',
+    description: 'Encontrá bicicletas de ruta usadas: Specialized, Trek, Cannondale, Bianchi. Modelos aero, endurance y escaladoras. Contacto directo con vendedores.',
+  },
+  '/bicicletas-mtb': {
+    title: 'Bicicletas MTB usadas en venta | Ciclo Market',
+    description: 'Mountain bikes usadas para XC, Trail y Enduro. Rígidas y doble suspensión. Specialized, Trek, Santa Cruz, Scott y más.',
+  },
+  '/bicicletas-gravel': {
+    title: 'Bicicletas Gravel usadas en venta | Ciclo Market',
+    description: 'Bicicletas gravel usadas para bikepacking y aventura. Cuadros de carbono, aluminio y acero. Specialized Diverge, Canyon Grail, Trek Checkpoint.',
+  },
+  '/fixie': {
+    title: 'Fixie y single speed usadas | Ciclo Market',
+    description: 'Fixies y single speed urbanas listas para rodar, con cuadros livianos, componentes personalizables y asesoramiento para elegir relación y frenos adecuados.',
+  },
+  '/clasificados-bicicletas': {
+    title: 'Clasificados de bicicletas | Ciclo Market',
+    description: 'Explorá clasificados ciclistas en Argentina con publicaciones verificadas, precios en tiempo real y contacto directo con vendedores para coordinar prueba y envío.',
+  },
+  '/accesorios': {
+    title: 'Accesorios para tu bicicleta | Ciclo Market',
+    description: 'Componentes, rodillos inteligentes, ciclocomputadoras y repuestos premium con compatibilidades detalladas para que equipes tu bici sin sorpresas ni gastos extra.',
+  },
+  '/indumentaria': {
+    title: 'Indumentaria de ciclismo | Ciclo Market',
+    description: 'Indumentaria ciclista con talles exactos, tecnologías de ventilación y accesorios completos; encontrá jerseys, cascos y calzado listos para tu próxima salida.',
+  },
+  '/bicicletas-triatlon': {
+    title: 'Bicicletas de triatlón (TT) | Ciclo Market',
+    description: 'Bicicletas de triatlón y contrarreloj con datos de fitting, soporte para hidratación y grupos electrónicos, listas para competir y coordinar entrega segura.',
+  },
+  '/ofertas-destacadas': {
+    title: 'Ofertas destacadas | Ciclo Market',
+    description: 'Ofertas verificadas en bicicletas y accesorios con bajas de precio reales, estados detallados y opciones de envío asegurado para aprovechar oportunidades únicas.',
+  },
+  '/nutricion': {
+    title: 'Nutrición para ciclismo: geles, hidratación y recuperación | Ciclo Market',
+    description: 'Catálogo de nutrición de tiendas oficiales: geles, bebidas isotónicas, sales y suplementos. Filtrá por cafeína, sodio, carbohidratos y porciones.',
+  },
+  '/bicicletas-usadas': {
+    title: 'Bicicletas usadas en venta Argentina | Ciclo Market',
+    description: 'Comprá bicicletas usadas verificadas. Ruta, MTB, Gravel y más. Fotos reales, contacto directo con vendedores.',
+  },
+  '/tiendas': {
+    title: 'Tiendas oficiales | Ciclo Market',
+    description: 'Descubrí todas las tiendas oficiales en Ciclo Market y mirá sus productos publicados, datos de contacto y redes.',
+  },
+  '/tiendas-oficiales': {
+    title: 'Tiendas oficiales: cómo funciona y beneficios | Ciclo Market',
+    description: 'Sumá tu local a Ciclo Market como tienda oficial: sello verificado, catálogo destacado, métricas y soporte. Solicitá prueba gratuita.',
+  },
+  '/blog': {
+    title: 'Blog de Ciclo Market',
+    description: 'Notas, entrevistas, rutas recomendadas y tecnología para ciclistas en Argentina. Todo el universo de Ciclo Market en un solo lugar.',
+  },
+  '/vender': {
+    title: 'Vendé tu bicicleta | Ciclo Market',
+    description: 'Publicá tu bicicleta gratis y llegá a miles de compradores verificados en toda Argentina. Contacto directo por WhatsApp.',
+  },
+  '/vender/tiendas': {
+    title: 'Tiendas Oficiales · Vendé online como e-commerce | Ciclo Market',
+    description: 'Abrí tu Tienda Oficial en Ciclo Market: publicaciones ilimitadas, WhatsApp directo, analítica real y verificación para vender más.',
+  },
+  '/como-publicar': {
+    title: 'Cómo publicar tu bicicleta | Ciclo Market',
+    description: 'Guía paso a paso para sacar las mejores fotos, describir tu bicicleta y activar un plan destacado que acelere la venta.',
+  },
+  '/ayuda': {
+    title: 'Centro de ayuda | Ciclo Market',
+    description: 'Respondemos tus dudas sobre envíos, publicaciones, pagos y seguridad para comprar y vender bicicletas con tranquilidad.',
+  },
+  '/faq': {
+    title: 'Preguntas frecuentes | Ciclo Market',
+    description: 'Respondemos las preguntas más comunes sobre pagos, publicación, seguridad y planes premium en Ciclo Market.',
+  },
+  '/terminos': {
+    title: 'Términos y condiciones | Ciclo Market',
+    description: 'Conocé las reglas de uso, responsabilidades y condiciones legales para operar dentro de Ciclo Market.',
+  },
+  '/privacidad': {
+    title: 'Política de privacidad | Ciclo Market',
+    description: 'Descubrí cómo protegemos tus datos personales, cómo usamos tu información y qué herramientas tenés para gestionarla.',
+  },
+  '/comparar': {
+    title: 'Comparar bicicletas | Ciclo Market',
+    description: 'Seleccioná tus bicicletas favoritas y compará especificaciones, precios y beneficios en una sola vista para decidir con confianza.',
+  },
+  '/tasacion': {
+    title: 'Tasación de bicicletas usadas · Ciclo Market',
+    description: 'Estimá el precio de tu bicicleta usada según precio original, año, estado y marca. Basado en una curva de depreciación heurística.',
+  },
+}
+
+// Mapeo de ?cat= a landing canónica — replica categoryToCanonicalPath() (src/utils/seo.ts)
+const CATEGORY_CANONICAL_PATH = {
+  'ruta': '/bicicletas-ruta',
+  'mtb': '/bicicletas-mtb',
+  'gravel': '/bicicletas-gravel',
+  'fixie': '/fixie',
+  'accesorios': '/accesorios',
+  'indumentaria': '/indumentaria',
+  'triatlón': '/bicicletas-triatlon',
+  'triatlon': '/bicicletas-triatlon',
+}
+
+exports.shareStatic = onRequest({ region: 'us-central1', memory: '256MiB' }, async (req, res) => {
+  res.set('Vary', 'User-Agent')
+
+  if (!isBot(req)) {
+    return sendSpaIndexHtml(res)
+  }
+
+  function clamp(text, max) {
+    const t = String(text || '').replace(/\s+/g, ' ').trim()
+    return t.length <= max ? t : `${t.slice(0, max - 1).trimEnd()}…`
+  }
+
+  const rawPath = req.originalUrl || req.url || '/'
+  let urlObj
+  try { urlObj = new URL(rawPath, SITE_ORIGIN) } catch { urlObj = new URL('/', SITE_ORIGIN) }
+  let pathname = urlObj.pathname.replace(/\/+$/, '') || '/'
+
+  // /marketplace con filtros: canonicalizar a la landing de categoría fija,
+  // igual que hace Marketplace.tsx (canonicalPath) del lado del cliente.
+  if (pathname === '/marketplace' || pathname === '/market' || pathname === '/buscar') {
+    const deal = urlObj.searchParams.get('deal')
+    const cat = urlObj.searchParams.get('cat')
+    if (deal === '1') {
+      pathname = '/ofertas-destacadas'
+    } else if (cat && cat.toLowerCase() !== 'todos') {
+      const mapped = CATEGORY_CANONICAL_PATH[cat.toLowerCase()]
+      if (mapped) pathname = mapped
+      else pathname = '/marketplace'
+    } else {
+      pathname = '/marketplace'
+    }
+  }
+
+  const meta = STATIC_PAGE_META[pathname]
+  const canonical = new URL(pathname, SITE_ORIGIN).toString()
+
+  const title = clamp(meta?.title || 'Ciclo Market – Marketplace de bicicletas', 90)
+  const description = clamp(
+    meta?.description || 'Publicá tu bici, encontrá ofertas y conectá con vendedores en Ciclo Market.',
+    220
+  )
+  const image = `${SITE_ORIGIN}/OG-Marketplace.png`
+
+  setBotHeaders(res)
+  buildCache(res)
+  res.set('Content-Type', 'text/html; charset=utf-8')
+  return res.status(200).send(renderOgHtml({ title, description, image, url: canonical }))
+})
+
+// ── shareProfile: SSR para bots en /vendedor/:id y /profile/:id ────────────
+exports.shareProfile = onRequest({ region: 'us-central1', memory: '256MiB', secrets: ['SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY'] }, async (req, res) => {
+  res.set('Vary', 'User-Agent')
+
+  function clamp(text, max) {
+    const t = String(text || '').replace(/\s+/g, ' ').trim()
+    return t.length <= max ? t : `${t.slice(0, max - 1).trimEnd()}…`
+  }
+
+  const rawPath = req.originalUrl || req.url || '/vendedor'
+  let urlObj
+  try { urlObj = new URL(rawPath, SITE_ORIGIN) } catch { urlObj = new URL('/vendedor', SITE_ORIGIN) }
+  const prefix = urlObj.pathname.startsWith('/profile/') ? '/profile/' : '/vendedor/'
+  const sellerId = urlObj.pathname.replace(/^\/(vendedor|profile)\//, '').replace(/\/+$/, '')
+
+  if (!isBot(req)) {
+    return sendSpaIndexHtml(res)
+  }
+
+  const FALLBACK_IMAGE = `${SITE_ORIGIN}/og-preview.png`
+
+  function sendFallback(statusOk = 200) {
+    const canonical = new URL(`${prefix}${sellerId || ''}`, SITE_ORIGIN).toString()
+    const title = clamp('Perfil de vendedor · Ciclo Market', 90)
+    const description = clamp('Conocé la reputación del vendedor, sus bicicletas publicadas y los planes activos antes de iniciar contacto.', 220)
+    setBotHeaders(res)
+    buildCache(res)
+    res.set('Content-Type', 'text/html; charset=utf-8')
+    return res.status(statusOk).send(renderOgHtml({ title, description, image: FALLBACK_IMAGE, url: canonical, type: 'profile' }))
+  }
+
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !sellerId) {
+    return sendFallback(200)
+  }
+
+  try {
+    const supabase = await getSupabase()
+    const { data: row, error } = await supabase
+      .from('users')
+      .select('id, full_name, avatar_url, city, province')
+      .eq('id', sellerId)
+      .maybeSingle()
+    if (error) console.warn('[shareProfile] fetch error', error)
+
+    if (!row) {
+      console.warn('[shareProfile] user not found', sellerId)
+      return sendFallback(200)
+    }
+
+    let listingCount = null
+    try {
+      const { count } = await supabase
+        .from('listings')
+        .select('id', { count: 'exact', head: true })
+        .eq('seller_id', row.id)
+        .in('status', ['active', 'published'])
+      listingCount = count
+    } catch (e) {
+      console.warn('[shareProfile] listing count error', e)
+    }
+
+    const name = String(row.full_name || '').trim() || 'Vendedor'
+    const city = String(row.city || '').trim()
+    const province = String(row.province || '').trim()
+    const location = [city, province].filter(Boolean).join(', ')
+    const canonical = new URL(`${prefix}${sellerId}`, SITE_ORIGIN).toString()
+
+    const title = clamp(`${name} – Vendedor en Ciclo Market`, 65)
+    const countPart = listingCount != null && listingCount > 0 ? ` ${listingCount} publicaciones activas.` : ''
+    const description = clamp(
+      `Perfil de ${name} en Ciclo Market.${countPart}${location ? ` ${location}, Argentina.` : ''}`,
+      155
+    )
+
+    let rawImg = row.avatar_url || FALLBACK_IMAGE
+    if (rawImg && rawImg.includes('supabase.co') && !rawImg.includes('?')) {
+      rawImg = `${rawImg}?width=1200&quality=80&resize=contain`
+    }
+    const image = toAbsoluteUrl(rawImg, SITE_ORIGIN) || FALLBACK_IMAGE
+
+    const bodyParts = [
+      `<nav aria-label="breadcrumb"><a href="${SITE_ORIGIN}">Inicio</a> &rsaquo; <span>${escapeHtml(name)}</span></nav>`,
+      `<h1>${escapeHtml(name)}</h1>`,
+    ]
+    if (location) bodyParts.push(`<p><strong>Ubicación:</strong> ${escapeHtml(location)}, Argentina</p>`)
+    if (listingCount != null && listingCount > 0) {
+      bodyParts.push(`<p><strong>Publicaciones activas:</strong> ${listingCount}</p>`)
+    }
+    bodyParts.push(`<p><a href="${escapeHtml(canonical)}">Ver perfil completo en Ciclo Market</a></p>`)
+    const bodyHtml = bodyParts.join('\n')
+
+    const personSchema = {
+      '@context': 'https://schema.org',
+      '@type': 'ProfilePage',
+      name,
+      url: canonical,
+    }
+    const jsonLd = `<script type="application/ld+json">${JSON.stringify(personSchema)}</script>`
+    const extraMeta = `<meta property="og:image:secure_url" content="${escapeHtml(image)}" />`
+
+    const html = renderOgHtml({ title, description, image, url: canonical, type: 'profile', extraMeta, bodyHtml, jsonLd })
+    setBotHeaders(res)
+    buildCache(res)
+    res.set('Content-Type', 'text/html; charset=utf-8')
+    return res.status(200).send(html)
+  } catch (err) {
+    console.error('[shareProfile] unexpected error', err)
+    return sendFallback(200)
+  }
+})
+
 // Exponer template para uso desde backend (cron / envíos masivos)
 exports.buildUpgradeEmailHtml = buildUpgradeEmailHtml
 
