@@ -88,7 +88,7 @@ async function createProtectedOrderCheckout({ buyerId, listingId, publicBase, fr
             currency_id: currency,
           },
         ],
-        marketplace_fee: commissionAmount,
+        ...(commissionAmount > 0 ? { marketplace_fee: commissionAmount } : {}),
         metadata: { type: 'protected_order', protectedOrderId: orderRow.id, checkoutRef },
         back_urls: {
           success: `${backBase}/listing/${listing.slug}?protected_payment=success`,
