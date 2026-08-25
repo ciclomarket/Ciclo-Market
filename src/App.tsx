@@ -79,6 +79,8 @@ import { ToastProvider } from './context/ToastContext'
 const CheckoutSuccess = lazy(() => import('./pages/Checkout/Success'))
 const CheckoutFailure = lazy(() => import('./pages/Checkout/Failure'))
 const CheckoutPending = lazy(() => import('./pages/Checkout/Pending'))
+const PagoProtegidoPanel = lazy(() => import('./pages/PagoProtegido/Panel'))
+const PagoProtegidoTerms = lazy(() => import('./pages/PagoProtegido/Terms'))
 import SeoHead, { type SeoHeadProps } from './components/SeoHead'
 import GlobalJsonLd from './components/GlobalJsonLd'
 import Breadcrumbs from './components/Breadcrumbs'
@@ -101,7 +103,7 @@ function resolveSeoForPath(pathname: string, search: string): Partial<SeoHeadPro
       title: 'Marketplace de bicicletas en Argentina',
       description:
         'Comprá, vendé y compará bicicletas nuevas y usadas en Ciclo Market. Encontrá gravel, ruta, MTB y accesorios verificados con contacto directo al vendedor.',
-      image: '/OG-Marketplace.png',
+      image: '/logo-azul.png',
       keywords: [
         'venta de bicicletas usadas',
         'bicicletas usadas',
@@ -142,7 +144,7 @@ function resolveSeoForPath(pathname: string, search: string): Partial<SeoHeadPro
       title: 'Tasación de bicicletas usadas · Ciclo Market',
       description:
         'Estimá el precio de tu bicicleta usada según precio original, año, estado y marca. Basado en una curva de depreciación heurística.',
-      image: '/OG-Marketplace.png',
+      image: '/logo-azul.png',
       keywords: [
         'tasación de bicicletas',
         'precio de bicicleta usada',
@@ -173,7 +175,7 @@ function resolveSeoForPath(pathname: string, search: string): Partial<SeoHeadPro
       title: 'Blog de Ciclo Market',
       description:
         'Notas, entrevistas, rutas recomendadas y tecnología para ciclistas en Argentina. Todo el universo de Ciclo Market en un solo lugar.',
-      image: '/OG-Marketplace.png',
+      image: '/logo-azul.png',
       keywords: [
         'blog ciclomarket',
         'notas ciclismo argentina',
@@ -188,7 +190,7 @@ function resolveSeoForPath(pathname: string, search: string): Partial<SeoHeadPro
       title: 'Artículo · Ciclo Market',
       description:
         'Leé las últimas historias y guías del blog de Ciclo Market. Consejos de mantenimiento, rutas y experiencias en primera persona.',
-      image: '/OG-Marketplace.png',
+      image: '/logo-azul.png',
       type: 'article',
     }
   }
@@ -198,7 +200,7 @@ function resolveSeoForPath(pathname: string, search: string): Partial<SeoHeadPro
       title: 'Comprar bicicletas nuevas y usadas',
       description:
         'Explorá cientos de bicicletas verificadas por tipo, talle, ubicación y rango de precio. Filtrá por gravel, ruta, MTB, e-bikes y accesorios para encontrar tu próxima bici.',
-      image: '/OG-Marketplace.png',
+      image: '/logo-azul.png',
       keywords: [
         'venta de bicicletas usadas',
         'bicicletas usadas',
@@ -569,6 +571,16 @@ export default function App() {
                       {/* Detalle */}
                       <Route path="/listing/:slug" element={<ListingDetail />} />
                       <Route path="/listing/:slug/destacar" element={<HighlightListing />} />
+
+                      <Route path="/pago-protegido/terminos" element={<PagoProtegidoTerms />} />
+                      <Route
+                        path="/panel/pago-protegido"
+                        element={
+                          <ProtectedRoute>
+                            <PagoProtegidoPanel />
+                          </ProtectedRoute>
+                        }
+                      />
 
                       {/* Cuenta / Dashboard */}
                       <Route

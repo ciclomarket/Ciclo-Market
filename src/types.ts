@@ -62,6 +62,10 @@ export interface Listing {
   isTienda?: boolean
   /** Conteo de vistas si está disponible desde API/listings_enriched */
   viewCount?: number
+  /** Checklist estructurado de condición (Pago Protegido) */
+  conditionChecklist?: Record<string, { ok: boolean; photoUrl: string | null; notes: string }>
+  /** true si el checklist está completo y el listing puede ofrecer Pago Protegido */
+  protectedPaymentEligible?: boolean
 }
 
 export interface ListingQuestion {

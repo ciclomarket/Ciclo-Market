@@ -56,6 +56,7 @@ const { buildEmailHtml: buildFree2PaidEmailHtml } = (() => {
 })()
 const { processPayment, recordPaymentIntent } = require('./services/paymentService')
 const sellerMpOauthService = require('./services/sellerMpOauthService')
+const { createProtectedOrderCheckout } = require('./services/protectedOrderService')
 const appApiRouter = require('./routes/appApi')
 const importRouter = require('./routes/import')
 const { whatsappRouter } = require('./routes/whatsapp')
@@ -561,11 +562,29 @@ app.get('/api/mp/oauth/connect', async (req, res) => {
     const supabase = getServerSupabaseClient()
     const authUser = await getAuthUser(req, supabase)
     if (!authUser?.id) return res.status(401).json({ ok: false, error: 'unauthorized' })
+
+    const acceptedTos = String(req.query?.acceptedTos || '') === '1' || String(req.query?.acceptedTos || '') === 'true'
+    if (!acceptedTos) return res.status(400).json({ ok: false, error: 'tos_required' })
+
+    await sellerMpOauthService.recordTosAcceptance(authUser.id)
     const url = sellerMpOauthService.buildAuthorizationUrl(authUser.id)
     return res.json({ ok: true, url })
   } catch (err) {
     console.error('[mp-oauth] connect failed', err?.message || err)
     return res.status(500).json({ ok: false, error: 'mp_oauth_connect_failed' })
+  }
+})
+
+app.get('/api/mp/oauth/status', async (req, res) => {
+  try {
+    const supabase = getServerSupabaseClient()
+    const authUser = await getAuthUser(req, supabase)
+    if (!authUser?.id) return res.status(401).json({ ok: false, error: 'unauthorized' })
+    const status = await sellerMpOauthService.getSellerMpStatus(authUser.id)
+    return res.json({ ok: true, ...status })
+  } catch (err) {
+    console.error('[mp-oauth] status failed', err?.message || err)
+    return res.status(500).json({ ok: false, error: 'mp_oauth_status_failed' })
   }
 })
 
@@ -585,6 +604,34 @@ app.get('/api/mp/oauth/callback', async (req, res) => {
   } catch (err) {
     console.error('[mp-oauth] callback failed', err?.message || err)
     return res.redirect(302, failureRedirect)
+  }
+})
+
+/* --------------------- Pago Protegido: checkout de orden (comprador) --------------------- */
+app.post('/api/protected-orders/checkout', async (req, res) => {
+  try {
+    const supabase = getServerSupabaseClient()
+    const authUser = await getAuthUser(req, supabase)
+    if (!authUser?.id) return res.status(401).json({ ok: false, error: 'unauthorized' })
+
+    const listingId = String(req.body?.listingId || '').trim()
+    if (!listingId) return res.status(400).json({ ok: false, error: 'missing_listing_id' })
+
+    const publicBase = (process.env.PUBLIC_BASE_URL || '').toString().replace(/\/$/, '')
+    const frontendBase = normalizeOrigin(process.env.FRONTEND_URL)
+
+    const result = await createProtectedOrderCheckout({
+      buyerId: authUser.id,
+      listingId,
+      publicBase,
+      frontendBase,
+    })
+
+    if (!result.ok) return res.status(400).json(result)
+    return res.json(result)
+  } catch (err) {
+    console.error('[protected-orders/checkout] failed', err?.message || err)
+    return res.status(500).json({ ok: false, error: 'unexpected_error' })
   }
 })
 

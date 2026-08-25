@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types */
 import { Label } from '@/components/ui/label';
 import ImageUploader from '@/components/listing/ImageUploader';
+import ConditionChecklist from '@/components/listing/ConditionChecklist';
 import { Camera, CheckCircle2 } from 'lucide-react';
 
 const photoTips = [
@@ -11,7 +12,7 @@ const photoTips = [
   'Cualquier detalle de desgaste o imperfección',
 ];
 
-export default function StepPhotos({ data, onChange, errors, maxPhotos = 12, uploading, progress, onAddFiles }) {
+export default function StepPhotos({ data, onChange, errors, maxPhotos = 12, uploading, progress, onAddFiles, checklist, onChecklistChange, sellerVerified }) {
   const visibleCap = (() => {
     const raw = Number(data?.grantedVisiblePhotos || 4)
     if (!Number.isFinite(raw) || raw <= 0) return 4
@@ -57,6 +58,10 @@ export default function StepPhotos({ data, onChange, errors, maxPhotos = 12, upl
           ))}
         </ul>
       </div>
+
+      {data?.mainCategory === 'Bicicletas' && checklist && onChecklistChange ? (
+        <ConditionChecklist value={checklist} onChange={onChecklistChange} sellerVerified={sellerVerified} />
+      ) : null}
     </div>
   );
 }

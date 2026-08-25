@@ -105,6 +105,31 @@ async function saveSellerMpAccount(sellerId, tokenResponse) {
   return { ok: true }
 }
 
+async function recordTosAcceptance(sellerId) {
+  const supabase = getServerSupabaseClient()
+  const { error } = await supabase
+    .from('seller_mp_accounts')
+    .upsert({ seller_id: sellerId, tos_accepted_at: new Date().toISOString() }, { onConflict: 'seller_id' })
+  if (error) throw error
+  return { ok: true }
+}
+
+async function getSellerMpStatus(sellerId) {
+  const supabase = getServerSupabaseClient()
+  const { data, error } = await supabase
+    .from('seller_mp_accounts')
+    .select('status,live_mode,connected_at,tos_accepted_at')
+    .eq('seller_id', sellerId)
+    .maybeSingle()
+  if (error) throw error
+  return {
+    status: data?.status || 'disconnected',
+    liveMode: Boolean(data?.live_mode),
+    connectedAt: data?.connected_at || null,
+    tosAcceptedAt: data?.tos_accepted_at || null,
+  }
+}
+
 async function getDecryptedSellerToken(sellerId) {
   const supabase = getServerSupabaseClient()
   const { data, error } = await supabase
@@ -124,4 +149,6 @@ module.exports = {
   saveSellerMpAccount,
   getDecryptedSellerToken,
   isLiveModeEnabled,
+  recordTosAcceptance,
+  getSellerMpStatus,
 }

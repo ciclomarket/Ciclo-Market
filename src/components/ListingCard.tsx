@@ -159,6 +159,11 @@ export default function ListingCard({ l, storeLogoUrl, priority = false, likeCou
             {waPublic && (
               <span className="rounded-full px-2 py-1 text-xs bg-[#25D366] text-white shadow">WhatsApp disponible</span>
             )}
+            {l.protectedPaymentEligible && (
+              <span className="rounded-full px-2.5 py-1 text-xs font-semibold text-white shadow bg-emerald-600 flex items-center gap-1">
+                🛡️ Pago Protegido
+              </span>
+            )}
           </div>
           <div className="absolute top-2 right-2 z-10 flex flex-col items-end gap-2">
             {storeLogoUrl ? (

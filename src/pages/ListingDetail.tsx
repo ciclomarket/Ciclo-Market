@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { ShieldCheck, MessageCircle } from 'lucide-react'
+import ProtectedChatModal from '../components/listing/ProtectedChatModal'
+import { fetchThreadsForListing, type ProtectedChatThreadSummary } from '../services/protectedChat'
 import dayjs from 'dayjs'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import Container from '../components/Container'
@@ -283,6 +286,59 @@ export default function ListingDetail() {
     } catch (e) {
       console.warn('[upgrade] failed', e)
       alert('No pudimos iniciar el checkout. Intentá nuevamente.')
+    }
+  }
+
+  const [startingProtectedPayment, setStartingProtectedPayment] = useState(false)
+  const [protectedChatOpen, setProtectedChatOpen] = useState(false)
+  const [sellerChatThreads, setSellerChatThreads] = useState<ProtectedChatThreadSummary[]>([])
+  const [sellerChatWithBuyer, setSellerChatWithBuyer] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!isOwner || !listing?.protectedPaymentEligible || !listing?.id) return
+    let active = true
+    fetchThreadsForListing(listing.id).then((threads) => { if (active) setSellerChatThreads(threads) })
+    return () => { active = false }
+  }, [isOwner, listing?.id, listing?.protectedPaymentEligible])
+
+  async function startProtectedPayment() {
+    if (!listing || startingProtectedPayment) return
+    try {
+      setStartingProtectedPayment(true)
+      const supabase = getSupabaseClient()
+      const { data: session } = await supabase.auth.getSession()
+      const token = session.session?.access_token
+      if (!token) {
+        alert('Iniciá sesión para comprar con Pago Protegido.')
+        return
+      }
+      const endpoint = apiBase ? `${apiBase}/api/protected-orders/checkout` : '/api/protected-orders/checkout'
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ listingId: listing.id }),
+      })
+      const text = await res.text()
+      let json: any = null
+      try { json = JSON.parse(text) } catch { /* respuesta no es json */ }
+      if (res.ok && json?.url) {
+        window.location.assign(json.url)
+        return
+      }
+      console.warn('[protected-payment] unexpected response', { status: res.status, text })
+      const errorMessages: Record<string, string> = {
+        seller_not_connected: 'El vendedor todavía no conectó su cuenta de Mercado Pago para Pago Protegido.',
+        not_eligible: 'Esta publicación todavía no tiene el checklist de condición completo.',
+        cannot_buy_own_listing: 'No podés comprar tu propia publicación.',
+        seller_not_verified: 'El vendedor todavía no verificó su identidad, requisito para usar Pago Protegido.',
+        buyer_not_verified: 'Para comprar con Pago Protegido primero tenés que verificar tu identidad desde tu Panel > Configuración > Verificación.',
+      }
+      alert(errorMessages[json?.error] || 'No pudimos iniciar el pago protegido. Intentá nuevamente.')
+    } catch (e) {
+      console.warn('[protected-payment] failed', e)
+      alert('No pudimos iniciar el pago protegido. Intentá nuevamente.')
+    } finally {
+      setStartingProtectedPayment(false)
     }
   }
 
@@ -1129,6 +1185,67 @@ export default function ListingDetail() {
                   {/* Quitar línea antes de Contactate (mobile lifestyle).*/}
                   <div className={isLifestyle ? 'hidden lg:block my-3 h-px w-full bg-[#14212e]/30' : 'hidden'} />
                   <ContactIcons />
+                  {!isOwner && listing.protectedPaymentEligible ? (
+                    <div className="space-y-2">
+                      <button
+                        type="button"
+                        disabled={startingProtectedPayment}
+                        onClick={startProtectedPayment}
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:brightness-105 disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400"
+                        aria-label="Comprar con Pago Protegido"
+                      >
+                        <ShieldCheck className="h-5 w-5" />
+                        {startingProtectedPayment ? 'Redirigiendo…' : 'Comprar con Pago Protegido'}
+                      </button>
+                      {user?.id ? (
+                        <button
+                          type="button"
+                          onClick={() => setProtectedChatOpen(true)}
+                          className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                          aria-label="Preguntar antes de comprar"
+                        >
+                          <MessageCircle className="h-4 w-4" />
+                          Preguntar antes de comprar
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {protectedChatOpen && user?.id ? (
+                    <ProtectedChatModal
+                      listingId={listing.id}
+                      sellerId={listing.sellerId}
+                      buyerId={user.id}
+                      role="buyer"
+                      onClose={() => setProtectedChatOpen(false)}
+                    />
+                  ) : null}
+                  {isOwner && sellerChatThreads.length > 0 ? (
+                    <div className="pt-2 border-t border-[#14212e]/10 space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-[#14212e]/60">
+                        Consultas de Pago Protegido ({sellerChatThreads.length})
+                      </p>
+                      {sellerChatThreads.map((t) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => setSellerChatWithBuyer(t.buyerId)}
+                          className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                        >
+                          <MessageCircle className="h-4 w-4" />
+                          Chat con comprador
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                  {sellerChatWithBuyer && user?.id ? (
+                    <ProtectedChatModal
+                      listingId={listing.id}
+                      sellerId={user.id}
+                      buyerId={sellerChatWithBuyer}
+                      role="seller"
+                      onClose={() => setSellerChatWithBuyer(null)}
+                    />
+                  ) : null}
                   {isOwner && (
                     <div className="pt-2 border-t border-[#14212e]/10">
                       <div className="rounded-2xl border border-[#14212e]/15 bg-[#f5f9ff] p-3">

@@ -74,6 +74,8 @@ type ListingRow = {
   view_count?: number | null
   views?: number | null
   views_count?: number | null
+  condition_checklist?: Record<string, { ok: boolean; photoUrl: string | null; notes: string }> | null
+  protected_payment_eligible?: boolean | null
 }
 
 const normalizeListing = (row: ListingRow): Listing => {
@@ -136,7 +138,9 @@ const normalizeListing = (row: ListingRow): Listing => {
     viewCount: typeof row.view_count === 'number' ? row.view_count
       : typeof row.views === 'number' ? row.views
       : typeof row.views_count === 'number' ? row.views_count
-      : undefined
+      : undefined,
+    conditionChecklist: row.condition_checklist ?? undefined,
+    protectedPaymentEligible: row.protected_payment_eligible ?? undefined
   }
 }
 

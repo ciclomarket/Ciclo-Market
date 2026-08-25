@@ -2,6 +2,7 @@ const { MercadoPagoConfig, Payment } = require('mercadopago')
 const { getServerSupabaseClient } = require('../lib/supabaseClient')
 const { sendMail, getDefaultSenderFrom } = require('../lib/mail')
 const { captureServerEvent } = require('../lib/posthog')
+const { processProtectedOrderPayment } = require('./protectedOrderService')
 
 const mpClient = (() => {
   const token = String(process.env.MERCADOPAGO_ACCESS_TOKEN || '').trim()
@@ -222,6 +223,11 @@ async function processPayment(paymentIdRaw) {
 
     const paymentClient = new Payment(mpClient)
     const mpPayment = await paymentClient.get({ id: paymentId })
+
+    if (mpPayment?.metadata?.type === 'protected_order') {
+      return await processProtectedOrderPayment(mpPayment)
+    }
+
     const extracted = extractMetadata(mpPayment)
     const approvedBaseTs = (() => {
       const approved = mpPayment?.date_approved ? Date.parse(String(mpPayment.date_approved)) : NaN
