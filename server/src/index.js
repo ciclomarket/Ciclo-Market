@@ -55,6 +55,7 @@ const { buildEmailHtml: buildFree2PaidEmailHtml } = (() => {
   try { return require('./jobs/campaignFreeToPaid') } catch { return {} }
 })()
 const { processPayment, recordPaymentIntent } = require('./services/paymentService')
+const sellerMpOauthService = require('./services/sellerMpOauthService')
 const appApiRouter = require('./routes/appApi')
 const importRouter = require('./routes/import')
 const { whatsappRouter } = require('./routes/whatsapp')
@@ -548,6 +549,42 @@ app.post('/api/checkout', async (req, res) => {
     const msg = (err && (err.message || err.toString())) || 'unknown_error'
     console.error('[checkout] failed', err)
     return res.status(500).json({ ok: false, error: 'checkout_failed', message: msg })
+  }
+})
+
+/* --------------------- Pago Protegido: OAuth Mercado Pago (vendedor) --------------------- */
+// Fase A: solo conecta la cuenta del vendedor a Mercado Pago Split (sandbox).
+// No procesa pagos ni toca el checkout actual.
+
+app.get('/api/mp/oauth/connect', async (req, res) => {
+  try {
+    const supabase = getServerSupabaseClient()
+    const authUser = await getAuthUser(req, supabase)
+    if (!authUser?.id) return res.status(401).json({ ok: false, error: 'unauthorized' })
+    const url = sellerMpOauthService.buildAuthorizationUrl(authUser.id)
+    return res.json({ ok: true, url })
+  } catch (err) {
+    console.error('[mp-oauth] connect failed', err?.message || err)
+    return res.status(500).json({ ok: false, error: 'mp_oauth_connect_failed' })
+  }
+})
+
+app.get('/api/mp/oauth/callback', async (req, res) => {
+  const publicBase = (process.env.PUBLIC_BASE_URL || '').toString().replace(/\/$/, '')
+  const frontendBase = normalizeOrigin(process.env.FRONTEND_URL)
+  const failureRedirect = `${frontendBase}/panel/pago-protegido?mp_oauth=error`
+  try {
+    const { code, state } = req.query
+    const sellerId = sellerMpOauthService.verifyState(state)
+    if (!sellerId || !code) return res.redirect(302, failureRedirect)
+
+    const tokenResponse = await sellerMpOauthService.exchangeCodeForToken(String(code))
+    await sellerMpOauthService.saveSellerMpAccount(sellerId, tokenResponse)
+
+    return res.redirect(302, `${frontendBase}/panel/pago-protegido?mp_oauth=success`)
+  } catch (err) {
+    console.error('[mp-oauth] callback failed', err?.message || err)
+    return res.redirect(302, failureRedirect)
   }
 })
 
