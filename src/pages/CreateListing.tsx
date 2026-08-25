@@ -13,7 +13,6 @@ import { fetchUserProfile, upsertUserProfile } from '@/services/users'
 import useUpload from '@/hooks/useUpload'
 import { parseMoneyInput } from '@/utils/money'
 import { trackGA4Event } from '@/lib/ga4'
-import { EMPTY_CHECKLIST, isChecklistComplete, type ConditionChecklistValue } from '@/components/listing/ConditionChecklist'
 
 const CONDITION_OPTIONS = ['Nuevo', 'Como nuevo', 'Usado'] as const
 
@@ -287,7 +286,6 @@ export default function CreateListing() {
   const [errors, setErrors] = useState<Errors>({})
   const [profileFullName, setProfileFullName] = useState('')
   const [profileEmail, setProfileEmail] = useState('')
-  const [sellerVerified, setSellerVerified] = useState<boolean | undefined>(undefined)
   const [editSellerId, setEditSellerId] = useState<string | null>(null)
 
   const INITIAL_STATE: FormData = useMemo(
@@ -351,7 +349,6 @@ export default function CreateListing() {
   )
 
   const [formData, setFormData] = useState<FormData>(INITIAL_STATE)
-  const [conditionChecklist, setConditionChecklist] = useState<ConditionChecklistValue>(EMPTY_CHECKLIST)
 
   const scrollToTop = () => {
     try {
@@ -628,7 +625,6 @@ export default function CreateListing() {
         if (!active) return
         if (profile?.full_name) setProfileFullName(profile.full_name)
         if (user?.email) setProfileEmail(user.email)
-        setSellerVerified(Boolean(profile?.verified))
         if (profile?.province && !formData.province) updateField('province', profile.province)
         if (profile?.city && !formData.city) updateField('city', profile.city)
         if ((profile as any)?.whatsapp_number && !formData.whatsApp) {
@@ -765,10 +761,6 @@ export default function CreateListing() {
           province: province || prev.province,
           extras: String(inferredAddons || ''),
         }))
-
-        if (row.condition_checklist && typeof row.condition_checklist === 'object') {
-          setConditionChecklist((prev) => ({ ...prev, ...row.condition_checklist }))
-        }
       } catch {
         alert('No se pudo cargar la publicación para editar.')
       }
@@ -850,12 +842,6 @@ export default function CreateListing() {
       drivetrain_detail: formData.drivetrainOther || null,
       extras: extrasText || null,
       images: imagesToSave,
-      ...(formData.mainCategory === 'Bicicletas'
-        ? {
-            condition_checklist: conditionChecklist,
-            protected_payment_eligible: isChecklistComplete(conditionChecklist) && Boolean(sellerVerified),
-          }
-        : {}),
     }
 
     const { data, error } =
@@ -953,9 +939,6 @@ export default function CreateListing() {
           uploading={uploading}
           progress={progress}
           onAddFiles={handleAddFiles}
-          checklist={conditionChecklist}
-          onChecklistChange={setConditionChecklist}
-          sellerVerified={sellerVerified}
         />
       )
     return (
