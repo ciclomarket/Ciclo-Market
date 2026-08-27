@@ -210,7 +210,17 @@ async function existingIdempotencySet(supabase, keys) {
 }
 
 async function logEmail(supabase, row) {
-  await supabase.from('email_logs').insert(row)
+  // Un intento previo (skipped/failed) puede haber ocupado esta idempotency_key
+  // antes que el envío exitoso. Usamos upsert para que el resultado final
+  // (en especial 'sent') siempre quede registrado y sea visible para
+  // existingIdempotencySet — de lo contrario el insert fallaba en silencio por
+  // el unique constraint y la campaña se reintentaba todos los días.
+  const { error } = await supabase
+    .from('email_logs')
+    .upsert(row, { onConflict: 'idempotency_key' })
+  if (error) {
+    console.error('[email-orchestrator] logEmail failed', { idempotency_key: row.idempotency_key, error: error.message || error })
+  }
 }
 
 function dedupeByPriority(candidates) {
