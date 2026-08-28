@@ -87,6 +87,7 @@ export async function submitListingInquiry(payload: {
   phone?: string
   message: string
   channel?: 'email' | 'whatsapp'
+  marketingOptIn?: boolean
 }): Promise<{ inquiryId: string; emailSent: boolean }> {
   const endpoint = API_BASE
     ? `${API_BASE}/api/listings/${encodeURIComponent(payload.listingId)}/inquiry`

@@ -8,12 +8,14 @@ const freeUpgradeOffer = require('./campaigns/freeUpgradeOffer')
 const soldFollowup = require('./campaigns/soldFollowup')
 const newArrivalsWeekly = require('./campaigns/newArrivalsWeekly')
 const whatsappUpsell = require('./campaigns/whatsappUpsell')
+const similarOffers = require('./campaigns/similarOffers')
 
 const CAMPAIGNS = [
   freeUpgradeOffer,  // 1) Upgrade de plan Free con descuento (diario 20:00, una vez por publicación)
   soldFollowup,      // 2) "¿Aún tenés tu bicicleta en venta?" (cada 30 días desde la publicación)
   whatsappUpsell,    // 4) Upsell WhatsApp (día 15 y día 40 desde la publicación)
   newArrivalsWeekly, // 3) Nuevos ingresos de la semana (viernes 10:00)
+  similarOffers,     // 5) Ofertas similares tras una consulta (15min y luego cada 7 días)
 ]
 
 function getTimeZone() {
@@ -89,6 +91,7 @@ async function getFeatureFlags(supabase) {
     campaign_sold_followup_enabled: true,
     campaign_new_arrivals_weekly_enabled: true,
     campaign_whatsapp_upsell_enabled: true,
+    campaign_similar_offers_enabled: true,
   }
 
   try {
@@ -489,9 +492,12 @@ function startEmailOrchestratorJob() {
     console.info('[email_orchestrator] disabled (EMAIL_ENGINE_ENABLED=false)')
     return
   }
-  // Dos corridas diarias: 10:00 y 20:00 (ARG). Cada campaña define su propia
-  // ventana de día/hora y solo genera candidatos cuando le corresponde.
-  const schedule = process.env.EMAIL_ENGINE_CRON || '0 10,20 * * *'
+  // Corre cada 15 minutos: la mayoría de las campañas definen su propia
+  // ventana de día/hora (shouldRunAt) y solo generan candidatos cuando les
+  // corresponde; similar_offers en cambio necesita esta cadencia fina para
+  // poder mandar el primer touch ~15min después de una consulta. El dedup
+  // por idempotency_key evita reintentos duplicados dentro de la misma hora.
+  const schedule = process.env.EMAIL_ENGINE_CRON || '*/15 * * * *'
   const tz = getTimeZone()
 
   const task = cron.schedule(schedule, async () => {

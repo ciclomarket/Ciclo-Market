@@ -32,6 +32,7 @@ export default function ListingInquiryModal({
   const [email, setEmail] = useState(defaultEmail || '')
   const [phone, setPhone] = useState(defaultPhone || '')
   const [message, setMessage] = useState(defaultMessage)
+  const [marketingOptIn, setMarketingOptIn] = useState(true)
   const [loading, setLoading] = useState(false)
   const [sent, setSent] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -70,6 +71,7 @@ export default function ListingInquiryModal({
         phone: phone.trim() || undefined,
         message: message.trim(),
         channel,
+        marketingOptIn,
       })
       onSent?.()
       void result
@@ -168,6 +170,26 @@ export default function ListingInquiryModal({
                 onChange={(e) => setMessage(e.target.value)}
                 required
               />
+            </label>
+
+            <label className="flex items-start gap-2 text-xs text-gray-600">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={marketingOptIn}
+                onChange={(e) => setMarketingOptIn(e.target.checked)}
+              />
+              <span>
+                Acepto recibir por email otras ofertas similares a la que consulté. Podés darte de baja cuando quieras.
+                Ver{' '}
+                <a href="/terminos" target="_blank" rel="noreferrer" className="underline">
+                  Términos y Condiciones
+                </a>{' '}
+                y{' '}
+                <a href="/privacidad" target="_blank" rel="noreferrer" className="underline">
+                  Política de Privacidad
+                </a>.
+              </span>
             </label>
 
             {error && <p className="text-sm text-red-600">{error}</p>}

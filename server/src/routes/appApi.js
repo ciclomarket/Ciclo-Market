@@ -386,6 +386,7 @@ router.post('/api/listings/:id/inquiry', async (req, res) => {
     const phone = clamp(String(req.body?.phone || '').trim(), 40) || null
     const message = clamp(String(req.body?.message || '').trim(), 2000)
     const channel = String(req.body?.channel || 'email').trim().toLowerCase() === 'whatsapp' ? 'whatsapp' : 'email'
+    const marketingOptIn = req.body?.marketingOptIn !== false
 
     if (
       !fullName || fullName.length < 2 ||
@@ -426,6 +427,7 @@ router.post('/api/listings/:id/inquiry', async (req, res) => {
         phone,
         message,
         channel,
+        marketing_opt_in: marketingOptIn,
       })
       .select('id')
       .single()
