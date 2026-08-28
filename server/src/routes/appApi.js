@@ -385,6 +385,7 @@ router.post('/api/listings/:id/inquiry', async (req, res) => {
     const email = String(req.body?.email || '').trim().toLowerCase()
     const phone = clamp(String(req.body?.phone || '').trim(), 40) || null
     const message = clamp(String(req.body?.message || '').trim(), 2000)
+    const channel = String(req.body?.channel || 'email').trim().toLowerCase() === 'whatsapp' ? 'whatsapp' : 'email'
 
     if (
       !fullName || fullName.length < 2 ||
@@ -424,6 +425,7 @@ router.post('/api/listings/:id/inquiry', async (req, res) => {
         email,
         phone,
         message,
+        channel,
       })
       .select('id')
       .single()
@@ -434,7 +436,7 @@ router.post('/api/listings/:id/inquiry', async (req, res) => {
     }
 
     let emailSent = false
-    if (isMailConfigured() && seller?.email && validateEmail(seller.email)) {
+    if (channel === 'email' && isMailConfigured() && seller?.email && validateEmail(seller.email)) {
       const frontBase = resolveFrontendBaseUrl()
       const listingUrl = `${frontBase}/listing/${encodeURIComponent(listing.slug || listing.id)}`
       try {

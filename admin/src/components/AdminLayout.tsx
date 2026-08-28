@@ -76,7 +76,7 @@ const NAV_ITEMS = [
   { to: '/analytics', label: 'Analytics', description: 'Métricas y reportes', icon: Icons.Analytics },
   { to: '/engagement', label: 'Engagement', description: 'Interacciones y contactos', icon: Icons.Engagement },
   { to: '/listings', label: 'Publicaciones', description: 'Moderación de avisos', icon: Icons.Listings },
-  { to: '/inquiries', label: 'Consultas', description: 'Mensajes de compradores a vendedores', icon: Icons.Inquiries },
+  { to: '/inquiries', label: 'Mensajes', description: 'Consultas de compradores por email y WhatsApp', icon: Icons.Inquiries },
   { to: '/stores', label: 'Tiendas', description: 'Partners y bicicleterías', icon: Icons.Stores },
   { to: '/pricing', label: 'Pricing', description: 'Base de datos de precios', icon: Icons.Pricing },
   { to: '/blog', label: 'Blog', description: 'Gestión de contenidos', icon: Icons.Blog },

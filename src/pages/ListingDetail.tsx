@@ -52,6 +52,7 @@ export default function ListingDetail() {
   const [listing, setListing] = useState<Listing | null>(null)
   const [loading, setLoading] = useState(true)
   const [inquiryOpen, setInquiryOpen] = useState(false)
+  const [waInquiryOpen, setWaInquiryOpen] = useState(false)
   // Oferta deshabilitada
   const [shareModalOpen, setShareModalOpen] = useState(false)
   const [moderatorUpdating, setModeratorUpdating] = useState(false)
@@ -939,10 +940,8 @@ export default function ListingDetail() {
         <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Contactar</p>
         <div className="space-y-2">
           {canShowWhatsapp ? (
-            <a
-              href={waLink || undefined}
-              target="_blank"
-              rel="noreferrer"
+            <button
+              type="button"
               className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#25D366] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:brightness-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mb-primary/40"
               aria-label="Contactar por WhatsApp"
               onClick={() => {
@@ -956,11 +955,12 @@ export default function ListingDetail() {
                     user_id: user?.id || null,
                   })
                 } catch { /* noop */ }
+                setWaInquiryOpen(true)
               }}
             >
               <span className="h-5 w-5">{<WhatsappIcon />}</span>
               WhatsApp
-            </a>
+            </button>
           ) : null}
           {emailRecipient ? (
             <button
@@ -1739,6 +1739,19 @@ export default function ListingDetail() {
           listingTitle={listing.title}
           defaultMessage={contactMessage}
           defaultEmail={user?.email || ''}
+        />
+      )}
+      {waInquiryOpen && listing && (
+        <ListingInquiryModal
+          open={waInquiryOpen}
+          onClose={() => setWaInquiryOpen(false)}
+          listingId={listing.id}
+          listingTitle={listing.title}
+          defaultMessage={contactMessage}
+          defaultEmail={user?.email || ''}
+          defaultPhone={user?.phone || ''}
+          channel="whatsapp"
+          getWhatsappHref={(msg) => buildWhatsappUrl(sellerWhatsappNumber ?? sellerWhatsappRaw, msg)}
         />
       )}
 

@@ -9,6 +9,10 @@ type Props = {
   listingTitle: string
   defaultMessage: string
   defaultEmail?: string
+  defaultPhone?: string
+  channel?: 'email' | 'whatsapp'
+  /** Requerido cuando channel === 'whatsapp'. Recibe el mensaje final y devuelve el link wa.me. */
+  getWhatsappHref?: (message: string) => string | null
   onSent?: () => void
 }
 
@@ -19,17 +23,22 @@ export default function ListingInquiryModal({
   listingTitle,
   defaultMessage,
   defaultEmail,
+  defaultPhone,
+  channel = 'email',
+  getWhatsappHref,
   onSent,
 }: Props) {
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState(defaultEmail || '')
-  const [phone, setPhone] = useState('')
+  const [phone, setPhone] = useState(defaultPhone || '')
   const [message, setMessage] = useState(defaultMessage)
   const [loading, setLoading] = useState(false)
   const [sent, setSent] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   if (!open) return null
+
+  const isWhatsapp = channel === 'whatsapp'
 
   const handleSubmit: React.FormEventHandler = async (e) => {
     e.preventDefault()
@@ -46,6 +55,12 @@ export default function ListingInquiryModal({
       setError('Escribí tu consulta.')
       return
     }
+
+    // Abrir la pestaña ahora, dentro del gesto de click, para que el navegador
+    // no la bloquee como popup — recién le seteamos la URL cuando el tracking
+    // server-side confirme.
+    const whatsappWindow = isWhatsapp ? window.open('', '_blank') : null
+
     setLoading(true)
     try {
       const result = await submitListingInquiry({
@@ -54,11 +69,26 @@ export default function ListingInquiryModal({
         email: email.trim(),
         phone: phone.trim() || undefined,
         message: message.trim(),
+        channel,
       })
-      setSent(true)
       onSent?.()
       void result
+
+      if (isWhatsapp) {
+        const href = getWhatsappHref?.(message.trim()) || null
+        if (href) {
+          if (whatsappWindow) whatsappWindow.location.href = href
+          else window.location.assign(href)
+        } else {
+          whatsappWindow?.close()
+        }
+        onClose()
+        return
+      }
+
+      setSent(true)
     } catch (err) {
+      whatsappWindow?.close()
       setError(err instanceof Error ? err.message : 'No pudimos enviar tu consulta.')
     } finally {
       setLoading(false)
@@ -90,7 +120,9 @@ export default function ListingInquiryModal({
         ) : (
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Contactar por email</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                {isWhatsapp ? 'Contactar por WhatsApp' : 'Contactar por email'}
+              </p>
               <h3 className="mt-1 text-lg font-semibold text-gray-900">{listingTitle}</h3>
             </div>
 
@@ -117,12 +149,13 @@ export default function ListingInquiryModal({
                 />
               </label>
               <label className="block text-sm">
-                <span className="text-gray-700">Teléfono (opcional)</span>
+                <span className="text-gray-700">Teléfono {isWhatsapp ? '' : '(opcional)'}</span>
                 <input
                   className="input mt-1"
                   type="tel"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
+                  required={isWhatsapp}
                 />
               </label>
             </div>
@@ -139,8 +172,12 @@ export default function ListingInquiryModal({
 
             {error && <p className="text-sm text-red-600">{error}</p>}
 
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Enviando…' : 'Enviar consulta'}
+            <Button
+              type="submit"
+              className={`w-full ${isWhatsapp ? '!bg-[#25D366] hover:!brightness-105' : ''}`}
+              disabled={loading}
+            >
+              {loading ? 'Enviando…' : isWhatsapp ? 'Enviar por WhatsApp' : 'Enviar consulta'}
             </Button>
           </form>
         )}
