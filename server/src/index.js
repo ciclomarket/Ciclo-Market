@@ -29,30 +29,14 @@ const { startNewsletterDigestJob, runDigestOnce } = (() => {
 const { startStoreAnalyticsDigestJob, runStoreAnalyticsDigestOnce } = (() => {
   try { return require('./jobs/storeAnalyticsDigest') } catch { return {} }
 })()
-const { startMarketingAutomationsJob, runMarketingAutomationsOnce } = (() => {
-  try { return require('./jobs/marketingAutomations') } catch { return {} }
-})()
 const { startSavedSearchDigestJob, runSavedSearchDigestOnce } = (() => {
   try { return require('./jobs/savedSearchDigest') } catch { return {} }
 })()
 const { startDeletedPurgerJob } = (() => {
   try { return require('./jobs/deletedPurger') } catch { return {} }
 })()
-// New weekly email automations
-const { startMondayNewArrivalsJob, sendMondayEmails } = (() => {
-  try { return require('./jobs/mondayNewArrivals') } catch { return {} }
-})()
-const { startWednesdayListingUpdateJob, sendWednesdayEmails } = (() => {
-  try { return require('./jobs/wednesdayListingUpdate') } catch { return {} }
-})()
-const { startFridayUpgradeOfferJob, sendFridayEmails } = (() => {
-  try { return require('./jobs/fridayUpgradeOffer') } catch { return {} }
-})()
 const { buildStoreAnalyticsHTML } = (() => {
   try { return require('./emails/storeAnalyticsEmail') } catch { return {} }
-})()
-const { buildEmailHtml: buildFree2PaidEmailHtml } = (() => {
-  try { return require('./jobs/campaignFreeToPaid') } catch { return {} }
 })()
 const { processPayment, recordPaymentIntent } = require('./services/paymentService')
 const sellerMpOauthService = require('./services/sellerMpOauthService')
@@ -63,10 +47,8 @@ const { whatsappRouter } = require('./routes/whatsapp')
 const emailCronRouter = require('./routes/emailCron')
 const pricingApiRouter = require('./routes/pricingApi')
 const notionSyncRouter = require('./routes/notionSync')
-const { emailEngineRouter } = require('./routes/emailEngine')
 const instagramCardRouter = require('./routes/instagramCard')
 const { diditRouter } = require('./routes/didit')
-const { startEmailOrchestratorJob } = require('./email/orchestrator')
 // Sweepstake feature removed
 const path = require('path')
 // const https = require('https') // removed: used only for Google rating proxy
@@ -264,56 +246,6 @@ app.use(
 app.use(sitemapRouter)
 app.use(feedsRouter)
 
-// Preview endpoint for Free→Paid campaign email (HTML)
-app.get('/api/preview/campaign/free2paid', async (req, res) => {
-  try {
-    if (typeof buildFree2PaidEmailHtml !== 'function') {
-      return res.status(501).type('text/plain').send('Preview not available')
-    }
-    const supabase = getServerSupabaseClient()
-    const listingId = req.query.listingId ? String(req.query.listingId) : null
-    const sellerId = req.query.sellerId ? String(req.query.sellerId) : null
-    let listing = null
-    if (listingId) {
-      const { data } = await supabase
-        .from('listings')
-        .select('id,seller_id,title,price,price_currency,images,plan,plan_code,seller_plan,status,slug,location,seller_location')
-        .eq('id', listingId)
-        .maybeSingle()
-      listing = data
-    } else {
-      let query = supabase
-        .from('listings')
-        // Nota: algunas instalaciones no tienen `updated_at` en `listings`.
-        .select('id,seller_id,title,price,price_currency,images,plan,plan_code,seller_plan,status,slug,location,seller_location,created_at')
-        .or('status.in.(active,published),status.is.null')
-        .or('plan.eq.free,plan_code.eq.free,seller_plan.eq.free')
-        .order('created_at', { ascending: false, nullsLast: true })
-        .limit(1)
-      if (sellerId) query = query.eq('seller_id', sellerId)
-      const { data } = await query
-      listing = Array.isArray(data) && data[0] ? data[0] : null
-    }
-    let profile = null
-    if (listing?.seller_id) {
-      const { data } = await supabase
-        .from('users')
-        .select('id,full_name,email')
-        .eq('id', listing.seller_id)
-        .maybeSingle()
-      profile = data
-    }
-    const html = buildFree2PaidEmailHtml({
-      baseFront: resolveFrontendBaseUrl(),
-      profile,
-      listing,
-    })
-    return res.type('text/html; charset=utf-8').send(html)
-  } catch (err) {
-    console.error('[preview/free2paid] failed', err)
-    return res.status(500).type('text/plain').send('Preview error')
-  }
-})
 
 /* ----------------------------- CORS --------------------------------------- */
 // Permitir CORS amplio (ajustable por FRONTEND_URL si se quiere restringir)
@@ -381,7 +313,6 @@ app.use(emailCronRouter)
 
 // Notion Growth OS sync (protected endpoint)
 app.use(notionSyncRouter)
-app.use(emailEngineRouter)
 
 // Pricing API routes (ingesta de precios, sugerencias, analytics)
 app.use('/api/v1/pricing', pricingApiRouter)
@@ -394,20 +325,19 @@ app.use(diditRouter)
 
 /* ----------------------------- Cron jobs ---------------------------------- */
 // Start scheduled jobs after basic middleware is ready
+//
+// El motor de campañas (email/orchestrator.js + email/campaigns/*, más los
+// jobs mondayNewArrivals/wednesdayListingUpdate/fridayUpgradeOffer y
+// marketingAutomations) fue eliminado por completo: cuatro sistemas
+// distintos mandando ofertas de upgrade/renovación superpuestas, sin cupo
+// diario compartido, causando reenvíos duplicados y agotando el límite de
+// Brevo todos los días. Lo que queda acá son automatizaciones puntuales
+// (digest de newsletter, analíticas de tienda, alertas de búsqueda guardada,
+// purga de archivos borrados) no relacionadas con ese problema.
 try { startNewsletterDigestJob && startNewsletterDigestJob() } catch {}
 try { startStoreAnalyticsDigestJob && startStoreAnalyticsDigestJob() } catch {}
-try { startMarketingAutomationsJob && startMarketingAutomationsJob() } catch {}
 try { startSavedSearchDigestJob && startSavedSearchDigestJob() } catch {}
 try { startDeletedPurgerJob && startDeletedPurgerJob() } catch {}
-// New weekly email automations
-// mondayNewArrivals y fridayUpgradeOffer deshabilitados: duplicaban contenido
-// que ya cubre el orquestador (newArrivalsWeekly / freeUpgradeOffer) sin dedup
-// cruzado entre ambos sistemas, causando envíos repetidos día tras día.
-// wednesdayListingUpdate deshabilitado para centralizar todo en el orquestador.
-// try { startMondayNewArrivalsJob && startMondayNewArrivalsJob() } catch {}
-// try { startWednesdayListingUpdateJob && startWednesdayListingUpdateJob() } catch {}
-// try { startFridayUpgradeOfferJob && startFridayUpgradeOfferJob() } catch {}
-try { startEmailOrchestratorJob && startEmailOrchestratorJob() } catch {}
 
 /* Google Reviews endpoints removed */
 
