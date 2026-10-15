@@ -68,11 +68,18 @@ const Icons = {
       <polyline points="10,9 9,9 8,9" />
     </svg>
   ),
+  Prefills: () => (
+    <svg className="admin-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+    </svg>
+  ),
 }
 
 const NAV_ITEMS = [
   { to: '/', label: 'Dashboard', description: 'Visión general del marketplace', icon: Icons.Overview },
   { to: '/ops', label: 'CRM Vendedores', description: 'Gestión de sellers y leads', icon: Icons.SellerOps },
+  { to: '/prefills', label: 'Outreach', description: 'Borradores precargados con link mágico', icon: Icons.Prefills },
   { to: '/analytics', label: 'Analytics', description: 'Métricas y reportes', icon: Icons.Analytics },
   { to: '/engagement', label: 'Engagement', description: 'Interacciones y contactos', icon: Icons.Engagement },
   { to: '/listings', label: 'Publicaciones', description: 'Moderación de avisos', icon: Icons.Listings },

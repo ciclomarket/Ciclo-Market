@@ -93,7 +93,7 @@ export default function SeoHybridLandingUsed({
       <SeoHead
         title={pageTitle}
         description={seoProps.description}
-        image="/OG-Marketplace.png"
+        image="/logo-azul.png"
         keywords={seoProps.keywords}
       />
       {itemListSchema ? (

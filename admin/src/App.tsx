@@ -12,6 +12,7 @@ import ActionInboxPage from '@admin/pages/ActionInbox'
 import InquiriesPage from '@admin/pages/Inquiries'
 import PricingPage from '@admin/pages/Pricing'
 import BlogPage from '@admin/pages/Blog'
+import PrefillsPage from '@admin/pages/Prefills'
 import { AdminLayout } from '@admin/components/AdminLayout'
 
 function ProtectedApp() {
@@ -28,6 +29,7 @@ function ProtectedApp() {
         <Route path="/stores/:id" element={<StoreDetailPage />} />
         <Route path="/pricing" element={<PricingPage />} />
         <Route path="/blog" element={<BlogPage />} />
+        <Route path="/prefills" element={<PrefillsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

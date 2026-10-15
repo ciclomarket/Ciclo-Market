@@ -32,6 +32,7 @@ const ResetPassword = lazyWithRetry(() => import('./pages/Auth/ResetPassword'))
 const Help = lazyWithRetry(() => import('./pages/Help'))
 const HowToPublish = lazyWithRetry(() => import('./pages/HowToPublish'))
 const CreateListing = lazyWithRetry(() => import('./pages/CreateListing'))
+const PrefillLanding = lazyWithRetry(() => import('./pages/PrefillLanding'))
 const OfficialStore = lazyWithRetry(() => import('./pages/OfficialStore'))
 const Store = lazyWithRetry(() => import('./pages/Store'))
 const Tiendas = lazyWithRetry(() => import('./pages/Tiendas'))
@@ -134,7 +135,7 @@ function resolveSeoForPath(pathname: string, search: string): Partial<SeoHeadPro
       title: 'Ciclo Market · Enlaces oficiales',
       description:
         'Entrá directo al marketplace, ofertas, tiendas oficiales y contenido destacado desde el link en bio de Ciclo Market.',
-      image: '/og-preview.png',
+      image: '/logo-azul.png',
       noIndex: true
     }
   }
@@ -218,7 +219,7 @@ function resolveSeoForPath(pathname: string, search: string): Partial<SeoHeadPro
       title: 'Planes para publicar tu bicicleta',
       description:
         'Elegí el plan ideal para publicar tu bicicleta en Ciclo Market: fotos destacadas, botón de WhatsApp y difusión en redes para vender más rápido.',
-      image: '/og-preview.png',
+      image: '/logo-azul.png',
       keywords: [
         'publicar bicicleta online',
         'plan destacado ciclomarket',
@@ -233,7 +234,7 @@ function resolveSeoForPath(pathname: string, search: string): Partial<SeoHeadPro
       title: 'Tiendas Oficiales · Vendé online como e-commerce',
       description:
         'Abrí tu Tienda Oficial en Ciclo Market: publicaciones ilimitadas, WhatsApp directo, analítica real y verificación para vender más.',
-      image: '/hero-tiendas.webp',
+      image: '/logo-azul.png',
       keywords: [
         'tienda oficial bicicletas',
         'vender bicicletas online',
@@ -251,7 +252,7 @@ function resolveSeoForPath(pathname: string, search: string): Partial<SeoHeadPro
       title: 'Comparar bicicletas',
       description:
         'Seleccioná tus bicicletas favoritas y compará especificaciones, precios y beneficios en una sola vista para decidir con confianza.',
-      image: '/og-preview.png',
+      image: '/logo-azul.png',
       keywords: [
         'comparar bicicletas',
         'comparador de bicicletas',
@@ -266,7 +267,7 @@ function resolveSeoForPath(pathname: string, search: string): Partial<SeoHeadPro
       title: 'Centro de ayuda',
       description:
         'Respondemos tus dudas sobre envíos, publicaciones, pagos y seguridad para comprar y vender bicicletas con tranquilidad.',
-      image: '/og-preview.png',
+      image: '/logo-azul.png',
       keywords: [
         'ayuda ciclomarket',
         'dudas comprar bicicleta online',
@@ -280,7 +281,7 @@ function resolveSeoForPath(pathname: string, search: string): Partial<SeoHeadPro
       title: 'Cómo publicar tu bicicleta',
       description:
         'Guía paso a paso para sacar las mejores fotos, describir tu bicicleta y activar un plan destacado que acelere la venta.',
-      image: '/og-preview.png',
+      image: '/logo-azul.png',
       type: 'article',
       keywords: [
         'como vender bicicleta',
@@ -295,7 +296,7 @@ function resolveSeoForPath(pathname: string, search: string): Partial<SeoHeadPro
       title: 'Tienda oficial Ciclo Market',
       description:
         'Accedé a bicicletas seleccionadas con inspección, garantías y beneficios exclusivos dentro de la tienda oficial de Ciclo Market.',
-      image: '/og-preview.png',
+      image: '/logo-azul.png',
       keywords: [
         'tienda oficial bicicletas',
         'bicicletas certificadas',
@@ -309,7 +310,7 @@ function resolveSeoForPath(pathname: string, search: string): Partial<SeoHeadPro
       title: 'Tiendas oficiales: cómo funciona y beneficios',
       description:
         'Sumá tu local a Ciclo Market como tienda oficial: sello verificado, catálogo destacado, métricas y soporte. Solicitá prueba gratuita.',
-      image: '/hero-tiendas.webp',
+      image: '/logo-azul.png',
       keywords: [
         'tiendas oficiales',
         'sumar tienda oficial',
@@ -324,7 +325,7 @@ function resolveSeoForPath(pathname: string, search: string): Partial<SeoHeadPro
       title: 'Tienda oficial del vendedor',
       description:
         'Conocé información del local, contacto y todos los productos publicados por esta tienda en Ciclo Market.',
-      image: '/og-preview.png',
+      image: '/logo-azul.png',
       type: 'profile',
       keywords: ['tienda oficial', 'vendedor verificado', 'productos del vendedor']
     }
@@ -334,7 +335,7 @@ function resolveSeoForPath(pathname: string, search: string): Partial<SeoHeadPro
     return {
       title: 'Detalle del producto',
       description: 'Mirá fotos, precio y especificaciones técnicas de la publicación en Ciclo Market.',
-      image: '/og-preview.png',
+      image: '/logo-azul.png',
       type: 'product'
     }
   }
@@ -344,7 +345,7 @@ function resolveSeoForPath(pathname: string, search: string): Partial<SeoHeadPro
       title: 'Preguntas frecuentes',
       description:
         'Respondemos las preguntas más comunes sobre pagos, publicación, seguridad y planes premium en Ciclo Market.',
-      image: '/og-preview.png',
+      image: '/logo-azul.png',
       keywords: [
         'preguntas frecuentes ciclomarket',
         'faq marketplace bicicletas',
@@ -357,7 +358,7 @@ function resolveSeoForPath(pathname: string, search: string): Partial<SeoHeadPro
     return {
       title: 'Tiendas oficiales',
       description: 'Descubrí todas las tiendas oficiales en Ciclo Market y mirá sus productos publicados, datos de contacto y redes.',
-      image: '/og-preview.png',
+      image: '/logo-azul.png',
       keywords: ['tiendas oficiales', 'tienda ciclomarket', 'vender bicicletas tienda']
     }
   }
@@ -367,7 +368,7 @@ function resolveSeoForPath(pathname: string, search: string): Partial<SeoHeadPro
       title: 'Nutrición para ciclismo: geles, hidratación y recuperación',
       description:
         'Encontrá geles, bebidas isotónicas, sales y suplementación de tiendas oficiales. Filtrá por cafeína, sodio y porciones para tu entrenamiento.',
-      image: '/og-preview.png',
+      image: '/logo-azul.png',
       keywords: [
         'nutricion ciclismo',
         'geles energeticos',
@@ -383,7 +384,7 @@ function resolveSeoForPath(pathname: string, search: string): Partial<SeoHeadPro
       title: 'Términos y condiciones',
       description:
         'Conocé las reglas de uso, responsabilidades y condiciones legales para operar dentro de Ciclo Market.',
-      image: '/og-preview.png',
+      image: '/logo-azul.png',
       keywords: [
         'terminos ciclomarket',
         'condiciones marketplace bicicletas',
@@ -397,7 +398,7 @@ function resolveSeoForPath(pathname: string, search: string): Partial<SeoHeadPro
       title: 'Política de privacidad',
       description:
         'Descubrí cómo protegemos tus datos personales, cómo usamos tu información y qué herramientas tenés para gestionarla.',
-      image: '/og-preview.png',
+      image: '/logo-azul.png',
       keywords: [
         'privacidad ciclomarket',
         'proteccion datos bicicletas',
@@ -411,7 +412,7 @@ function resolveSeoForPath(pathname: string, search: string): Partial<SeoHeadPro
       title: 'Eliminar datos de tu cuenta',
       description:
         'Aprendé cómo solicitar la eliminación de tu cuenta y datos personales en Ciclo Market por cuenta propia o por correo.',
-      image: '/og-preview.png',
+      image: '/logo-azul.png',
       keywords: [
         'eliminar datos',
         'borrar cuenta',
@@ -426,7 +427,7 @@ function resolveSeoForPath(pathname: string, search: string): Partial<SeoHeadPro
       title: 'Perfil de vendedor',
       description:
         'Conocé la reputación del vendedor, sus bicicletas publicadas y los planes activos antes de iniciar contacto.',
-      image: '/og-preview.png',
+      image: '/logo-azul.png',
       type: 'profile',
       keywords: [
         'perfil vendedor bicicletas',
@@ -555,6 +556,8 @@ export default function App() {
                         element={<PublishNew />}
                       />
 	                      <Route path="/publicar/crear" element={<CreateListing />} />
+	                      {/* Link mágico de outreach: borrador precargado por un admin */}
+	                      <Route path="/p/:token" element={<PrefillLanding />} />
 
 	                      {/* Vender — landing general + B2B */}
 	                      <Route path="/vender" element={<LandingVendedores />} />

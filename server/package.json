@@ -32,6 +32,7 @@
     "pricing:scrape:mercadolibre": "node ./scripts/scrape-mercadolibre-api.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.135.0",
     "@notionhq/client": "^3.1.1",
     "@supabase/supabase-js": "^2.74.0",
     "cors": "^2.8.5",

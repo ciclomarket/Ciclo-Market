@@ -319,7 +319,7 @@ exports.shareBlog = onRequest({ region: 'us-central1', memory: '256MiB', secrets
   // Respuesta varía por UA
   res.set('Vary', 'User-Agent')
 
-  const FALLBACK_IMAGE = `${SITE_ORIGIN}/OG-Marketplace.png`
+  const FALLBACK_IMAGE = `${SITE_ORIGIN}/logo-azul.png`
   const FALLBACK_LOGO = `${SITE_ORIGIN}/logo-azul.png`
   const SITE_HOST = new URL(SITE_ORIGIN).host
 
@@ -489,7 +489,7 @@ exports.shareListing = onRequest({ region: 'us-central1', memory: '256MiB', secr
   res.set('Vary', 'User-Agent')
 
   // Helpers defensivos locales
-  const FALLBACK_IMAGE = `${SITE_ORIGIN}/OG-Marketplace.png`
+  const FALLBACK_IMAGE = `${SITE_ORIGIN}/logo-azul.png`
   const FALLBACK_LOGO = `${SITE_ORIGIN}/logo-azul.png`
   const SITE_HOST = new URL(SITE_ORIGIN).host
 
@@ -799,7 +799,7 @@ ${priceNum != null ? `<meta property="product:price:currency" content="${escapeH
 exports.shareStore = onRequest({ region: 'us-central1', memory: '256MiB', secrets: ['SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY'] }, async (req, res) => {
   res.set('Vary', 'User-Agent')
 
-  const FALLBACK_IMAGE = `${SITE_ORIGIN}/og-preview.png`
+  const FALLBACK_IMAGE = `${SITE_ORIGIN}/logo-azul.png`
   const FALLBACK_LOGO = `${SITE_ORIGIN}/logo-azul.png`
 
   function safeDecode(segment) {
@@ -983,7 +983,7 @@ exports.shareMarca = onRequest({ region: 'us-central1', memory: '256MiB', secret
     setBotHeaders(res)
     buildCache(res)
     res.set('Content-Type', 'text/html; charset=utf-8')
-    return res.status(200).send(renderOgHtml({ title: clamp(fallbackTitle, 90), description: clamp(fallbackDesc, 220), image: `${SITE_ORIGIN}/OG-Marketplace.png`, url: canonical }))
+    return res.status(200).send(renderOgHtml({ title: clamp(fallbackTitle, 90), description: clamp(fallbackDesc, 220), image: `${SITE_ORIGIN}/logo-azul.png`, url: canonical }))
   }
 
   try {
@@ -999,7 +999,7 @@ exports.shareMarca = onRequest({ region: 'us-central1', memory: '256MiB', secret
     const total = count ?? (rows ? rows.length : 0)
     const title = clamp(`Bicicletas ${brandName} en Argentina | Ciclo Market`, 65)
     const description = clamp(`Encontrá ${total > 0 ? total + ' ' : ''}bicicletas ${brandName} en venta en Argentina. MTB, ruta y gravel. Contacto directo, sin comisiones.`, 155)
-    const image = `${SITE_ORIGIN}/OG-Marketplace.png`
+    const image = `${SITE_ORIGIN}/logo-azul.png`
 
     const bodyParts = [
       `<nav><a href="${SITE_ORIGIN}">Inicio</a> &rsaquo; <a href="${SITE_ORIGIN}/bicicletas-usadas">Bicicletas usadas</a> &rsaquo; <span>Bicicletas ${escapeHtml(brandName)}</span></nav>`,
@@ -1041,7 +1041,7 @@ exports.shareMarca = onRequest({ region: 'us-central1', memory: '256MiB', secret
     setBotHeaders(res)
     buildCache(res)
     res.set('Content-Type', 'text/html; charset=utf-8')
-    return res.status(200).send(renderOgHtml({ title: clamp(fallbackTitle, 90), description: clamp(fallbackDesc, 220), image: `${SITE_ORIGIN}/OG-Marketplace.png`, url: canonical }))
+    return res.status(200).send(renderOgHtml({ title: clamp(fallbackTitle, 90), description: clamp(fallbackDesc, 220), image: `${SITE_ORIGIN}/logo-azul.png`, url: canonical }))
   }
 })
 
@@ -1083,7 +1083,7 @@ exports.shareProvincia = onRequest({ region: 'us-central1', memory: '256MiB', se
     setBotHeaders(res)
     buildCache(res)
     res.set('Content-Type', 'text/html; charset=utf-8')
-    return res.status(200).send(renderOgHtml({ title: clamp(fallbackTitle, 90), description: clamp(fallbackDesc, 220), image: `${SITE_ORIGIN}/OG-Marketplace.png`, url: canonical }))
+    return res.status(200).send(renderOgHtml({ title: clamp(fallbackTitle, 90), description: clamp(fallbackDesc, 220), image: `${SITE_ORIGIN}/logo-azul.png`, url: canonical }))
   }
 
   try {
@@ -1099,7 +1099,7 @@ exports.shareProvincia = onRequest({ region: 'us-central1', memory: '256MiB', se
     const total = count ?? (rows ? rows.length : 0)
     const title = clamp(`Bicicletas usadas en ${displayName} | Ciclo Market`, 65)
     const description = clamp(`${total > 0 ? total + ' publicaciones activas' : 'Publicaciones activas'} de vendedores locales en ${displayName}. Comprá y vendé sin comisiones.`, 155)
-    const image = `${SITE_ORIGIN}/OG-Marketplace.png`
+    const image = `${SITE_ORIGIN}/logo-azul.png`
 
     const bodyParts = [
       `<nav><a href="${SITE_ORIGIN}">Inicio</a> &rsaquo; <a href="${SITE_ORIGIN}/bicicletas-usadas">Bicicletas usadas</a> &rsaquo; <span>Bicicletas en ${escapeHtml(displayName || '')}</span></nav>`,
@@ -1141,7 +1141,7 @@ exports.shareProvincia = onRequest({ region: 'us-central1', memory: '256MiB', se
     setBotHeaders(res)
     buildCache(res)
     res.set('Content-Type', 'text/html; charset=utf-8')
-    return res.status(200).send(renderOgHtml({ title: clamp(fallbackTitle, 90), description: clamp(fallbackDesc, 220), image: `${SITE_ORIGIN}/OG-Marketplace.png`, url: canonical }))
+    return res.status(200).send(renderOgHtml({ title: clamp(fallbackTitle, 90), description: clamp(fallbackDesc, 220), image: `${SITE_ORIGIN}/logo-azul.png`, url: canonical }))
   }
 })
 
@@ -1300,7 +1300,7 @@ exports.shareStatic = onRequest({ region: 'us-central1', memory: '256MiB' }, asy
     meta?.description || 'Publicá tu bici, encontrá ofertas y conectá con vendedores en Ciclo Market.',
     220
   )
-  const image = `${SITE_ORIGIN}/OG-Marketplace.png`
+  const image = `${SITE_ORIGIN}/logo-azul.png`
 
   setBotHeaders(res)
   buildCache(res)
@@ -1327,7 +1327,7 @@ exports.shareProfile = onRequest({ region: 'us-central1', memory: '256MiB', secr
     return sendSpaIndexHtml(res)
   }
 
-  const FALLBACK_IMAGE = `${SITE_ORIGIN}/og-preview.png`
+  const FALLBACK_IMAGE = `${SITE_ORIGIN}/logo-azul.png`
 
   function sendFallback(statusOk = 200) {
     const canonical = new URL(`${prefix}${sellerId || ''}`, SITE_ORIGIN).toString()

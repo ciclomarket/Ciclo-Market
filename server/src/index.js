@@ -50,6 +50,7 @@ const pricingApiRouter = require('./routes/pricingApi')
 const notionSyncRouter = require('./routes/notionSync')
 const instagramCardRouter = require('./routes/instagramCard')
 const { diditRouter } = require('./routes/didit')
+const prefillsRouter = require('./routes/prefills')
 // Sweepstake feature removed
 const path = require('path')
 // const https = require('https') // removed: used only for Google rating proxy
@@ -324,6 +325,9 @@ app.use('/api', instagramCardRouter)
 
 // Didit identity verification (session creation + webhook)
 app.use(diditRouter)
+
+// Borradores precargados para outreach (link mágico /p/:token)
+app.use(prefillsRouter)
 
 /* ----------------------------- Cron jobs ---------------------------------- */
 // Start scheduled jobs after basic middleware is ready

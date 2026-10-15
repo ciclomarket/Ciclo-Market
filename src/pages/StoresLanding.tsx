@@ -47,7 +47,7 @@ export default function StoresLanding() {
       <SeoHead
         title="Tiendas oficiales: cómo funciona y beneficios"
         description="Sumá tu local como tienda oficial en Ciclo Market y accedé a catálogo destacado, métricas de rendimiento, soporte humano y campañas para atraer ciclistas verificados."
-        image="/hero-tiendas.webp"
+        image="/logo-azul.png"
         keywords={[
           'tienda oficial bicicletas',
           'sumar tienda ciclomarket',

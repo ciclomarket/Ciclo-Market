@@ -59,7 +59,7 @@ export default function SeoLandingTemplate({
         <SeoHead 
           title={title} 
           description={description} 
-          image="/OG-Marketplace.png" 
+          image="/logo-azul.png" 
           keywords={keywords}
         />
       )}

@@ -71,7 +71,7 @@ function ProvinciaLandingContent({
         title={title}
         description={description}
         canonicalPath={canonical}
-        image="/OG-Marketplace.png"
+        image="/logo-azul.png"
         keywords={[
           `bicicletas usadas ${displayName.toLowerCase()}`,
           `comprar bicicleta ${displayName.toLowerCase()}`,

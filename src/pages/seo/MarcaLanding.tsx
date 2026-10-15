@@ -64,7 +64,7 @@ function MarcaLandingContent({ brandName, brandSlug }: { brandName: string; bran
         title={title}
         description={description}
         canonicalPath={canonical}
-        image="/OG-Marketplace.png"
+        image="/logo-azul.png"
         keywords={[
           `bicicletas ${brandName.toLowerCase()} usadas`,
           `${brandName.toLowerCase()} segunda mano argentina`,

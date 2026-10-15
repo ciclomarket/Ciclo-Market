@@ -13,6 +13,7 @@ import { fetchUserProfile, upsertUserProfile } from '@/services/users'
 import useUpload from '@/hooks/useUpload'
 import { parseMoneyInput } from '@/utils/money'
 import { trackGA4Event } from '@/lib/ga4'
+import { claimPendingPrefill } from '@/services/prefills'
 
 const CONDITION_OPTIONS = ['Nuevo', 'Como nuevo', 'Usado'] as const
 
@@ -888,6 +889,7 @@ export default function CreateListing() {
 
     const slug = (data as any)?.slug || (data as any)?.id
     if (!isEdit && (data as any)?.id) {
+      void claimPendingPrefill(String((data as any).id))
       trackGA4Event('publish_listing', {
         listing_id: String((data as any).id),
         category: categoryField || null,
