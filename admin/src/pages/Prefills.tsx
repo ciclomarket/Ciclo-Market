@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useState, type ClipboardEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type ReactNode } from 'react'
 import useUpload from '@app/hooks/useUpload'
 import { BIKE_CATEGORIES, FRAME_SIZES, WHEEL_SIZE_OPTIONS } from '@app/constants/catalog'
 import { PROVINCES } from '@app/constants/locations'
+import { buildBookmarkletHref, readImportPayloadFromHash } from '@admin/lib/bookmarklet'
 import {
   createPrefill,
   extractPrefill,
   fetchPrefills,
+  importImages,
   type CreatedPrefill,
   type PrefillDraft,
   type PrefillRow,
@@ -57,6 +59,9 @@ export default function PrefillsPage() {
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [rows, setRows] = useState<PrefillRow[]>([])
+  const [importStatus, setImportStatus] = useState<string | null>(null)
+  const bookmarkletRef = useRef<HTMLAnchorElement | null>(null)
+  const importHandledRef = useRef(false)
 
   const loadRows = useCallback(async () => {
     try { setRows(await fetchPrefills()) } catch (err) { setError((err as Error).message) }
@@ -87,10 +92,10 @@ export default function PrefillsPage() {
     setMissing([]); setIsBike(true); setCreated(null); setMessage(''); setError(null)
   }
 
-  const handleExtract = async () => {
+  const runExtract = async (sourceText: string, sourceImages: string[]) => {
     setError(null); setExtracting(true); setCreated(null)
     try {
-      const result = await extractPrefill({ text, images })
+      const result = await extractPrefill({ text: sourceText, images: sourceImages })
       setDraft(result.draft)
       setSellerName(result.sellerFirstName)
       setMissing(result.missing)
@@ -101,6 +106,41 @@ export default function PrefillsPage() {
       setExtracting(false)
     }
   }
+
+  const handleExtract = () => runExtract(text, images)
+
+  // React bloquea href="javascript:..." en JSX, así que lo seteamos a mano.
+  useEffect(() => {
+    bookmarkletRef.current?.setAttribute('href', buildBookmarkletHref(`${window.location.origin}/admin/prefills`))
+  }, [])
+
+  // Llegada desde el bookmarklet: importar fotos y analizar automáticamente.
+  useEffect(() => {
+    if (importHandledRef.current) return
+    const payload = readImportPayloadFromHash(window.location.hash)
+    if (!payload) return
+    importHandledRef.current = true
+    window.history.replaceState(null, '', window.location.pathname + window.location.search)
+    setText(payload.text)
+    setSourceUrl(payload.sourceUrl)
+    ;(async () => {
+      let imported: string[] = []
+      if (payload.images.length) {
+        setImportStatus(`Importando ${payload.images.length} fotos…`)
+        try {
+          const result = await importImages(payload.images)
+          imported = result.images
+          setImages(imported)
+          if (result.failed) setError(`${result.failed} foto(s) no se pudieron importar. Podés agregarlas a mano.`)
+        } catch (err) {
+          setError((err as Error).message)
+        }
+      }
+      setImportStatus(null)
+      await runExtract(payload.text, imported)
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleCreate = async () => {
     if (!draft) return
@@ -138,6 +178,21 @@ export default function PrefillsPage() {
         </p>
       </div>
 
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+        <a
+          ref={bookmarkletRef}
+          onClick={(e) => e.preventDefault()}
+          className="cursor-grab rounded-lg bg-blue-600 px-3 py-1.5 font-semibold text-white"
+          title="Arrastrame a la barra de favoritos"
+        >
+          → Ciclo Market
+        </a>
+        <span>
+          Arrastrá este botón a tu barra de favoritos. Después, desde una publicación de Marketplace o MercadoLibre, tocalo y se carga todo acá solo.
+        </span>
+      </div>
+
+      {importStatus && <div className="rounded-lg bg-blue-50 px-4 py-3 text-sm text-blue-800">{importStatus}</div>}
       {error && <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
 
       <div className="grid gap-6 lg:grid-cols-2">

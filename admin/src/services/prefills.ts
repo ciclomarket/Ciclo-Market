@@ -50,6 +50,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   ai_refusal: 'La IA no pudo procesar este contenido.',
   ai_failed: 'Falló la IA. Probá de nuevo.',
   missing_input: 'Pegá el texto o subí al menos una foto.',
+  no_valid_images: 'No se encontraron fotos importables en la publicación.',
   unauthorized: 'Sesión vencida. Volvé a iniciar sesión.',
   forbidden: 'Tu usuario no tiene permisos de moderador.',
 }
@@ -91,6 +92,14 @@ export function createPrefill(args: {
   sourceText: string
 }): Promise<CreatedPrefill> {
   return adminFetch<CreatedPrefill>('/api/admin/prefills', { method: 'POST', body: JSON.stringify(args) })
+}
+
+/** El server descarga las fotos externas (fbcdn, mlstatic) y las guarda en nuestro storage. */
+export function importImages(urls: string[]): Promise<{ images: string[]; failed: number }> {
+  return adminFetch<{ images: string[]; failed: number }>('/api/admin/prefills/import-images', {
+    method: 'POST',
+    body: JSON.stringify({ urls }),
+  })
 }
 
 export async function fetchPrefills(): Promise<PrefillRow[]> {

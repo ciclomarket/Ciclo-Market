@@ -14,6 +14,13 @@ const router = express.Router()
 
 const MAX_TEXT_LENGTH = 6000
 const MAX_IMAGES = 12
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024
+const LISTINGS_BUCKET = process.env.SUPABASE_STORAGE_BUCKET || 'listings'
+// Solo se descargan imágenes de los CDNs de estas plataformas (evita SSRF).
+const ALLOWED_IMAGE_HOSTS = ['fbcdn.net', 'cdninstagram.com', 'mlstatic.com']
+
+let sharp = null
+try { sharp = require('sharp') } catch { /* sin sharp se sube la imagen original */ }
 
 // ── Auth helpers ──────────────────────────────────────────────────────────────
 
@@ -87,7 +94,59 @@ function buildOutreachMessage({ sellerName, draft, url }) {
   return `${greeting} Vi que estás vendiendo tu ${bike} 🚲 Te armé la publicación gratis en Ciclo Market, un marketplace solo de bicis, con tus fotos y datos ya cargados. Si querés sumarla, solo revisala y confirmá acá: ${url}`
 }
 
+function isAllowedImageUrl(raw) {
+  try {
+    const url = new URL(raw)
+    if (url.protocol !== 'https:') return false
+    return ALLOWED_IMAGE_HOSTS.some((host) => url.hostname === host || url.hostname.endsWith(`.${host}`))
+  } catch {
+    return false
+  }
+}
+
+// Descarga una imagen externa (los links de fbcdn vencen) y la guarda en nuestro storage.
+async function mirrorImage(supabase, sourceUrl) {
+  const resp = await fetch(sourceUrl, { signal: AbortSignal.timeout(15000) })
+  if (!resp.ok) throw new Error(`http_${resp.status}`)
+  if (!isAllowedImageUrl(resp.url)) throw new Error('redirected_outside_allowlist')
+  const contentType = String(resp.headers.get('content-type') || '')
+  if (!contentType.startsWith('image/')) throw new Error('not_an_image')
+  const original = Buffer.from(await resp.arrayBuffer())
+  if (original.length > MAX_IMAGE_BYTES) throw new Error('too_large')
+
+  let body = original
+  let ext = (contentType.split('/')[1] || 'jpg').split(';')[0]
+  let type = contentType
+  if (sharp) {
+    body = await sharp(original).rotate().resize(1600, 1600, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 80 }).toBuffer()
+    ext = 'webp'
+    type = 'image/webp'
+  }
+
+  const path = `prefills/${new Date().getFullYear()}/${Date.now()}_${crypto.randomUUID()}.${ext}`
+  const { error } = await supabase.storage.from(LISTINGS_BUCKET).upload(path, body, { contentType: type, cacheControl: '3600', upsert: false })
+  if (error) throw error
+  return supabase.storage.from(LISTINGS_BUCKET).getPublicUrl(path).data.publicUrl
+}
+
 // ── Admin ────────────────────────────────────────────────────────────────────
+
+router.post('/api/admin/prefills/import-images', async (req, res) => {
+  const ctx = await requireModerator(req, res)
+  if (!ctx) return
+  const urls = (Array.isArray(req.body?.urls) ? req.body.urls : [])
+    .filter((u) => typeof u === 'string' && isAllowedImageUrl(u))
+    .slice(0, MAX_IMAGES)
+  if (!urls.length) return res.status(400).json({ ok: false, error: 'no_valid_images' })
+
+  const results = await Promise.allSettled(urls.map((u) => mirrorImage(ctx.supabase, u)))
+  const images = []
+  for (const r of results) {
+    if (r.status === 'fulfilled') images.push(r.value)
+    else console.warn('[prefills] image import failed', r.reason?.message || r.reason)
+  }
+  return res.json({ ok: true, images, failed: urls.length - images.length })
+})
 
 router.post('/api/admin/prefills/extract', async (req, res) => {
   const ctx = await requireModerator(req, res)
